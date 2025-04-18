@@ -1,0 +1,198 @@
+// This is your Prisma schema file, simplified for the new requirements
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  OWNER
+  ADMIN
+  LOCATION_ADMIN
+}
+
+enum PermissionType {
+  CREATE_LOCATION
+  READ_LOCATION
+  UPDATE_LOCATION
+  DELETE_LOCATION
+  MANAGE_ADMINS
+  MANAGE_LOCATION_ADMINS
+  VIEW_ANALYTICS
+}
+
+enum ProfileFieldType {
+  TEXT
+  NUMBER
+  DATE
+  BOOLEAN
+  SELECT
+  MULTI_SELECT
+  FILE
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WAITLISTED
+  CANCELLED
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  password       String
+  role           UserRole
+  firstName      String?
+  lastName       String?
+  phone          String?
+  active         Boolean      @default(true)
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  managedLocations Location[]  @relation("LocationAdmins")
+  permissions    Permission[]
+  camperProfiles CamperProfile[] // User can have multiple camper profiles
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Organization {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  users           User[]
+  locations       Location[]
+  profileFields   ProfileField[]   // Organization defines profile fields
+  camperProfiles  CamperProfile[]  // Organization has many camper profiles
+  years           Year[]           // Organization has many years
+  activeYearId    String?          // Reference to the active year
+  activeYear      Year?            @relation("ActiveYear", fields: [activeYearId], references: [id])
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Location {
+  id             String       @id @default(cuid())
+  name           String
+  address        String
+  city           String
+  state          String?
+  zipCode        String?
+  country        String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  admins         User[]       @relation("LocationAdmins")
+  camperProfiles CamperProfile[] // Location can have many camper profiles
+  registrations  Registration[] // Location can have many registrations
+  signupLinks    SignupLink[] // Location can have many signup links
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, name])
+}
+
+model Permission {
+  id        String         @id @default(cuid())
+  type      PermissionType
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([userId, type])
+}
+
+model ProfileField {
+  id             String           @id @default(cuid())
+  name           String
+  label          String
+  type           ProfileFieldType
+  required       Boolean          @default(false)
+  options        String?          // JSON string for select options
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  fieldValues    ProfileFieldValue[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([organizationId, name])
+}
+
+model CamperProfile {
+  id             String              @id @default(cuid())
+  name           String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  location       Location?           @relation(fields: [locationId], references: [id])
+  locationId     String?
+  fieldValues    ProfileFieldValue[]
+  registrations  Registration[]      // Profile can have many registrations
+  active         Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model ProfileFieldValue {
+  id               String         @id @default(cuid())
+  value            String         // Stored as string, converted based on field type
+  field            ProfileField   @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  fieldId          String
+  camperProfile    CamperProfile  @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
+  camperProfileId  String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([fieldId, camperProfileId])
+}
+
+model Year {
+  id               String          @id @default(cuid())
+  name             String          // e.g., "2025", "Summer 2025"
+  startDate        DateTime
+  endDate          DateTime
+  active           Boolean         @default(false)
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId   String
+  registrations    Registration[]  // Year can have many registrations
+  activeForOrgs    Organization[]  @relation("ActiveYear")
+  signupLinks      SignupLink[]    // Year can have many signup links
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([organizationId, name])
+}
+
+model SignupLink {
+  id             String       @id @default(cuid())
+  token          String       @unique // The unique token for the URL
+  location       Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId     String
+  year           Year         @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId         String
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([locationId, yearId])
+}
+
+model Registration {
+  id               String             @id @default(cuid())
+  status           RegistrationStatus @default(PENDING)
+  notes            String?
+  camperProfile    CamperProfile      @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
+  camperProfileId  String
+  year             Year               @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId           String
+  location         Location           @relation(fields: [locationId], references: [id])
+  locationId       String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
