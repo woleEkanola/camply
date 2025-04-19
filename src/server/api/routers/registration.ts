@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { RegistrationStatus } from "@prisma/client";
 
@@ -284,6 +284,37 @@ export const registrationRouter = createTRPCRouter({
       return registration;
     }),
     
+  // Get registrations for the current user (for dashboard)
+  getByUserId: protectedProcedure
+    .query(async ({ ctx }) => {
+      const currentUser = ctx.session.user;
+      
+      if (!currentUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+      }
+      
+      // Get all camper profiles for the user
+      const camperProfiles = await ctx.prisma.camperProfile.findMany({
+        where: { userId: currentUser.id },
+        select: { id: true }
+      });
+      
+      // Get all registrations for those profiles
+      return await ctx.prisma.registration.findMany({
+        where: {
+          camperProfileId: {
+            in: camperProfiles.map(profile => profile.id)
+          }
+        },
+        include: {
+          camperProfile: true,
+          year: true,
+          location: true
+        },
+        orderBy: { createdAt: "desc" }
+      });
+    }),
+    
   // Create a new registration
   create: protectedProcedure
     .input(registrationSchema)
@@ -380,6 +411,46 @@ export const registrationRouter = createTRPCRouter({
           year: true
         }
       });
+    }),
+    
+  // Create a registration during signup (public procedure)
+  createDuringSignup: publicProcedure
+    .input(z.object({
+      camperProfileId: z.string(),
+      yearId: z.string(),
+      locationId: z.string(),
+      status: z.nativeEnum(RegistrationStatus).default(RegistrationStatus.PENDING),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // Create the registration
+        const registration = await ctx.prisma.registration.create({
+          data: {
+            camperProfile: { connect: { id: input.camperProfileId } },
+            year: { connect: { id: input.yearId } },
+            location: { connect: { id: input.locationId } },
+            status: input.status
+          },
+          include: {
+            camperProfile: true,
+            location: true,
+            year: true
+          }
+        });
+        
+        return registration;
+      } catch (error) {
+        if (error instanceof Error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Error creating registration: ${error.message}`
+          });
+        }
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "An unknown error occurred while creating registration"
+        });
+      }
     }),
     
   // Update a registration

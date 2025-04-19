@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { UserRole } from "@prisma/client";
 
@@ -106,6 +106,36 @@ export const camperProfileRouter = createTRPCRouter({
         where: { userId: input.userId },
         include: {
           location: true,
+          fieldValues: {
+            include: {
+              field: true
+            }
+          }
+        },
+        orderBy: { createdAt: "desc" }
+      });
+    }),
+    
+  // Get camper profiles for the current user (for dashboard)
+  getByUserId: protectedProcedure
+    .query(async ({ ctx }) => {
+      const currentUser = ctx.session.user;
+      
+      if (!currentUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+      }
+      
+      return await ctx.prisma.camperProfile.findMany({
+        where: { userId: currentUser.id },
+        include: {
+          organization: true,
+          location: true,
+          registrations: {
+            include: {
+              year: true,
+              location: true
+            }
+          },
           fieldValues: {
             include: {
               field: true
@@ -229,6 +259,36 @@ export const camperProfileRouter = createTRPCRouter({
       }
       
       return profile;
+    }),
+    
+  // Create a new camper profile during signup (public procedure)
+  createDuringSignup: publicProcedure
+    .input(z.object({
+      name: z.string().min(2, "Name must be at least 2 characters"),
+      userId: z.string(),
+      organizationId: z.string(),
+      locationId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // Create the camper profile
+        const profile = await ctx.prisma.camperProfile.create({
+          data: {
+            name: input.name,
+            user: { connect: { id: input.userId } },
+            organization: { connect: { id: input.organizationId } },
+            location: { connect: { id: input.locationId } },
+            active: true
+          }
+        });
+        
+        return profile;
+      } catch (error: any) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Error creating camper profile: ${error.message}`
+        });
+      }
     }),
     
   // Update a camper profile

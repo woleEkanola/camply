@@ -458,17 +458,23 @@ export default function LocationsPage() {
     }
   });
 
-  // Get signup links for each location
+  // Get signup links for all locations at once
+  const { data: signupLinks = [] } = api.signupLink.getByOrganization.useQuery(
+    { 
+      organizationId: (session?.user as ExtendedUser)?.organizationId || "",
+      yearId: activeYear?.id 
+    },
+    {
+      enabled: 
+        status === "authenticated" && 
+        !!(session?.user as ExtendedUser)?.organizationId && 
+        !!activeYear?.id,
+    }
+  );
+
+  // Helper function to find signup link for a location (not a hook)
   const getSignupLinkForLocation = (locationId: string) => {
-    return api.signupLink.getByLocationAndYear.useQuery(
-      { 
-        locationId,
-        yearId: activeYear?.id 
-      },
-      {
-        enabled: !!locationId && !!activeYear?.id,
-      }
-    );
+    return signupLinks.find(link => link.locationId === locationId);
   };
 
   // Generate signup link for a location
@@ -570,8 +576,8 @@ export default function LocationsPage() {
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {locations.map((location) => {
-                  // Get signup link for this location
-                  const { data: signupLink } = getSignupLinkForLocation(location.id);
+                  // Get signup link for this location (using the helper function, not a hook)
+                  const signupLink = getSignupLinkForLocation(location.id);
                   
                   return (
                     <tr key={location.id}>
@@ -586,7 +592,7 @@ export default function LocationsPage() {
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                         <div className="flex flex-wrap gap-1">
-                          {location.admins.length > 0 ? (
+                          {location.admins && location.admins.length > 0 ? (
                             location.admins.map((admin) => (
                               <span
                                 key={admin.id}

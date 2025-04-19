@@ -10,6 +10,96 @@ const signupLinkSchema = z.object({
 });
 
 export const signupLinkRouter = createTRPCRouter({
+  // Get all signup links for an organization
+  getByOrganization: protectedProcedure
+    .input(z.object({ 
+      organizationId: z.string(),
+      yearId: z.string().optional() // If not provided, use active year
+    }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      
+      if (!currentUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+      }
+      
+      // Check if user has permission to view signup links for this organization
+      const hasPermission = 
+        currentUser.role === "SUPER_ADMIN" || 
+        (currentUser.role === "OWNER" && currentUser.organizationId === input.organizationId) ||
+        (currentUser.role === "ADMIN" && currentUser.organizationId === input.organizationId) ||
+        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === input.organizationId);
+      
+      if (!hasPermission) {
+        throw new TRPCError({ 
+          code: "FORBIDDEN", 
+          message: "Not authorized to view signup links for this organization" 
+        });
+      }
+      
+      // Get the year ID to filter by
+      let yearId = input.yearId;
+      
+      // If no year ID provided, use the active year
+      if (!yearId) {
+        const organization = await ctx.prisma.organization.findUnique({
+          where: { id: input.organizationId },
+          select: { activeYearId: true }
+        });
+        
+        if (!organization || !organization.activeYearId) {
+          throw new TRPCError({ 
+            code: "BAD_REQUEST", 
+            message: "No active year set for this organization" 
+          });
+        }
+        
+        yearId = organization.activeYearId;
+      }
+      
+      // For location admins, only show signup links for their managed locations
+      if (currentUser.role === "LOCATION_ADMIN") {
+        const managedLocationIds = await ctx.prisma.location.findMany({
+          where: {
+            organizationId: input.organizationId,
+            admins: {
+              some: {
+                id: currentUser.id
+              }
+            }
+          },
+          select: { id: true }
+        });
+        
+        const locationIds = managedLocationIds.map(loc => loc.id);
+        
+        return await ctx.prisma.signupLink.findMany({
+          where: { 
+            yearId,
+            locationId: { in: locationIds }
+          },
+          include: {
+            location: true,
+            year: true
+          }
+        });
+      }
+      
+      // For other roles, show all signup links for the organization
+      return await ctx.prisma.signupLink.findMany({
+        where: { 
+          yearId,
+          location: {
+            organizationId: input.organizationId
+          }
+        },
+        include: {
+          location: true,
+          year: true
+        }
+      });
+    }),
+    
   // Get signup link for a location and year
   getByLocationAndYear: protectedProcedure
     .input(z.object({ 
@@ -17,7 +107,7 @@ export const signupLinkRouter = createTRPCRouter({
       yearId: z.string().optional() // If not provided, use active year
     }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -98,7 +188,7 @@ export const signupLinkRouter = createTRPCRouter({
   generate: protectedProcedure
     .input(signupLinkSchema)
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -209,6 +299,19 @@ export const signupLinkRouter = createTRPCRouter({
         }
       });
       
+      console.log('validateToken called with token:', input.token);
+      console.log('signupLink found:', signupLink);
+      
+      // Add more detailed logging to debug organizationId
+      if (signupLink) {
+        console.log('Location details:', {
+          locationId: signupLink.locationId,
+          locationName: signupLink.location?.name,
+          organizationId: signupLink.location?.organizationId,
+        });
+        console.log('Organization details:', signupLink.location?.organization);
+      }
+      
       if (!signupLink || !signupLink.active) {
         throw new TRPCError({ 
           code: "NOT_FOUND", 
@@ -228,7 +331,8 @@ export const signupLinkRouter = createTRPCRouter({
       return {
         locationId: signupLink.locationId,
         locationName: signupLink.location.name,
-        organizationId: signupLink.location.organizationId,
+        // Make sure we're getting the organizationId from the correct place
+        organizationId: signupLink.location.organization.id,
         organizationName: signupLink.location.organization.name,
         yearId: signupLink.yearId,
         yearName: signupLink.year.name
@@ -239,7 +343,7 @@ export const signupLinkRouter = createTRPCRouter({
   deactivate: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -292,7 +396,7 @@ export const signupLinkRouter = createTRPCRouter({
   reactivate: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });

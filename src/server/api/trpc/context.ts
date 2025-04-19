@@ -11,7 +11,7 @@ export async function createTRPCContext() {
   
   return {
     prisma,
-    session,
+    session: session ?? null, // add null check
   };
 }
 

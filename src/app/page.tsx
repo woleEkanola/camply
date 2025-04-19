@@ -21,9 +21,16 @@ export default function Home() {
     } else if (session.user.role === "OWNER") {
       // Redirect Owner to their dashboard
       router.push("/admin");
+    } else if (session.user.role === "ADMIN") {
+      // Redirect base users to the user dashboard
+      router.push("/dashboard");
+    } else if (session.user.role === "LOCATION_ADMIN") {
+      // Redirect location admins to their dashboard
+      router.push("/location-admin");
     } else {
-      // Fallback for any other case
-      router.push("/auth/signin");
+      // Fallback for any other case - should not happen
+      console.warn("Unknown user role:", session.user.role);
+      router.push("/login");
     }
   }, [router, session, status]);
 

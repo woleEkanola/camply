@@ -318,4 +318,21 @@ export const locationRouter = createTRPCRouter({
         },
       });
     }),
+
+  // Get all locations (for dropdowns in user dashboard)
+  getAll: protectedProcedure
+    .query(async ({ ctx }) => {
+      // Ensure user is authenticated
+      if (!ctx.session?.user) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+      }
+      
+      // Get all locations
+      return await ctx.prisma.location.findMany({
+        orderBy: { name: "asc" },
+        include: {
+          organization: true
+        }
+      });
+    }),
 });
