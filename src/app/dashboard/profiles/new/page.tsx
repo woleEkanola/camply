@@ -49,12 +49,11 @@ export default function NewProfilePage() {
     }
   }, [locationsError]);
   
-  // Create profile mutation
+  // Create profile mutation (no registration will be created here)
   const createProfileMutation = api.camperProfile.create.useMutation({
     onSuccess: (data) => {
       setSuccess("Profile created successfully!");
       setIsSubmitting(false);
-      
       // Redirect to the profile page after a short delay
       setTimeout(() => {
         router.push(`/dashboard/profiles/${data.id}`);

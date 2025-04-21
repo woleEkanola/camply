@@ -281,7 +281,7 @@ export const userRouter = createTRPCRouter({
         firstName: z.string().min(1, "First name is required"),
         lastName: z.string().min(1, "Last name is required"),
         phone: z.string().optional(),
-        role: z.nativeEnum(UserRole),
+        role: z.nativeEnum(UserRole), // BASE_USER is now included in UserRole
         password: z.string().min(8, "Password must be at least 8 characters"),
         active: z.boolean().default(true),
         organizationId: z.string(),
@@ -366,7 +366,7 @@ export const userRouter = createTRPCRouter({
           firstName: z.string().min(1, "First name is required").optional(),
           lastName: z.string().min(1, "Last name is required").optional(),
           phone: z.string().optional(),
-          role: z.nativeEnum(UserRole).optional(),
+          role: z.nativeEnum(UserRole).optional(), // BASE_USER is now included
           password: z.string().min(8, "Password must be at least 8 characters").optional(),
           active: z.boolean().optional(),
           organizationId: z.string().optional(),

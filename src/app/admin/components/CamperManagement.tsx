@@ -98,6 +98,21 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     }
   }, [profilesData]);
 
+  // Improved fallback: only set timeout if loading, and always clear timeout if loading finishes
+  useEffect(() => {
+    if (!organizationId) {
+      setIsLoading(false);
+      setError("No organization ID found. Please contact your administrator.");
+      return;
+    }
+    if (!isLoading) return; // Don't set timeout if not loading
+    const timeout = setTimeout(() => {
+      setIsLoading(false);
+      setError("Request timed out. Please try refreshing the page.");
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, [organizationId, isLoading, setError]);
+
   // Filter camper profiles
   const filteredProfiles = camperProfiles.filter((profile) => {
     // Search term filter

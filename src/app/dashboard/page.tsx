@@ -17,12 +17,14 @@ export default function UserDashboard() {
     
     if (!session) {
       router.push("/login");
-    } else if (session.user.role !== "ADMIN") {
-      // If not a base user, redirect to appropriate dashboard
+    } else if (session.user.role !== "ADMIN" && session.user.role !== "BASE_USER") {
+      // If not a base user or admin, redirect to appropriate dashboard
       if (session.user.role === "SUPER_ADMIN") {
         router.push("/super-admin");
       } else if (session.user.role === "OWNER") {
         router.push("/admin");
+      } else if (session.user.role === "LOCATION_ADMIN") {
+        router.push("/location-admin");
       }
     }
   }, [session, status, router]);

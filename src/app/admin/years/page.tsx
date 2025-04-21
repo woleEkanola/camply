@@ -357,10 +357,10 @@ export default function YearsPage() {
                     Name
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Start Date
+                    Camp Start Date
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    End Date
+                    Camp End Date
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Status
@@ -456,7 +456,7 @@ export default function YearsPage() {
                   
                   <div className="mb-4">
                     <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
-                      Start Date
+                      Camp Start Date
                     </label>
                     <input
                       type="date"
@@ -471,7 +471,7 @@ export default function YearsPage() {
                   
                   <div className="mb-4">
                     <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">
-                      End Date
+                      Camp End Date
                     </label>
                     <input
                       type="date"

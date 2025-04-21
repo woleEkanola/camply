@@ -231,13 +231,13 @@ function SignupForm({ token }: { token: string }) {
     console.log("Creating user with organization:", linkDetails.organizationId);
     
     try {
-      // Create user with ADMIN role
+      // Create user with BASE_USER role
       const userData = {
         email: formData.email,
         password: formData.password,
         firstName: formData.firstName,
         lastName: formData.lastName,
-        role: "ADMIN" as UserRole,
+        role: "BASE_USER" as UserRole,
         organizationId: linkDetails.organizationId,
       };
       
