@@ -1,10 +1,12 @@
 "use client";
 
+import React from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import ModernDashboardLayout from "./components/ModernDashboardLayout";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
+import BaseUsersPage from "./base-users";
 
 // Define extended session user type
 interface ExtendedUser {
@@ -44,6 +46,11 @@ export default function AdminDashboard() {
   return (
     <ModernDashboardLayout>
       <AnalyticsDashboard />
+      <div className="mt-8">
+        {/* BASE_USER Table Section */}
+        <h2 className="text-xl font-semibold mb-4">BASE_USERs</h2>
+        <BaseUsersPage />
+      </div>
     </ModernDashboardLayout>
   );
 }

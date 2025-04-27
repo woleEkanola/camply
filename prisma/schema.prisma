@@ -127,6 +127,8 @@ model ProfileField {
 model CamperProfile {
   id             String              @id @default(cuid())
   name           String
+  dateOfBirth    DateTime?           // Date of birth field
+  gender         String?             // Gender field
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId         String
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)

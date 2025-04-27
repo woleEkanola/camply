@@ -10,6 +10,8 @@ const camperProfileSchema = z.object({
   organizationId: z.string(),
   locationId: z.string().optional(),
   active: z.boolean().default(true),
+  dateOfBirth: z.string().optional(), // Accept ISO date string from client
+  gender: z.string().optional(),
 });
 
 // Schema for profile field values
@@ -158,7 +160,12 @@ export const camperProfileRouter = createTRPCRouter({
       
       const profile = await ctx.prisma.camperProfile.findUnique({
         where: { id: input.id },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          active: true,
+          dateOfBirth: true,
+          gender: true,
           user: true,
           location: true,
           fieldValues: {
@@ -179,6 +186,7 @@ export const camperProfileRouter = createTRPCRouter({
         currentUser.role === "SUPER_ADMIN" || 
         currentUser.role === "OWNER" || 
         currentUser.role === "ADMIN" ||
+        currentUser.role === "BASE_USER" ||
         (currentUser.role === "LOCATION_ADMIN" && 
          profile.locationId && 
          await ctx.prisma.location.findFirst({
@@ -239,6 +247,12 @@ export const camperProfileRouter = createTRPCRouter({
           organization: { connect: { id: input.profile.organizationId } },
           ...(input.profile.locationId && {
             location: { connect: { id: input.profile.locationId } }
+          }),
+          ...(input.profile.dateOfBirth && {
+            dateOfBirth: new Date(input.profile.dateOfBirth)
+          }),
+          ...(input.profile.gender && {
+            gender: input.profile.gender
           })
         }
       });
@@ -320,7 +334,8 @@ export const camperProfileRouter = createTRPCRouter({
         currentUser.id === profile.userId || 
         currentUser.role === "SUPER_ADMIN" || 
         currentUser.role === "OWNER" || 
-        currentUser.role === "ADMIN";
+        currentUser.role === "ADMIN" ||
+        currentUser.role === "BASE_USER";
       
       if (!hasPermission) {
         throw new TRPCError({ 
@@ -337,6 +352,12 @@ export const camperProfileRouter = createTRPCRouter({
           ...(input.profile.active !== undefined && { active: input.profile.active }),
           ...(input.profile.locationId && { 
             location: { connect: { id: input.profile.locationId } }
+          }),
+          ...(input.profile.dateOfBirth && {
+            dateOfBirth: new Date(input.profile.dateOfBirth)
+          }),
+          ...(input.profile.gender && {
+            gender: input.profile.gender
           })
         }
       });

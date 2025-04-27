@@ -29,7 +29,8 @@ export const profileFieldRouter = createTRPCRouter({
         currentUser.role === "SUPER_ADMIN" || 
         currentUser.role === "OWNER" || 
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === input.organizationId);
+        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === input.organizationId) ||
+        (currentUser.role === "BASE_USER" && currentUser.organizationId === input.organizationId);
       
       if (!hasPermission) {
         throw new TRPCError({ 

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { api } from "../../../utils/api";
 import { User, Location, UserRole } from "@prisma/client";
+import BaseUserProfilesAccordion from "./BaseUserProfilesAccordion";
 
 interface UserFormData {
   email: string;
@@ -26,9 +27,15 @@ export default function UserManagement({ organizationId }: { organizationId: str
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [activeTab, setActiveTab] = useState<"users" | "locationAccess">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "accounts" | "locationAccess">("users");
   const [selectedLocationAdmin, setSelectedLocationAdmin] = useState<string | null>(null);
   const [locationAdmins, setLocationAdmins] = useState<User[]>([]);
+  
+  // Fetch BASE_USERs with camper profile counts for the Accounts tab
+  const { data: baseUsers, isLoading: loadingBaseUsers, error: baseUsersError } = api.user.getBaseUsersWithCamperCounts.useQuery(
+    { organizationId },
+    { enabled: !!organizationId && !!session?.user }
+  );
 
   // Debug props and session
   useEffect(() => {
@@ -65,8 +72,8 @@ export default function UserManagement({ organizationId }: { organizationId: str
   useEffect(() => {
     if (userData) {
       console.log("Users fetched successfully:", userData);
-      // Filter out users with OWNER role
-      const filteredUsers = userData.filter(user => user.role !== "OWNER");
+      // Filter out users with OWNER role and BASE_USER role
+      const filteredUsers = userData.filter(user => user.role !== "OWNER" && user.role !== "BASE_USER");
       setUsers(filteredUsers);
       
       // Extract location admins for the location access tab
@@ -409,6 +416,16 @@ export default function UserManagement({ organizationId }: { organizationId: str
             Users
           </button>
           <button
+            onClick={() => setActiveTab("accounts")}
+            className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium ${
+              activeTab === "accounts"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+            }`}
+          >
+            Accounts
+          </button>
+          <button
             onClick={() => setActiveTab("locationAccess")}
             className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium ${
               activeTab === "locationAccess"
@@ -723,6 +740,22 @@ export default function UserManagement({ organizationId }: { organizationId: str
           <p className="text-gray-500">No users found. Add your first user!</p>
         </div>
       ) : null}
+      
+      {/* Accounts Tab (BASE_USERs) */}
+      {activeTab === "accounts" && (
+        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-4 text-lg font-medium text-gray-800">Accounts (BASE_USERs)</h3>
+          {loadingBaseUsers ? (
+            <div>Loading accounts...</div>
+          ) : baseUsersError ? (
+            <div className="text-red-600">Error loading accounts: {baseUsersError.message}</div>
+          ) : !baseUsers || baseUsers.length === 0 ? (
+            <div>No BASE_USER accounts found.</div>
+          ) : (
+            <BaseUserProfilesAccordion users={baseUsers} />
+          )}
+        </div>
+      )}
       
       {/* Location Access Tab */}
       {activeTab === "locationAccess" && (

@@ -56,13 +56,10 @@ function DebugComponent({ token }: { token: string }) {
 }
 
 // Interface for form data
-interface SignupFormData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-  camperName: string;
+interface CamperData {
+  name: string;
+  dob: string;
+  gender: string;
 }
 
 // Client component that handles all the actual logic
@@ -70,30 +67,20 @@ function SignupForm({ token }: { token: string }) {
   console.log("SignupForm rendering with token:", token);
   const router = useRouter();
   
-  const [formData, setFormData] = useState<SignupFormData>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    camperName: "",
-  });
+  // Multistep state
+  const [step, setStep] = useState(1);
+  // Step 1: account info
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  // Step 2: campers
+  const [campers, setCampers] = useState<CamperData[]>([{ name: "", dob: "", gender: "" }]);
+  // Step 3: confirmation
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [linkDetails, setLinkDetails] = useState<{
-    locationId: string;
-    locationName: string;
-    organizationId: string;
-    organizationName: string;
-    yearId: string;
-    yearName: string;
-  } | null>(null);
+  const [linkDetails, setLinkDetails] = useState<any>(null);
   const [isLinkValid, setIsLinkValid] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    console.log("Component mounted with token:", token);
-  }, [token]);
 
   // Use tRPC client directly
   const { 
@@ -129,140 +116,75 @@ function SignupForm({ token }: { token: string }) {
     }
   }, [tokenData, tokenError]);
 
-  // Create user mutation
-  const createUserMutation = api.auth.signup.useMutation({
-    onSuccess: async (data) => {
-      if (data.success) {
-        setSuccess("Account created successfully! Creating camper profile and registration...");
-        
-        // Create camper profile using the public procedure
-        try {
-          const profile = await createCamperProfileMutation.mutateAsync({
-            name: formData.camperName,
-            userId: data.userId!,
-            organizationId: linkDetails!.organizationId,
-            locationId: linkDetails!.locationId,
-          });
-          
-          // Create registration using the public procedure
-          if (profile) {
-            await createRegistrationMutation.mutateAsync({
-              camperProfileId: profile.id,
-              yearId: linkDetails!.yearId,
-              locationId: linkDetails!.locationId,
-              status: "PENDING",
-            });
-            
-            setSuccess("Registration complete! You can now login.");
-            setTimeout(() => {
-              router.push("/login");
-            }, 3000);
-          }
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
-          setError(`Error creating profile: ${errorMessage}`);
-        }
-        
-        setIsSubmitting(false);
-      } else {
-        setError(data.message || "Failed to create account");
-        setIsSubmitting(false);
-      }
-    },
-    onError: (error) => {
-      setError(`Error creating account: ${error.message}`);
-      setIsSubmitting(false);
-    }
-  });
-  
-  // Create camper profile mutation (using the public procedure)
-  const createCamperProfileMutation = api.camperProfile.createDuringSignup.useMutation();
-  
-  // Create registration mutation (using the public procedure)
-  const createRegistrationMutation = api.registration.createDuringSignup.useMutation();
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Handlers for steps
+  function handleNextStep1() {
     setError("");
-    setSuccess("");
-    setIsSubmitting(true);
-
-    // Validate form data
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.camperName) {
+    if (!email || !password || !confirmPassword) {
       setError("All fields are required");
-      setIsSubmitting(false);
       return;
     }
-
-    if (formData.password !== formData.confirmPassword) {
+    if (password !== confirmPassword) {
       setError("Passwords do not match");
-      setIsSubmitting(false);
       return;
     }
-
-    if (formData.password.length < 8) {
+    if (password.length < 8) {
       setError("Password must be at least 8 characters long");
-      setIsSubmitting(false);
       return;
     }
-
-    if (!linkDetails) {
-      setError("Invalid signup link");
-      setIsSubmitting(false);
+    setStep(2);
+  }
+  function handleAddCamper() {
+    setCampers([...campers, { name: "", dob: "", gender: "" }]);
+  }
+  function handleRemoveCamper(idx: number) {
+    setCampers(campers.filter((_, i) => i !== idx));
+  }
+  function handleCampersChange(idx: number, field: keyof CamperData, value: string) {
+    setCampers(campers.map((c, i) => i === idx ? { ...c, [field]: value } : c));
+  }
+  function handleNextStep2() {
+    setError("");
+    if (campers.some(c => !c.name || !c.dob || !c.gender)) {
+      setError("All campers must have name, date of birth, and gender");
       return;
     }
-
-    console.log("Link details before submission:", JSON.stringify(linkDetails, null, 2));
-    
-    if (!linkDetails.organizationId) {
-      setError("Organization ID is missing from the signup link");
-      setIsSubmitting(false);
-      return;
-    }
-
-    console.log("Creating user with organization:", linkDetails.organizationId);
-    
+    setStep(3);
+  }
+  function handleBack() {
+    setStep(s => Math.max(1, s - 1));
+  }
+  const createUserMutation = api.auth.signup.useMutation();
+  const createCamperProfileMutation = api.camperProfile.createDuringSignup.useMutation();
+  async function handleSubmitFinal() {
+    setError(""); setSuccess(""); setIsSubmitting(true);
     try {
-      // Create user with BASE_USER role
       const userData = {
-        email: formData.email,
-        password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        role: "BASE_USER" as UserRole,
+        email, password,
+        firstName: "", lastName: "",
+        role: "BASE_USER", // Ensure BASE_USER is used for signup
         organizationId: linkDetails.organizationId,
       };
-      
-      console.log("User data before submission:", JSON.stringify(userData, null, 2));
-      
-      if (!userData.organizationId) {
-        throw new Error("Organization ID is undefined. Cannot create user without organization.");
+      const userResp = await createUserMutation.mutateAsync(userData);
+      if (!userResp.success) throw new Error(userResp.message || "Signup failed");
+      for (const camper of campers) {
+        await createCamperProfileMutation.mutateAsync({
+          name: camper.name,
+          userId: userResp.userId,
+          organizationId: linkDetails.organizationId,
+          locationId: linkDetails.locationId,
+          dateOfBirth: camper.dob, // Pass as ISO string
+          gender: camper.gender,
+        });
       }
-      
-      console.log("Submitting user data:", userData);
-      
-      createUserMutation.mutate(userData, {
-        onError: (error) => {
-          console.error("Mutation error:", error);
-          setError(`Error creating account: ${error.message}`);
-          setIsSubmitting(false);
-        }
-      });
+      setSuccess("Signup complete! You can now log in.");
+      setTimeout(() => router.push("/login"), 2500);
     } catch (err) {
-      console.error("Submit error:", err);
-      setError(`Error: ${err instanceof Error ? err.message : String(err)}`);
-      setIsSubmitting(false);
+      setError(err instanceof Error ? err.message : String(err));
     }
-  };
+    setIsSubmitting(false);
+  }
 
+  // --- Render ---
   if (isValidatingToken) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
@@ -299,164 +221,72 @@ function SignupForm({ token }: { token: string }) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      {/* Add the debug component at the top */}
-      <DebugComponent token={token} />
-      
-      <div className="w-full max-w-md space-y-8">
+    <div className="max-w-lg mx-auto bg-white p-8 rounded shadow mt-8">
+      <h2 className="text-2xl font-bold mb-6">Sign Up</h2>
+      {error && <div className="mb-4 text-red-600">{error}</div>}
+      {success && <div className="mb-4 text-green-600">{success}</div>}
+      {step === 1 && (
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign up for {linkDetails?.organizationName || "..."}
-          </h2>
-          {linkDetails && (
-            <p className="mt-2 text-center text-sm text-gray-600">
-              {linkDetails.locationName} - {linkDetails.yearName}
-            </p>
-          )}
+          <div className="mb-4">
+            <label>Email</label>
+            <input className="w-full border rounded p-2" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+          </div>
+          <div className="mb-4">
+            <label>Password</label>
+            <input className="w-full border rounded p-2" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+            <p className="text-xs text-gray-500">Password must be at least 8 characters</p>
+          </div>
+          <div className="mb-4">
+            <label>Confirm Password</label>
+            <input className="w-full border rounded p-2" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
+          </div>
+          <button className="bg-emerald-600 text-white px-4 py-2 rounded" onClick={handleNextStep1}>Next</button>
         </div>
-        
-        {error && (
-          <div className="rounded-md bg-red-50 p-4">
-            <div className="flex">
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">Error</h3>
-                <div className="mt-2 text-sm text-red-700">
-                  <p>{error}</p>
-                </div>
+      )}
+      {step === 2 && (
+        <div>
+          {campers.map((camper, idx) => (
+            <div key={idx} className="mb-4 border-b pb-4">
+              <div className="mb-2">
+                <label>Camper Name</label>
+                <input className="w-full border rounded p-2" type="text" value={camper.name} onChange={e => handleCampersChange(idx, "name", e.target.value)} />
               </div>
+              <div className="mb-2">
+                <label>Date of Birth</label>
+                <input className="w-full border rounded p-2" type="date" value={camper.dob} onChange={e => handleCampersChange(idx, "dob", e.target.value)} />
+              </div>
+              <div className="mb-2">
+                <label>Gender</label>
+                <select className="w-full border rounded p-2" value={camper.gender} onChange={e => handleCampersChange(idx, "gender", e.target.value)}>
+                  <option value="">Select Gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+              {campers.length > 1 && (
+                <button className="text-red-600 text-xs" onClick={() => handleRemoveCamper(idx)}>Remove</button>
+              )}
             </div>
-          </div>
-        )}
-        
-        {success && (
-          <div className="rounded-md bg-green-50 p-4">
-            <div className="flex">
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-green-800">Success</h3>
-                <div className="mt-2 text-sm text-green-700">
-                  <p>{success}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {isLinkValid && (
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div className="space-y-4 rounded-md shadow-sm">
-              <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
-                  First Name
-                </label>
-                <input
-                  id="firstName"
-                  name="firstName"
-                  type="text"
-                  required
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
-                  value={formData.firstName}
-                  onChange={handleInputChange}
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
-                  Last Name
-                </label>
-                <input
-                  id="lastName"
-                  name="lastName"
-                  type="text"
-                  required
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
-                  value={formData.lastName}
-                  onChange={handleInputChange}
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                  Email Address
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                />
-                <p className="mt-1 text-xs text-gray-500">Password must be at least 8 characters long</p>
-              </div>
-              
-              <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                  Confirm Password
-                </label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="camperName" className="block text-sm font-medium text-gray-700">
-                  Camper Name
-                </label>
-                <input
-                  id="camperName"
-                  name="camperName"
-                  type="text"
-                  required
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
-                  value={formData.camperName}
-                  onChange={handleInputChange}
-                />
-              </div>
-            </div>
-            
-            <div>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="group relative flex w-full justify-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-75"
-              >
-                {isSubmitting ? 'Creating Account...' : 'Sign Up'}
-              </button>
-            </div>
-            
-            <div className="text-center text-sm">
-              <Link href="/login" className="text-emerald-600 hover:text-emerald-500">
-                Already have an account? Log in
-              </Link>
-            </div>
-          </form>
-        )}
-      </div>
+          ))}
+          <button className="bg-blue-500 text-white px-3 py-1 rounded mr-2" onClick={handleAddCamper}>Add Another Camper</button>
+          <button className="bg-emerald-600 text-white px-4 py-2 rounded ml-2" onClick={handleNextStep2}>Next</button>
+          <button className="ml-2 text-gray-700 underline" onClick={handleBack}>Back</button>
+        </div>
+      )}
+      {step === 3 && (
+        <div>
+          <h3 className="font-semibold mb-2">Confirm Information</h3>
+          <div className="mb-2">Email: {email}</div>
+          <div className="mb-2">Campers:</div>
+          <ul className="mb-4">
+            {campers.map((c, i) => (
+              <li key={i} className="ml-4">{c.name} (DOB: {c.dob}, Gender: {c.gender})</li>
+            ))}
+          </ul>
+          <button className="bg-emerald-600 text-white px-4 py-2 rounded" onClick={handleSubmitFinal} disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Submit'}</button>
+          <button className="ml-2 text-gray-700 underline" onClick={handleBack}>Back</button>
+        </div>
+      )}
     </div>
   );
 }

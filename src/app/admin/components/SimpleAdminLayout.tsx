@@ -12,7 +12,7 @@ import Link from "next/link";
 
 interface SimpleAdminLayoutProps {
   children: ReactNode;
-  activeTab: "locations" | "admins";
+  activeTab: "locations" | "admins" | "profile-fields";
 }
 
 export default function SimpleAdminLayout({
@@ -94,6 +94,17 @@ export default function SimpleAdminLayout({
             >
               <UserGroupIcon className="mr-2 h-5 w-5" />
               Admin Users
+            </Link>
+            <Link
+              href="/admin/profile-fields"
+              className={`inline-flex items-center border-b-2 py-4 px-1 text-sm font-medium ${
+                activeTab === "profile-fields"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+              }`}
+            >
+              <span className="mr-2 h-5 w-5 inline-block">🔧</span>
+              Profile Fields
             </Link>
           </nav>
         </div>

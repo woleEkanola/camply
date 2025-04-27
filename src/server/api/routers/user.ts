@@ -408,7 +408,18 @@ export const userRouter = createTRPCRouter({
       }
       
       // Prepare data for update
-      const updateData: any = { ...input.data };
+      type UpdateData = {
+        email?: string;
+        firstName?: string;
+        lastName?: string;
+        phone?: string;
+        role?: UserRole;
+        password?: string;
+        active?: boolean;
+        organizationId?: string;
+        managedLocations?: string[];
+      };
+      const updateData: UpdateData = { ...input.data };
       
       // Remove managedLocations from direct update
       if (updateData.managedLocations) {
@@ -513,5 +524,48 @@ export const userRouter = createTRPCRouter({
       return await ctx.prisma.user.delete({
         where: { id: input.id },
       });
+    }),
+    
+  getBaseUsersWithCamperCounts: protectedProcedure
+    .input(z.object({ organizationId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session.user;
+      if (!currentUser) {
+        throw new Error("User not authenticated");
+      }
+      // Only allow SUPER_ADMIN, OWNER, ADMIN to view base users
+      if (
+        currentUser.role !== "SUPER_ADMIN" &&
+        currentUser.role !== "OWNER" &&
+        currentUser.role !== "ADMIN"
+      ) {
+        throw new Error("Not authorized to view base users");
+      }
+      // Filter by organization if provided (for multi-tenant)
+      const where = {
+        role: UserRole.BASE_USER,
+        ...(input.organizationId && { organizationId: input.organizationId })
+      };
+      // Find all BASE_USERs
+      const users = await ctx.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          createdAt: true,
+          organizationId: true,
+          camperProfiles: {
+            select: { id: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+      // Map to include camper profile count
+      return users.map(user => ({
+        ...user,
+        camperProfileCount: user.camperProfiles.length
+      }));
     }),
 });
