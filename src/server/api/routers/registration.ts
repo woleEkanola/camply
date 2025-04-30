@@ -12,6 +12,14 @@ const registrationSchema = z.object({
   notes: z.string().optional(),
 });
 
+// Add zod schemas for new fields
+const registrationUpdateSchema = z.object({
+  published: z.boolean().optional(),
+  parentConsent: z.boolean().optional(),
+  status: z.nativeEnum(RegistrationStatus).optional(),
+  notes: z.string().optional(),
+});
+
 export const registrationRouter = createTRPCRouter({
   // Get all registrations for an organization and year
   getByOrganizationAndYear: protectedProcedure
@@ -532,6 +540,43 @@ export const registrationRouter = createTRPCRouter({
           location: true,
           year: true
         }
+      });
+    }),
+    
+  // PATCH: update registration fields (admin/location admin only)
+  updateFields: protectedProcedure
+    .input(z.object({ id: z.string(), data: registrationUpdateSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session.user;
+      if (!currentUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+      }
+      // Only admins or location admins can update these fields
+      const registration = await ctx.prisma.registration.findUnique({
+        where: { id: input.id },
+        include: { location: true },
+      });
+      if (!registration) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Registration not found" });
+      }
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
+        currentUser.role === "ADMIN" ||
+        (currentUser.role === "LOCATION_ADMIN" &&
+          await ctx.prisma.location.findFirst({
+            where: {
+              id: registration.locationId,
+              admins: { some: { id: currentUser.id } },
+            },
+          }));
+      if (!hasPermission) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to update registration fields" });
+      }
+      return await ctx.prisma.registration.update({
+        where: { id: input.id },
+        data: input.data,
+        include: { camperProfile: true, location: true, year: true },
       });
     }),
     

@@ -26,7 +26,7 @@ export default function Home() {
       router.push("/dashboard");
     } else if (session.user.role === "LOCATION_ADMIN") {
       // Redirect location admins to their dashboard
-      router.push("/location-admin");
+      router.push("/admin/location-admin-dashboard");
     } else {
       // Fallback for any other case - should not happen
       console.warn("Unknown user role:", session.user.role);

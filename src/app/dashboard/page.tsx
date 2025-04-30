@@ -45,6 +45,31 @@ export default function UserDashboard() {
     }
   );
 
+  // Fetch required profile fields for the user's organization
+  const { data: profileFields = [], isLoading: isLoadingFields } = api.profileField.getByOrganization.useQuery(
+    { organizationId: session?.user?.organizationId },
+    { enabled: !!session?.user?.organizationId }
+  );
+
+  // Helper to calculate completion percentage for a profile
+  function getProfileCompletion(profile: any) {
+    if (!profileFields.length) return 0;
+    const requiredFields = profileFields.filter((f: any) => f.required);
+    if (!requiredFields.length) return 100;
+    let filled = 0;
+    for (const field of requiredFields) {
+      // Check core fields
+      if (["name","dateOfBirth","gender","locationId"].includes(field.name)) {
+        if (profile[field.name]) filled++;
+      } else {
+        // Custom fields
+        const val = profile.fieldValues?.find((fv: any) => fv.fieldId === field.id)?.value;
+        if (val && val !== "") filled++;
+      }
+    }
+    return Math.round((filled / requiredFields.length) * 100);
+  }
+
   // Handle errors with useEffect
   useEffect(() => {
     if (profilesError) {
@@ -55,7 +80,7 @@ export default function UserDashboard() {
     }
   }, [profilesError, registrationsError]);
 
-  if (status === "loading" || isLoadingProfiles || isLoadingRegistrations) {
+  if (status === "loading" || isLoadingProfiles || isLoadingRegistrations || isLoadingFields) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-emerald-500"></div>
@@ -166,12 +191,6 @@ export default function UserDashboard() {
                         >
                           View Details
                         </Link>
-                        <Link
-                          href={`/dashboard/profiles/${profile.id}/edit`}
-                          className="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-300"
-                        >
-                          Edit
-                        </Link>
                       </div>
                     </div>
                   </div>
@@ -228,6 +247,12 @@ export default function UserDashboard() {
                         scope="col"
                         className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
                       >
+                        Profile Completion
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                      >
                         Actions
                       </th>
                     </tr>
@@ -264,6 +289,23 @@ export default function UserDashboard() {
                           >
                             {registration.status}
                           </span>
+                        </td>
+                        {/* Profile Completion Cell */}
+                        <td className="whitespace-nowrap px-6 py-4">
+                          {(() => {
+                            const percent = getProfileCompletion(registration.camperProfile);
+                            return (
+                              <div className="flex items-center gap-2 min-w-[100px]">
+                                <div className="w-full bg-gray-200 rounded h-2">
+                                  <div
+                                    className="bg-emerald-500 h-2 rounded"
+                                    style={{ width: `${percent}%` }}
+                                  ></div>
+                                </div>
+                                <span className="text-xs font-medium text-gray-700">{percent}%</span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm font-medium">
                           <Link

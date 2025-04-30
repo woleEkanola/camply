@@ -3,7 +3,8 @@
 import React, { useState } from "react";
 import { api } from "@/utils/trpc";
 import { useSession } from "next-auth/react";
-import SimpleAdminLayout from "../components/SimpleAdminLayout";
+import DashboardLayout from "../components/DashboardLayout";
+import ModernDashboardLayout from "../components/ModernDashboardLayout";
 
 const FIELD_TYPES = [
   { value: "text", label: "Text" },
@@ -49,7 +50,8 @@ export default function ProfileFieldsPage() {
   }
 
   return (
-    <SimpleAdminLayout activeTab="profile-fields">
+
+ <ModernDashboardLayout>
       <div className="max-w-2xl mx-auto py-8">
         <h2 className="text-2xl font-bold mb-6">Manage Profile Fields</h2>
 
@@ -171,7 +173,7 @@ export default function ProfileFieldsPage() {
           </table>
         )}
       </div>
-    </SimpleAdminLayout>
+      </ModernDashboardLayout>
   );
 }
 

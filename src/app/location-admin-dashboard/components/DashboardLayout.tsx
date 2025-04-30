@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   HomeIcon,
@@ -11,28 +11,30 @@ import {
   ArrowLeftOnRectangleIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 interface DashboardLayoutProps {
   children: ReactNode;
   title: string;
-  activeTab: "locations" | "admins" | "location-admin" | "settings";
 }
 
 export default function DashboardLayout({
   children,
   title,
-  activeTab,
 }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
+  const pathname = usePathname();
 
   // Only show sidebar links based on user role
   const isLocationAdmin = session?.user?.role === "LOCATION_ADMIN";
 
   // Location Admin Sidebar Links
   const locationAdminLinks = [
-    { label: "Campers Profiles", href: "/location-admin-dashboard", icon: UserGroupIcon },
+    { label: "Dashboard", href: "/location-admin-dashboard", icon: HomeIcon },
+    { label: "Campers Profiles", href: "/location-admin-dashboard/campers-profile", icon: UserGroupIcon },
     { label: "Registrations", href: "/location-admin-dashboard/registrations", icon: BuildingOfficeIcon },
     { label: "Age/DOB Approvals", href: "/location-admin-dashboard/dob-approvals", icon: HomeIcon },
     { label: "Parent Concents", href: "/location-admin-dashboard/parent-consents", icon: Cog6ToothIcon },
@@ -86,7 +88,7 @@ export default function DashboardLayout({
               <Link
                 href="/admin"
                 className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
-                  activeTab === "locations"
+                  pathname === "/admin"
                     ? "bg-blue-50 text-blue-700"
                     : "text-gray-700 hover:bg-gray-100"
                 }`}
@@ -98,7 +100,7 @@ export default function DashboardLayout({
               <Link
                 href="/admin?tab=locations"
                 className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
-                  activeTab === "locations"
+                  pathname === "/admin" && searchParams.get("tab") === "locations"
                     ? "bg-blue-50 text-blue-700"
                     : "text-gray-700 hover:bg-gray-100"
                 }`}
@@ -110,7 +112,7 @@ export default function DashboardLayout({
               <Link
                 href="/admin?tab=admins"
                 className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
-                  activeTab === "admins"
+                  pathname === "/admin" && searchParams.get("tab") === "admins"
                     ? "bg-blue-50 text-blue-700"
                     : "text-gray-700 hover:bg-gray-100"
                 }`}
@@ -126,7 +128,7 @@ export default function DashboardLayout({
               key={link.href}
               href={link.href}
               className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
-                activeTab === link.href.replace("/location-admin-dashboard", "location-admin")
+                pathname === link.href
                   ? "bg-blue-50 text-blue-700"
                   : "text-gray-700 hover:bg-gray-100"
               }`}
@@ -139,7 +141,7 @@ export default function DashboardLayout({
           <Link
             href={isLocationAdmin ? "/location-admin-dashboard" : "/admin/location-admin-dashboard"}
             className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
-              activeTab === "location-admin"
+              pathname === (isLocationAdmin ? "/location-admin-dashboard" : "/admin/location-admin-dashboard")
                 ? "bg-blue-50 text-blue-700"
                 : "text-gray-700 hover:bg-gray-100"
             }`}
@@ -152,7 +154,7 @@ export default function DashboardLayout({
             <Link
               href="/admin?tab=settings"
               className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
-                activeTab === "settings"
+                pathname === "/admin" && searchParams.get("tab") === "settings"
                   ? "bg-blue-50 text-blue-700"
                   : "text-gray-700 hover:bg-gray-100"
               }`}

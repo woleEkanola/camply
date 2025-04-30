@@ -193,6 +193,50 @@ export default function RegistrationsPage() {
     }
   });
 
+  // Bulk Publish State
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const bulkPublishMutation = api.registration.updateFields.useMutation({
+    onSuccess: () => {
+      setSuccess("Selected registrations published!");
+      setSelectedIds([]);
+      void refetchRegistrations();
+    },
+    onError: (error) => {
+      setError(`Error publishing registrations: ${error.message}`);
+    }
+  });
+
+  const handleSelect = (id: string, checked: boolean) => {
+    setSelectedIds((prev) =>
+      checked ? [...prev, id] : prev.filter((x) => x !== id)
+    );
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedIds(
+      checked
+        ? filteredRegistrations
+            .filter(r => r.status !== RegistrationStatus.PENDING)
+            .map(r => r.id)
+        : []
+    );
+  };
+
+  const handleBulkPublish = () => {
+    // Only publish if all selected are not pending
+    const allowedIds = selectedIds.filter(
+      id => filteredRegistrations.find(r => r.id === id)?.status !== RegistrationStatus.PENDING
+    );
+    if (allowedIds.length === 0) {
+      setError("Only registrations that are not pending can be published.");
+      return;
+    }
+    bulkPublishMutation.mutate({
+      id: allowedIds[0], // Only one at a time for now (could be expanded to batch API)
+      data: { published: true }
+    });
+  };
+
   const openCreateModal = () => {
     resetForm();
     setSelectedRegistration(null);
@@ -437,6 +481,17 @@ export default function RegistrationsPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    <input
+                      type="checkbox"
+                      checked={
+                        selectedIds.length > 0 &&
+                        selectedIds.length === filteredRegistrations.filter(r => r.status !== RegistrationStatus.PENDING).length
+                      }
+                      onChange={e => handleSelectAll(e.target.checked)}
+                      aria-label="Select all except pending"
+                    />
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Camper
                   </th>
@@ -454,6 +509,15 @@ export default function RegistrationsPage() {
               <tbody className="divide-y divide-gray-200 bg-white">
                 {filteredRegistrations.map((registration) => (
                   <tr key={registration.id}>
+                    <td className="px-3 py-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(registration.id)}
+                        disabled={registration.status === RegistrationStatus.PENDING}
+                        onChange={e => handleSelect(registration.id, e.target.checked)}
+                        aria-label={`Select registration ${registration.id}`}
+                      />
+                    </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {registration.camperProfile.user.firstName} {registration.camperProfile.user.lastName}
                       <div className="text-xs text-gray-500">{registration.camperProfile.user.email}</div>
@@ -510,6 +574,23 @@ export default function RegistrationsPage() {
                 ? "No registrations match your filters."
                 : "No registrations found. Add your first registration!"}
             </p>
+          </div>
+        )}
+
+        {/* Bulk Publish Button */}
+        {selectedIds.length > 0 && (
+          <div className="mt-4 flex justify-end">
+            <button
+              className="bg-green-600 text-white rounded px-4 py-2 disabled:bg-gray-400"
+              onClick={handleBulkPublish}
+              disabled={
+                selectedIds.length === 0 ||
+                selectedIds.some(id => filteredRegistrations.find(r => r.id === id)?.status === RegistrationStatus.PENDING) ||
+                bulkPublishMutation.isLoading
+              }
+            >
+              {bulkPublishMutation.isLoading ? "Publishing..." : "Publish Selected"}
+            </button>
           </div>
         )}
 

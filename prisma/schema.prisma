@@ -73,6 +73,7 @@ model Organization {
   years           Year[]           // Organization has many years
   activeYearId    String?          // Reference to the active year
   activeYear      Year?            @relation("ActiveYear", fields: [activeYearId], references: [id])
+  settings        Json?            // Holds admin settings such as age range, cutoff date, etc.
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
@@ -138,6 +139,7 @@ model CamperProfile {
   fieldValues    ProfileFieldValue[]
   registrations  Registration[]      // Profile can have many registrations
   active         Boolean             @default(true)
+  dobApproved    Boolean             @default(false)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 }
@@ -196,6 +198,8 @@ model Registration {
   yearId           String
   location         Location           @relation(fields: [locationId], references: [id])
   locationId       String
+  published        Boolean            @default(false)
+  parentConsent    Boolean            @default(false)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 }

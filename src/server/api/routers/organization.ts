@@ -41,5 +41,45 @@ export const organizationRouter = createTRPCRouter({
       return prisma.organization.findMany({
         orderBy: { name: 'asc' }
       });
-    })
+    }),
+  
+  // Get organization settings (any admin/owner)
+  getSettings: protectedProcedure
+    .input(z.object({ organizationId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      // Only allow users in the organization
+      const org = await prisma.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { settings: true }
+      });
+      if (!org) throw new Error("Organization not found");
+      return org.settings || {};
+    }),
+
+  // Update organization settings (admin/owner only)
+  updateSettings: protectedProcedure
+    .input(z.object({
+      organizationId: z.string(),
+      settings: z.object({
+        minAge: z.number().min(0),
+        maxAge: z.number().min(0),
+        cutoffDate: z.string().optional(),
+      })
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Only allow admins/owners
+      const user = await prisma.user.findUnique({ where: { id: ctx.userId } });
+      if (!user || !user.organizationId || user.organizationId !== input.organizationId) {
+        throw new Error("Not authorized");
+      }
+      if (!["ADMIN", "OWNER", "SUPER_ADMIN"].includes(user.role)) {
+        throw new Error("Not authorized");
+      }
+      const updated = await prisma.organization.update({
+        where: { id: input.organizationId },
+        data: { settings: input.settings },
+        select: { settings: true }
+      });
+      return updated.settings;
+    }),
 });

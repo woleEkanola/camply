@@ -20,6 +20,16 @@ const profileFieldValueSchema = z.object({
   value: z.string(),
 });
 
+// Schema for camper profile update
+const camperProfileUpdateSchema = z.object({
+  name: z.string().optional(),
+  active: z.boolean().optional(),
+  locationId: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  gender: z.string().optional(),
+  dobApproved: z.boolean().optional(),
+});
+
 export const camperProfileRouter = createTRPCRouter({
   // Get all camper profiles for an organization
   getByOrganization: protectedProcedure
@@ -168,6 +178,8 @@ export const camperProfileRouter = createTRPCRouter({
           gender: true,
           user: true,
           location: true,
+          locationId: true,
+          organizationId: true,
           fieldValues: {
             include: {
               field: true
@@ -309,7 +321,7 @@ export const camperProfileRouter = createTRPCRouter({
   update: protectedProcedure
     .input(z.object({
       id: z.string(),
-      profile: camperProfileSchema.partial(),
+      profile: camperProfileUpdateSchema,
       fieldValues: z.array(profileFieldValueSchema).optional()
     }))
     .mutation(async ({ ctx, input }) => {
@@ -358,6 +370,9 @@ export const camperProfileRouter = createTRPCRouter({
           }),
           ...(input.profile.gender && {
             gender: input.profile.gender
+          }),
+          ...(input.profile.dobApproved !== undefined && {
+            dobApproved: input.profile.dobApproved
           })
         }
       });
@@ -393,6 +408,49 @@ export const camperProfileRouter = createTRPCRouter({
       }
       
       return updatedProfile;
+    }),
+    
+  // Update DOB approval
+  updateDobApproval: protectedProcedure
+    .input(z.object({ id: z.string(), dobApproved: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session.user;
+      
+      if (!currentUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+      }
+      
+      // Only admins or location admins can approve DOB
+      const profile = await ctx.prisma.camperProfile.findUnique({
+        where: { id: input.id },
+        include: { location: true },
+      });
+      
+      if (!profile) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Profile not found" });
+      }
+      
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
+        currentUser.role === "ADMIN" ||
+        (currentUser.role === "LOCATION_ADMIN" &&
+          profile.locationId &&
+          (await ctx.prisma.location.findFirst({
+            where: {
+              id: profile.locationId,
+              admins: { some: { id: currentUser.id } },
+            },
+          })));
+      
+      if (!hasPermission) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to approve DOB" });
+      }
+      
+      return await ctx.prisma.camperProfile.update({
+        where: { id: input.id },
+        data: { dobApproved: input.dobApproved },
+      });
     }),
     
   // Delete a camper profile

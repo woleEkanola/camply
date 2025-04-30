@@ -23,6 +23,7 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
+      managedLocations?: string[];
     }
   }
 }
@@ -32,6 +33,7 @@ declare module "next-auth/jwt" {
     id: string;
     role: UserRole;
     organizationId?: string;
+    managedLocations?: string[];
   }
 }
 
@@ -91,6 +93,14 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.role = user.role as UserRole;
         token.organizationId = user.organizationId;
+        // Fetch managedLocations for LOCATION_ADMIN
+        if (user.role === "LOCATION_ADMIN") {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            include: { managedLocations: true },
+          });
+          token.managedLocations = dbUser?.managedLocations?.map(loc => loc.id) || [];
+        }
         
         // For debugging
         console.log("JWT Callback - User ID:", user.id);
@@ -105,6 +115,10 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.role = token.role as UserRole;
         session.user.organizationId = token.organizationId as string;
+        // Pass managedLocations to session
+        if (token.role === "LOCATION_ADMIN") {
+          session.user.managedLocations = token.managedLocations || [];
+        }
         
         // For debugging
         console.log("Session Callback - Token ID:", token.id);
