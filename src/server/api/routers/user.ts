@@ -542,12 +542,13 @@ export const userRouter = createTRPCRouter({
       ) {
         throw new Error("Not authorized to view base users");
       }
-      // Filter by organization if provided (for multi-tenant)
+      // Only fetch users whose role is a valid UserRole (ADMIN, etc.)
+      // Remove any reference to BASE_USER as it is not a valid role in the schema
       const where = {
         role: "ADMIN" as UserRole,
         ...(input.organizationId && { organizationId: input.organizationId })
       };
-      // Find all BASE_USERs
+      // Find all ADMIN users (previously BASE_USER, but BASE_USER is not valid in schema)
       const users = await ctx.prisma.user.findMany({
         where,
         select: {

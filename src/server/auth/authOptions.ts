@@ -38,13 +38,24 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || undefined,
-          role: user.role,
-          organizationId: user.organizationId ?? undefined,
-        };
+        // Only return user if their role is a valid UserRole (exclude BASE_USER)
+        if (
+          user.role === "SUPER_ADMIN" ||
+          user.role === "OWNER" ||
+          user.role === "ADMIN" ||
+          user.role === "LOCATION_ADMIN"
+        ) {
+          return {
+            id: user.id,
+            email: user.email,
+            name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || undefined,
+            role: user.role as UserRole,
+            organizationId: user.organizationId ?? undefined,
+          };
+        } else {
+          // Invalid/legacy role (e.g., BASE_USER), do not authorize
+          return null;
+        }
       },
     }),
   ],
