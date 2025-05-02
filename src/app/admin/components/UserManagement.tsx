@@ -115,12 +115,16 @@ export default function UserManagement({ organizationId }: { organizationId: str
   useEffect(() => {
     if (userData) {
       console.log("Users fetched successfully:", userData);
-      // BASE_USER is not a valid role, filter only OWNER (see project memories)
-      const filteredUsers = userData.filter((user: User) => user.role !== UserRole.OWNER);
+      // Normalize backend roles to local UserRole enum
+      const normalizedUsers: User[] = userData.map((user: any) => ({
+        ...user,
+        role: user.role as UserRole,
+      }));
+      const filteredUsers = normalizedUsers.filter((user) => user.role !== UserRole.OWNER);
       setUsers(filteredUsers);
       
       // Extract location admins for the location access tab
-      const admins = userData.filter((user: User) => user.role === UserRole.LOCATION_ADMIN);
+      const admins = normalizedUsers.filter((user) => user.role === UserRole.LOCATION_ADMIN);
       setLocationAdmins(admins);
     }
   }, [userData]);

@@ -39,7 +39,7 @@ export default function AnalyticsDashboard() {
     id: string;
     name: string;
     user?: { email?: string };
-    location?: { name?: string };
+    location?: { name?: string } | null;
     createdAt: string | Date;
   }
 
