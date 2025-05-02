@@ -17,7 +17,7 @@ export default function UserDashboard() {
     
     if (!session) {
       router.push("/login");
-    } else if (session.user.role !== "ADMIN" && session.user.role !== "BASE_USER") {
+    } else if (session.user.role !== "ADMIN") {
       // If not a base user or admin, redirect to appropriate dashboard
       if (session.user.role === "SUPER_ADMIN") {
         router.push("/super-admin");
@@ -46,9 +46,10 @@ export default function UserDashboard() {
   );
 
   // Fetch required profile fields for the user's organization
+  const organizationId = session?.user?.organizationId ?? "";
   const { data: profileFields = [], isLoading: isLoadingFields } = api.profileField.getByOrganization.useQuery(
-    { organizationId: session?.user?.organizationId },
-    { enabled: !!session?.user?.organizationId }
+    { organizationId },
+    { enabled: !!organizationId }
   );
 
   // Helper to calculate completion percentage for a profile
@@ -172,7 +173,7 @@ export default function UserDashboard() {
               </div>
             ) : (
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {camperProfiles?.map((profile) => (
+                {camperProfiles?.map((profile: any) => (
                   <div
                     key={profile.id}
                     className="overflow-hidden rounded-lg bg-white shadow"
@@ -258,7 +259,7 @@ export default function UserDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
-                    {registrations?.map((registration) => (
+                    {registrations?.map((registration: any) => (
                       <tr key={registration.id}>
                         <td className="whitespace-nowrap px-6 py-4">
                           <div className="text-sm font-medium text-gray-900">

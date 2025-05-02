@@ -41,14 +41,16 @@ export default function ModernDashboardLayout({
       { name: "Users", href: "/admin/users", icon: UsersIcon, current: pathname === "/admin/users" },
       { name: "Camper Profiles", href: "/admin/campers", icon: UserGroupIcon, current: pathname === "/admin/campers" },
       // Add Profile Fields link for ADMIN, OWNER, SUPER_ADMIN
-      (session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "OWNER" || session?.user?.role === "ADMIN") && {
-        name: "Profile Fields",
-        href: "/admin/profile-fields",
-        icon: Cog6ToothIcon,
-        current: pathname === "/admin/profile-fields"
-      },
+      ...(session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "OWNER" || session?.user?.role === "ADMIN"
+        ? [{
+            name: "Profile Fields",
+            href: "/admin/profile-fields",
+            icon: Cog6ToothIcon,
+            current: pathname === "/admin/profile-fields"
+          }]
+        : []),
       { name: "Settings", href: "/admin/settings", icon: Cog6ToothIcon, current: pathname === "/admin/settings" },
-    ].filter(Boolean);
+    ];
 
     // Add Years and Registrations for Super Admin, Owner, and Admin roles
     if (session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "OWNER") {

@@ -46,7 +46,8 @@ export const organizationRouter = createTRPCRouter({
   // Get organization settings (any admin/owner)
   getSettings: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
-    .query(async ({ input, ctx }) => {
+    .query(async ({ input }) => {
+      // Removed unused parameter 'ctx' to fix ESLint error
       // Only allow users in the organization
       const org = await prisma.organization.findUnique({
         where: { id: input.organizationId },

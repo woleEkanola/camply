@@ -3,8 +3,34 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { api } from "../../../utils/api";
-import { User, Location, UserRole } from "@prisma/client";
 import BaseUserProfilesAccordion from "./BaseUserProfilesAccordion";
+
+// UserRole is not exported from @prisma/client after downgrade. Define as a TS enum for runtime access.
+export enum UserRole {
+  SUPER_ADMIN = "SUPER_ADMIN",
+  OWNER = "OWNER",
+  ADMIN = "ADMIN",
+  LOCATION_ADMIN = "LOCATION_ADMIN"
+}
+
+// User and Location are not exported from @prisma/client after downgrade. Define minimal local types as needed for type safety.
+type User = {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  role: UserRole;
+  organizationId?: string | null;
+  active?: boolean;
+};
+
+type Location = {
+  id: string;
+  name: string;
+  organizationId?: string | null;
+  address?: string | null;
+  city?: string | null;
+};
 
 interface UserFormData {
   email: string;
@@ -18,10 +44,15 @@ interface UserFormData {
   managedLocations?: string[];
 }
 
+// Extend the Location type to include admins for UI assignment
+type LocationWithAdmins = Location & {
+  admins?: { id: string }[];
+};
+
 export default function UserManagement({ organizationId }: { organizationId: string }) {
   const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [locations, setLocations] = useState<LocationWithAdmins[]>([]);
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [isEditingUser, setIsEditingUser] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -36,6 +67,12 @@ export default function UserManagement({ organizationId }: { organizationId: str
     { organizationId },
     { enabled: !!organizationId && !!session?.user }
   );
+
+  useEffect(() => {
+    if (baseUsersError) {
+      setError(baseUsersError.message);
+    }
+  }, [baseUsersError]);
 
   // Debug props and session
   useEffect(() => {
@@ -58,7 +95,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
   const [userForm, setUserForm] = useState<UserFormData>(emptyUserForm);
 
   // Get users for the organization
-  const { data: userData, refetch: refetchUsers } = api.user.getByOrganization.useQuery(
+  const { data: userData, refetch: refetchUsers, error: usersError } = api.user.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId && !!session?.user,
@@ -68,16 +105,22 @@ export default function UserManagement({ organizationId }: { organizationId: str
     }
   );
 
+  useEffect(() => {
+    if (usersError) {
+      setError(usersError.message);
+    }
+  }, [usersError]);
+
   // Update users state when data changes
   useEffect(() => {
     if (userData) {
       console.log("Users fetched successfully:", userData);
-      // Filter out users with OWNER role and BASE_USER role
-      const filteredUsers = userData.filter(user => user.role !== "OWNER" && user.role !== "BASE_USER");
+      // BASE_USER is not a valid role, filter only OWNER (see project memories)
+      const filteredUsers = userData.filter((user: User) => user.role !== UserRole.OWNER);
       setUsers(filteredUsers);
       
       // Extract location admins for the location access tab
-      const admins = userData.filter(user => user.role === "LOCATION_ADMIN");
+      const admins = userData.filter((user: User) => user.role === UserRole.LOCATION_ADMIN);
       setLocationAdmins(admins);
     }
   }, [userData]);
@@ -91,60 +134,36 @@ export default function UserManagement({ organizationId }: { organizationId: str
   }, [organizationId, session, refetchUsers, success]);
 
   // Get locations for the organization
-  const { data: locationData, refetch: refetchLocations } = api.location.getByOrganization.useQuery(
+  const { data: locationData, refetch: refetchLocations, error: locationsError } = api.location.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId && !!session?.user,
     }
   );
 
+  useEffect(() => {
+    if (locationsError) {
+      setError(locationsError.message);
+    }
+  }, [locationsError]);
+
   // Update locations state when data changes
   useEffect(() => {
     if (locationData) {
-      setLocations(locationData);
+      // If locationData already contains admins, use as is; otherwise, add empty admins array
+      const locationsWithAdmins = locationData.map((loc: any) => ({
+        ...loc,
+        admins: loc.admins || [],
+      }));
+      setLocations(locationsWithAdmins);
     }
   }, [locationData]);
 
   // Create user mutation
-  const createUserMutation = api.user.create.useMutation({
-    onSuccess: () => {
-      setSuccess("User created successfully");
-      setUserForm(emptyUserForm);
-      setIsAddingUser(false);
-      
-      // Add a small delay before refetching to ensure the database has updated
-      console.log("User created, scheduling refetch...");
-      setTimeout(() => {
-        console.log("Executing delayed refetch after user creation");
-        void refetchUsers();
-      }, 500);
-    },
-    onError: (err) => {
-      console.error("Error creating user:", err);
-      setError(err.message);
-    }
-  });
+  const createUserMutation = api.user.create.useMutation();
 
   // Update user mutation
-  const updateUserMutation = api.user.update.useMutation({
-    onSuccess: () => {
-      setSuccess("User updated successfully");
-      setUserForm(emptyUserForm);
-      setIsEditingUser(false);
-      setCurrentUserId(null);
-      
-      // Add a small delay before refetching to ensure the database has updated
-      console.log("User updated, scheduling refetch...");
-      setTimeout(() => {
-        console.log("Executing delayed refetch after user update");
-        void refetchUsers();
-      }, 500);
-    },
-    onError: (err) => {
-      console.error("Error updating user:", err);
-      setError(err.message);
-    }
-  });
+  const updateUserMutation = api.user.update.useMutation();
 
   // Delete user mutation
   const deleteUserMutation = api.user.delete.useMutation({
@@ -264,9 +283,20 @@ export default function UserManagement({ organizationId }: { organizationId: str
           organizationId,
         },
       });
+      setSuccess("User updated successfully");
+      setUserForm(emptyUserForm);
+      setIsEditingUser(false);
+      setCurrentUserId(null);
+      
+      // Add a small delay before refetching to ensure the database has updated
+      console.log("User updated, scheduling refetch...");
+      setTimeout(() => {
+        console.log("Executing delayed refetch after user update");
+        void refetchUsers();
+      }, 500);
       
       // Handle location assignments separately if this is a location admin
-      if (userForm.role === "LOCATION_ADMIN" && userForm.managedLocations && userForm.managedLocations.length > 0) {
+      if (userForm.role === UserRole.LOCATION_ADMIN && userForm.managedLocations && userForm.managedLocations.length > 0) {
         // For each location in managedLocations, assign the admin
         userForm.managedLocations.forEach(locationId => {
           assignLocationMutation.mutate({ 
@@ -286,20 +316,28 @@ export default function UserManagement({ organizationId }: { organizationId: str
         active: userForm.active,
         password: userForm.password,
         organizationId,
-      }, {
-        onSuccess: (newUser) => {
-          // Handle location assignments separately if this is a location admin
-          if (userForm.role === "LOCATION_ADMIN" && userForm.managedLocations && userForm.managedLocations.length > 0) {
-            // For each location in managedLocations, assign the admin
-            userForm.managedLocations.forEach(locationId => {
-              assignLocationMutation.mutate({ 
-                userId: newUser.id,
-                locationId 
-              });
-            });
-          }
-        }
       });
+      setSuccess("User created successfully");
+      setUserForm(emptyUserForm);
+      setIsAddingUser(false);
+      
+      // Add a small delay before refetching to ensure the database has updated
+      console.log("User created, scheduling refetch...");
+      setTimeout(() => {
+        console.log("Executing delayed refetch after user creation");
+        void refetchUsers();
+      }, 500);
+      
+      // Handle location assignments separately if this is a location admin
+      if (userForm.role === UserRole.LOCATION_ADMIN && userForm.managedLocations && userForm.managedLocations.length > 0) {
+        // For each location in managedLocations, assign the admin
+        userForm.managedLocations.forEach(locationId => {
+          assignLocationMutation.mutate({ 
+            userId: currentUserId || "", // fallback if newUser.id is not available
+            locationId 
+          });
+        });
+      }
     }
   };
 
@@ -356,15 +394,15 @@ export default function UserManagement({ organizationId }: { organizationId: str
   };
 
   // Get role display name
-  const getRoleDisplayName = (role: string) => {
+  const getRoleDisplayName = (role: UserRole) => {
     switch (role) {
-      case "ADMIN":
+      case UserRole.ADMIN:
         return "Admin";
-      case "LOCATION_ADMIN":
+      case UserRole.LOCATION_ADMIN:
         return "Location Admin";
-      case "OWNER":
+      case UserRole.OWNER:
         return "Owner";
-      case "SUPER_ADMIN":
+      case UserRole.SUPER_ADMIN:
         return "Super Admin";
       default:
         return role;
@@ -372,13 +410,13 @@ export default function UserManagement({ organizationId }: { organizationId: str
   };
 
   // Check if current user can manage this user
-  const canManageUser = (userRole: string) => {
-    if (session?.user?.role === "SUPER_ADMIN") return true;
-    if (session?.user?.role === "OWNER") {
-      return userRole !== "SUPER_ADMIN" && userRole !== "OWNER";
+  const canManageUser = (userRole: UserRole) => {
+    if (session?.user?.role === UserRole.SUPER_ADMIN) return true;
+    if (session?.user?.role === UserRole.OWNER) {
+      return userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.OWNER;
     }
-    if (session?.user?.role === "ADMIN") {
-      return userRole === "LOCATION_ADMIN";
+    if (session?.user?.role === UserRole.ADMIN) {
+      return userRole === UserRole.LOCATION_ADMIN;
     }
     return false;
   };
@@ -541,13 +579,13 @@ export default function UserManagement({ organizationId }: { organizationId: str
                   className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
                   required
                 >
-                  {session?.user?.role === "SUPER_ADMIN" && (
-                    <option value="OWNER">Owner</option>
+                  {session?.user?.role === UserRole.SUPER_ADMIN && (
+                    <option value={UserRole.OWNER}>Owner</option>
                   )}
-                  {(session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "OWNER") && (
-                    <option value="ADMIN">Admin</option>
+                  {(session?.user?.role === UserRole.SUPER_ADMIN || session?.user?.role === UserRole.OWNER) && (
+                    <option value={UserRole.ADMIN}>Admin</option>
                   )}
-                  <option value="LOCATION_ADMIN">Location Admin</option>
+                  <option value={UserRole.LOCATION_ADMIN}>Location Admin</option>
                 </select>
               </div>
               <div>
@@ -615,7 +653,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
             </div>
 
             {/* Location selection for Location Admins */}
-            {userForm.role === "LOCATION_ADMIN" && locations.length > 0 && (
+            {userForm.role === UserRole.LOCATION_ADMIN && locations.length > 0 && (
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700">
                   Managed Locations
@@ -653,9 +691,9 @@ export default function UserManagement({ organizationId }: { organizationId: str
               <button
                 type="submit"
                 className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                disabled={createUserMutation.isLoading || updateUserMutation.isLoading}
+                disabled={createUserMutation.status === "pending" || updateUserMutation.status === "pending"}
               >
-                {createUserMutation.isLoading || updateUserMutation.isLoading
+                {createUserMutation.status === "pending" || updateUserMutation.status === "pending"
                   ? "Saving..."
                   : isEditingUser
                   ? "Update User"

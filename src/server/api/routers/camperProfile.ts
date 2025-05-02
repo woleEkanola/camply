@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { UserRole } from "@prisma/client";
+
+// Removed unused import: UserRole
 
 // Schema for camper profile data validation
 const camperProfileSchema = z.object({
@@ -35,7 +36,7 @@ export const camperProfileRouter = createTRPCRouter({
   getByOrganization: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -94,7 +95,7 @@ export const camperProfileRouter = createTRPCRouter({
   getByUser: protectedProcedure
     .input(z.object({ userId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -131,7 +132,7 @@ export const camperProfileRouter = createTRPCRouter({
   // Get camper profiles for the current user (for dashboard)
   getByUserId: protectedProcedure
     .query(async ({ ctx }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -162,7 +163,7 @@ export const camperProfileRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -194,11 +195,10 @@ export const camperProfileRouter = createTRPCRouter({
       
       // Check if user has permission to view this profile
       const hasPermission = 
-        currentUser.id === profile.userId || 
+        currentUser.id === profile.user?.id || 
         currentUser.role === "SUPER_ADMIN" || 
         currentUser.role === "OWNER" || 
         currentUser.role === "ADMIN" ||
-        currentUser.role === "BASE_USER" ||
         (currentUser.role === "LOCATION_ADMIN" && 
          profile.locationId && 
          await ctx.prisma.location.findFirst({
@@ -229,7 +229,7 @@ export const camperProfileRouter = createTRPCRouter({
       fieldValues: z.array(profileFieldValueSchema)
     }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -309,10 +309,11 @@ export const camperProfileRouter = createTRPCRouter({
         });
         
         return profile;
-      } catch (error: any) {
+      } catch (error) {
+        const err = error as Error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: `Error creating camper profile: ${error.message}`
+          message: `Error creating camper profile: ${err.message}`
         });
       }
     }),
@@ -325,7 +326,7 @@ export const camperProfileRouter = createTRPCRouter({
       fieldValues: z.array(profileFieldValueSchema).optional()
     }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -334,7 +335,7 @@ export const camperProfileRouter = createTRPCRouter({
       // Get the profile to update
       const profile = await ctx.prisma.camperProfile.findUnique({
         where: { id: input.id },
-        include: { fieldValues: true }
+        include: { fieldValues: true, user: true }
       });
       
       if (!profile) {
@@ -343,11 +344,10 @@ export const camperProfileRouter = createTRPCRouter({
       
       // Check if user has permission to update this profile
       const hasPermission = 
-        currentUser.id === profile.userId || 
+        currentUser.id === profile.user?.id || 
         currentUser.role === "SUPER_ADMIN" || 
         currentUser.role === "OWNER" || 
-        currentUser.role === "ADMIN" ||
-        currentUser.role === "BASE_USER";
+        currentUser.role === "ADMIN";
       
       if (!hasPermission) {
         throw new TRPCError({ 
@@ -384,8 +384,8 @@ export const camperProfileRouter = createTRPCRouter({
         
         // Process each field value
         await Promise.all(
-          input.fieldValues.map(async fieldValue => {
-            const existingValue = currentFieldValues.find(v => v.fieldId === fieldValue.fieldId);
+          input.fieldValues.map(async (fieldValue: any) => {
+            const existingValue = currentFieldValues.find((v: any) => v.fieldId === fieldValue.fieldId);
             
             if (existingValue) {
               // Update existing value
@@ -414,7 +414,7 @@ export const camperProfileRouter = createTRPCRouter({
   updateDobApproval: protectedProcedure
     .input(z.object({ id: z.string(), dobApproved: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -457,7 +457,7 @@ export const camperProfileRouter = createTRPCRouter({
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -465,7 +465,8 @@ export const camperProfileRouter = createTRPCRouter({
       
       // Get the profile to delete
       const profile = await ctx.prisma.camperProfile.findUnique({
-        where: { id: input.id }
+        where: { id: input.id },
+        select: { userId: true }
       });
       
       if (!profile) {

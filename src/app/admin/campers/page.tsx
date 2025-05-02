@@ -5,8 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
 import ModernDashboardLayout from "../components/ModernDashboardLayout";
-import { UserRole, ProfileFieldType } from "@prisma/client";
 import CamperManagement from "../components/CamperManagement";
+
+// UserRole and ProfileFieldType do not exist as types or enums in the generated Prisma client after the downgrade.
+// If you need these enums for UI logic, define them locally to match your schema.
+export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+export type ProfileFieldType = "TEXT" | "NUMBER" | "DATE" | "BOOLEAN" | "SELECT" | "MULTI_SELECT" | "FILE";
 
 interface ExtendedUser {
   id: string;

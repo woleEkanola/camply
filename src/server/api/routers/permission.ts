@@ -2,34 +2,33 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 
-// Define the PermissionType enum to match the Prisma schema
+// PermissionType is not exported from @prisma/client after downgrade. Define as local enum and zod schema to match schema.
+export enum PermissionType {
+  CREATE_LOCATION = "CREATE_LOCATION",
+  READ_LOCATION = "READ_LOCATION",
+  UPDATE_LOCATION = "UPDATE_LOCATION",
+  DELETE_LOCATION = "DELETE_LOCATION",
+  MANAGE_ADMINS = "MANAGE_ADMINS",
+  MANAGE_LOCATION_ADMINS = "MANAGE_LOCATION_ADMINS",
+  VIEW_ANALYTICS = "VIEW_ANALYTICS"
+}
 const PermissionTypeEnum = z.enum([
-  "CREATE_LOCATION",
-  "READ_LOCATION",
-  "UPDATE_LOCATION",
-  "DELETE_LOCATION",
-  "MANAGE_ADMINS",
-  "MANAGE_LOCATION_ADMINS",
-  "VIEW_ANALYTICS",
+  PermissionType.CREATE_LOCATION,
+  PermissionType.READ_LOCATION,
+  PermissionType.UPDATE_LOCATION,
+  PermissionType.DELETE_LOCATION,
+  PermissionType.MANAGE_ADMINS,
+  PermissionType.MANAGE_LOCATION_ADMINS,
+  PermissionType.VIEW_ANALYTICS
 ]);
-
-// Define the UserRole enum to match the Prisma schema
-const UserRoleEnum = z.enum([
-  "SUPER_ADMIN",
-  "OWNER",
-  "ADMIN",
-  "LOCATION_ADMIN",
-]);
-
-// Type for the permission
-type PermissionType = z.infer<typeof PermissionTypeEnum>;
+type PermissionTypeType = z.infer<typeof PermissionTypeEnum>;
 
 export const permissionRouter = createTRPCRouter({
   getByUser: protectedProcedure
     .input(z.object({ userId: z.string() }))
     .query(async ({ ctx, input }) => {
       // Session check is handled by protectedProcedure middleware
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       // Get the user whose permissions we're checking
       const targetUser = await ctx.prisma.user.findUnique({
@@ -48,10 +47,10 @@ export const permissionRouter = createTRPCRouter({
       }
       
       // Check if current user has permission to view this user's permissions
-      if (currentUser.role !== "SUPER_ADMIN" && 
-          ((currentUser.role === "OWNER" && 
+      if (currentUser?.role !== "SUPER_ADMIN" && 
+          ((currentUser?.role === "OWNER" && 
            (targetUser.role === "SUPER_ADMIN" || targetUser.role === "OWNER")) ||
-          (currentUser.role === "ADMIN" && 
+          (currentUser?.role === "ADMIN" && 
            targetUser.role !== "LOCATION_ADMIN"))) {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -74,7 +73,7 @@ export const permissionRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       // Session check is handled by protectedProcedure middleware
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       // Get the user whose permissions we're updating
       const targetUser = await ctx.prisma.user.findUnique({
@@ -93,10 +92,10 @@ export const permissionRouter = createTRPCRouter({
       }
       
       // Check if current user has permission to update this user's permissions
-      if (currentUser.role !== "SUPER_ADMIN" && 
-          ((currentUser.role === "OWNER" && 
+      if (currentUser?.role !== "SUPER_ADMIN" && 
+          ((currentUser?.role === "OWNER" && 
            (targetUser.role === "SUPER_ADMIN" || targetUser.role === "OWNER")) ||
-          (currentUser.role === "ADMIN" && 
+          (currentUser?.role === "ADMIN" && 
            targetUser.role !== "LOCATION_ADMIN"))) {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -110,21 +109,17 @@ export const permissionRouter = createTRPCRouter({
       });
       
       // Permissions to remove
-      const permissionsToRemove = currentPermissions.filter(
-        (permission) => !input.permissions.includes(permission.type as PermissionType)
-      );
+      const permissionsToRemove = currentPermissions.filter((permission: any) => !input.permissions.includes(permission.type as PermissionTypeType));
       
       // Permissions to add
-      const permissionsToAdd = input.permissions.filter(
-        (permission) => !currentPermissions.some((p) => p.type === permission)
-      );
+      const permissionsToAdd = input.permissions.filter((p: any) => !currentPermissions.some((permission: any) => permission.type === p));
       
       // Delete permissions to remove
       if (permissionsToRemove.length > 0) {
         await ctx.prisma.permission.deleteMany({
           where: {
             userId: input.userId,
-            type: { in: permissionsToRemove.map((p) => p.type) },
+            type: { in: permissionsToRemove.map((p: any) => p.type) },
           },
         });
       }
@@ -157,7 +152,7 @@ export const permissionRouter = createTRPCRouter({
       // Session check is handled by protectedProcedure middleware
       
       // Super admin always has all permissions
-      if (ctx.session.user.role === "SUPER_ADMIN") {
+      if (ctx.session?.user?.role === "SUPER_ADMIN") {
         return true;
       }
       

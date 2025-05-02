@@ -71,7 +71,7 @@ export const signupLinkRouter = createTRPCRouter({
           select: { id: true }
         });
         
-        const locationIds = managedLocationIds.map(loc => loc.id);
+        const locationIds = managedLocationIds.map((loc: { id: string }) => loc.id);
         
         return await ctx.prisma.signupLink.findMany({
           where: { 

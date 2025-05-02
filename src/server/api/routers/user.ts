@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/trpc";
-import { UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
+
+// UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
 
 export const userRouter = createTRPCRouter({
   getAll: publicProcedure.query(async ({ ctx }) => {
@@ -31,7 +33,7 @@ export const userRouter = createTRPCRouter({
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
       // Check if user has permission to view users in this organization
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       console.log("getByOrganization called with:", {
         organizationId: input.organizationId,
@@ -67,7 +69,7 @@ export const userRouter = createTRPCRouter({
           const users = await ctx.prisma.user.findMany({
             where: { 
               organizationId: input.organizationId,
-              role: { not: UserRole.SUPER_ADMIN },
+              role: { not: "SUPER_ADMIN" },
             },
             include: {
               managedLocations: true,
@@ -86,7 +88,7 @@ export const userRouter = createTRPCRouter({
           const users = await ctx.prisma.user.findMany({
             where: { 
               organizationId: input.organizationId,
-              role: UserRole.LOCATION_ADMIN,
+              role: "LOCATION_ADMIN",
             },
             include: {
               managedLocations: true,
@@ -123,7 +125,7 @@ export const userRouter = createTRPCRouter({
   getLocationAdmins: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new Error("User not authenticated");
@@ -143,7 +145,7 @@ export const userRouter = createTRPCRouter({
       return await ctx.prisma.user.findMany({
         where: { 
           organizationId: input.organizationId,
-          role: UserRole.LOCATION_ADMIN,
+          role: "LOCATION_ADMIN",
         },
         include: {
           managedLocations: true,
@@ -160,7 +162,7 @@ export const userRouter = createTRPCRouter({
       locationId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new Error("User not authenticated");
@@ -208,7 +210,7 @@ export const userRouter = createTRPCRouter({
       locationId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new Error("User not authenticated");
@@ -252,7 +254,7 @@ export const userRouter = createTRPCRouter({
     
   getProfile: protectedProcedure
     .query(async ({ ctx }) => {
-      const userId = ctx.session.user.id;
+      const userId = ctx.session?.user.id;
       
       if (!userId) {
         throw new Error("User not authenticated");
@@ -281,7 +283,7 @@ export const userRouter = createTRPCRouter({
         firstName: z.string().min(1, "First name is required"),
         lastName: z.string().min(1, "Last name is required"),
         phone: z.string().optional(),
-        role: z.nativeEnum(UserRole), // BASE_USER is now included in UserRole
+        role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"]), 
         password: z.string().min(8, "Password must be at least 8 characters"),
         active: z.boolean().default(true),
         organizationId: z.string(),
@@ -289,7 +291,7 @@ export const userRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new Error("User not authenticated");
@@ -366,7 +368,7 @@ export const userRouter = createTRPCRouter({
           firstName: z.string().min(1, "First name is required").optional(),
           lastName: z.string().min(1, "Last name is required").optional(),
           phone: z.string().optional(),
-          role: z.nativeEnum(UserRole).optional(), // BASE_USER is now included
+          role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"]).optional(), 
           password: z.string().min(8, "Password must be at least 8 characters").optional(),
           active: z.boolean().optional(),
           organizationId: z.string().optional(),
@@ -375,7 +377,7 @@ export const userRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new Error("User not authenticated");
@@ -417,14 +419,15 @@ export const userRouter = createTRPCRouter({
         password?: string;
         active?: boolean;
         organizationId?: string;
-        managedLocations?: string[];
       };
-      const updateData: UpdateData = { ...input.data };
       
-      // Remove managedLocations from direct update
-      if (updateData.managedLocations) {
-        delete updateData.managedLocations;
-      }
+      // Only include organizationId if it is a defined string, and never include managedLocations
+      const updateData: UpdateData = Object.fromEntries(
+        Object.entries(input.data)
+          .filter(([key, value]) => (
+            key !== 'managedLocations' && (key !== 'organizationId' || typeof value === 'string')
+          ))
+      );
       
       // Hash the password if provided
       if (updateData.password) {
@@ -440,12 +443,10 @@ export const userRouter = createTRPCRouter({
       // Update managed locations if provided
       if (input.data.managedLocations && userToUpdate.role === "LOCATION_ADMIN") {
         // Get current managed locations
-        const currentLocations = userToUpdate.managedLocations.map(loc => loc.id);
+        const currentLocations = userToUpdate.managedLocations.map((loc: { id: string }) => loc.id);
         
         // Locations to disconnect
-        const locationsToDisconnect = currentLocations.filter(
-          id => !input.data.managedLocations!.includes(id)
-        );
+        const locationsToDisconnect = currentLocations.filter((id: string) => !input.data.managedLocations!.includes(id));
         
         // Locations to connect
         const locationsToConnect = input.data.managedLocations.filter(
@@ -455,7 +456,7 @@ export const userRouter = createTRPCRouter({
         // Disconnect locations
         if (locationsToDisconnect.length > 0) {
           await Promise.all(
-            locationsToDisconnect.map(async (locationId) => {
+            locationsToDisconnect.map(async (locationId: string) => {
               await ctx.prisma.location.update({
                 where: { id: locationId },
                 data: {
@@ -491,7 +492,7 @@ export const userRouter = createTRPCRouter({
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new Error("User not authenticated");
@@ -529,7 +530,7 @@ export const userRouter = createTRPCRouter({
   getBaseUsersWithCamperCounts: protectedProcedure
     .input(z.object({ organizationId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       if (!currentUser) {
         throw new Error("User not authenticated");
       }
@@ -543,7 +544,7 @@ export const userRouter = createTRPCRouter({
       }
       // Filter by organization if provided (for multi-tenant)
       const where = {
-        role: UserRole.BASE_USER,
+        role: "ADMIN",
         ...(input.organizationId && { organizationId: input.organizationId })
       };
       // Find all BASE_USERs
@@ -563,7 +564,7 @@ export const userRouter = createTRPCRouter({
         orderBy: { createdAt: 'desc' }
       });
       // Map to include camper profile count
-      return users.map(user => ({
+      return users.map((user: any) => ({
         ...user,
         camperProfileCount: user.camperProfiles.length
       }));

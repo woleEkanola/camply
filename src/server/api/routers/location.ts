@@ -236,7 +236,7 @@ export const locationRouter = createTRPCRouter({
         user.role === "SUPER_ADMIN" || 
         user.role === "OWNER" || 
         user.role === "ADMIN" ||
-        (user.role === "LOCATION_ADMIN" && location.admins.some(admin => admin.id === user.id));
+        (user.role === "LOCATION_ADMIN" && location.admins.some((admin: any) => admin.id === user.id));
 
       if (!hasPermission) {
         throw new TRPCError({ 
@@ -292,12 +292,10 @@ export const locationRouter = createTRPCRouter({
       }
 
       // Get current admin IDs
-      const currentAdminIds = location.admins.map(admin => admin.id);
+      const currentAdminIds = location.admins.map((admin: any) => admin.id);
 
       // Admins to disconnect
-      const adminsToDisconnect = currentAdminIds.filter(
-        id => !input.adminIds.includes(id)
-      );
+      const adminsToDisconnect = currentAdminIds.filter((id: any) => !input.adminIds.includes(id));
 
       // Admins to connect
       const adminsToConnect = input.adminIds.filter(
@@ -309,8 +307,8 @@ export const locationRouter = createTRPCRouter({
         where: { id: input.locationId },
         data: {
           admins: {
-            disconnect: adminsToDisconnect.map(id => ({ id })),
-            connect: adminsToConnect.map(id => ({ id })),
+            disconnect: adminsToDisconnect.map((id: any) => ({ id })),
+            connect: adminsToConnect.map((id: any) => ({ id })),
           },
         },
         include: {

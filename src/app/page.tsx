@@ -21,7 +21,7 @@ export default function Home() {
     } else if (session.user.role === "OWNER") {
       // Redirect Owner to their dashboard
       router.push("/admin");
-    } else if (session.user.role === "ADMIN" || session.user.role === "BASE_USER") {
+    } else if (session.user.role === "ADMIN") {
       // Redirect base users to the user dashboard
       router.push("/dashboard");
     } else if (session.user.role === "LOCATION_ADMIN") {

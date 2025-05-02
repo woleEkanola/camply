@@ -3,14 +3,32 @@ import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { PermissionType } from "@prisma/client";
+
+// PermissionType is not exported from @prisma/client after downgrade. Define as local enum to match schema.
+export enum PermissionType {
+  CREATE_LOCATION = "CREATE_LOCATION",
+  READ_LOCATION = "READ_LOCATION",
+  UPDATE_LOCATION = "UPDATE_LOCATION",
+  DELETE_LOCATION = "DELETE_LOCATION",
+  MANAGE_ADMINS = "MANAGE_ADMINS",
+  MANAGE_LOCATION_ADMINS = "MANAGE_LOCATION_ADMINS",
+  VIEW_ANALYTICS = "VIEW_ANALYTICS"
+}
 
 // Schema for admin user creation
 const adminUserSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   organizationId: z.string(),
-  permissions: z.array(z.nativeEnum(PermissionType)),
+  permissions: z.array(z.enum([
+    PermissionType.CREATE_LOCATION,
+    PermissionType.READ_LOCATION,
+    PermissionType.UPDATE_LOCATION,
+    PermissionType.DELETE_LOCATION,
+    PermissionType.MANAGE_ADMINS,
+    PermissionType.MANAGE_LOCATION_ADMINS,
+    PermissionType.VIEW_ANALYTICS
+  ])),
 });
 
 export const adminRouter = createTRPCRouter({
@@ -44,7 +62,7 @@ export const adminRouter = createTRPCRouter({
       const hashedPassword = await bcrypt.hash(input.password, 10);
 
       // Create the admin user with a transaction to ensure all operations succeed or fail together
-      return prisma.$transaction(async (tx) => {
+      return prisma.$transaction(async (tx: any) => {
         // Create the admin user
         const adminUser = await tx.user.create({
           data: {
@@ -117,12 +135,12 @@ export const adminRouter = createTRPCRouter({
       });
 
       // Format the response to not include sensitive information
-      return adminUsers.map(admin => ({
+      return adminUsers.map((admin: any) => ({
         id: admin.id,
         email: admin.email,
         role: admin.role,
         organizationId: admin.organizationId,
-        permissions: admin.permissions.map(p => p.type),
+        permissions: admin.permissions.map((p: any) => p.type),
         createdAt: admin.createdAt,
       }));
     }),
@@ -131,7 +149,15 @@ export const adminRouter = createTRPCRouter({
   updatePermissions: protectedProcedure
     .input(z.object({
       adminId: z.string(),
-      permissions: z.array(z.nativeEnum(PermissionType)),
+      permissions: z.array(z.enum([
+        PermissionType.CREATE_LOCATION,
+        PermissionType.READ_LOCATION,
+        PermissionType.UPDATE_LOCATION,
+        PermissionType.DELETE_LOCATION,
+        PermissionType.MANAGE_ADMINS,
+        PermissionType.MANAGE_LOCATION_ADMINS,
+        PermissionType.VIEW_ANALYTICS
+      ])),
     }))
     .mutation(async ({ input, ctx }) => {
       // Get the admin user to update
@@ -167,7 +193,7 @@ export const adminRouter = createTRPCRouter({
       }
 
       // Update permissions with a transaction
-      return prisma.$transaction(async (tx) => {
+      return prisma.$transaction(async (tx: any) => {
         // Delete all existing permissions
         await tx.permission.deleteMany({
           where: { userId: input.adminId },

@@ -7,7 +7,7 @@ import {
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 
-interface Column<T> {
+export interface Column<T> {
   header: string;
   accessor: keyof T | ((data: T) => React.ReactNode);
   sortable?: boolean;

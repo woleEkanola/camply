@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
-import { UserRole } from "@prisma/client";
+
+// UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
+export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
 
 interface ExtendedUser {
   id: string;
@@ -66,28 +68,24 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   // Get camper profiles
-  const { data: profilesData, refetch: refetchProfiles } = api.camperProfile.getByOrganization.useQuery(
+  const { data: profilesData, refetch: refetchProfiles, error: profilesError, isSuccess } = api.camperProfile.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
-      onError: (error) => {
-        setError(`Error loading camper profiles: ${error.message}`);
-        setIsLoading(false);
-      },
-      onSuccess: () => {
-        setIsLoading(false);
-      },
     }
   );
 
+  useEffect(() => {
+    if (isSuccess) {
+      setIsLoading(false);
+    }
+  }, [isSuccess]);
+
   // Get locations for filtering
-  const { data: locationsData } = api.location.getByOrganization.useQuery(
+  const { data: locationsData, error: locationsError } = api.location.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
-      onError: (error) => {
-        setError(`Error loading locations: ${error.message}`);
-      },
     }
   );
 
@@ -112,6 +110,17 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     }, 10000);
     return () => clearTimeout(timeout);
   }, [organizationId, isLoading, setError]);
+
+  // Handle query errors
+  useEffect(() => {
+    if (profilesError) {
+      setError(`Error loading camper profiles: ${profilesError.message}`);
+      setIsLoading(false);
+    }
+    if (locationsError) {
+      setError(`Error loading locations: ${locationsError.message}`);
+    }
+  }, [profilesError, locationsError, setError]);
 
   // Filter camper profiles
   const filteredProfiles = camperProfiles.filter((profile) => {
@@ -142,10 +151,14 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       setIsDeleteModalOpen(false);
       void refetchProfiles();
     },
-    onError: (error) => {
-      setError(`Error deleting camper profile: ${error.message}`);
-    },
   });
+
+  // Handle mutation errors
+  useEffect(() => {
+    if (deleteCamperMutation.error) {
+      setError(`Error deleting camper profile: ${deleteCamperMutation.error.message}`);
+    }
+  }, [deleteCamperMutation.error, setError]);
 
   const handleDeleteProfile = () => {
     if (selectedProfile) {
@@ -179,7 +192,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
               onChange={(e) => setLocationFilter(e.target.value === "all" ? "all" : e.target.value)}
             >
               <option value="all">All Locations</option>
-              {locationsData?.map((location) => (
+              {locationsData?.map((location: { id: string; name: string }) => (
                 <option key={location.id} value={location.id}>
                   {location.name}
                 </option>

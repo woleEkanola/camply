@@ -20,12 +20,12 @@ const t = initTRPC.context<TRPCContext>().create({
 // Create a middleware to check if the user is authenticated
 const isAuthed = t.middleware(({ ctx, next }) => {
   // Check if session exists
-  if (!ctx.session || !ctx.session.user) {
+  if (!ctx.session || !ctx.session?.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
   }
   
   // Check if user ID exists in session
-  const userId = ctx.session.user.id;
+  const userId = ctx.session?.user.id;
   if (!userId) {
     console.error("User ID is missing in session:", ctx.session);
     throw new TRPCError({ 

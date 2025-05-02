@@ -24,7 +24,7 @@ export default function LocationAdminRegistrationsPage() {
 
   // Always define these variables, even if session is not ready
   const managedLocations: string[] = session?.user?.managedLocations || [];
-  const organizationId = session?.user?.organizationId;
+  const organizationId = session?.user?.organizationId ?? "";
   const locationId = managedLocations[0];
 
   // Always call the TRPC hook, but only enable if we have the org id
@@ -114,10 +114,20 @@ export default function LocationAdminRegistrationsPage() {
     },
   ];
 
-  // Filter to only published registrations for this location
-  const publishedRegs: Registration[] = (registrations || []).filter(
-    (reg: Registration) => reg.published && reg.locationId === locationId
-  );
+  // Adapt registrations to Registration[] shape, converting dateOfBirth if needed
+  const publishedRegs: Registration[] = (registrations || [])
+    .map((reg: any) => ({
+      ...reg,
+      camperProfile: {
+        ...reg.camperProfile,
+        // Convert dateOfBirth to string if it is a Date
+        dateOfBirth:
+          reg.camperProfile && reg.camperProfile.dateOfBirth instanceof Date
+            ? reg.camperProfile.dateOfBirth.toISOString().slice(0, 10)
+            : reg.camperProfile?.dateOfBirth ?? null,
+      },
+    }))
+    .filter((reg: Registration) => reg.published && reg.locationId === locationId);
 
   return (
     <DashboardLayout title="Registrations">
@@ -132,7 +142,7 @@ export default function LocationAdminRegistrationsPage() {
         />
         {error && (
           <div className="text-red-600 mt-4">
-            Error: {error.message || (error.data && error.data.message) || JSON.stringify(error)}
+            Error: {typeof error === 'string' ? error : (error && 'message' in error && typeof error.message === 'string') ? error.message : (error && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data) ? (error.data as any).message : JSON.stringify(error)}
           </div>
         )}
       </div>

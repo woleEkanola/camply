@@ -26,20 +26,7 @@ export default function NavBar() {
               </Link>
               {isAuthenticated && (
                 <>
-                  <Link
-                    href="/appointments"
-                    className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                  >
-                    My Appointments
-                  </Link>
-                  {session?.user?.role === 'PROVIDER' && (
-                    <Link
-                      href="/provider/dashboard"
-                      className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                    >
-                      Provider Dashboard
-                    </Link>
-                  )}
+                  {/* Removed appointment-related navigation links */}
                 </>
               )}
             </div>

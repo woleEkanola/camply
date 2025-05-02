@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import StatCard from "./StatCard";
 import DashboardPanel from "./DashboardPanel";
 import { api } from "@/utils/trpc";
@@ -8,12 +9,24 @@ import { api } from "@/utils/trpc";
 export default function AnalyticsDashboard() {
   const [activeVariation, setActiveVariation] = useState<number>(1);
 
+  const { data: session } = useSession();
+  const organizationId = session?.user?.organizationId;
+
   // Fetch relevant stats using existing APIs
   // Example: Get total users, total campers, total locations, recent activity
   const { data: usersData, isLoading: usersLoading } = api.user.getBaseUsersWithCamperCounts.useQuery({});
-  const { data: adminsData, isLoading: adminsLoading } = api.admin.getByOrganization.useQuery({}, { enabled: true });
-  const { data: campersData, isLoading: campersLoading } = api.camperProfile.getByOrganization.useQuery({}, { enabled: true });
-  const { data: locationsData, isLoading: locationsLoading } = api.location.getByOrganization.useQuery({}, { enabled: true });
+  const { data: adminsData, isLoading: adminsLoading } = api.admin.getByOrganization.useQuery(
+    organizationId ? { organizationId } : { organizationId: "" },
+    { enabled: !!organizationId }
+  );
+  const { data: campersData, isLoading: campersLoading } = api.camperProfile.getByOrganization.useQuery(
+    organizationId ? { organizationId } : { organizationId: "" },
+    { enabled: !!organizationId }
+  );
+  const { data: locationsData, isLoading: locationsLoading } = api.location.getByOrganization.useQuery(
+    organizationId ? { organizationId } : { organizationId: "" },
+    { enabled: !!organizationId }
+  );
 
   // Calculate stats
   const totalBaseUsers = usersData?.length || 0;
@@ -21,8 +34,17 @@ export default function AnalyticsDashboard() {
   const totalCampers = campersData?.length || 0;
   const totalLocations = locationsData?.length || 0;
 
+  // Define type for recentCampers to avoid implicit any
+  interface RecentCamperProfile {
+    id: string;
+    name: string;
+    user?: { email?: string };
+    location?: { name?: string };
+    createdAt: string | Date;
+  }
+
   // Example: Recent activity (last 5 campers created)
-  const recentCampers = campersData?.slice(-5).reverse() || [];
+  const recentCampers: RecentCamperProfile[] = campersData?.slice(-5).reverse() || [];
 
   return (
     <div className="w-full">
@@ -84,7 +106,7 @@ export default function AnalyticsDashboard() {
               </tr>
             </thead>
             <tbody>
-              {recentCampers.map((profile) => (
+              {recentCampers.map((profile: RecentCamperProfile) => (
                 <tr key={profile.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2 border-b">{profile.name}</td>
                   <td className="px-4 py-2 border-b">{profile.user?.email || '-'}</td>

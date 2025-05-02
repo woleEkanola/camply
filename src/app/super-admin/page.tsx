@@ -28,19 +28,23 @@ export default function SuperAdminDashboard() {
   }, [session, status, router]);
 
   // Get organizations
-  const { data: organizations, refetch: refetchOrgs } = api.organization.list.useQuery(undefined, {
-    enabled: status === "authenticated" && session?.user?.role === "SUPER_ADMIN",
-    onError: (error) => setError(error.message)
+  const { data: organizations, refetch: refetchOrgs, error: orgsError } = api.organization.list.useQuery(undefined, {
+    enabled: status === "authenticated" && session?.user?.role === "SUPER_ADMIN"
   });
+  useEffect(() => {
+    if (orgsError) setError(orgsError.message);
+  }, [orgsError]);
 
   // Get owners for selected organization
-  const { data: owners, refetch: refetchOwners } = api.owner.list.useQuery(
+  const { data: owners, refetch: refetchOwners, error: ownersError } = api.owner.list.useQuery(
     { organizationId: selectedOrgId },
     { 
-      enabled: !!selectedOrgId && status === "authenticated" && session?.user?.role === "SUPER_ADMIN", 
-      onError: (error) => setError(error.message) 
+      enabled: !!selectedOrgId && status === "authenticated" && session?.user?.role === "SUPER_ADMIN"
     }
   );
+  useEffect(() => {
+    if (ownersError) setError(ownersError.message);
+  }, [ownersError]);
 
   // Create organization mutation
   const createOrgMutation = api.organization.create.useMutation({
@@ -149,10 +153,10 @@ export default function SuperAdminDashboard() {
             </div>
             <button
               type="submit"
-              disabled={createOrgMutation.isLoading}
+              disabled={createOrgMutation.status === "pending"}
               className="w-full rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
             >
-              {createOrgMutation.isLoading ? "Creating..." : "Create Organization"}
+              {createOrgMutation.status === "pending" ? "Creating..." : "Create Organization"}
             </button>
           </form>
         </div>
@@ -173,7 +177,7 @@ export default function SuperAdminDashboard() {
                 required
               >
                 <option value="">Select an organization</option>
-                {organizations?.map((org) => (
+                {organizations?.map((org: any) => (
                   <option key={org.id} value={org.id}>
                     {org.name}
                   </option>
@@ -208,10 +212,10 @@ export default function SuperAdminDashboard() {
             </div>
             <button
               type="submit"
-              disabled={createOwnerMutation.isLoading}
+              disabled={createOwnerMutation.status === "pending"}
               className="w-full rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
             >
-              {createOwnerMutation.isLoading ? "Creating..." : "Create Owner"}
+              {createOwnerMutation.status === "pending" ? "Creating..." : "Create Owner"}
             </button>
           </form>
         </div>
@@ -237,7 +241,7 @@ export default function SuperAdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {organizations.map((org) => (
+                {organizations.map((org: any) => (
                   <tr key={org.id}>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {org.name}
@@ -281,7 +285,7 @@ export default function SuperAdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {owners.map((owner) => (
+                  {owners.map((owner: any) => (
                     <tr key={owner.id}>
                       <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                         {owner.email}

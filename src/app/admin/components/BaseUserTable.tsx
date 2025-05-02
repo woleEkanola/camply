@@ -4,11 +4,12 @@ import { api } from "@/utils/trpc";
 interface BaseUser {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  createdAt: string;
-  organizationId?: string;
+  firstName: string | null;
+  lastName: string | null;
+  createdAt: Date;
+  organizationId: string | null;
   camperProfileCount: number;
+  camperProfiles: { id: string }[];
 }
 
 interface BaseUserTableProps {
@@ -36,7 +37,7 @@ export const BaseUserTable: React.FC<BaseUserTableProps> = ({ organizationId }) 
           </tr>
         </thead>
         <tbody>
-          {data.map((user: BaseUser) => (
+          {data.map((user: BaseUser, idx: number) => (
             <tr key={user.id} className="hover:bg-gray-50">
               <td className="px-4 py-2 border-b">{user.email}</td>
               <td className="px-4 py-2 border-b">{user.firstName}</td>

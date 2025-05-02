@@ -108,7 +108,7 @@ export default function OwnerDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {locations.map((location) => (
+                  {locations.map((location: any) => (
                     <tr key={location.id}>
                       <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                         {location.name}
@@ -185,7 +185,7 @@ export default function OwnerDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {adminUsers.map((admin) => (
+                  {adminUsers.map((admin: any) => (
                     <tr key={admin.id}>
                       <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                         {admin.email}

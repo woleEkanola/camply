@@ -10,7 +10,7 @@ const AgeRangeSettings = dynamic(() => import("../settings-age-range"), { ssr: f
 
 export default function AdminSettingsPage() {
   const { data: session } = useSession();
-  const organizationId = session?.user?.organizationId;
+  const organizationId = session?.user?.organizationId || "";
   // Fetch settings only if organizationId is available
   const { data: settings, isLoading } = api.organization.getSettings.useQuery(
     { organizationId },
@@ -18,9 +18,9 @@ export default function AdminSettingsPage() {
   );
 
   // Memoize initial values to avoid prop changes after mount
-  const initialMin = useMemo(() => settings?.minAge ?? 5, [settings]);
-  const initialMax = useMemo(() => settings?.maxAge ?? 18, [settings]);
-  const initialCutoffDate = useMemo(() => settings?.cutoffDate ?? "", [settings]);
+  const initialMin = useMemo(() => (typeof settings === 'object' && settings !== null && 'minAge' in settings ? (settings as any).minAge : undefined) ?? 5, [settings]);
+  const initialMax = useMemo(() => (typeof settings === 'object' && settings !== null && 'maxAge' in settings ? (settings as any).maxAge : undefined) ?? 18, [settings]);
+  const initialCutoffDate = useMemo(() => (typeof settings === 'object' && settings !== null && 'cutoffDate' in settings ? (settings as any).cutoffDate : undefined) ?? "", [settings]);
 
   if (!organizationId) {
     return <div className="p-8 text-red-600">Organization not found in session.</div>;
@@ -30,8 +30,8 @@ export default function AdminSettingsPage() {
   }
 
   return (
- <ModernDashboardLayout>
-        <div className="max-w-2xl mx-auto mt-8 bg-white rounded-xl shadow-lg p-8 border border-gray-100">
+    <ModernDashboardLayout>
+      <div className="max-w-2xl mx-auto mt-8 bg-white rounded-xl shadow-lg p-8 border border-gray-100">
         <h1 className="text-3xl font-bold mb-4 text-blue-700">Admin Dashboard Settings</h1>
         <p className="mb-6 text-gray-600 text-lg">Configure registration age range and cut-off date for your organization. These settings control camper eligibility for registration.</p>
         <div className="mb-6">

@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
 import ModernDashboardLayout from "../components/ModernDashboardLayout";
-import { UserRole } from "@prisma/client";
+
+// UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
 
 // Define the extended user type that includes organizationId
 interface ExtendedUser {
@@ -28,6 +30,21 @@ interface LocationFormData {
   organizationId: string;
 }
 
+// Add a type that extends Location with admins and their names
+type LocationWithAdmins = {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string | null;
+  zipCode: string | null;
+  country: string;
+  organizationId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  admins?: { id: string; firstName?: string | null; lastName?: string | null }[];
+};
+
 export default function LocationsPage() {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -46,20 +63,18 @@ export default function LocationsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [locationAdmins, setLocationAdmins] = useState<{
+  // Accept admins with firstName/lastName as string | null for locationAdmins too
+  const [locationAdmins, setLocationAdmins] = useState<AdminUser[]>([]);
+  // Accept admins with firstName/lastName as string | null
+  interface AdminUser {
     id: string;
-    firstName: string;
-    lastName: string;
+    firstName: string | null;
+    lastName: string | null;
     email: string;
     role: string;
-  }[]>([]);
-  const [availableAdmins, setAvailableAdmins] = useState<{
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    role: string;
-  }[]>([]);
+    managedLocations?: { id: string; name: string }[];
+  }
+  const [availableAdmins, setAvailableAdmins] = useState<AdminUser[]>([]);
   const [selectedAdmins, setSelectedAdmins] = useState<string[]>([]);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [generatingLinkFor, setGeneratingLinkFor] = useState<string | null>(null);
@@ -91,21 +106,30 @@ export default function LocationsPage() {
   }, [session, status, router]);
 
   // Get locations for the organization
-  const { data: locations = [], refetch: refetchLocations, isLoading: isLoadingLocations } = api.location.getByOrganization.useQuery(
+  const { data: rawLocations = [], refetch: refetchLocations, isLoading: isLoadingLocations, error: locationsError } = api.location.getByOrganization.useQuery(
     { organizationId: (session?.user as ExtendedUser)?.organizationId || "" },
     {
       enabled: 
         status === "authenticated" && 
         !!(session?.user as ExtendedUser)?.organizationId,
-      onError: (error) => {
-        setError(`Error loading locations: ${error.message}`);
-      },
       // Add staleTime and refetchInterval to ensure data is fresh
       staleTime: 0, // Consider data stale immediately
       refetchInterval: false, // Don't auto-refetch on interval
       refetchOnWindowFocus: true, // Refetch when window regains focus
     }
   );
+
+  // Ensure locations always have an admins array (empty if missing)
+  const locations: LocationWithAdmins[] = rawLocations.map((loc: any) => ({
+    ...loc,
+    admins: loc.admins || [],
+  }));
+
+  useEffect(() => {
+    if (locationsError) {
+      setError(`Error loading locations: ${locationsError.message}`);
+    }
+  }, [locationsError]);
 
   // Debug locations data
   useEffect(() => {
@@ -115,30 +139,35 @@ export default function LocationsPage() {
   }, [locations]);
 
   // Get single location
-  const { data: locationData } = api.location.getById.useQuery(
+  const { data: locationData, error: locationDataError } = api.location.getById.useQuery(
     { id: selectedLocation || "" },
     {
       enabled: !!selectedLocation,
-      onSuccess: (data) => {
-        if (data) {
-          setFormData({
-            id: data.id,
-            name: data.name,
-            address: data.address,
-            city: data.city,
-            state: data.state || "",
-            zipCode: data.zipCode || "",
-            country: data.country,
-            organizationId: data.organizationId,
-          });
-        }
-      },
-      onError: (error) => {
-        setError(`Error loading location details: ${error.message}`);
-        setIsModalOpen(false);
-      }
     }
   );
+
+  useEffect(() => {
+    if (locationData) {
+      setFormData({
+        id: locationData.id,
+        name: locationData.name,
+        address: locationData.address,
+        city: locationData.city,
+        state: locationData.state || "",
+        zipCode: locationData.zipCode || "",
+        country: locationData.country,
+        organizationId: locationData.organizationId,
+      });
+    }
+  }, [locationData]);
+
+  useEffect(() => {
+    if (locationDataError) {
+      setError(`Error loading location details: ${locationDataError.message}`);
+      setIsModalOpen(false);
+    }
+  }, [locationDataError]);
+
   const isLoadingLocation = !locationData && !!selectedLocation;
 
   // Create location mutation
@@ -224,10 +253,16 @@ export default function LocationsPage() {
     }
   );
 
-  // Update admins state when data changes
   useEffect(() => {
     if (adminData) {
-      setAvailableAdmins(adminData);
+      // Map to ensure firstName/lastName are always strings (fallback to empty string if null)
+      setAvailableAdmins(
+        adminData.map((admin: any) => ({
+          ...admin,
+          firstName: admin.firstName ?? '',
+          lastName: admin.lastName ?? '',
+        }))
+      );
     }
   }, [adminData]);
 
@@ -242,10 +277,16 @@ export default function LocationsPage() {
   // Update admins state when data changes
   useEffect(() => {
     if (locationAdminData) {
-      // Store the location admins for reference
-      setLocationAdmins(locationAdminData);
+      // Map to ensure firstName/lastName are always strings (fallback to empty string if null)
+      setLocationAdmins(
+        locationAdminData.map((admin: any) => ({
+          ...admin,
+          firstName: admin.firstName ?? '',
+          lastName: admin.lastName ?? '',
+        }))
+      );
       // Set the selected admin IDs
-      setSelectedAdmins(locationAdminData.map(admin => admin.id));
+      setSelectedAdmins(locationAdminData.map((admin: any) => admin.id));
     }
   }, [locationAdminData]);
 
@@ -264,11 +305,12 @@ export default function LocationsPage() {
     }
   };
 
+  const updateLocationAdminsMutation = api.location.updateLocationAdmins.useMutation();
+
   // Save admin assignments
   const handleSaveAdmins = async () => {
     setIsSubmitting(true);
     setError("");
-    
     try {
       if (!selectedLocation) {
         setError("No location selected");
@@ -277,7 +319,7 @@ export default function LocationsPage() {
       }
       
       // Update location admins
-      await api.location.updateLocationAdmins.mutate({
+      await updateLocationAdminsMutation.mutateAsync({
         locationId: selectedLocation,
         adminIds: selectedAdmins
       });
@@ -381,13 +423,15 @@ export default function LocationsPage() {
         // Update existing location
         updateLocationMutation.mutate({
           id: selectedLocation,
-          name: locationData.name,
-          address: locationData.address,
-          city: locationData.city,
-          state: locationData.state,
-          zipCode: locationData.zipCode,
-          country: locationData.country,
-          organizationId: locationData.organizationId,
+          data: {
+            name: locationData.name,
+            address: locationData.address,
+            city: locationData.city,
+            state: locationData.state,
+            zipCode: locationData.zipCode,
+            country: locationData.country,
+            organizationId: locationData.organizationId,
+          },
         });
       } else {
         // Create new location
@@ -474,7 +518,7 @@ export default function LocationsPage() {
 
   // Helper function to find signup link for a location (not a hook)
   const getSignupLinkForLocation = (locationId: string) => {
-    return signupLinks.find(link => link.locationId === locationId);
+    return signupLinks.find((link: { locationId: string }) => link.locationId === locationId);
   };
 
   // Generate signup link for a location
@@ -643,7 +687,7 @@ export default function LocationsPage() {
                           >
                             {generatingLinkFor === location.id ? (
                               <>
-                                <svg className="mr-1 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <svg className="mr-1 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
@@ -651,7 +695,7 @@ export default function LocationsPage() {
                               </>
                             ) : (
                               <>
-                                <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                 </svg>
                                 Generate Link

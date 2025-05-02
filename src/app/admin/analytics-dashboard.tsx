@@ -78,95 +78,84 @@ export default function AnalyticsDashboard() {
         <StatCard
           title="Total Locations"
           value={locations.length.toString()}
-          icon={<BuildingIcon className="h-6 w-6 text-white" />}
-          iconBgColor="bg-amber-500"
-          changeText="from last month"
-          changeValue="+14.5%"
-          changeColor="text-green-600"
+          icon="building"
+          change={14.5}
+          color="amber"
         />
         <StatCard
           title="Admin Users"
           value={adminUsers.length.toString()}
-          icon={<UsersIcon className="h-6 w-6 text-white" />}
-          iconBgColor="bg-rose-500"
-          changeText="growth rate"
-          changeValue="+7.5%"
-          changeColor="text-green-600"
+          icon="users"
+          change={7.5}
+          color="rose"
         />
         <StatCard
           title="System Uptime"
           value="99.9%"
-          icon={<ClockIcon className="h-6 w-6 text-white" />}
-          iconBgColor="bg-emerald-500"
-          changeText="increased by"
-          changeValue="+0.7%"
-          changeColor="text-green-600"
+          icon="clock"
+          change={0.7}
+          color="emerald"
         />
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <DashboardPanel
-          title="Portfolio Performance"
-          className="lg:col-span-3"
-          actions={
-            <button className="rounded-md bg-gray-100 px-3 py-1 text-sm text-gray-700 hover:bg-gray-200">
-              View All
-            </button>
-          }
-        >
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="flex items-center rounded-lg bg-amber-50 p-4">
-              <div className="mr-4 rounded-full bg-amber-500 p-3">
-                <CurrencyDollarIcon className="h-6 w-6 text-white" />
+        <div className="lg:col-span-3">
+          <DashboardPanel
+            title="Portfolio Performance"
+            viewAllLink="#"
+          >
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              <div className="flex items-center rounded-lg bg-amber-50 p-4">
+                <div className="mr-4 rounded-full bg-amber-500 p-3">
+                  <CurrencyDollarIcon className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Total Locations</p>
+                  <p className="text-2xl font-bold text-gray-900">{locations.length}</p>
+                  <p className="text-sm text-red-600">↓ 14.5% less growth</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Total Locations</p>
-                <p className="text-2xl font-bold text-gray-900">{locations.length}</p>
-                <p className="text-sm text-red-600">↓ 14.5% less growth</p>
+              <div className="flex items-center rounded-lg bg-rose-50 p-4">
+                <div className="mr-4 rounded-full bg-rose-500 p-3">
+                  <ChartBarIcon className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Admin Users</p>
+                  <p className="text-2xl font-bold text-gray-900">{adminUsers.length}</p>
+                  <p className="text-sm text-green-600">↑ 7.5% growth rate</p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center rounded-lg bg-rose-50 p-4">
-              <div className="mr-4 rounded-full bg-rose-500 p-3">
-                <ChartBarIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Admin Users</p>
-                <p className="text-2xl font-bold text-gray-900">{adminUsers.length}</p>
-                <p className="text-sm text-green-600">↑ 7.5% growth rate</p>
-              </div>
-            </div>
-            <div className="flex items-center rounded-lg bg-emerald-50 p-4">
-              <div className="mr-4 rounded-full bg-emerald-500 p-3">
-                <ArrowTrendingUpIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">System Uptime</p>
-                <p className="text-2xl font-bold text-gray-900">99.9%</p>
-                <p className="text-sm text-green-600">↑ 0.7% increased</p>
+              <div className="flex items-center rounded-lg bg-emerald-50 p-4">
+                <div className="mr-4 rounded-full bg-emerald-500 p-3">
+                  <ArrowTrendingUpIcon className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">System Uptime</p>
+                  <p className="text-2xl font-bold text-gray-900">99.9%</p>
+                  <p className="text-sm text-green-600">↑ 0.7% increased</p>
+                </div>
               </div>
             </div>
-          </div>
-        </DashboardPanel>
+          </DashboardPanel>
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <DashboardPanel
           title="Technical Support"
-          actions={
-            <div className="flex space-x-2">
-              <button className="rounded-full bg-gray-200 p-1 text-gray-500 hover:bg-gray-300">
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <button className="rounded-full bg-gray-200 p-1 text-gray-500 hover:bg-gray-300">
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          }
         >
+          <div className="flex space-x-2 mb-4">
+            <button className="rounded-full bg-gray-200 p-1 text-gray-500 hover:bg-gray-300">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button className="rounded-full bg-gray-200 p-1 text-gray-500 hover:bg-gray-300">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
           <div className="mb-4">
             <p className="text-sm font-medium uppercase text-gray-500">New Accounts Since 2018</p>
             <div className="mt-1 flex items-baseline">
@@ -174,7 +163,7 @@ export default function AnalyticsDashboard() {
               <p className="ml-2 flex items-baseline text-sm font-semibold text-emerald-600">+14</p>
             </div>
           </div>
-          <LineChart data={salesData} labels={salesLabels} color="#10b981" height={200} />
+          <LineChart data={salesData} color="#10b981" />
           <div className="mt-4 flex justify-center">
             <div className="flex space-x-2">
               <button className="h-2 w-2 rounded-full bg-emerald-600"></button>
@@ -199,50 +188,40 @@ export default function AnalyticsDashboard() {
 
         <DashboardPanel
           title="Timeline Example"
-          actions={
+        >
+          <div className="mb-4">
             <button className="text-sm font-medium text-gray-500 hover:text-gray-700">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
               </svg>
             </button>
-          }
-        >
+          </div>
           <div className="space-y-6">
             <TimelineItem
               title="All Hands Meeting"
               time="Yet another one at 10:00 PM"
-              icon={<ClockIcon className="h-4 w-4 text-white" />}
-              iconColor="bg-rose-500"
+              status="info"
+              participants={["Alice", "Bob"]}
             />
             <TimelineItem
               title="Build the production release"
-              icon={<CheckCircleIcon className="h-4 w-4 text-white" />}
-              iconColor="bg-emerald-500"
-              badge={{ text: "NEW", color: "bg-emerald-100 text-emerald-800" }}
+              status="new"
+              participants={["Charlie"]}
             />
             <TimelineItem
               title="Something not important"
-              icon={<ExclamationCircleIcon className="h-4 w-4 text-white" />}
-              iconColor="bg-amber-500"
-              users={[
-                { image: "https://randomuser.me/api/portraits/men/1.jpg", alt: "User 1" },
-                { image: "https://randomuser.me/api/portraits/women/2.jpg", alt: "User 2" },
-                { image: "https://randomuser.me/api/portraits/men/3.jpg", alt: "User 3" },
-                { image: "https://randomuser.me/api/portraits/women/4.jpg", alt: "User 4" },
-                { image: "https://randomuser.me/api/portraits/men/5.jpg", alt: "User 5" },
-                { image: "https://randomuser.me/api/portraits/women/6.jpg", alt: "User 6" },
-                { image: "https://randomuser.me/api/portraits/men/7.jpg", alt: "User 7" },
-              ]}
+              status="pending"
+              participants={["David", "Eve", "Frank", "Grace", "Heidi", "Ivan", "Judy"]}
             />
             <TimelineItem
               title="This dot has an info state"
-              icon={<ExclamationCircleIcon className="h-4 w-4 text-white" />}
-              iconColor="bg-blue-500"
+              status="info"
+              participants={[]}
             />
             <TimelineItem
               title="This dot has a dark state"
-              icon={<ExclamationCircleIcon className="h-4 w-4 text-white" />}
-              iconColor="bg-gray-800"
+              status="dark"
+              participants={[]}
             />
           </div>
           <div className="mt-6 text-center">
@@ -254,34 +233,34 @@ export default function AnalyticsDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <DashboardPanel title="" className="flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center justify-center p-4">
           <p className="text-sm font-medium text-gray-500">Sales Last Month</p>
           <p className="mt-1 text-2xl font-bold text-gray-900">$874</p>
           <div className="mt-2 h-1 w-full bg-emerald-100">
             <div className="h-1 w-1/3 bg-emerald-500"></div>
           </div>
-        </DashboardPanel>
-        <DashboardPanel title="" className="flex flex-col items-center justify-center p-4">
+        </div>
+        <div className="flex flex-col items-center justify-center p-4">
           <p className="text-sm font-medium text-gray-500">Sales Income</p>
           <p className="mt-1 text-2xl font-bold text-gray-900">$1283</p>
           <div className="mt-2 h-1 w-full bg-blue-100">
             <div className="h-1 w-2/3 bg-blue-500"></div>
           </div>
-        </DashboardPanel>
-        <DashboardPanel title="" className="flex flex-col items-center justify-center p-4">
+        </div>
+        <div className="flex flex-col items-center justify-center p-4">
           <p className="text-sm font-medium text-gray-500">Last Month Sales</p>
           <p className="mt-1 text-2xl font-bold text-gray-900">$1286</p>
           <div className="mt-2 h-1 w-full bg-amber-100">
             <div className="h-1 w-3/4 bg-amber-500"></div>
           </div>
-        </DashboardPanel>
-        <DashboardPanel title="" className="flex flex-col items-center justify-center p-4">
+        </div>
+        <div className="flex flex-col items-center justify-center p-4">
           <p className="text-sm font-medium text-gray-500">Total Revenue</p>
           <p className="mt-1 text-2xl font-bold text-gray-900">$564</p>
           <div className="mt-2 h-1 w-full bg-rose-100">
             <div className="h-1 w-1/4 bg-rose-500"></div>
           </div>
-        </DashboardPanel>
+        </div>
       </div>
     </AnalyticsDashboardLayout>
   );

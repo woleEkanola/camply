@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
 import ModernDashboardLayout from "../components/ModernDashboardLayout";
-import { UserRole, RegistrationStatus } from "@prisma/client";
+
+// UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+// RegistrationStatus is not exported from @prisma/client after downgrade. Define as a union type for type safety. For runtime values, use string literals directly.
+type RegistrationStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 
 interface ExtendedUser {
   id: string;
@@ -34,7 +38,7 @@ export default function RegistrationsPage() {
     camperProfileId: "",
     yearId: "",
     locationId: "",
-    status: RegistrationStatus.PENDING,
+    status: "PENDING",
     notes: "",
   });
   const [error, setError] = useState("");
@@ -72,15 +76,18 @@ export default function RegistrationsPage() {
   }, [organizationId]);
 
   // Get active year for the organization
-  const { data: activeYear } = api.year.getActiveYear.useQuery(
+  const { data: activeYear, error: activeYearError } = api.year.getActiveYear.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
-      onError: (error) => {
-        console.error("Error loading active year:", error);
-      },
     }
   );
+
+  useEffect(() => {
+    if (activeYearError) {
+      console.error("Error loading active year:", activeYearError);
+    }
+  }, [activeYearError]);
 
   // Get all locations for the organization
   const { data: locations = [] } = api.location.getByOrganization.useQuery(
@@ -99,7 +106,7 @@ export default function RegistrationsPage() {
   );
 
   // Get registrations for the organization and active year
-  const { data: registrations = [], refetch: refetchRegistrations, isLoading: isLoadingRegistrations } = 
+  const { data: registrations = [], refetch: refetchRegistrations, isLoading: isLoadingRegistrations, error: registrationsError } = 
     api.registration.getByOrganizationAndYear.useQuery(
       { 
         organizationId,
@@ -107,35 +114,42 @@ export default function RegistrationsPage() {
       },
       {
         enabled: !!organizationId && !!activeYear?.id,
-        onError: (error) => {
-          setError(`Error loading registrations: ${error.message}`);
-        },
       }
     );
 
+  useEffect(() => {
+    if (registrationsError) {
+      setError(`Error loading registrations: ${registrationsError.message}`);
+    }
+  }, [registrationsError]);
+
   // Get single registration
-  api.registration.getById.useQuery(
+  const { data: singleRegistration, error: singleRegistrationError } = api.registration.getById.useQuery(
     { id: selectedRegistration || "" },
     {
       enabled: !!selectedRegistration,
-      onSuccess: (data) => {
-        if (data) {
-          setFormData({
-            id: data.id,
-            camperProfileId: data.camperProfileId,
-            yearId: data.yearId,
-            locationId: data.locationId,
-            status: data.status,
-            notes: data.notes || "",
-          });
-        }
-      },
-      onError: (error) => {
-        setError(`Error loading registration details: ${error.message}`);
-        setIsModalOpen(false);
-      }
     }
   );
+
+  useEffect(() => {
+    if (singleRegistration) {
+      setFormData({
+        id: singleRegistration.id,
+        camperProfileId: singleRegistration.camperProfileId,
+        yearId: singleRegistration.yearId,
+        locationId: singleRegistration.locationId,
+        status: singleRegistration.status,
+        notes: singleRegistration.notes || "",
+      });
+    }
+  }, [singleRegistration]);
+
+  useEffect(() => {
+    if (singleRegistrationError) {
+      setError(`Error loading registration details: ${singleRegistrationError.message}`);
+      setIsModalOpen(false);
+    }
+  }, [singleRegistrationError]);
 
   // Create registration mutation
   const createRegistrationMutation = api.registration.create.useMutation({
@@ -216,8 +230,8 @@ export default function RegistrationsPage() {
     setSelectedIds(
       checked
         ? filteredRegistrations
-            .filter(r => r.status !== RegistrationStatus.PENDING)
-            .map(r => r.id)
+            .filter((r: any) => r.status !== "PENDING")
+            .map((r: any) => r.id)
         : []
     );
   };
@@ -225,7 +239,7 @@ export default function RegistrationsPage() {
   const handleBulkPublish = () => {
     // Only publish if all selected are not pending
     const allowedIds = selectedIds.filter(
-      id => filteredRegistrations.find(r => r.id === id)?.status !== RegistrationStatus.PENDING
+      id => filteredRegistrations.find((r: any) => r.id === id)?.status !== "PENDING"
     );
     if (allowedIds.length === 0) {
       setError("Only registrations that are not pending can be published.");
@@ -258,7 +272,7 @@ export default function RegistrationsPage() {
       camperProfileId: "",
       yearId: activeYear?.id || "",
       locationId: "",
-      status: RegistrationStatus.PENDING,
+      status: "PENDING",
       notes: "",
     });
   };
@@ -349,15 +363,15 @@ export default function RegistrationsPage() {
   };
 
   // Filter registrations based on search query, location, and status
-  const filteredRegistrations = registrations.filter((registration) => {
+  const filteredRegistrations = registrations.filter((r: any) => {
     const matchesSearch = 
       searchQuery === "" ||
-      registration.camperProfile.user.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      registration.camperProfile.user.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      registration.camperProfile.user.email?.toLowerCase().includes(searchQuery.toLowerCase());
+      r.camperProfile.user.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.camperProfile.user.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.camperProfile.user.email?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesLocation = filterLocation === "" || registration.locationId === filterLocation;
-    const matchesStatus = filterStatus === "" || registration.status === filterStatus;
+    const matchesLocation = filterLocation === "" || r.locationId === filterLocation;
+    const matchesStatus = filterStatus === "" || r.status === filterStatus;
     
     return matchesSearch && matchesLocation && matchesStatus;
   });
@@ -443,7 +457,7 @@ export default function RegistrationsPage() {
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
             >
               <option value="">All Locations</option>
-              {locations.map((location) => (
+              {locations.map((location: any) => (
                 <option key={location.id} value={location.id}>
                   {location.name}
                 </option>
@@ -462,11 +476,10 @@ export default function RegistrationsPage() {
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
             >
               <option value="">All Statuses</option>
-              <option value={RegistrationStatus.PENDING}>Pending</option>
-              <option value={RegistrationStatus.APPROVED}>Approved</option>
-              <option value={RegistrationStatus.WAITLISTED}>Waitlisted</option>
-              <option value={RegistrationStatus.REJECTED}>Rejected</option>
-              <option value={RegistrationStatus.CANCELLED}>Cancelled</option>
+              <option value="PENDING">Pending</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
+              <option value="CANCELLED">Cancelled</option>
             </select>
           </div>
         </div>
@@ -486,7 +499,7 @@ export default function RegistrationsPage() {
                       type="checkbox"
                       checked={
                         selectedIds.length > 0 &&
-                        selectedIds.length === filteredRegistrations.filter(r => r.status !== RegistrationStatus.PENDING).length
+                        selectedIds.length === filteredRegistrations.filter((r: any) => r.status !== "PENDING").length
                       }
                       onChange={e => handleSelectAll(e.target.checked)}
                       aria-label="Select all except pending"
@@ -507,13 +520,13 @@ export default function RegistrationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {filteredRegistrations.map((registration) => (
+                {filteredRegistrations.map((registration: any) => (
                   <tr key={registration.id}>
                     <td className="px-3 py-4 text-center">
                       <input
                         type="checkbox"
                         checked={selectedIds.includes(registration.id)}
-                        disabled={registration.status === RegistrationStatus.PENDING}
+                        disabled={registration.status === "PENDING"}
                         onChange={e => handleSelect(registration.id, e.target.checked)}
                         aria-label={`Select registration ${registration.id}`}
                       />
@@ -530,22 +543,19 @@ export default function RegistrationsPage() {
                         value={registration.status}
                         onChange={(e) => handleStatusChange(registration.id, e.target.value as RegistrationStatus)}
                         className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                          registration.status === RegistrationStatus.APPROVED
+                          registration.status === "APPROVED"
                             ? "border-green-300 bg-green-100 text-green-800"
-                            : registration.status === RegistrationStatus.PENDING
+                            : registration.status === "PENDING"
                             ? "border-yellow-300 bg-yellow-100 text-yellow-800"
-                            : registration.status === RegistrationStatus.WAITLISTED
-                            ? "border-blue-300 bg-blue-100 text-blue-800"
-                            : registration.status === RegistrationStatus.REJECTED
+                            : registration.status === "REJECTED"
                             ? "border-red-300 bg-red-100 text-red-800"
                             : "border-gray-300 bg-gray-100 text-gray-800"
                         }`}
                       >
-                        <option value={RegistrationStatus.PENDING}>Pending</option>
-                        <option value={RegistrationStatus.APPROVED}>Approved</option>
-                        <option value={RegistrationStatus.WAITLISTED}>Waitlisted</option>
-                        <option value={RegistrationStatus.REJECTED}>Rejected</option>
-                        <option value={RegistrationStatus.CANCELLED}>Cancelled</option>
+                        <option value="PENDING">Pending</option>
+                        <option value="APPROVED">Approved</option>
+                        <option value="REJECTED">Rejected</option>
+                        <option value="CANCELLED">Cancelled</option>
                       </select>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
@@ -585,11 +595,11 @@ export default function RegistrationsPage() {
               onClick={handleBulkPublish}
               disabled={
                 selectedIds.length === 0 ||
-                selectedIds.some(id => filteredRegistrations.find(r => r.id === id)?.status === RegistrationStatus.PENDING) ||
-                bulkPublishMutation.isLoading
+                selectedIds.some(id => filteredRegistrations.find((r: any) => r.id === id)?.status === "PENDING") ||
+                bulkPublishMutation.status === "pending"
               }
             >
-              {bulkPublishMutation.isLoading ? "Publishing..." : "Publish Selected"}
+              {bulkPublishMutation.status === "pending" ? "Publishing..." : "Publish Selected"}
             </button>
           </div>
         )}
@@ -619,7 +629,7 @@ export default function RegistrationsPage() {
                       required
                     >
                       <option value="">Select a camper profile</option>
-                      {camperProfiles.map((profile) => (
+                      {camperProfiles.map((profile: any) => (
                         <option key={profile.id} value={profile.id}>
                           {profile.user.firstName} {profile.user.lastName} ({profile.user.email})
                         </option>
@@ -640,7 +650,7 @@ export default function RegistrationsPage() {
                       required
                     >
                       <option value="">Select a location</option>
-                      {locations.map((location) => (
+                      {locations.map((location: any) => (
                         <option key={location.id} value={location.id}>
                           {location.name}
                         </option>
@@ -660,11 +670,10 @@ export default function RegistrationsPage() {
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
                       required
                     >
-                      <option value={RegistrationStatus.PENDING}>Pending</option>
-                      <option value={RegistrationStatus.APPROVED}>Approved</option>
-                      <option value={RegistrationStatus.WAITLISTED}>Waitlisted</option>
-                      <option value={RegistrationStatus.REJECTED}>Rejected</option>
-                      <option value={RegistrationStatus.CANCELLED}>Cancelled</option>
+                      <option value="PENDING">Pending</option>
+                      <option value="APPROVED">Approved</option>
+                      <option value="REJECTED">Rejected</option>
+                      <option value="CANCELLED">Cancelled</option>
                     </select>
                   </div>
                   

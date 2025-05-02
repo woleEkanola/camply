@@ -9,7 +9,7 @@ export default function LocationAdminDashboard() {
 
   // Always define these variables, even if session is not ready
   const managedLocations: string[] = session?.user?.managedLocations || [];
-  const organizationId = session?.user?.organizationId;
+  const organizationId = session?.user?.organizationId ?? "";
   const locationId = managedLocations[0];
 
   // Always call the TRPC hook, but only enable if we have the org id

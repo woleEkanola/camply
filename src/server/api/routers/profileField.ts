@@ -1,13 +1,23 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { ProfileFieldType } from "@prisma/client";
+
+// ProfileFieldType is not exported from @prisma/client after downgrade. Define locally to match schema.
+type ProfileFieldType = "TEXT" | "NUMBER" | "DATE" | "BOOLEAN" | "SELECT" | "MULTI_SELECT" | "FILE";
 
 // Schema for profile field data validation
 const profileFieldSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   label: z.string().min(2, "Label must be at least 2 characters"),
-  type: z.nativeEnum(ProfileFieldType),
+  type: z.enum([
+    "TEXT",
+    "NUMBER",
+    "DATE",
+    "BOOLEAN",
+    "SELECT",
+    "MULTI_SELECT",
+    "FILE"
+  ]),
   required: z.boolean().default(false),
   options: z.string().optional(), // JSON string for select options
   organizationId: z.string(),
@@ -18,7 +28,7 @@ export const profileFieldRouter = createTRPCRouter({
   getByOrganization: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -29,8 +39,7 @@ export const profileFieldRouter = createTRPCRouter({
         currentUser.role === "SUPER_ADMIN" || 
         currentUser.role === "OWNER" || 
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === input.organizationId) ||
-        (currentUser.role === "BASE_USER" && currentUser.organizationId === input.organizationId);
+        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === input.organizationId);
       
       if (!hasPermission) {
         throw new TRPCError({ 
@@ -50,7 +59,7 @@ export const profileFieldRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -85,7 +94,7 @@ export const profileFieldRouter = createTRPCRouter({
   create: protectedProcedure
     .input(profileFieldSchema)
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -131,7 +140,7 @@ export const profileFieldRouter = createTRPCRouter({
       data: profileFieldSchema.partial()
     }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -187,7 +196,7 @@ export const profileFieldRouter = createTRPCRouter({
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });

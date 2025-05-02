@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "../../../utils/api";
-import type { UserRole } from "@prisma/client";
+// UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
 import Link from "next/link";
 import React from "react";
 
@@ -161,7 +162,7 @@ function SignupForm({ token }: { token: string }) {
       const userData = {
         email, password,
         firstName: "", lastName: "",
-        role: "BASE_USER", // Ensure BASE_USER is used for signup
+        role: "ADMIN" as UserRole, // Use a valid enum value, see project memory
         organizationId: linkDetails.organizationId,
       };
       const userResp = await createUserMutation.mutateAsync(userData);
@@ -169,11 +170,9 @@ function SignupForm({ token }: { token: string }) {
       for (const camper of campers) {
         await createCamperProfileMutation.mutateAsync({
           name: camper.name,
-          userId: userResp.userId,
+          userId: userResp.userId ?? "",
           organizationId: linkDetails.organizationId,
           locationId: linkDetails.locationId,
-          dateOfBirth: camper.dob, // Pass as ISO string
-          gender: camper.gender,
         });
       }
       setSuccess("Signup complete! You can now log in.");

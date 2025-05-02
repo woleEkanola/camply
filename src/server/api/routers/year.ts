@@ -16,7 +16,7 @@ export const yearRouter = createTRPCRouter({
   getByOrganization: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -68,7 +68,7 @@ export const yearRouter = createTRPCRouter({
   getActiveYear: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -91,7 +91,7 @@ export const yearRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -141,7 +141,7 @@ export const yearRouter = createTRPCRouter({
   create: protectedProcedure
     .input(yearSchema)
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -197,7 +197,7 @@ export const yearRouter = createTRPCRouter({
       data: yearSchema.partial()
     }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -266,7 +266,7 @@ export const yearRouter = createTRPCRouter({
       yearId: z.string()
     }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -326,7 +326,7 @@ export const yearRouter = createTRPCRouter({
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });

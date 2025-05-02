@@ -4,10 +4,10 @@ import { api } from "@/utils/trpc";
 interface BaseUser {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  createdAt: string;
-  organizationId?: string;
+  firstName: string | null;
+  lastName: string | null;
+  createdAt: Date;
+  organizationId?: string | null;
   camperProfileCount: number;
 }
 

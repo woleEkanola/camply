@@ -9,7 +9,7 @@ import {
 
 interface StatCardProps {
   title: string;
-  value: string;
+  value: string | number;
   change: number;
   icon: string;
   color: string;

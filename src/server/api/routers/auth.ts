@@ -2,7 +2,9 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import bcrypt from "bcryptjs";
-import { UserRole } from "@prisma/client";
+
+// UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
 
 export const authRouter = createTRPCRouter({
   login: publicProcedure
@@ -38,7 +40,7 @@ export const authRouter = createTRPCRouter({
       password: z.string().min(8),
       firstName: z.string(),
       lastName: z.string(),
-      role: z.nativeEnum(UserRole),
+      role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"]),
       organizationId: z.string()
     }))
     .mutation(async ({ input }) => {
@@ -76,10 +78,11 @@ export const authRouter = createTRPCRouter({
           userId: user.id,
           message: "User created successfully"
         };
-      } catch (error: any) {
+      } catch (error) {
+        const err = error as Error;
         return {
           success: false,
-          message: `Error creating user: ${error.message}`
+          message: `Error creating user: ${err.message}`
         };
       }
     })

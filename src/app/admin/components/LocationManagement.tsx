@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
 import DataTable from "./DataTable";
+import type { Column } from "./DataTable";
 import { PencilIcon, TrashIcon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 // Location form type
@@ -38,15 +39,18 @@ export default function LocationManagement({ organizationId }: LocationManagemen
   const [success, setSuccess] = useState("");
 
   // Get locations for the organization
-  const { data: locations = [], isLoading, refetch: refetchLocations } = api.location.getByOrganization.useQuery(
+  const { data: locations = [], isLoading, refetch: refetchLocations, error: queryError } = api.location.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
-      onError: (err) => {
-        setError(err.message);
-      }
     }
   );
+
+  useEffect(() => {
+    if (queryError) {
+      setError(queryError.message);
+    }
+  }, [queryError]);
 
   // Create location mutation
   const createLocationMutation = api.location.create.useMutation({
@@ -155,7 +159,18 @@ export default function LocationManagement({ organizationId }: LocationManagemen
   };
 
   // Define table columns
-  const columns = [
+  const columns: Column<{
+    name: string;
+    address: string;
+    city: string;
+    state: string | null;
+    zipCode: string | null;
+    country: string;
+    id: string;
+    organizationId: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>[] = [
     {
       header: "Name",
       accessor: "name",
@@ -176,12 +191,16 @@ export default function LocationManagement({ organizationId }: LocationManagemen
     },
     {
       header: "State/Province",
-      accessor: (location: any) => location.state || "-",
+      accessor: (location: {
+        state: string | null;
+      }) => location.state || "-",
       sortable: false,
     },
     {
       header: "Postal Code",
-      accessor: (location: any) => location.zipCode || "-",
+      accessor: (location: {
+        zipCode: string | null;
+      }) => location.zipCode || "-",
       sortable: false,
     },
     {
@@ -349,9 +368,9 @@ export default function LocationManagement({ organizationId }: LocationManagemen
               <button
                 type="submit"
                 className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                disabled={createLocationMutation.isLoading || updateLocationMutation.isLoading}
+                disabled={createLocationMutation.isPending || updateLocationMutation.isPending}
               >
-                {createLocationMutation.isLoading || updateLocationMutation.isLoading
+                {createLocationMutation.isPending || updateLocationMutation.isPending
                   ? "Saving..."
                   : isEditingLocation
                   ? "Update Location"

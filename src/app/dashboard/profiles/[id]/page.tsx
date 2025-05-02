@@ -29,15 +29,16 @@ export default function CamperProfilePage() {
   );
 
   // Fetch active year for the profile's organization
+  const organizationId = profile?.organizationId ?? "";
   const { data: activeYear, isLoading: isLoadingYear } = api.year.getActiveYear.useQuery(
-    { organizationId: profile?.organizationId },
-    { enabled: !!profile?.organizationId }
+    { organizationId },
+    { enabled: !!organizationId }
   );
 
   // Fetch custom profile fields for the organization
   const { data: customFields = [], isLoading: isLoadingFields } = api.profileField.getByOrganization.useQuery(
-    { organizationId: profile?.organizationId },
-    { enabled: !!profile?.organizationId }
+    { organizationId },
+    { enabled: !!organizationId }
   );
 
   // Prepare state for dynamic field values
@@ -65,13 +66,24 @@ export default function CamperProfilePage() {
     if (!requiredFields.length) return 100;
     let filled = 0;
     for (const field of requiredFields) {
-      // Check core fields
-      if (["name","dateOfBirth","gender","locationId"].includes(field.name)) {
-        if (profile && profile[field.name]) filled++;
-      } else {
-        // Custom fields
-        const val = profile?.fieldValues?.find((fv: any) => fv.fieldId === field.id)?.value;
-        if (val && val !== "") filled++;
+      switch (field.name) {
+        case "name":
+          if (profile && typeof profile.name === "string" && profile.name) filled++;
+          break;
+        case "dateOfBirth":
+          if (profile && typeof profile.dateOfBirth === "string" && profile.dateOfBirth) filled++;
+          break;
+        case "gender":
+          if (profile && typeof profile.gender === "string" && profile.gender) filled++;
+          break;
+        case "locationId":
+          if (profile && typeof profile.locationId === "string" && profile.locationId) filled++;
+          break;
+        default: {
+          // Custom fields
+          const val = profile?.fieldValues?.find((fv: any) => fv.fieldId === field.id)?.value;
+          if (val && val !== "") filled++;
+        }
       }
     }
     return Math.round((filled / requiredFields.length) * 100);
@@ -261,8 +273,8 @@ export default function CamperProfilePage() {
                 {/* Custom fields (editable with Edit button) */}
                 {customFields.length > 0 && (
                   <div className="grid gap-4">
-                    {console.log("customFields", customFields)}
-                    {console.log("fieldValues", fieldValues)}
+                    {/* Debug logs removed: console.log("customFields", customFields) */}
+                    {/* Debug logs removed: console.log("fieldValues", fieldValues) */}
                     {customFields.map((field: any) => {
                       let inputEl = null;
                       // Safe parsing for options
@@ -273,16 +285,23 @@ export default function CamperProfilePage() {
                         try {
                           options = field.options.trim().startsWith('[')
                             ? JSON.parse(field.options)
-                            : field.options.split(',').map(opt => opt.trim());
+                            : field.options.split(',').map((opt: string) => opt.trim());
                         } catch {
-                          options = field.options.split(',').map(opt => opt.trim());
+                          options = field.options.split(',').map((opt: string) => opt.trim());
                         }
                       }
                       const value = fieldValues[field.id] ?? '';
                       // Robust CHECKBOX rendering for all cases
                       if (field.type && String(field.type).trim().toUpperCase() === "BOOLEAN") {
                         // Accept value as: true, false, 'true', 'false', 1, 0, '1', '0', undefined, null, ''
-                        const checked = value === true || value === 'true' || value === 1 || value === '1';
+                        let checked = false;
+                        if (typeof value === 'boolean') {
+                          checked = value;
+                        } else if (typeof value === 'string') {
+                          checked = value === 'true' || value === '1';
+                        } else if (typeof value === 'number') {
+                          checked = value === 1;
+                        }
                         inputEl = (
                           <div className="flex items-center gap-2">
                             <label className="inline-flex relative items-center cursor-pointer">

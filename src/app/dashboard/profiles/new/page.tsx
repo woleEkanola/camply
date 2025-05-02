@@ -20,7 +20,7 @@ export default function NewProfilePage() {
   );
 
   // Find the first profile with a locationId
-  const connectedLocationId = userProfiles?.find(p => p.locationId)?.locationId || "";
+  const connectedLocationId = userProfiles?.find((p: any) => p.locationId)?.locationId || "";
 
   const [formData, setFormData] = useState({
     name: "",
@@ -62,8 +62,8 @@ export default function NewProfilePage() {
         router.push(`/dashboard/profiles/${data.id}`);
       }, 2000);
     },
-    onError: (error: Error) => {
-      setError(`Error creating profile: ${error.message}`);
+    onError: (error) => {
+      setError(`Error creating profile: ${'message' in error ? (error as any).message : 'Unknown error'}`);
       setIsSubmitting(false);
     }
   });
@@ -113,7 +113,7 @@ export default function NewProfilePage() {
           dateOfBirth: formData.dateOfBirth,
           gender: formData.gender,
           locationId: formData.locationId,
-          organizationId: session.user.organizationId,
+          organizationId: session.user.organizationId ?? "",
           userId: session.user.id,
         },
         fieldValues: []

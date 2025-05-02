@@ -3,7 +3,20 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { api } from "../../../utils/api";
-import { UserRole, PermissionType } from "@prisma/client";
+
+// UserRole and PermissionType are not exported from @prisma/client after the downgrade.
+// Define them as local enums to allow both type and runtime value usage.
+// UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+export enum PermissionType {
+  CREATE_LOCATION = "CREATE_LOCATION",
+  READ_LOCATION = "READ_LOCATION",
+  UPDATE_LOCATION = "UPDATE_LOCATION",
+  DELETE_LOCATION = "DELETE_LOCATION",
+  MANAGE_ADMINS = "MANAGE_ADMINS",
+  MANAGE_LOCATION_ADMINS = "MANAGE_LOCATION_ADMINS",
+  VIEW_ANALYTICS = "VIEW_ANALYTICS"
+}
 
 interface PermissionFormData {
   userId: string;
@@ -22,35 +35,47 @@ export default function AccessControl({ organizationId }: { organizationId: stri
   });
 
   // Get users for the organization
-  const { data: userData, refetch: refetchUsers } = api.user.getByOrganization.useQuery(
+  const { data: userData, refetch: refetchUsers, error: usersError } = api.user.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId && !!session?.user,
-      onSuccess: (data) => {
-        setUsers(data);
-      },
-      onError: (err) => {
-        setError(err.message);
-      }
     }
   );
 
+  useEffect(() => {
+    if (userData) {
+      setUsers(userData);
+    }
+  }, [userData]);
+
+  useEffect(() => {
+    if (usersError) {
+      setError(usersError.message);
+    }
+  }, [usersError]);
+
   // Get permissions for a user
-  const { data: permissionData, refetch: refetchPermissions } = api.permission.getByUser.useQuery(
+  const { data: permissionData, refetch: refetchPermissions, error: permissionsError } = api.permission.getByUser.useQuery(
     { userId: selectedUser || "" },
     {
       enabled: !!selectedUser,
-      onSuccess: (data) => {
-        setPermissionForm({
-          userId: selectedUser || "",
-          permissions: data.map((p: any) => p.type),
-        });
-      },
-      onError: (err) => {
-        setError(err.message);
-      }
     }
   );
+
+  useEffect(() => {
+    if (permissionData) {
+      setPermissionForm({
+        userId: selectedUser || "",
+        permissions: permissionData.map((p: any) => p.type),
+      });
+    }
+  }, [permissionData, selectedUser]);
+
+  useEffect(() => {
+    if (permissionsError) {
+      setError(permissionsError.message);
+    }
+  }, [permissionsError]);
 
   // Update permissions mutation
   const updatePermissionsMutation = api.permission.updateUserPermissions.useMutation({
@@ -115,19 +140,16 @@ export default function AccessControl({ organizationId }: { organizationId: stri
         return allPermissions;
       case "OWNER":
         return allPermissions.filter(p => 
-          p !== "MANAGE_SUPER_ADMIN" && 
-          p !== "MANAGE_OWNER"
+          p !== PermissionType.MANAGE_ADMINS
         );
       case "ADMIN":
         return allPermissions.filter(p => 
-          p !== "MANAGE_SUPER_ADMIN" && 
-          p !== "MANAGE_OWNER" && 
-          p !== "MANAGE_ADMIN"
+          p !== PermissionType.MANAGE_ADMINS
         );
       case "LOCATION_ADMIN":
         return allPermissions.filter(p => 
-          p.startsWith("READ_") || 
-          p === "VIEW_ANALYTICS"
+          p === PermissionType.READ_LOCATION || 
+          p === PermissionType.VIEW_ANALYTICS
         );
       default:
         return [];
@@ -240,7 +262,7 @@ export default function AccessControl({ organizationId }: { organizationId: stri
                         type="checkbox"
                         id={`permission-${permission}`}
                         checked={permissionForm.permissions.includes(permission)}
-                        onChange={(e) => handlePermissionChange(permission as PermissionType, e.target.checked)}
+                        onChange={(e) => handlePermissionChange(permission, e.target.checked)}
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                       <label
@@ -258,9 +280,9 @@ export default function AccessControl({ organizationId }: { organizationId: stri
                 <button
                   type="submit"
                   className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                  disabled={updatePermissionsMutation.isLoading}
+                  disabled={updatePermissionsMutation.isPending}
                 >
-                  {updatePermissionsMutation.isLoading ? "Saving..." : "Save Permissions"}
+                  {updatePermissionsMutation.isPending ? "Saving..." : "Save Permissions"}
                 </button>
               </div>
             </form>

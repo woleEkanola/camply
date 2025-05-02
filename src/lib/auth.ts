@@ -1,6 +1,9 @@
 import { compare, hash } from 'bcryptjs';
 import { prisma } from '../server/db';
 
+// UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
+export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+
 export async function hashPassword(password: string): Promise<string> {
   return await hash(password, 12);
 }
@@ -9,14 +12,15 @@ export async function verifyPassword(password: string, hashedPassword: string): 
   return await compare(password, hashedPassword);
 }
 
-export async function createUser(name: string, email: string, password: string) {
+export async function createUser(firstName: string, email: string, password: string, role: UserRole = "ADMIN") {
   const hashedPassword = await hashPassword(password);
   
   return prisma.user.create({
     data: {
-      name,
+      firstName,
       email,
       password: hashedPassword,
+      role,
     },
   });
 }

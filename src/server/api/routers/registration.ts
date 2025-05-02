@@ -1,14 +1,16 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { RegistrationStatus } from "@prisma/client";
+
+// RegistrationStatus is not exported from @prisma/client after downgrade. Define locally to match schema.
+export type RegistrationStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 
 // Schema for registration data validation
 const registrationSchema = z.object({
   camperProfileId: z.string(),
   yearId: z.string(),
   locationId: z.string(),
-  status: z.nativeEnum(RegistrationStatus).default(RegistrationStatus.PENDING),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).default("PENDING"),
   notes: z.string().optional(),
 });
 
@@ -16,7 +18,7 @@ const registrationSchema = z.object({
 const registrationUpdateSchema = z.object({
   published: z.boolean().optional(),
   parentConsent: z.boolean().optional(),
-  status: z.nativeEnum(RegistrationStatus).optional(),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).optional(),
   notes: z.string().optional(),
 });
 
@@ -28,7 +30,7 @@ export const registrationRouter = createTRPCRouter({
       yearId: z.string().optional() // If not provided, use active year
     }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -82,7 +84,7 @@ export const registrationRouter = createTRPCRouter({
           select: { id: true }
         });
         
-        const locationIds = managedLocationIds.map(loc => loc.id);
+        const locationIds = managedLocationIds.map((profile: { id: string }) => profile.id);
         
         return await ctx.prisma.registration.findMany({
           where: { 
@@ -157,7 +159,7 @@ export const registrationRouter = createTRPCRouter({
       yearId: z.string().optional() // If not provided, get all years
     }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -202,7 +204,7 @@ export const registrationRouter = createTRPCRouter({
           select: { id: true }
         });
         
-        const locationIds = managedLocationIds.map(loc => loc.id);
+        const locationIds = managedLocationIds.map((profile: { id: string }) => profile.id);
         
         return await ctx.prisma.registration.findMany({
           where: { 
@@ -236,7 +238,7 @@ export const registrationRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -295,7 +297,7 @@ export const registrationRouter = createTRPCRouter({
   // Get registrations for the current user (for dashboard)
   getByUserId: protectedProcedure
     .query(async ({ ctx }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -311,7 +313,7 @@ export const registrationRouter = createTRPCRouter({
       return await ctx.prisma.registration.findMany({
         where: {
           camperProfileId: {
-            in: camperProfiles.map(profile => profile.id)
+            in: camperProfiles.map((profile: { id: string }) => profile.id)
           }
         },
         include: {
@@ -327,7 +329,7 @@ export const registrationRouter = createTRPCRouter({
   create: protectedProcedure
     .input(registrationSchema)
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -427,7 +429,7 @@ export const registrationRouter = createTRPCRouter({
       camperProfileId: z.string(),
       yearId: z.string(),
       locationId: z.string(),
-      status: z.nativeEnum(RegistrationStatus).default(RegistrationStatus.PENDING),
+      status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).default("PENDING"),
     }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -468,7 +470,7 @@ export const registrationRouter = createTRPCRouter({
       data: registrationSchema.partial()
     }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -547,7 +549,7 @@ export const registrationRouter = createTRPCRouter({
   updateFields: protectedProcedure
     .input(z.object({ id: z.string(), data: registrationUpdateSchema }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
@@ -584,10 +586,10 @@ export const registrationRouter = createTRPCRouter({
   updateStatus: protectedProcedure
     .input(z.object({
       id: z.string(),
-      status: z.nativeEnum(RegistrationStatus)
+      status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"])
     }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
@@ -643,7 +645,7 @@ export const registrationRouter = createTRPCRouter({
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session.user;
+      const currentUser = ctx.session?.user;
       
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });

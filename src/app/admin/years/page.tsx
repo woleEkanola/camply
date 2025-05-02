@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
 import ModernDashboardLayout from "../components/ModernDashboardLayout";
-import { UserRole } from "@prisma/client";
+
+// UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
 
 interface ExtendedUser {
   id: string;
@@ -67,50 +69,56 @@ export default function YearsPage() {
   }, [organizationId]);
 
   // Get years for the organization
-  const { data: years = [], refetch: refetchYears, isLoading: isLoadingYears } = api.year.getByOrganization.useQuery(
+  const { data: years = [], refetch: refetchYears, isLoading: isLoadingYears, error: yearsError } = api.year.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
-      onError: (error) => {
-        setError(`Error loading years: ${error.message}`);
-      },
     }
   );
+  useEffect(() => {
+    if (yearsError) {
+      setError(`Error loading years: ${yearsError.message}`);
+    }
+  }, [yearsError]);
 
   // Get active year for the organization
-  const { data: activeYear } = api.year.getActiveYear.useQuery(
+  const { data: activeYear, error: activeYearError } = api.year.getActiveYear.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
-      onError: (error) => {
-        console.error("Error loading active year:", error);
-      },
     }
   );
+  useEffect(() => {
+    if (activeYearError) {
+      console.error("Error loading active year:", activeYearError);
+    }
+  }, [activeYearError]);
 
   // Get single year
-  const { data: yearData } = api.year.getById.useQuery(
+  const { data: yearData, error: yearDataError } = api.year.getById.useQuery(
     { id: selectedYear || "" },
     {
       enabled: !!selectedYear,
-      onSuccess: (data) => {
-        if (data) {
-          setFormData({
-            id: data.id,
-            name: data.name,
-            startDate: new Date(data.startDate).toISOString().split('T')[0],
-            endDate: new Date(data.endDate).toISOString().split('T')[0],
-            active: data.active,
-            organizationId: data.organizationId,
-          });
-        }
-      },
-      onError: (error) => {
-        setError(`Error loading year details: ${error.message}`);
-        setIsModalOpen(false);
-      }
     }
   );
+  useEffect(() => {
+    if (yearDataError) {
+      setError(`Error loading year details: ${yearDataError.message}`);
+      setIsModalOpen(false);
+    }
+  }, [yearDataError]);
+  useEffect(() => {
+    if (yearData) {
+      setFormData({
+        id: yearData.id,
+        name: yearData.name,
+        startDate: new Date(yearData.startDate).toISOString().split('T')[0],
+        endDate: new Date(yearData.endDate).toISOString().split('T')[0],
+        active: yearData.active,
+        organizationId: yearData.organizationId,
+      });
+    }
+  }, [yearData]);
 
   // Create year mutation
   const createYearMutation = api.year.create.useMutation({
@@ -371,7 +379,7 @@ export default function YearsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {years.map((year) => (
+                {years.map((year: any) => (
                   <tr key={year.id} className={year.active ? "bg-green-50" : ""}>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {year.name}

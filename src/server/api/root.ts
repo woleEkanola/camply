@@ -30,6 +30,9 @@ export const appRouter = createTRPCRouter({
   year: yearRouter,
   registration: registrationRouter,
   signupLink: signupLinkRouter,
+  // booking: bookingRouter, // removed because booking router file was deleted
+  // eventType: eventTypeRouter, // removed because eventType router file was deleted
+  // schedule: scheduleRouter, // removed because schedule router file was deleted
 });
 
 // export type definition of API

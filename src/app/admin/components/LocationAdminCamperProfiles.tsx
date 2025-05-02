@@ -10,7 +10,7 @@ interface LocationAdminCamperProfilesProps {
 export const LocationAdminCamperProfiles: React.FC<LocationAdminCamperProfilesProps> = ({ locationId }) => {
   // Get session for organizationId
   const { data: session, status } = useSession({ required: true });
-  const organizationId = session?.user?.organizationId;
+  const organizationId = session?.user?.organizationId ?? "";
 
   // Filtering state (must be declared before any early returns)
   const [showVerifiedDOB, setShowVerifiedDOB] = useState<null | boolean>(null);
@@ -20,13 +20,17 @@ export const LocationAdminCamperProfiles: React.FC<LocationAdminCamperProfilesPr
   // Fetch camper profiles for this location
   const { data: profiles, isLoading, error, refetch } = api.camperProfile.getByOrganization.useQuery(
     { organizationId },
-    { enabled: !!locationId && !!organizationId }
+    { enabled: !!locationId && organizationId !== "" }
   );
 
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [dobApprovalLoading, setDobApprovalLoading] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  useEffect(() => {
+    if (error) setErrorMsg(error.message);
+  }, [error]);
 
   // API mutation for approving DOB
   const dobApprovalMutation = api.camperProfile.updateDobApproval.useMutation({
@@ -45,7 +49,7 @@ export const LocationAdminCamperProfiles: React.FC<LocationAdminCamperProfilesPr
   const allRegistrations = profiles?.flatMap((p: any) => p.registrations || []) || [];
   const years = Array.from(new Set(allRegistrations.map((reg: any) => reg.yearId)));
   // Assume the latest year is active
-  const latestYearId = years.length > 0 ? years[years.length - 1] : null;
+  const latestYearId: string | null = years.length > 0 ? String(years[years.length - 1]) : null;
   useEffect(() => {
     if (latestYearId) setActiveYearId(latestYearId);
   }, [latestYearId]);
@@ -122,6 +126,11 @@ const LocationAdminRegistrations: React.FC<{ profileId: string; locationId: stri
   const regUpdateMutation = api.registration.updateFields.useMutation({
     onSuccess: () => refetch(),
   });
+  // Optionally handle error with local state if you want to show a custom message
+  // const [errorMsg, setErrorMsg] = useState("");
+  // useEffect(() => {
+  //   if (error) setErrorMsg(error.message);
+  // }, [error]);
   if (isLoading) return <div>Loading...</div>;
   if (error) return <div className="text-red-600">Error: {error.message}</div>;
   // Only show published registrations for this location

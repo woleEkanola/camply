@@ -1,10 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
-import { PermissionType } from "@prisma/client";
 import DataTable from "./DataTable";
 import { PencilIcon, TrashIcon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
+
+// PermissionType is not exported from @prisma/client after the downgrade. Use the local enum defined in AccessControl.tsx or define it here if needed.
+export enum PermissionType {
+  CREATE_LOCATION = "CREATE_LOCATION",
+  READ_LOCATION = "READ_LOCATION",
+  UPDATE_LOCATION = "UPDATE_LOCATION",
+  DELETE_LOCATION = "DELETE_LOCATION",
+  MANAGE_ADMINS = "MANAGE_ADMINS",
+  MANAGE_LOCATION_ADMINS = "MANAGE_LOCATION_ADMINS",
+  VIEW_ANALYTICS = "VIEW_ANALYTICS"
+}
 
 // Admin user form type
 type AdminFormData = {
@@ -33,6 +43,15 @@ interface AdminManagementProps {
   organizationId: string;
 }
 
+type AdminUser = {
+  id: string;
+  email: string;
+  role: string;
+  organizationId: string | null;
+  permissions: string[];
+  createdAt: Date;
+};
+
 export default function AdminManagement({ organizationId }: AdminManagementProps) {
   const [isAddingAdmin, setIsAddingAdmin] = useState(false);
   const [isEditingAdmin, setIsEditingAdmin] = useState(false);
@@ -42,15 +61,19 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
   const [success, setSuccess] = useState("");
 
   // Get admin users for the organization
-  const { data: adminUsers = [], isLoading, refetch: refetchAdmins } = api.admin.getByOrganization.useQuery(
+  const { data: adminUsers = [], isLoading, refetch: refetchAdmins, error: adminUsersError } = api.admin.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
-      onError: (err) => {
-        setError(err.message);
-      }
     }
   );
+
+  // Handle query error with useEffect
+  useEffect(() => {
+    if (adminUsersError) {
+      setError(adminUsersError.message);
+    }
+  }, [adminUsersError]);
 
   // Create admin user mutation
   const createAdminMutation = api.admin.create.useMutation({
@@ -181,13 +204,13 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
   const columns = [
     {
       header: "Email",
-      accessor: "email",
+      accessor: "email" as keyof AdminUser,
       sortable: true,
       searchable: true,
     },
     {
       header: "Permissions",
-      accessor: (admin: any) => (
+      accessor: (admin: AdminUser) => (
         <div className="flex flex-wrap gap-1">
           {admin.permissions.map((permission: string) => (
             <span
@@ -202,7 +225,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
     },
     {
       header: "Created",
-      accessor: (admin: any) => new Date(admin.createdAt).toLocaleDateString(),
+      accessor: (admin: AdminUser) => new Date(admin.createdAt).toLocaleDateString(),
       sortable: true,
     },
   ];
@@ -337,9 +360,9 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
               <button
                 type="submit"
                 className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                disabled={createAdminMutation.isLoading || updatePermissionsMutation.isLoading}
+                disabled={createAdminMutation.isPending || updatePermissionsMutation.isPending}
               >
-                {createAdminMutation.isLoading || updatePermissionsMutation.isLoading
+                {createAdminMutation.isPending || updatePermissionsMutation.isPending
                   ? "Saving..."
                   : isEditingAdmin
                   ? "Update Permissions"

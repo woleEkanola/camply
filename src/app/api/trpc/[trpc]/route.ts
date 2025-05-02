@@ -7,19 +7,7 @@ const handler = async (req: Request) => {
     endpoint: "/api/trpc",
     req,
     router: appRouter,
-    createContext: () => createTRPCContext({
-      req,
-      resHeaders: new Headers(),
-      info: {
-        isBatchCall: false,
-        calls: [],
-        accept: 'application/jsonl',
-        connectionParams: {},
-        type: 'query',
-        signal: new AbortController().signal,
-        url: new URL(req.url),
-      },
-    }),
+    createContext: createTRPCContext,
   });
 };
 

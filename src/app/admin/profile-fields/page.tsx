@@ -16,14 +16,17 @@ const FIELD_TYPES = [
 
 export default function ProfileFieldsPage() {
   const { data: session } = useSession();
-  const organizationId = session?.user?.organizationId;
+  const organizationId = session?.user?.organizationId ?? "";
   const isAdmin =
     session?.user?.role === "ADMIN" ||
     session?.user?.role === "OWNER" ||
     session?.user?.role === "SUPER_ADMIN";
 
   // Fetch all fields for this org
-  const { data: fields = [], isLoading, refetch } = api.profileField.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
+  const { data: fields = [], isLoading, refetch } = api.profileField.getByOrganization.useQuery(
+    { organizationId },
+    { enabled: !!organizationId }
+  );
 
   // State for new field form
   const [form, setForm] = useState({
@@ -50,8 +53,7 @@ export default function ProfileFieldsPage() {
   }
 
   return (
-
- <ModernDashboardLayout>
+    <ModernDashboardLayout>
       <div className="max-w-2xl mx-auto py-8">
         <h2 className="text-2xl font-bold mb-6">Manage Profile Fields</h2>
 
@@ -139,9 +141,9 @@ export default function ProfileFieldsPage() {
           <button
             type="submit"
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            disabled={createField.isLoading}
+            disabled={createField.status === "pending"}
           >
-            {createField.isLoading ? "Creating..." : "Add Field"}
+            {createField.status === "pending" ? "Creating..." : "Add Field"}
           </button>
         </form>
 
@@ -173,7 +175,7 @@ export default function ProfileFieldsPage() {
           </table>
         )}
       </div>
-      </ModernDashboardLayout>
+    </ModernDashboardLayout>
   );
 }
 
