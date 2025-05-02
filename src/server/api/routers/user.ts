@@ -544,7 +544,7 @@ export const userRouter = createTRPCRouter({
       }
       // Filter by organization if provided (for multi-tenant)
       const where = {
-        role: "ADMIN",
+        role: "ADMIN" as UserRole,
         ...(input.organizationId && { organizationId: input.organizationId })
       };
       // Find all BASE_USERs

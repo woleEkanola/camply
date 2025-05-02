@@ -138,7 +138,8 @@ export default function RegistrationsPage() {
         camperProfileId: singleRegistration.camperProfileId,
         yearId: singleRegistration.yearId,
         locationId: singleRegistration.locationId,
-        status: singleRegistration.status,
+        // Normalize status to match local RegistrationStatus type
+        status: singleRegistration.status as RegistrationStatus,
         notes: singleRegistration.notes || "",
       });
     }
