@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 
 // ProfileFieldType is not exported from @prisma/client after downgrade. Define locally to match schema.
@@ -25,30 +25,10 @@ const profileFieldSchema = z.object({
 
 export const profileFieldRouter = createTRPCRouter({
   // Get all profile fields for an organization
-  getByOrganization: protectedProcedure
+  getByOrganization: publicProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session?.user;
-      
-      if (!currentUser) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
-      }
-      
-      // Check if user has permission to view fields in this organization
-      const hasPermission = 
-        currentUser.role === "SUPER_ADMIN" || 
-        currentUser.role === "OWNER" || 
-        currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === input.organizationId);
-      
-      if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to view profile fields for this organization" 
-        });
-      }
-      
-      // Get all profile fields for the organization
+      // Allow all users (including unauthenticated) to view profile fields for the organization
       return await ctx.prisma.profileField.findMany({
         where: { organizationId: input.organizationId },
         orderBy: { createdAt: "asc" }

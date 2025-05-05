@@ -30,16 +30,18 @@ export default function AdminDashboard() {
 
   // Check if user is authenticated
   useEffect(() => {
-    if (status === "authenticated" && 
-        (session?.user as ExtendedUser)?.role !== "SUPER_ADMIN" && 
-        (session?.user as ExtendedUser)?.role !== "OWNER" && 
-        (session?.user as ExtendedUser)?.role !== "ADMIN" && 
-        (session?.user as ExtendedUser)?.role !== "LOCATION_ADMIN") {
-      router.push("/");
+    if (status === "authenticated") {
+      const role = (session?.user as ExtendedUser)?.role;
+      // Only allow SUPER_ADMIN, OWNER, ADMIN
+      if (role !== "SUPER_ADMIN" && role !== "OWNER" && role !== "ADMIN") {
+        // If base_user or location_admin, redirect away
+        router.replace("/login");
+      }
     }
   }, [session, status, router]);
 
-  if (status === "loading") {
+  if (status === "loading" || (status === "authenticated" && ["BASE_USER", "LOCATION_ADMIN"].includes((session?.user as ExtendedUser)?.role))) {
+    // Prevent dashboard flash for unauthorized roles
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
 

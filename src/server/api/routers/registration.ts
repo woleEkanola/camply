@@ -17,7 +17,7 @@ const registrationSchema = z.object({
 // Add zod schemas for new fields
 const registrationUpdateSchema = z.object({
   published: z.boolean().optional(),
-  parentConsent: z.boolean().optional(),
+  parentConsent: z.string().optional(),
   status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).optional(),
   notes: z.string().optional(),
 });
@@ -556,7 +556,7 @@ export const registrationRouter = createTRPCRouter({
       // Only admins or location admins can update these fields
       const registration = await ctx.prisma.registration.findUnique({
         where: { id: input.id },
-        include: { location: true },
+        include: { location: true, camperProfile: true },
       });
       if (!registration) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Registration not found" });
@@ -571,7 +571,15 @@ export const registrationRouter = createTRPCRouter({
               id: registration.locationId,
               admins: { some: { id: currentUser.id } },
             },
-          }));
+          })) ||
+        (currentUser.role === "BASE_USER" &&
+          registration.camperProfileId &&
+          (await ctx.prisma.camperProfile.findFirst({
+            where: {
+              id: registration.camperProfileId,
+              userId: currentUser.id,
+            },
+          })));
       if (!hasPermission) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to update registration fields" });
       }

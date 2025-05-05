@@ -29,6 +29,7 @@ const camperProfileUpdateSchema = z.object({
   dateOfBirth: z.string().optional(),
   gender: z.string().optional(),
   dobApproved: z.boolean().optional(),
+  birthCert: z.string().optional(),
 });
 
 export const camperProfileRouter = createTRPCRouter({
@@ -57,7 +58,7 @@ export const camperProfileRouter = createTRPCRouter({
       }
       
       // Get all camper profiles for the organization
-      return await ctx.prisma.camperProfile.findMany({
+      const profiles = await ctx.prisma.camperProfile.findMany({
         where: { 
           organizationId: input.organizationId,
           // If user is a location admin, only show profiles for their managed locations
@@ -85,10 +86,15 @@ export const camperProfileRouter = createTRPCRouter({
             include: {
               field: true
             }
-          }
+          },
+          // Ensure birthCert is included (it's a scalar field, always returned)
+          
         },
         orderBy: { createdAt: "desc" }
       });
+      // Debug log: log all fetched profiles
+      console.log("DEBUG: Fetched camper profiles:", JSON.stringify(profiles, null, 2));
+      return profiles;
     }),
     
   // Get camper profiles for a specific user
@@ -176,6 +182,7 @@ export const camperProfileRouter = createTRPCRouter({
           name: true,
           active: true,
           dateOfBirth: true,
+          birthCert:true,
           gender: true,
           user: true,
           location: true,
@@ -335,7 +342,7 @@ export const camperProfileRouter = createTRPCRouter({
       // Get the profile to update
       const profile = await ctx.prisma.camperProfile.findUnique({
         where: { id: input.id },
-        include: { fieldValues: true, user: true }
+        include: { fieldValues: true, user: true, location: true }
       });
       
       if (!profile) {
@@ -347,7 +354,17 @@ export const camperProfileRouter = createTRPCRouter({
         currentUser.id === profile.user?.id || 
         currentUser.role === "SUPER_ADMIN" || 
         currentUser.role === "OWNER" || 
-        currentUser.role === "ADMIN";
+        currentUser.role === "ADMIN" ||
+        (
+          currentUser.role === "LOCATION_ADMIN" &&
+          profile.locationId &&
+          await ctx.prisma.location.findFirst({
+            where: {
+              id: profile.locationId,
+              admins: { some: { id: currentUser.id } },
+            },
+          })
+        );
       
       if (!hasPermission) {
         throw new TRPCError({ 
@@ -373,7 +390,8 @@ export const camperProfileRouter = createTRPCRouter({
           }),
           ...(input.profile.dobApproved !== undefined && {
             dobApproved: input.profile.dobApproved
-          })
+          }),
+          ...(input.profile.birthCert && { birthCert: input.profile.birthCert }),
         }
       });
       

@@ -19,22 +19,28 @@ export default function NewProfilePage() {
     { enabled: !!session?.user?.id }
   );
 
-  // Find the first profile with a locationId
-  const connectedLocationId = userProfiles?.find((p: any) => p.locationId)?.locationId || "";
+  // Fetch the main user record to get locationId
+  const { data: userRecord } = api.user.getById.useQuery(
+    { id: session?.user?.id ?? "" },
+    { enabled: !!session?.user?.id }
+  );
+
+  // Use the user's main locationId from their user record
+  const userLocationId = userRecord?.locationId || "";
 
   const [formData, setFormData] = useState({
     name: "",
     dateOfBirth: "",
     gender: "",
-    locationId: connectedLocationId,
+    locationId: userLocationId,
   });
 
-  // Keep formData.locationId in sync if connectedLocationId changes
+  // Keep formData.locationId in sync if userLocationId changes
   useEffect(() => {
-    if (connectedLocationId && formData.locationId !== connectedLocationId) {
-      setFormData(prev => ({ ...prev, locationId: connectedLocationId }));
+    if (userLocationId && formData.locationId !== userLocationId) {
+      setFormData(prev => ({ ...prev, locationId: userLocationId }));
     }
-  }, [connectedLocationId]);
+  }, [userLocationId]);
 
   // Redirect if not authenticated or not a BASE_USER
   useEffect(() => {
@@ -112,7 +118,8 @@ export default function NewProfilePage() {
           name: formData.name,
           dateOfBirth: formData.dateOfBirth,
           gender: formData.gender,
-          locationId: formData.locationId,
+          // Always use user's main locationId for profile creation
+          locationId: userLocationId,
           organizationId: session.user.organizationId ?? "",
           userId: session.user.id,
         },

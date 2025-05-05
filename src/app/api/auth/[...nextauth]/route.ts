@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import { authOptions } from "../../../../server/auth/authOptions";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER";
 
 // Extend the default session and JWT types to include our custom fields
 declare module "next-auth" {

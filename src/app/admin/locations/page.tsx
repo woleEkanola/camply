@@ -28,6 +28,7 @@ interface LocationFormData {
   zipCode?: string;
   country: string;
   organizationId: string;
+  quota?: number;
 }
 
 // Add a type that extends Location with admins and their names
@@ -40,6 +41,7 @@ type LocationWithAdmins = {
   zipCode: string | null;
   country: string;
   organizationId: string;
+  quota?: number;
   createdAt: Date;
   updatedAt: Date;
   admins?: { id: string; firstName?: string | null; lastName?: string | null }[];
@@ -59,6 +61,7 @@ export default function LocationsPage() {
     zipCode: "",
     country: "",
     organizationId: "",
+    quota: 0,
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -85,6 +88,28 @@ export default function LocationsPage() {
       router.push("/login");
     },
   });
+
+  // Permission helpers
+  const userPermissions = (session?.user as any)?.permissions || [];
+  const canCreateLocation = userPermissions.includes('CREATE_LOCATION') || (session?.user as ExtendedUser)?.role === 'OWNER' || (session?.user as ExtendedUser)?.role === 'SUPER_ADMIN';
+  const canUpdateLocation = userPermissions.includes('UPDATE_LOCATION') || (session?.user as ExtendedUser)?.role === 'OWNER' || (session?.user as ExtendedUser)?.role === 'SUPER_ADMIN';
+  const canDeleteLocation = userPermissions.includes('DELETE_LOCATION') || (session?.user as ExtendedUser)?.role === 'OWNER' || (session?.user as ExtendedUser)?.role === 'SUPER_ADMIN';
+  const canGenerateSignupLink = userPermissions.includes('GENERATE_SIGNUP_LINK') || (session?.user as ExtendedUser)?.role === 'OWNER' || (session?.user as ExtendedUser)?.role === 'SUPER_ADMIN';
+  const canManageAdmins = userPermissions.includes('MANAGE_LOCATION_ADMINS') || (session?.user as ExtendedUser)?.role === 'OWNER' || (session?.user as ExtendedUser)?.role === 'SUPER_ADMIN';
+
+  // DEBUG: Permission UI visibility
+  useEffect(() => {
+    if (status === "authenticated") {
+      console.log("PERMISSION CHECKS:");
+      console.log("canCreateLocation:", canCreateLocation);
+      console.log("canUpdateLocation:", canUpdateLocation);
+      console.log("canDeleteLocation:", canDeleteLocation);
+      console.log("canGenerateSignupLink:", canGenerateSignupLink);
+      console.log("canManageAdmins:", canManageAdmins);
+      console.log("userPermissions:", userPermissions);
+      console.log("role:", (session?.user as ExtendedUser)?.role);
+    }
+  }, [status, session, canCreateLocation, canUpdateLocation, canDeleteLocation, canGenerateSignupLink, canManageAdmins]);
 
   // Debug session and organization ID
   useEffect(() => {
@@ -118,6 +143,9 @@ export default function LocationsPage() {
       refetchOnWindowFocus: true, // Refetch when window regains focus
     }
   );
+
+  // If permission error, do not show locations table
+  const showLocationsTable = !locationsError;
 
   // Ensure locations always have an admins array (empty if missing)
   const locations: LocationWithAdmins[] = rawLocations.map((loc: any) => ({
@@ -157,6 +185,7 @@ export default function LocationsPage() {
         zipCode: locationData.zipCode || "",
         country: locationData.country,
         organizationId: locationData.organizationId,
+        quota: locationData.quota,
       });
     }
   }, [locationData]);
@@ -363,6 +392,7 @@ export default function LocationsPage() {
       zipCode: "",
       country: "",
       organizationId: (session?.user as ExtendedUser)?.organizationId || "",
+      quota: 0,
     });
     setError("");
   };
@@ -430,7 +460,7 @@ export default function LocationsPage() {
             state: locationData.state,
             zipCode: locationData.zipCode,
             country: locationData.country,
-            organizationId: locationData.organizationId,
+            quota: locationData.quota,
           },
         });
       } else {
@@ -444,6 +474,7 @@ export default function LocationsPage() {
           zipCode: locationData.zipCode,
           country: locationData.country,
           organizationId: locationData.organizationId,
+          quota: locationData.quota,
         });
       }
     } catch (err) {
@@ -581,158 +612,197 @@ export default function LocationsPage() {
           </div>
         )}
         
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-800">Locations</h2>
-          <button
-            onClick={openCreateModal}
-            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-          >
-            Add Location
-          </button>
+        <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-800">Locations</h2>
+            {session?.user && (
+              <div className="mt-1 text-sm text-gray-600">
+                <span className="font-medium">{session.user.email}</span>
+                {Array.isArray(userPermissions) && userPermissions.length > 0 && (
+                  <span className="ml-2 text-xs text-gray-500">[
+                    {userPermissions.join(', ')}
+                  ]</span>
+                )}
+                {(!userPermissions || userPermissions.length === 0) && (
+                  <span className="ml-2 text-xs text-gray-400">[No explicit permissions]</span>
+                )}
+              </div>
+            )}
+          </div>
+          {canCreateLocation && (
+            <button
+              onClick={openCreateModal}
+              className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+              data-testid="add-location-btn"
+            >
+              Add Location
+            </button>
+          )}
         </div>
         
-        {isLoadingLocations ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
-            <span className="ml-2">Loading locations...</span>
+        {locationsError && (
+          <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
+            Error loading locations: {locationsError.message || "You don't have permission to view locations for this organization"}
           </div>
-        ) : locations.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Address
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Admins
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Signup Link
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {locations.map((location) => {
-                  // Get signup link for this location (using the helper function, not a hook)
-                  const signupLink = getSignupLinkForLocation(location.id);
-                  
-                  return (
-                    <tr key={location.id}>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                        {location.name}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                        {location.address}, {location.city}
-                        {location.state && `, ${location.state}`}
-                        {location.zipCode && ` ${location.zipCode}`}
-                        {location.country && `, ${location.country}`}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                        <div className="flex flex-wrap gap-1">
-                          {location.admins && location.admins.length > 0 ? (
-                            location.admins.map((admin) => (
-                              <span
-                                key={admin.id}
-                                className="inline-flex rounded-full bg-blue-100 px-2 text-xs font-semibold leading-5 text-blue-800"
-                              >
-                                {admin.firstName} {admin.lastName}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-gray-400">No admins</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                        {!activeYear ? (
-                          <span className="text-yellow-500">No active year set</span>
-                        ) : signupLink ? (
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => handleCopySignupLink(signupLink.token, location.id)}
-                              className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
-                            >
-                              {copiedLinkId === location.id ? (
-                                <>
-                                  <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  Copied!
-                                </>
-                              ) : (
-                                <>
-                                  <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                  </svg>
-                                  Copy Link
-                                </>
-                              )}
-                            </button>
-                            <span className="text-xs text-gray-500">
-                              {signupLink.active ? 'Active' : 'Inactive'}
-                            </span>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleGenerateSignupLink(location.id)}
-                            disabled={generatingLinkFor === location.id}
-                            className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400"
-                          >
-                            {generatingLinkFor === location.id ? (
-                              <>
-                                <svg className="mr-1 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Generating...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                </svg>
-                                Generate Link
-                              </>
-                            )}
-                          </button>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                        <button
-                          onClick={() => openEditModal(location.id)}
-                          className="mr-2 text-blue-600 hover:text-blue-900"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => openDeleteModal(location.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
-                        <button
-                          onClick={() => openAdminModal(location.id)}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          Manage Admins
-                        </button>
-                      </td>
+        )}
+        
+        {showLocationsTable && (
+          <div>
+            {isLoadingLocations ? (
+              <div className="flex h-64 items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
+                <span className="ml-2">Loading locations...</span>
+              </div>
+            ) : locations.length > 0 ? (
+              <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Address
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Assigned Admin
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Quota
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Signup Link
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Actions
+                      </th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-            <p className="text-gray-500">No locations found. Add your first location!</p>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {locations.map((location) => {
+                      // Get signup link for this location (using the helper function, not a hook)
+                      const signupLink = getSignupLinkForLocation(location.id);
+                      // Assigned Admin: show first admin if exists
+                      const assignedAdmin = location.admins && location.admins.length > 0 ? location.admins[0] : null;
+                      return (
+                        <tr key={location.id}>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                            {location.name}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                            {location.address}, {location.city}
+                            {location.state && `, ${location.state}`}
+                            {location.zipCode && ` ${location.zipCode}`}
+                            {location.country && `, ${location.country}`}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                            {assignedAdmin ? (
+                              <span className="inline-flex rounded-full bg-blue-100 px-2 text-xs font-semibold leading-5 text-blue-800">
+                                {assignedAdmin.firstName} {assignedAdmin.lastName}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">No admin assigned</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                            {typeof location.quota === "number" ? location.quota : 0}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                            {!activeYear ? (
+                              <span className="text-yellow-500">No active year set</span>
+                            ) : signupLink ? (
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleCopySignupLink(signupLink.token, location.id)}
+                                  className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
+                                  data-testid={`copy-link-btn-${location.id}`}
+                                >
+                                  {copiedLinkId === location.id ? (
+                                    <>
+                                      <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      Copied!
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                      </svg>
+                                      Copy Link
+                                    </>
+                                  )}
+                                </button>
+                                <span className="text-xs text-gray-500">
+                                  {signupLink.active ? 'Active' : 'Inactive'}
+                                </span>
+                              </div>
+                            ) : canGenerateSignupLink ? (
+                              <button
+                                onClick={() => handleGenerateSignupLink(location.id)}
+                                disabled={generatingLinkFor === location.id}
+                                className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400"
+                                data-testid={`generate-link-btn-${location.id}`}
+                              >
+                                {generatingLinkFor === location.id ? (
+                                  <>
+                                    <svg className="mr-1 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Generating...
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                    </svg>
+                                    Generate Link
+                                  </>
+                                )}
+                              </button>
+                            ) : null}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                            {canUpdateLocation && (
+                              <button
+                                onClick={() => openEditModal(location.id)}
+                                className="mr-2 text-blue-600 hover:text-blue-900"
+                                data-testid={`edit-location-btn-${location.id}`}
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {canDeleteLocation && (
+                              <button
+                                onClick={() => openDeleteModal(location.id)}
+                                className="text-red-600 hover:text-red-900"
+                                data-testid={`delete-location-btn-${location.id}`}
+                              >
+                                Delete
+                              </button>
+                            )}
+                            {canManageAdmins && (
+                              <button
+                                onClick={() => openAdminModal(location.id)}
+                                className="text-green-600 hover:text-green-900"
+                                data-testid={`manage-admins-btn-${location.id}`}
+                              >
+                                Manage Admins
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
+                <p className="text-gray-500">No locations found. Add your first location!</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -818,6 +888,22 @@ export default function LocationsPage() {
                     />
                   </div>
                   
+                  <div className="mb-4">
+                    <label htmlFor="quota" className="block text-sm font-medium text-gray-700">
+                      Quota
+                    </label>
+                    <input
+                      type="number"
+                      id="quota"
+                      name="quota"
+                      value={formData.quota ?? 0}
+                      min={0}
+                      onChange={e => setFormData(prev => ({ ...prev, quota: Number(e.target.value) }))}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  
                   <div className="mb-4 grid grid-cols-2 gap-4">
                     <div>
                       <label htmlFor="state" className="block text-sm font-medium text-gray-700">
@@ -867,6 +953,20 @@ export default function LocationsPage() {
                   </div>
                   
                   <div className="mt-6 flex justify-end space-x-3">
+                    {(canCreateLocation || (selectedLocation && canUpdateLocation)) && (
+                      <button
+                        type="submit"
+                        className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-400"
+                        disabled={isSubmitting}
+                        data-testid="modal-save-btn"
+                      >
+                        {isSubmitting
+                          ? "Saving..."
+                          : selectedLocation
+                          ? "Update Location"
+                          : "Create Location"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
@@ -874,23 +974,6 @@ export default function LocationsPage() {
                       disabled={isSubmitting}
                     >
                       Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-400"
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting && (
-                        <svg className="mr-2 h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      )}
-                      {isSubmitting
-                        ? "Saving..."
-                        : selectedLocation
-                        ? "Update Location"
-                        : "Create Location"}
                     </button>
                   </div>
                 </form>
@@ -921,20 +1004,17 @@ export default function LocationsPage() {
                 >
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  className="flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:bg-red-400"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting && (
-                    <svg className="mr-2 h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  )}
-                  {isSubmitting ? "Deleting..." : "Delete Location"}
-                </button>
+                {canDeleteLocation && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    className="flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:bg-red-400"
+                    disabled={isSubmitting}
+                    data-testid="modal-delete-btn"
+                  >
+                    {isSubmitting ? "Deleting..." : "Delete Location"}
+                  </button>
+                )}
               </div>
             </div>
           </div>

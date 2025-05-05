@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "../../../utils/api";
+import { signIn } from "next-auth/react";
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
 import Link from "next/link";
 import React from "react";
+import { useQuery } from '@tanstack/react-query';
 
 // This is a debug component to test if the token is being passed correctly
 function DebugComponent({ token }: { token: string }) {
@@ -65,234 +67,210 @@ interface CamperData {
 
 // Client component that handles all the actual logic
 function SignupForm({ token }: { token: string }) {
-  console.log("SignupForm rendering with token:", token);
   const router = useRouter();
-  
-  // Multistep state
-  const [step, setStep] = useState(1);
-  // Step 1: account info
+  const [step, setStep] = useState<'email' | 'otp' | 'profile'>('email');
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  // Step 2: campers
-  const [campers, setCampers] = useState<CamperData[]>([{ name: "", dob: "", gender: "" }]);
-  // Step 3: confirmation
+  const [otp, setOtp] = useState("");
+  const [name, setName] = useState("");
+  const [dob, setDob] = useState("");
+  const [gender, setGender] = useState("");
+  const [dynamicFields, setDynamicFields] = useState<any[]>([]);
+  const [dynamicValues, setDynamicValues] = useState<{ [key: string]: any }>({});
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [linkDetails, setLinkDetails] = useState<any>(null);
-  const [isLinkValid, setIsLinkValid] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Use tRPC client directly
-  const { 
-    data: tokenData, 
-    isLoading: isValidatingToken,
-    error: tokenError
-  } = api.signupLink.validateToken.useQuery(
-    { token },
-    {
-      retry: false,
-    }
-  );
-
-  // Handle token validation results
+  // Fetch organizationId after OTP verified
   useEffect(() => {
-    if (tokenData) {
-      console.log('Token validation success:', tokenData);
-      if (!tokenData.organizationId) {
-        console.error("organizationId is missing from tRPC response", tokenData);
-        setIsLinkValid(false);
-        setError("Organization ID is missing from the signup link");
-        return;
-      }
-      setLinkDetails(tokenData);
-      setIsLinkValid(true);
+    if (step === 'profile' && !organizationId) {
+      // Validate token to get organizationId
+      (async () => {
+        try {
+          const res = await fetch('/api/trpc/signupLink.validateToken?input=' + encodeURIComponent(JSON.stringify({ token })));
+          const json = await res.json();
+          const orgId = json?.result?.data?.location?.organizationId || json?.result?.data?.organizationId;
+          setOrganizationId(orgId);
+        } catch (e) {
+          setError('Could not fetch organization info.');
+        }
+      })();
     }
-    
-    // Handle token validation errors
-    if (tokenError) {
-      console.error('Token validation error:', tokenError);
-      setIsLinkValid(false);
-      setError(tokenError.message || "Invalid or inactive signup link");
-    }
-  }, [tokenData, tokenError]);
+  }, [step, organizationId, token]);
 
-  // Handlers for steps
-  function handleNextStep1() {
-    setError("");
-    if (!email || !password || !confirmPassword) {
-      setError("All fields are required");
-      return;
+  // Fetch dynamic profile fields
+  useEffect(() => {
+    if (organizationId) {
+      (async () => {
+        try {
+          const res = await fetch('/api/trpc/profileField.getByOrganization?input=' + encodeURIComponent(JSON.stringify({ organizationId })));
+          const json = await res.json();
+          setDynamicFields(json?.result?.data || []);
+        } catch (e) {
+          setError('Could not fetch profile fields.');
+        }
+      })();
     }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long");
-      return;
-    }
-    setStep(2);
-  }
-  function handleAddCamper() {
-    setCampers([...campers, { name: "", dob: "", gender: "" }]);
-  }
-  function handleRemoveCamper(idx: number) {
-    setCampers(campers.filter((_, i) => i !== idx));
-  }
-  function handleCampersChange(idx: number, field: keyof CamperData, value: string) {
-    setCampers(campers.map((c, i) => i === idx ? { ...c, [field]: value } : c));
-  }
-  function handleNextStep2() {
-    setError("");
-    if (campers.some(c => !c.name || !c.dob || !c.gender)) {
-      setError("All campers must have name, date of birth, and gender");
-      return;
-    }
-    setStep(3);
-  }
-  function handleBack() {
-    setStep(s => Math.max(1, s - 1));
-  }
-  const createUserMutation = api.auth.signup.useMutation();
-  const createCamperProfileMutation = api.camperProfile.createDuringSignup.useMutation();
-  async function handleSubmitFinal() {
-    setError(""); setSuccess(""); setIsSubmitting(true);
-    try {
-      const userData = {
-        email, password,
-        firstName: "", lastName: "",
-        role: "ADMIN" as UserRole, // Use a valid enum value, see project memory
-        organizationId: linkDetails.organizationId,
-      };
-      const userResp = await createUserMutation.mutateAsync(userData);
-      if (!userResp.success) throw new Error(userResp.message || "Signup failed");
-      for (const camper of campers) {
-        await createCamperProfileMutation.mutateAsync({
-          name: camper.name,
-          userId: userResp.userId ?? "",
-          organizationId: linkDetails.organizationId,
-          locationId: linkDetails.locationId,
-        });
-      }
-      setSuccess("Signup complete! You can now log in.");
-      setTimeout(() => router.push("/login"), 2500);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-    setIsSubmitting(false);
-  }
+  }, [organizationId]);
 
-  // --- Render ---
-  if (isValidatingToken) {
+  // Step 1: Collect Email and create user, send OTP
+  if (step === 'email') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-        <div className="w-full max-w-md space-y-8">
-          <div className="text-center">
-            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Validating signup link...</h2>
-            <div className="mt-4 flex justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-emerald-500"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLinkValid === false) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-        <div className="w-full max-w-md space-y-8">
-          <div className="text-center">
-            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Invalid Signup Link</h2>
-            <p className="mt-2 text-center text-sm text-gray-600">
-              This signup link is invalid or has expired.
-            </p>
-            <div className="mt-4">
-              <Link href="/login" className="text-emerald-600 hover:text-emerald-500">
-                Go to Login
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-lg mx-auto bg-white p-8 rounded shadow mt-8">
-      <h2 className="text-2xl font-bold mb-6">Sign Up</h2>
-      {error && <div className="mb-4 text-red-600">{error}</div>}
-      {success && <div className="mb-4 text-green-600">{success}</div>}
-      {step === 1 && (
-        <div>
+      <div className="max-w-lg mx-auto bg-white p-8 rounded shadow mt-8">
+        <h2 className="text-2xl font-bold mb-6">Sign Up</h2>
+        {error && <div className="mb-4 text-red-600">{error}</div>}
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          setIsLoading(true);
+          setError("");
+          // Create base user and send OTP
+          const res = await fetch('/api/base-user/create-and-send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, token }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setError(data.message || 'Error creating user or sending OTP');
+            setIsLoading(false);
+            return;
+          }
+          setStep('otp');
+          setIsLoading(false);
+        }}>
           <div className="mb-4">
             <label>Email</label>
-            <input className="w-full border rounded p-2" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+            <input className="w-full border rounded p-2" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+          </div>
+          <button className="bg-emerald-600 text-white px-4 py-2 rounded" type="submit" disabled={isLoading}>{isLoading ? 'Processing...' : 'Continue'}</button>
+        </form>
+      </div>
+    );
+  }
+
+  // Step 2: Verify OTP
+  if (step === 'otp') {
+    return (
+      <div className="max-w-lg mx-auto bg-white p-8 rounded shadow mt-8">
+        <h2 className="text-2xl font-bold mb-6">Verify Email</h2>
+        {error && <div className="mb-4 text-red-600">{error}</div>}
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          setIsLoading(true);
+          setError("");
+          const res = await fetch('/api/base-user/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, otp, token }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setError(data.message || 'Invalid or expired OTP');
+            setIsLoading(false);
+            return;
+          }
+          // Automatically sign in the user using OTP as the 'otp' field
+          console.log("Signing in with:", { email, otp });
+          const signInResult = await signIn("credentials", {
+            redirect: false,
+            email,
+            otp,
+          });
+          if (signInResult?.ok) {
+            router.push('/dashboard');
+          } else {
+            setError("Failed to sign in after OTP verification.");
+          }
+          setIsLoading(false);
+        }}>
+          <div className="mb-4">
+            <label>Enter OTP</label>
+            <input className="w-full border rounded p-2" type="text" value={otp} onChange={e => setOtp(e.target.value)} required />
+          </div>
+          <button className="bg-emerald-600 text-white px-4 py-2 rounded" type="submit" disabled={isLoading}>{isLoading ? 'Verifying...' : 'Verify OTP'}</button>
+        </form>
+      </div>
+    );
+  }
+
+  // Step 3: Update Profile (name, dob, gender, dynamic fields)
+  if (step === 'profile') {
+    return (
+      <div className="max-w-lg mx-auto bg-white p-8 rounded shadow mt-8">
+        <h2 className="text-2xl font-bold mb-6">Complete Your Profile</h2>
+        {error && <div className="mb-4 text-red-600">{error}</div>}
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          setIsLoading(true);
+          setError("");
+          // Build dynamic field values array
+          const fieldValues = dynamicFields.map(field => ({
+            fieldId: field.id,
+            value: dynamicValues[field.id] || ""
+          }));
+          const payload = {
+            name,
+            dob,
+            gender,
+            token,
+            fieldValues
+          };
+          const res = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setError(data.message || 'Signup failed');
+            setIsLoading(false);
+            return;
+          }
+          setSuccess('Signup complete! Redirecting...');
+          setIsLoading(false);
+          setTimeout(() => {
+            router.push('/auth/signin');
+          }, 1500);
+        }}>
+          <div className="mb-4">
+            <label>Name</label>
+            <input className="w-full border rounded p-2" type="text" value={name} onChange={e => setName(e.target.value)} required />
           </div>
           <div className="mb-4">
-            <label>Password</label>
-            <input className="w-full border rounded p-2" type="password" value={password} onChange={e => setPassword(e.target.value)} />
-            <p className="text-xs text-gray-500">Password must be at least 8 characters</p>
+            <label>Date of Birth</label>
+            <input className="w-full border rounded p-2" type="date" value={dob} onChange={e => setDob(e.target.value)} required />
           </div>
           <div className="mb-4">
-            <label>Confirm Password</label>
-            <input className="w-full border rounded p-2" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
+            <label>Gender</label>
+            <select className="w-full border rounded p-2" value={gender} onChange={e => setGender(e.target.value)} required>
+              <option value="">Select Gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
           </div>
-          <button className="bg-emerald-600 text-white px-4 py-2 rounded" onClick={handleNextStep1}>Next</button>
-        </div>
-      )}
-      {step === 2 && (
-        <div>
-          {campers.map((camper, idx) => (
-            <div key={idx} className="mb-4 border-b pb-4">
-              <div className="mb-2">
-                <label>Camper Name</label>
-                <input className="w-full border rounded p-2" type="text" value={camper.name} onChange={e => handleCampersChange(idx, "name", e.target.value)} />
-              </div>
-              <div className="mb-2">
-                <label>Date of Birth</label>
-                <input className="w-full border rounded p-2" type="date" value={camper.dob} onChange={e => handleCampersChange(idx, "dob", e.target.value)} />
-              </div>
-              <div className="mb-2">
-                <label>Gender</label>
-                <select className="w-full border rounded p-2" value={camper.gender} onChange={e => handleCampersChange(idx, "gender", e.target.value)}>
-                  <option value="">Select Gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                </select>
-              </div>
-              {campers.length > 1 && (
-                <button className="text-red-600 text-xs" onClick={() => handleRemoveCamper(idx)}>Remove</button>
-              )}
+          {dynamicFields.map(field => (
+            <div className="mb-4" key={field.id}>
+              <label>{field.name}</label>
+              <input
+                className="w-full border rounded p-2"
+                type="text"
+                value={dynamicValues[field.id] || ""}
+                onChange={e => setDynamicValues(v => ({ ...v, [field.id]: e.target.value }))}
+                required={field.required}
+              />
             </div>
           ))}
-          <button className="bg-blue-500 text-white px-3 py-1 rounded mr-2" onClick={handleAddCamper}>Add Another Camper</button>
-          <button className="bg-emerald-600 text-white px-4 py-2 rounded ml-2" onClick={handleNextStep2}>Next</button>
-          <button className="ml-2 text-gray-700 underline" onClick={handleBack}>Back</button>
-        </div>
-      )}
-      {step === 3 && (
-        <div>
-          <h3 className="font-semibold mb-2">Confirm Information</h3>
-          <div className="mb-2">Email: {email}</div>
-          <div className="mb-2">Campers:</div>
-          <ul className="mb-4">
-            {campers.map((c, i) => (
-              <li key={i} className="ml-4">{c.name} (DOB: {c.dob}, Gender: {c.gender})</li>
-            ))}
-          </ul>
-          <button className="bg-emerald-600 text-white px-4 py-2 rounded" onClick={handleSubmitFinal} disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Submit'}</button>
-          <button className="ml-2 text-gray-700 underline" onClick={handleBack}>Back</button>
-        </div>
-      )}
-    </div>
-  );
+          <button className="bg-emerald-600 text-white px-4 py-2 rounded" type="submit" disabled={isLoading}>{isLoading ? 'Submitting...' : 'Complete Signup'}</button>
+        </form>
+        {success && <div className="mt-4 text-green-600">{success}</div>}
+      </div>
+    );
+  }
 }
 
 // Page component that handles the React.use() and passes the token
 export default function SignupPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = React.use(params);
-  console.log("SignupPage received token:", token);
   return <SignupForm token={token} />;
 }

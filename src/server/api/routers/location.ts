@@ -12,6 +12,7 @@ const locationSchema = z.object({
   zipCode: z.string().optional(),
   country: z.string().min(2, "Country must be at least 2 characters"),
   organizationId: z.string(),
+  quota: z.number().int().min(0).optional(),
 });
 
 export const locationRouter = createTRPCRouter({
@@ -55,23 +56,28 @@ export const locationRouter = createTRPCRouter({
       // Get the user from the session
       const user = await prisma.user.findUnique({
         where: { id: ctx.userId },
+        include: { permissions: true },
       });
 
-      // Check if user exists and has permission
+      // Check if user exists
       if (!user) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not found" });
       }
 
-      // Check if user is SUPER_ADMIN or an OWNER of the organization
-      const hasPermission = 
-        user.role === "SUPER_ADMIN" || 
-        (user.role === "OWNER" && user.organizationId === input.organizationId);
-
-      if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "You don't have permission to view locations for this organization" 
-        });
+      // Only OWNER can always access
+      if (user.role === "OWNER" && user.organizationId === input.organizationId) {
+        // pass
+      } else {
+        // For ADMIN, must have at least one of the required permissions
+        const allowedPermissions = ["READ_LOCATION", "UPDATE_LOCATION"];
+        const userPermissions = user.permissions.map(p => p.type);
+        const hasPermission = userPermissions.some(p => allowedPermissions.includes(p));
+        if (!(user.role === "ADMIN" && user.organizationId === input.organizationId && hasPermission)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You don't have permission to view locations for this organization"
+          });
+        }
       }
 
       // Get all locations for the organization
@@ -104,10 +110,18 @@ export const locationRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not found" });
       }
 
-      // Check if user is SUPER_ADMIN or an OWNER of the organization
+      // Check if user is SUPER_ADMIN, OWNER of the org, or LOCATION_ADMIN assigned to this location
       const hasPermission = 
         user.role === "SUPER_ADMIN" || 
-        (user.role === "OWNER" && user.organizationId === location.organizationId);
+        (user.role === "OWNER" && user.organizationId === location.organizationId) ||
+        (user.role === "LOCATION_ADMIN" && await prisma.location.findFirst({
+          where: {
+            id: location.id,
+            admins: {
+              some: { id: user.id }
+            }
+          }
+        }));
 
       if (!hasPermission) {
         throw new TRPCError({ 
@@ -157,10 +171,12 @@ export const locationRouter = createTRPCRouter({
         });
       }
 
+      // Remove organizationId from update payload if present
+      const { organizationId, ...rest } = input.data;
       // Update the location
       return prisma.location.update({
         where: { id: input.id },
-        data: input.data,
+        data: rest,
       });
     }),
 

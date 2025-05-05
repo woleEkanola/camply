@@ -14,7 +14,7 @@ export const LocationAdminCamperProfiles: React.FC<LocationAdminCamperProfilesPr
 
   // Filtering state (must be declared before any early returns)
   const [showVerifiedDOB, setShowVerifiedDOB] = useState<null | boolean>(null);
-  const [showRegistered, setShowRegistered] = useState<null | boolean>(null);
+  const [showBirthCertUploaded, setShowBirthCertUploaded] = useState<null | boolean>(null);
   const [activeYearId, setActiveYearId] = useState<string | null>(null);
 
   // Fetch camper profiles for this location
@@ -61,11 +61,8 @@ export const LocationAdminCamperProfiles: React.FC<LocationAdminCamperProfilesPr
   if (showVerifiedDOB !== null) {
     filteredProfiles = filteredProfiles.filter((p: any) => !!p.dobApproved === showVerifiedDOB);
   }
-  if (showRegistered !== null && activeYearId) {
-    filteredProfiles = filteredProfiles.filter((p: any) => {
-      const hasReg = Array.isArray(p.registrations) && p.registrations.some((reg: any) => reg.yearId === activeYearId);
-      return showRegistered ? hasReg : !hasReg;
-    });
+  if (showBirthCertUploaded !== null) {
+    filteredProfiles = filteredProfiles.filter((p: any) => (!!p.birthCert && p.birthCert !== "") === showBirthCertUploaded);
   }
 
   return (
@@ -76,6 +73,14 @@ export const LocationAdminCamperProfiles: React.FC<LocationAdminCamperProfilesPr
       {/* Filters */}
       <div className="flex gap-4 mb-4">
         <label className="flex items-center gap-2">
+          <input type="checkbox" checked={showBirthCertUploaded === true} onChange={e => setShowBirthCertUploaded(e.target.checked ? true : null)} />
+          Birth Certificate Uploaded
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={showBirthCertUploaded === false} onChange={e => setShowBirthCertUploaded(e.target.checked ? false : null)} />
+          No Birth Certificate
+        </label>
+        <label className="flex items-center gap-2">
           <input type="checkbox" checked={showVerifiedDOB === true} onChange={e => setShowVerifiedDOB(e.target.checked ? true : null)} />
           DOB Verified
         </label>
@@ -83,20 +88,12 @@ export const LocationAdminCamperProfiles: React.FC<LocationAdminCamperProfilesPr
           <input type="checkbox" checked={showVerifiedDOB === false} onChange={e => setShowVerifiedDOB(e.target.checked ? false : null)} />
           Not Verified
         </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={showRegistered === true} onChange={e => setShowRegistered(e.target.checked ? true : null)} />
-          Registered (Active Year)
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={showRegistered === false} onChange={e => setShowRegistered(e.target.checked ? false : null)} />
-          Not Registered (Active Year)
-        </label>
       </div>
 
       <DataTable
         data={filteredProfiles}
         columns={[
-          { header: "Name", accessor: "name", searchable: true },
+          { header: "Name", accessor: "name", searchable: true, sortable: true },
           { header: "DOB", accessor: (row: any) => row.dateOfBirth ? new Date(row.dateOfBirth).toLocaleDateString() : "-" },
           { header: "DOB Approved", accessor: (row: any) => (
               <input
@@ -110,7 +107,12 @@ export const LocationAdminCamperProfiles: React.FC<LocationAdminCamperProfilesPr
               />
             )
           },
-          { header: "Registrations", accessor: (row: any) => <LocationAdminRegistrations profileId={row.id} locationId={locationId} /> },
+          { header: "Birth Certificate", accessor: (row: any) => (
+              row.birthCert && row.birthCert !== ""
+                ? <span className="text-green-700 font-semibold">Yes</span>
+                : <span className="text-red-700 font-semibold">No</span>
+            )
+          },
         ]}
         searchPlaceholder="Search camper profiles..."
         isLoading={isLoading}

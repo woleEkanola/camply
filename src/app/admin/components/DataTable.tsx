@@ -37,7 +37,7 @@ export default function DataTable<T>({
     direction: "asc" | "desc";
   }>({ key: null, direction: "asc" });
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Handle sorting
   const handleSort = (key: keyof T) => {
@@ -99,7 +99,7 @@ export default function DataTable<T>({
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredData.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredData, currentPage]);
+  }, [filteredData, currentPage, itemsPerPage]);
 
   // Get cell value
   const getCellValue = (item: T, column: Column<T>) => {
@@ -209,6 +209,22 @@ export default function DataTable<T>({
                 <span className="font-medium">{Math.min(filteredData.length, currentPage * itemsPerPage)}</span> of{" "}
                 <span className="font-medium">{filteredData.length}</span> results
               </p>
+              <div className="ml-4 flex items-center gap-2">
+                <label htmlFor="itemsPerPage" className="text-sm text-gray-700">Per page:</label>
+                <select
+                  id="itemsPerPage"
+                  className="border rounded px-2 py-1"
+                  value={itemsPerPage}
+                  onChange={e => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  {[5, 10, 20, 50, 100].map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex items-center space-x-2">
               <button

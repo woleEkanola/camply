@@ -5,7 +5,7 @@ import { verifyPassword } from "../../lib/auth";
 import { type NextAuthOptions } from "next-auth";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -14,10 +14,12 @@ export const authOptions: NextAuthOptions = {
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        otp: { label: "OTP", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        console.log("Authorize called with:", credentials);
+        if (!credentials?.email || (!credentials?.password && !credentials?.otp)) {
           return null;
         }
 
@@ -25,15 +27,46 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         });
 
-        if (!user || !user.password) {
+        if (!user) {
           return null;
         }
 
+        // OTP-based login (for base users, no password supplied)
+        if (credentials.otp) {
+          // Check OTP in the OTP table
+          const otpRecord = await prisma.oTP.findUnique({ where: { email: credentials.email } });
+          if (!otpRecord) return null;
+          if (otpRecord.code !== credentials.otp || otpRecord.expiresAt.getTime() < Date.now()) return null;
+          // OTP is valid, delete it (one-time use)
+          await prisma.oTP.delete({ where: { email: credentials.email } });
+          // Only allow login for valid roles (including BASE_USER)
+          if (
+            user.role === "SUPER_ADMIN" ||
+            user.role === "OWNER" ||
+            user.role === "ADMIN" ||
+            user.role === "LOCATION_ADMIN" ||
+            user.role === "BASE_USER"
+          ) {
+            return {
+              id: user.id,
+              email: user.email,
+              name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || undefined,
+              role: user.role as UserRole,
+              organizationId: user.organizationId ?? undefined,
+            };
+          } else {
+            return null;
+          }
+        }
+
+        // Password-based login (default)
+        if (!user.password) {
+          return null;
+        }
         const isValid = await verifyPassword(
           credentials.password,
           user.password
         );
-
         if (!isValid) {
           return null;
         }

@@ -56,6 +56,8 @@ model User {
   active         Boolean      @default(true)
   organization   Organization? @relation(fields: [organizationId], references: [id])
   organizationId String?
+  location       Location?    @relation("UserLocation", fields: [locationId], references: [id])
+  locationId     String?
   managedLocations Location[]  @relation("LocationAdmins")
   permissions    Permission[]
   camperProfiles CamperProfile[] // User can have multiple camper profiles
@@ -89,9 +91,12 @@ model Location {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
   admins         User[]       @relation("LocationAdmins")
+  users          User[]       @relation("UserLocation")
   camperProfiles CamperProfile[] // Location can have many camper profiles
   registrations  Registration[] // Location can have many registrations
   signupLinks    SignupLink[] // Location can have many signup links
+  quota          Int          @default(0)
+  signupOpen     Boolean      @default(true)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -140,6 +145,7 @@ model CamperProfile {
   registrations  Registration[]      // Profile can have many registrations
   active         Boolean             @default(true)
   dobApproved    Boolean             @default(false)
+  birthCert      String?             // URL to uploaded birth certificate
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 }
@@ -188,6 +194,12 @@ model SignupLink {
   @@unique([locationId, yearId])
 }
 
+model OTP {
+  email     String   @id
+  code      String
+  expiresAt DateTime
+}
+
 model Registration {
   id               String             @id @default(cuid())
   status           RegistrationStatus @default(PENDING)
@@ -198,8 +210,8 @@ model Registration {
   yearId           String
   location         Location           @relation(fields: [locationId], references: [id])
   locationId       String
+  parentConsent    String?             // URL to uploaded parent consent form
   published        Boolean            @default(false)
-  parentConsent    Boolean            @default(false)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 }
