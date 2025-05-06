@@ -56,9 +56,8 @@ export async function POST(request: Request) {
       // If not found, create one for this location
       baseUser = await prisma.user.create({
         data: {
-          role: 'BASE_USER',
+          role: 'ADMIN', // Use a valid role according to your Prisma schema
           organizationId,
-          location: { connect: { id: signupLink.locationId } }, // Set location relation
           locationId: signupLink.locationId,
           email: `baseuser_${signupLink.locationId}_${Date.now()}@example.com`, // Placeholder email
           password: 'placeholder', // Set a secure placeholder or OTP
@@ -77,9 +76,9 @@ export async function POST(request: Request) {
     const camperProfile = await prisma.camperProfile.create({
       data: {
         name,
-        userId: baseUser.id,
+        userId: baseUser!.id,
         organizationId,
-        locationId: baseUser.locationId, // Always use location from base user
+        locationId: baseUser!.locationId, // Always use location from base user
         dateOfBirth: dob ? new Date(dob) : undefined, // Ensure ISO DateTime
         gender,
         active: true,

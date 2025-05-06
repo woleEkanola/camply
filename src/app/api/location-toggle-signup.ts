@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/server/auth/authOptions";
-import prisma from "@/server/db";
+import { prisma } from "@/server/db";
 
 // POST: Toggle signupOpen for a location (expects { locationId, signupOpen })
 export async function POST(req: NextRequest) {

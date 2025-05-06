@@ -157,7 +157,7 @@ const LocationAdminRegistrations: React.FC<{ profileId: string; locationId: stri
               <input
                 type="checkbox"
                 checked={!!reg.parentConsent}
-                onChange={() => regUpdateMutation.mutate({ id: reg.id, data: { parentConsent: !reg.parentConsent } })}
+                onChange={() => regUpdateMutation.mutate({ id: reg.id, data: { parentConsent: (!reg.parentConsent).toString() } })}
               />
             </td>
             <td className="px-2 py-1 border-b text-center">

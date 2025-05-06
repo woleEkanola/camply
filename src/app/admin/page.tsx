@@ -48,11 +48,7 @@ export default function AdminDashboard() {
   return (
     <ModernDashboardLayout>
       <AnalyticsDashboard />
-      <div className="mt-8">
-        {/* BASE_USER Table Section */}
-        <h2 className="text-xl font-semibold mb-4">BASE_USERs</h2>
-        <BaseUsersPage />
-      </div>
+      
     </ModernDashboardLayout>
   );
 }

@@ -8,6 +8,36 @@ import DashboardLayout from "../../components/DashboardLayout";
 import FileUpload from "@/components/file-upload";
 import { useState } from "react";
 
+type CamperProfile = {
+  id: string;
+  name: string;
+  gender: string | null;
+  dateOfBirth?: string | null;
+  user?: {
+    id: string;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  };
+  location?: {
+    id: string;
+    name: string;
+  } | null;
+  fieldValues: Array<{
+    id: string;
+    value: string;
+    fieldId: string;
+    field: {
+      id: string;
+      name: string;
+      label: string;
+      type: string;
+    };
+  }>;
+  dobApproved: boolean;
+  birthCert: string | null;
+};
+
 export default function CamperProfileDetailPage() {
   const { id } = useParams();
   const { data: session, status } = useSession({ required: true });
@@ -28,7 +58,7 @@ export default function CamperProfileDetailPage() {
   // Fetch all campers for the organization (or location)
   const organizationId = session?.user?.organizationId;
   const { data: campersList, isLoading: isLoadingList } = api.camperProfile.getByOrganization.useQuery(
-    { organizationId },
+    { organizationId: organizationId! },
     { enabled: !!organizationId }
   );
 
@@ -44,6 +74,7 @@ export default function CamperProfileDetailPage() {
   }
 
   const handleApproveDOB = () => {
+    if (!profile) return;
     setIsApprovingDOB(true);
     dobApprovalMutation.mutate({ id: profile.id, dobApproved: true }, {
       onSuccess: () => { setIsApprovingDOB(false); router.refresh(); },
@@ -52,6 +83,7 @@ export default function CamperProfileDetailPage() {
   };
 
   const handleBirthCertUpload = (url: string) => {
+    if (!profile) return;
     setIsUploadingBirthCert(true);
     setBirthCertError("");
     setBirthCertSuccess("");
@@ -77,6 +109,13 @@ export default function CamperProfileDetailPage() {
   if (!profile) {
     return <div>Camper profile not found.</div>;
   }
+  // Type assertion for safety
+  // Patch the profile object to ensure dobApproved and birthCert exist
+  const typedProfile = {
+    ...profile,
+    dobApproved: (profile as any).dobApproved ?? false,
+    birthCert: (profile as any).birthCert ?? null,
+  } as CamperProfile;
 
   return (
     <DashboardLayout title="Camper Profile Details">
@@ -103,18 +142,18 @@ export default function CamperProfileDetailPage() {
           </button>
         </div>
         <div className="bg-white p-6 rounded shadow max-w-2xl">
-          <div className="mb-2"><b>Name:</b> {profile.name}</div>
-          <div className="mb-2"><b>Date of Birth:</b> {profile.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString() : "-"}</div>
-          <div className="mb-2"><b>Gender:</b> {profile.gender || "-"}</div>
-          <div className="mb-2"><b>Email:</b> {profile.user?.email || "-"}</div>
-          <div className="mb-2"><b>Location:</b> {profile.location?.name || "-"}</div>
-          <div className="mb-2"><b>DOB Approved:</b> {profile.dobApproved ? "Yes" : "No"}</div>
+          <div className="mb-2"><b>Name:</b> {typedProfile.name}</div>
+          <div className="mb-2"><b>Date of Birth:</b> {typedProfile.dateOfBirth ? new Date(typedProfile.dateOfBirth).toLocaleDateString() : "-"}</div>
+          <div className="mb-2"><b>Gender:</b> {typedProfile.gender || "-"}</div>
+          <div className="mb-2"><b>Email:</b> {typedProfile.user?.email || "-"}</div>
+          <div className="mb-2"><b>Location:</b> {typedProfile.location?.name || "-"}</div>
+          <div className="mb-2"><b>DOB Approved:</b> {typedProfile.dobApproved ? "Yes" : "No"}</div>
           <div className="mb-2"><b>Birth Certificate:</b>
-            {profile.birthCert ? (
+            {typedProfile.birthCert ? (
               <div className="my-2">
-                <img src={profile.birthCert} alt="Birth Certificate" className="max-w-xs border rounded shadow mb-2" />
+                <img src={typedProfile.birthCert} alt="Birth Certificate" className="max-w-xs border rounded shadow mb-2" />
                 <div>
-                  <a href={profile.birthCert} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">View Full</a>
+                  <a href={typedProfile.birthCert} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">View Full</a>
                 </div>
               </div>
             ) : (
@@ -124,14 +163,14 @@ export default function CamperProfileDetailPage() {
           <div className="flex gap-4 my-4">
             <button
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded disabled:opacity-50"
-              disabled={isApprovingDOB || profile.dobApproved}
+              disabled={isApprovingDOB || typedProfile.dobApproved}
               onClick={handleApproveDOB}
             >
-              {profile.dobApproved ? "DOB Approved" : isApprovingDOB ? "Approving..." : "Approve DOB"}
+              {typedProfile.dobApproved ? "DOB Approved" : isApprovingDOB ? "Approving..." : "Approve DOB"}
             </button>
             <div>
               <FileUpload
-                value={profile.birthCert || ""}
+                value={typedProfile.birthCert || ""}
                 onChange={handleBirthCertUpload}
                 disabled={isUploadingBirthCert}
                 label="Upload Birth Certificate"
@@ -141,11 +180,11 @@ export default function CamperProfileDetailPage() {
             </div>
           </div>
           {/* Custom Fields */}
-          {profile.fieldValues && profile.fieldValues.length > 0 && (
+          {typedProfile.fieldValues && typedProfile.fieldValues.length > 0 && (
             <div className="mb-2">
               <b>Custom Fields:</b>
               <ul className="list-disc ml-6">
-                {profile.fieldValues.map((fv: any) => (
+                {typedProfile.fieldValues.map((fv: any) => (
                   <li key={fv.fieldId}><b>{fv.field?.label || fv.fieldId}:</b> {fv.value}</li>
                 ))}
               </ul>

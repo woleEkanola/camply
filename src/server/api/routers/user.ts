@@ -3,7 +3,7 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/t
 import bcrypt from "bcryptjs";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER";
 
 export const userRouter = createTRPCRouter({
   getAll: publicProcedure.query(async ({ ctx }) => {
@@ -283,7 +283,7 @@ export const userRouter = createTRPCRouter({
         firstName: z.string().min(1, "First name is required"),
         lastName: z.string().min(1, "Last name is required"),
         phone: z.string().optional(),
-        role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"]), 
+        role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN", "BASE_USER"]), 
         password: z.string().min(8, "Password must be at least 8 characters"),
         active: z.boolean().default(true),
         organizationId: z.string(),
@@ -368,7 +368,7 @@ export const userRouter = createTRPCRouter({
           firstName: z.string().min(1, "First name is required").optional(),
           lastName: z.string().min(1, "Last name is required").optional(),
           phone: z.string().optional(),
-          role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"]).optional(), 
+          role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN", "BASE_USER"]).optional(), 
           password: z.string().min(8, "Password must be at least 8 characters").optional(),
           active: z.boolean().optional(),
           organizationId: z.string().optional(),
@@ -542,13 +542,12 @@ export const userRouter = createTRPCRouter({
       ) {
         throw new Error("Not authorized to view base users");
       }
-      // Only fetch users whose role is a valid UserRole (ADMIN, etc.)
-      // Remove any reference to BASE_USER as it is not a valid role in the schema
+      // Fetch only BASE_USERs for the Accounts tab
       const where = {
-        role: "ADMIN" as UserRole,
+        role: "BASE_USER" as UserRole,
         ...(input.organizationId && { organizationId: input.organizationId })
       };
-      // Find all ADMIN users (previously BASE_USER, but BASE_USER is not valid in schema)
+      // Find all BASE_USER users
       const users = await ctx.prisma.user.findMany({
         where,
         select: {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
+import EditCamperProfileModal from "./EditCamperProfileModal";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
@@ -43,6 +44,8 @@ interface CamperProfileType {
       type: string;
     };
   }>;
+  dobApproved: boolean;
+  birthCert: string | null;
 }
 
 interface CamperManagementProps {
@@ -173,6 +176,18 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
 
   return (
     <div>
+      {/* Edit Camper Profile Modal */}
+      {isModalOpen && selectedProfile && (
+        <EditCamperProfileModal
+          profileId={selectedProfile}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSuccess={() => {
+            setSuccess("Camper profile updated successfully");
+            void refetchProfiles();
+          }}
+        />
+      )}
       {/* Filters and Search */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-1 flex-wrap items-center gap-4">
@@ -275,16 +290,19 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Created
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Actions
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {filteredProfiles.map((profile) => (
                 <tr key={profile.id}>
                   <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                    {profile.name}
+                    <button
+                      className="text-left w-full h-full"
+                      style={{ all: "unset", cursor: "pointer" }}
+                      onClick={() => window.location.assign(`/admin/camper-profile/${profile.id}`)}
+                    >
+                      {profile.name}
+                    </button>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                     {profile.user.firstName} {profile.user.lastName}
@@ -306,23 +324,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                     {new Date(profile.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                    <button
-                      onClick={() => {
-                        setSelectedProfile(profile.id);
-                        setIsModalOpen(true);
-                      }}
-                      className="mr-2 text-blue-600 hover:text-blue-900"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => openDeleteModal(profile.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Delete
-                    </button>
                   </td>
                 </tr>
               ))}
@@ -367,9 +368,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           </div>
         </div>
       )}
-
-      {/* TODO: Add Camper Profile Modal */}
-      {/* This will be implemented in a separate component */}
     </div>
   );
 };

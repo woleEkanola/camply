@@ -23,11 +23,9 @@ export const BaseUserProfilesAccordion: React.FC<BaseUserProfilesAccordionProps>
       <table className="min-w-full bg-white border border-gray-200 rounded shadow">
         <thead>
           <tr>
-            <th className="px-4 py-2 border-b">Email</th>
-            <th className="px-4 py-2 border-b">First Name</th>
-            <th className="px-4 py-2 border-b">Last Name</th>
-            <th className="px-4 py-2 border-b">Created At</th>
-            <th className="px-4 py-2 border-b">Camper Profiles</th>
+            <th className="px-4 py-2 border-b text-left">Email</th>
+            <th className="px-4 py-2 border-b text-left">Created At</th>
+            <th className="px-4 py-2 border-b text-left">Camper Profiles</th>
           </tr>
         </thead>
         <tbody>
@@ -38,14 +36,12 @@ export const BaseUserProfilesAccordion: React.FC<BaseUserProfilesAccordionProps>
                 onClick={() => setOpenUserId(openUserId === user.id ? null : user.id)}
               >
                 <td className="px-4 py-2 border-b">{user.email}</td>
-                <td className="px-4 py-2 border-b">{user.firstName}</td>
-                <td className="px-4 py-2 border-b">{user.lastName}</td>
                 <td className="px-4 py-2 border-b">{new Date(user.createdAt).toLocaleDateString()}</td>
                 <td className="px-4 py-2 border-b text-center font-semibold">{user.camperProfileCount}</td>
               </tr>
               {openUserId === user.id && (
                 <tr>
-                  <td colSpan={5} className="p-0 bg-blue-50">
+                  <td colSpan={3} className="p-0 bg-blue-50">
                     <ProfilesList userId={user.id} />
                   </td>
                 </tr>

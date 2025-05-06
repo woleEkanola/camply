@@ -10,7 +10,8 @@ export enum UserRole {
   SUPER_ADMIN = "SUPER_ADMIN",
   OWNER = "OWNER",
   ADMIN = "ADMIN",
-  LOCATION_ADMIN = "LOCATION_ADMIN"
+  LOCATION_ADMIN = "LOCATION_ADMIN",
+  BASE_USER = "BASE_USER"
 }
 
 // User and Location are not exported from @prisma/client after downgrade. Define minimal local types as needed for type safety.
@@ -408,6 +409,8 @@ export default function UserManagement({ organizationId }: { organizationId: str
         return "Owner";
       case UserRole.SUPER_ADMIN:
         return "Super Admin";
+      case UserRole.BASE_USER:
+        return "BASE_USER";
       default:
         return role;
     }
@@ -732,7 +735,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {users.map((user) => (
+              {users.filter(user => user.role !== "BASE_USER").map((user) => (
                 <tr key={user.id}>
                   <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                     {user.firstName} {user.lastName}

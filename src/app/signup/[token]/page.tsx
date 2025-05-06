@@ -81,22 +81,21 @@ function SignupForm({ token }: { token: string }) {
   const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // Use tRPC to validate the signup link token
+  const {
+    data: signupLinkData,
+    isLoading: isSignupLinkLoading,
+    error: signupLinkError
+  } = api.signupLink.validateToken.useQuery({ token }, { retry: false });
+
   // Fetch organizationId after OTP verified
   useEffect(() => {
-    if (step === 'profile' && !organizationId) {
-      // Validate token to get organizationId
-      (async () => {
-        try {
-          const res = await fetch('/api/trpc/signupLink.validateToken?input=' + encodeURIComponent(JSON.stringify({ token })));
-          const json = await res.json();
-          const orgId = json?.result?.data?.location?.organizationId || json?.result?.data?.organizationId;
-          setOrganizationId(orgId);
-        } catch (e) {
-          setError('Could not fetch organization info.');
-        }
-      })();
+    if (step === 'profile' && !organizationId && signupLinkData) {
+      // Get organizationId from validated token data
+      const orgId = signupLinkData.organizationId;
+      setOrganizationId(orgId);
     }
-  }, [step, organizationId, token]);
+  }, [step, organizationId, signupLinkData]);
 
   // Fetch dynamic profile fields
   useEffect(() => {
@@ -112,6 +111,38 @@ function SignupForm({ token }: { token: string }) {
       })();
     }
   }, [organizationId]);
+
+  if (isSignupLinkLoading) {
+    return (
+      <div className="max-w-lg mx-auto bg-white p-8 rounded shadow mt-8 flex flex-col items-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600 mb-4"></div>
+        <span>Checking registration status...</span>
+      </div>
+    );
+  }
+
+  if (signupLinkError) {
+    const closed = signupLinkError.message?.includes("inactive signup link") ||
+      signupLinkError.message?.includes("inactive year") ||
+      signupLinkError.message?.includes("Invalid") ||
+      signupLinkError.message?.includes("not found") ||
+      signupLinkError.data?.code === "NOT_FOUND" ||
+      signupLinkError.data?.code === "BAD_REQUEST";
+    if (closed) {
+      return (
+        <div className="max-w-lg mx-auto bg-white p-8 rounded shadow mt-8 flex flex-col items-center">
+          <span className="text-2xl font-bold mb-4">Registration has closed</span>
+          <span className="text-red-600">{signupLinkError.message || 'This registration link is no longer active.'}</span>
+        </div>
+      );
+    }
+    return (
+      <div className="max-w-lg mx-auto bg-white p-8 rounded shadow mt-8 flex flex-col items-center">
+        <span className="text-2xl font-bold mb-4">Error</span>
+        <span className="text-red-600">{signupLinkError.message || 'An error occurred while validating the signup link.'}</span>
+      </div>
+    );
+  }
 
   // Step 1: Collect Email and create user, send OTP
   if (step === 'email') {

@@ -84,6 +84,7 @@ export const locationRouter = createTRPCRouter({
       return prisma.location.findMany({
         where: { organizationId: input.organizationId },
         orderBy: { name: "asc" },
+        include: { admins: true },
       });
     }),
 
@@ -348,5 +349,68 @@ export const locationRouter = createTRPCRouter({
           organization: true
         }
       });
+    }),
+
+  // Get statistics for a location (registrations, campers, trend)
+  getStats: protectedProcedure
+    .input(z.object({ locationId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.userId },
+      });
+      if (!user) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not found" });
+      }
+      // Check if user has permission to view stats for this location
+      const location = await prisma.location.findUnique({
+        where: { id: input.locationId },
+        include: { admins: true },
+      });
+      if (!location) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
+      }
+      const hasPermission =
+        user.role === "SUPER_ADMIN" ||
+        user.role === "OWNER" ||
+        user.role === "ADMIN" ||
+        (user.role === "LOCATION_ADMIN" && location.admins.some((admin: any) => admin.id === user.id));
+      if (!hasPermission) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You don't have permission to view stats for this location" });
+      }
+      // Total registrations
+      const registrationsCount = await prisma.registration.count({
+        where: { locationId: input.locationId },
+      });
+      // Unique campers (by camperProfileId) - workaround for Prisma not supporting 'distinct' in .count() in your version
+      const uniqueCamperProfiles = await prisma.registration.findMany({
+        where: { locationId: input.locationId },
+        select: { camperProfileId: true },
+      });
+      const campersCount = new Set(uniqueCamperProfiles.map(r => r.camperProfileId)).size;
+      // Registrations trend (last 12 months)
+      const now = new Date();
+      const trend = [];
+      for (let i = 11; i >= 0; i--) {
+        const from = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const to = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+        const count = await prisma.registration.count({
+          where: {
+            locationId: input.locationId,
+            createdAt: {
+              gte: from,
+              lt: to,
+            },
+          },
+        });
+        trend.push({
+          month: from.toISOString().slice(0, 7),
+          count,
+        });
+      }
+      return {
+        registrationsCount,
+        campersCount,
+        trend,
+      };
     }),
 });

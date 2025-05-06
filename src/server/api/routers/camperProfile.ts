@@ -81,20 +81,28 @@ export const camperProfileRouter = createTRPCRouter({
               lastName: true,
             }
           },
-          location: true,
+          location: {
+            select: {
+              id: true,
+              name: true,
+            }
+          },
           fieldValues: {
             include: {
               field: true
             }
           },
-          // Ensure birthCert is included (it's a scalar field, always returned)
-          
         },
         orderBy: { createdAt: "desc" }
       });
       // Debug log: log all fetched profiles
       console.log("DEBUG: Fetched camper profiles:", JSON.stringify(profiles, null, 2));
-      return profiles;
+      // Add dobApproved and birthCert to each profile explicitly (they are scalar fields and always returned)
+      return profiles.map((profile) => ({
+        ...profile,
+        dobApproved: profile.dobApproved ?? false,
+        birthCert: profile.birthCert ?? null,
+      }));
     }),
     
   // Get camper profiles for a specific user

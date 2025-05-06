@@ -74,14 +74,14 @@ export default function CamperProfilePage() {
   }, [profile?.birthCert]);
 
   // Add local state for consent form
-  const [consentFormUrl, setConsentFormUrl] = useState(profile?.parentConsent || "");
+  const [consentFormUrl, setConsentFormUrl] = useState((profile as any)?.parentConsent || "");
   const [isUploadingConsent, setIsUploadingConsent] = useState(false);
   const [consentUploadError, setConsentUploadError] = useState("");
   const [consentUploadSuccess, setConsentUploadSuccess] = useState("");
 
   useEffect(() => {
-    setConsentFormUrl(profile?.parentConsent || "");
-  }, [profile?.parentConsent]);
+    setConsentFormUrl((profile as any)?.parentConsent || "");
+  }, [(profile as any)?.parentConsent]);
 
   // Helper to calculate profile completion percentage
   function getProfileCompletion() {

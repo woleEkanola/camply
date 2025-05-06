@@ -103,7 +103,12 @@ export default function LocationAdminRegistrationsPage() {
           </span>
           <select
             value={reg.status}
-            onChange={e => updateStatusMutation.mutate({ id: reg.id, data: { status: e.target.value } })}
+            onChange={e =>
+              updateStatusMutation.mutate({
+                id: reg.id,
+                data: { status: e.target.value as "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" }
+              })
+            }
             className="border rounded px-2 py-1 text-xs"
             aria-label="Update registration status"
             style={{ minWidth: 80 }}

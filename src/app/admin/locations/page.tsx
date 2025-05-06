@@ -682,8 +682,16 @@ export default function LocationsPage() {
                     {locations.map((location) => {
                       // Get signup link for this location (using the helper function, not a hook)
                       const signupLink = getSignupLinkForLocation(location.id);
-                      // Assigned Admin: show first admin if exists
-                      const assignedAdmin = location.admins && location.admins.length > 0 ? location.admins[0] : null;
+                      // Assigned Admin: show all admins (comma-separated)
+                      const assignedAdmins = location.admins && location.admins.length > 0 ? (
+                        <span className="inline-flex rounded-full bg-blue-100 px-2 text-xs font-semibold leading-5 text-blue-800">
+                          {location.admins.map(a => (a.firstName || a.lastName) ? `${a.firstName ?? ''} ${a.lastName ?? ''}`.trim() : a.id).join(', ')}
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-gray-100 px-2 text-xs font-semibold leading-5 text-gray-500">
+                          No admin assigned
+                        </span>
+                      );
                       return (
                         <tr key={location.id}>
                           <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
@@ -695,14 +703,10 @@ export default function LocationsPage() {
                             {location.zipCode && ` ${location.zipCode}`}
                             {location.country && `, ${location.country}`}
                           </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                            {assignedAdmin ? (
-                              <span className="inline-flex rounded-full bg-blue-100 px-2 text-xs font-semibold leading-5 text-blue-800">
-                                {assignedAdmin.firstName} {assignedAdmin.lastName}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">No admin assigned</span>
-                            )}
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500 cursor-pointer hover:underline"
+                              onClick={() => router.push(`/admin/locations/${location.id}`)}
+                          >
+                            {assignedAdmins}
                           </td>
                           <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                             {typeof location.quota === "number" ? location.quota : 0}

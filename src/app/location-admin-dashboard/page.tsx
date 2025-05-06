@@ -39,6 +39,12 @@ export default function LocationAdminDashboard() {
     setToggleLoading(true);
     setToggleError("");
     try {
+      // Only proceed if location is defined
+      if (!location) {
+        setToggleError("Location data not loaded. Please try again.");
+        setToggleLoading(false);
+        return;
+      }
       const res = await fetch("/api/location-toggle-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
