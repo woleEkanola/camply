@@ -411,6 +411,9 @@ export const signupLinkRouter = createTRPCRouter({
   deactivate: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      // DEBUG LOGGING - DEACTIVATE
+      console.log('[DEBUG][DEACTIVATE] User:', ctx.session?.user);
+      console.log('[DEBUG][DEACTIVATE] Input:', input);
       const currentUser = ctx.session?.user;
       
       if (!currentUser) {
@@ -464,6 +467,9 @@ export const signupLinkRouter = createTRPCRouter({
   reactivate: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      // DEBUG LOGGING - REACTIVATE
+      console.log('[DEBUG][REACTIVATE] User:', ctx.session?.user);
+      console.log('[DEBUG][REACTIVATE] Input:', input);
       const currentUser = ctx.session?.user;
       
       if (!currentUser) {
