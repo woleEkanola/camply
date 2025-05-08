@@ -125,7 +125,7 @@ export default function LocationsPage() {
   const handleBulkDisable = async () => {
   setIsBulkActionLoading(true);
   setError("");
-  let failedLocations: string[] = [];
+  let failedDetails: { id: string; error: string }[] = [];
   try {
     await Promise.all(
       selectedLocationIds.map(async (locationId) => {
