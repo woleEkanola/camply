@@ -21,6 +21,7 @@ CREATE TABLE "User" (
     "phone" TEXT,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "organizationId" TEXT,
+    "locationId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -32,6 +33,7 @@ CREATE TABLE "Organization" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "activeYearId" TEXT,
+    "settings" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -42,12 +44,15 @@ CREATE TABLE "Organization" (
 CREATE TABLE "Location" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
     "address" TEXT NOT NULL,
     "city" TEXT NOT NULL,
     "state" TEXT,
     "zipCode" TEXT,
     "country" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
+    "quota" INTEGER NOT NULL DEFAULT 0,
+    "signupOpen" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -84,10 +89,14 @@ CREATE TABLE "ProfileField" (
 CREATE TABLE "CamperProfile" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "dateOfBirth" TIMESTAMP(3),
+    "gender" TEXT,
     "userId" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
     "locationId" TEXT,
     "active" BOOLEAN NOT NULL DEFAULT true,
+    "dobApproved" BOOLEAN NOT NULL DEFAULT false,
+    "birthCert" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -134,6 +143,15 @@ CREATE TABLE "SignupLink" (
 );
 
 -- CreateTable
+CREATE TABLE "OTP" (
+    "email" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OTP_pkey" PRIMARY KEY ("email")
+);
+
+-- CreateTable
 CREATE TABLE "Registration" (
     "id" TEXT NOT NULL,
     "status" "RegistrationStatus" NOT NULL DEFAULT 'PENDING',
@@ -141,6 +159,8 @@ CREATE TABLE "Registration" (
     "camperProfileId" TEXT NOT NULL,
     "yearId" TEXT NOT NULL,
     "locationId" TEXT NOT NULL,
+    "parentConsent" TEXT,
+    "published" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -160,6 +180,9 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Organization_name_key" ON "Organization"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Location_slug_key" ON "Location"("slug");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Location_organizationId_name_key" ON "Location"("organizationId", "name");
@@ -187,6 +210,9 @@ CREATE INDEX "_LocationAdmins_B_index" ON "_LocationAdmins"("B");
 
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "User" ADD CONSTRAINT "User_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "Location"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Organization" ADD CONSTRAINT "Organization_activeYearId_fkey" FOREIGN KEY ("activeYearId") REFERENCES "Year"("id") ON DELETE SET NULL ON UPDATE CASCADE;

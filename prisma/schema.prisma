@@ -83,6 +83,7 @@ model Organization {
 model Location {
   id             String       @id @default(cuid())
   name           String
+  slug           String       @unique
   address        String
   city           String
   state          String?

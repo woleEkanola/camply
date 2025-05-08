@@ -1,5 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
@@ -89,9 +89,19 @@ async function main() {
   const locationAdminPassword = await bcrypt.hash("password123", 10);
   
   // Create a location
+  // Simple slugify function
+  function slugify(text: string) {
+    return text.toString().toLowerCase().replace(/\s+/g, '-') // Replace spaces with -
+      .replace(/[^\w\-]+/g, '') // Remove all non-word chars
+      .replace(/\-\-+/g, '-') // Replace multiple - with single -
+      .replace(/^-+/, '') // Trim - from start of text
+      .replace(/-+$/, ''); // Trim - from end of text
+  }
+
   const location = await prisma.location.create({
     data: {
       name: "Demo Location",
+      slug: slugify("Demo Location"),
       address: "123 Main St",
       city: "Demo City",
       state: "DS",

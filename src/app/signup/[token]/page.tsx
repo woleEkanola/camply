@@ -260,7 +260,7 @@ function SignupForm({ token }: { token: string }) {
           setSuccess('Signup complete! Redirecting...');
           setIsLoading(false);
           setTimeout(() => {
-            router.push('/auth/signin');
+            router.push('/login');
           }, 1500);
         }}>
           <div className="mb-4">

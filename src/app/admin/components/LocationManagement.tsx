@@ -9,22 +9,36 @@ import { PencilIcon, TrashIcon, PlusIcon, XMarkIcon } from "@heroicons/react/24/
 // Location form type
 type LocationFormData = {
   name: string;
+  slug: string;
   address: string;
   city: string;
   state: string;
   zipCode: string;
   country: string;
+  quota?: number;
 };
 
 // Empty location form
 const emptyLocationForm: LocationFormData = {
   name: "",
+  slug: "",
   address: "",
   city: "",
   state: "",
   zipCode: "",
   country: "",
+  quota: undefined,
 };
+
+// Helper to generate slug from name
+function slugify(str: string) {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
 
 interface LocationManagementProps {
   organizationId: string;
@@ -121,8 +135,10 @@ export default function LocationManagement({ organizationId }: LocationManagemen
       });
     } else {
       // Create new location
+      const slug = slugify(locationForm.name);
       createLocationMutation.mutate({
         ...locationForm,
+        slug,
         organizationId,
       });
     }
@@ -132,11 +148,13 @@ export default function LocationManagement({ organizationId }: LocationManagemen
   const handleEditLocation = (location: any) => {
     setLocationForm({
       name: location.name,
+      slug: location.slug || slugify(location.name),
       address: location.address,
       city: location.city,
       state: location.state || "",
       zipCode: location.zipCode || "",
       country: location.country,
+      quota: location.quota,
     });
     setCurrentLocationId(location.id);
     setIsEditingLocation(true);

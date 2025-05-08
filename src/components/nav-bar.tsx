@@ -47,7 +47,7 @@ export default function NavBar() {
             ) : (
               <div className="flex items-center space-x-4">
                 <Link
-                  href="/auth/signin"
+                  href="/login"
                   className="text-sm text-blue-600 hover:text-blue-800"
                 >
                   Sign In

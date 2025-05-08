@@ -31,34 +31,10 @@ export default function LocationAdminDashboard() {
     { enabled: !!locationId }
   );
 
-  const [toggleLoading, setToggleLoading] = useState(false);
-  const [toggleError, setToggleError] = useState("");
+
   const [copied, setCopied] = useState(false);
 
-  const handleToggleSignup = async () => {
-    setToggleLoading(true);
-    setToggleError("");
-    try {
-      // Only proceed if location is defined
-      if (!location) {
-        setToggleError("Location data not loaded. Please try again.");
-        setToggleLoading(false);
-        return;
-      }
-      const res = await fetch("/api/location-toggle-signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locationId, signupOpen: !location.signupOpen })
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || "Unknown error");
-      await refetchLocation();
-    } catch (err: any) {
-      setToggleError(err.message || "Failed to update signup status");
-    } finally {
-      setToggleLoading(false);
-    }
-  };
+
 
   const handleCopySignupLink = (token: string) => {
     const url = `${window.location.origin}/signup/${token}`;
@@ -87,16 +63,7 @@ export default function LocationAdminDashboard() {
         <h1 className="text-2xl font-bold mb-4">Location Summary</h1>
         {locationId ? (
           <>
-            <div className="mb-4">
-              <button
-                className={`px-4 py-2 rounded bg-${location?.signupOpen ? "red" : "green"}-600 text-white font-semibold disabled:opacity-50`}
-                onClick={handleToggleSignup}
-                disabled={toggleLoading || isLocationLoading}
-              >
-                {location?.signupOpen ? "Disable Signup Page" : "Enable Signup Page"}
-              </button>
-              {toggleError && <div className="text-red-600 mt-2">{toggleError}</div>}
-            </div>
+
             {/* Signup Link Section */}
             <div className="mb-4">
               <label className="block font-semibold mb-1">Signup Link</label>

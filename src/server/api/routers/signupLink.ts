@@ -286,52 +286,120 @@ export const signupLinkRouter = createTRPCRouter({
   validateToken: publicProcedure
     .input(z.object({ token: z.string() }))
     .query(async ({ ctx, input }) => {
-      // Find the signup link by token
-      const signupLink = await ctx.prisma.signupLink.findUnique({
-        where: { token: input.token },
-        include: {
-          location: {
-            include: {
-              organization: true
+      // Support both random token and {slug}_{year} format
+      const slugYearMatch = input.token.match(/^([a-zA-Z0-9_-]+)_(\d{4,})$/);
+      let signupLink = null;
+      if (slugYearMatch) {
+        const slug = slugYearMatch[1];
+        const yearName = slugYearMatch[2];
+        // Find the location by slug
+        const location = await ctx.prisma.location.findUnique({
+          where: { slug },
+          include: { organization: true }
+        });
+        if (!location) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
+        }
+        // Find the year by name and organization
+        const year = await ctx.prisma.year.findFirst({
+          where: { name: yearName, organizationId: location.organizationId },
+        });
+        if (!year) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Year not found for this organization" });
+        }
+        // Find the signup link by locationId and yearId
+        signupLink = await ctx.prisma.signupLink.findUnique({
+          where: {
+            locationId_yearId: {
+              locationId: location.id,
+              yearId: year.id
             }
           },
-          year: true
-        }
-      });
-      
+          include: {
+            location: { include: { organization: true } },
+            year: true
+          }
+        });
+      } else {
+        // Fallback to old token lookup
+        signupLink = await ctx.prisma.signupLink.findUnique({
+          where: { token: input.token },
+          include: {
+            location: { include: { organization: true } },
+            year: true
+          }
+        });
+      }
       console.log('validateToken called with token:', input.token);
-      console.log('signupLink found:', signupLink);
-      
-      // Add more detailed logging to debug organizationId
-      if (signupLink) {
-        console.log('Location details:', {
-          locationId: signupLink.locationId,
-          locationName: signupLink.location?.name,
-          organizationId: signupLink.location?.organizationId,
-        });
-        console.log('Organization details:', signupLink.location?.organization);
+      if (!signupLink || !signupLink.year) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found or year missing" });
       }
-      
-      if (!signupLink || !signupLink.active) {
-        throw new TRPCError({ 
-          code: "NOT_FOUND", 
-          message: "Invalid or inactive signup link" 
-        });
+      if (!signupLink.active) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Signup link is inactive" });
       }
-      
-      // Check if the year is active
       if (!signupLink.year.active) {
         throw new TRPCError({ 
           code: "BAD_REQUEST", 
           message: "This signup link is for an inactive year" 
         });
       }
-      
       // Return the signup link details
       return {
         locationId: signupLink.locationId,
         locationName: signupLink.location.name,
-        // Make sure we're getting the organizationId from the correct place
+        organizationId: signupLink.location.organization.id,
+        organizationName: signupLink.location.organization.name,
+        yearId: signupLink.yearId,
+        yearName: signupLink.year.name
+      };
+
+    }),
+
+  // Validate a signup link by slug and year
+  validateSlug: publicProcedure
+    .input(z.object({ slug: z.string(), year: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Find the location by slug
+      const location = await ctx.prisma.location.findUnique({
+        where: { slug: input.slug },
+        include: { organization: true }
+      });
+      if (!location) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
+      }
+      // Find the year by id and ensure it belongs to the same org
+      const year = await ctx.prisma.year.findUnique({
+        where: { id: input.year },
+        include: { organization: true }
+      });
+      if (!year || year.organizationId !== location.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Year not found for this organization" });
+      }
+      // Find the signup link by locationId and yearId
+      const signupLink = await ctx.prisma.signupLink.findUnique({
+        where: {
+          locationId_yearId: {
+            locationId: location.id,
+            yearId: year.id
+          }
+        },
+        include: {
+          location: { include: { organization: true } },
+          year: true
+        }
+      });
+      if (!signupLink) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found for this location and year" });
+      }
+      if (!signupLink.active) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Signup link is inactive" });
+      }
+      if (!signupLink.year.active) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This signup link is for an inactive year" });
+      }
+      return {
+        locationId: signupLink.locationId,
+        locationName: signupLink.location.name,
         organizationId: signupLink.location.organization.id,
         organizationName: signupLink.location.organization.name,
         yearId: signupLink.yearId,

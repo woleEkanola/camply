@@ -1,5 +1,6 @@
 "use client";
 
+import type { SignupLink } from "../../../types/signupLink";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -18,10 +19,11 @@ interface ExtendedUser {
   email?: string | null;
   image?: string | null;
 }
-
+// NOTE: Slug is required by the backend and is auto-generated from the name field.
 interface LocationFormData {
   id?: string;
   name: string;
+  slug: string;
   address: string;
   city: string;
   state?: string;
@@ -30,7 +32,6 @@ interface LocationFormData {
   organizationId: string;
   quota?: number;
 }
-
 // Add a type that extends Location with admins and their names
 type LocationWithAdmins = {
   id: string;
@@ -48,6 +49,118 @@ type LocationWithAdmins = {
 };
 
 export default function LocationsPage() {
+  // tRPC mutation hooks for bulk actions
+  const deactivateMutation = api.signupLink.deactivate.useMutation();
+  const reactivateMutation = api.signupLink.reactivate.useMutation();
+  // Bulk selection state
+  const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
+  const [isBulkActionLoading, setIsBulkActionLoading] = useState(false);
+
+  // Helper: get signup link for a location (for the current active year)
+  const getSignupLinkIdForLocation = (locationId: string): string | undefined => {
+    const link = getSignupLinkForLocation(locationId);
+    return link ? link.id : undefined;
+  };
+
+  // Handler: Select/Deselect all locations
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedLocationIds([]);
+      setSelectAll(false);
+    } else {
+      setSelectedLocationIds(locations.map(loc => loc.id));
+      setSelectAll(true);
+    }
+  };
+
+  // Handler: Select/Deselect a single location
+  const handleSelectLocation = (locationId: string) => {
+    setSelectedLocationIds(prev =>
+      prev.includes(locationId)
+        ? prev.filter(id => id !== locationId)
+        : [...prev, locationId]
+    );
+  };
+
+  // Handler: Bulk enable signup links
+  const handleBulkEnable = async () => {
+  setIsBulkActionLoading(true);
+  setError("");
+  let failedLocations: string[] = [];
+  try {
+    await Promise.all(
+      selectedLocationIds.map(async (locationId) => {
+        const link = getSignupLinkForLocation(locationId);
+        if (link && !link.active) {
+          try {
+            await reactivateMutation.mutateAsync({ id: link.id });
+          } catch (err) {
+            failedLocations.push(locationId);
+          }
+        }
+      })
+    );
+    if (failedLocations.length > 0) {
+      // Map location IDs to names for better feedback
+      const failedNames = failedLocations.map(id => {
+        const loc = locations.find(l => l.id === id);
+        return loc ? loc.name : id;
+      });
+      setError(`Failed to enable signup links for: ${failedNames.join(", ")}`);
+    } else {
+      setSuccess("Selected signup links enabled!");
+    }
+    setSelectedLocationIds([]);
+    setSelectAll(false);
+    void refetchLocations();
+  } catch (error) {
+    setError("An unexpected error occurred during bulk enable.");
+  } finally {
+    setIsBulkActionLoading(false);
+  }
+};
+
+  // Handler: Bulk disable signup links
+  const handleBulkDisable = async () => {
+  setIsBulkActionLoading(true);
+  setError("");
+  let failedLocations: string[] = [];
+  try {
+    await Promise.all(
+      selectedLocationIds.map(async (locationId) => {
+        const link = getSignupLinkForLocation(locationId);
+        if (link && link.active) {
+          try {
+            await deactivateMutation.mutateAsync({ id: link.id });
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            console.error("Failed to deactivate:", locationId, errorMsg);
+            failedDetails.push({ id: locationId, error: errorMsg });
+          }
+        }
+      })
+    );
+    if (failedDetails.length > 0) {
+      // Map location IDs to names and show error details for better feedback
+      const failedMsgs = failedDetails.map(({ id, error }) => {
+        const loc = locations.find(l => l.id === id);
+        return `${loc ? loc.name : id}: ${error}`;
+      });
+      setError(`Failed to disable signup links:\n${failedMsgs.join("\n")}`);
+    } else {
+      setSuccess("Selected signup links disabled!");
+    }
+    setSelectedLocationIds([]);
+    setSelectAll(false);
+    void refetchLocations();
+  } catch (error) {
+    setError("An unexpected error occurred during bulk disable.");
+  } finally {
+    setIsBulkActionLoading(false);
+  }
+};
+
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -55,6 +168,7 @@ export default function LocationsPage() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [formData, setFormData] = useState<LocationFormData>({
     name: "",
+    slug: "",
     address: "",
     city: "",
     state: "",
@@ -121,10 +235,10 @@ export default function LocationsPage() {
 
   // Check if user is authenticated
   useEffect(() => {
-    if (status === "authenticated" && 
-        (session?.user as ExtendedUser)?.role !== "SUPER_ADMIN" && 
-        (session?.user as ExtendedUser)?.role !== "OWNER" && 
-        (session?.user as ExtendedUser)?.role !== "ADMIN" && 
+    if (status === "authenticated" &&
+        (session?.user as ExtendedUser)?.role !== "SUPER_ADMIN" &&
+        (session?.user as ExtendedUser)?.role !== "OWNER" &&
+        (session?.user as ExtendedUser)?.role !== "ADMIN" &&
         (session?.user as ExtendedUser)?.role !== "LOCATION_ADMIN") {
       router.push("/");
     }
@@ -134,8 +248,8 @@ export default function LocationsPage() {
   const { data: rawLocations = [], refetch: refetchLocations, isLoading: isLoadingLocations, error: locationsError } = api.location.getByOrganization.useQuery(
     { organizationId: (session?.user as ExtendedUser)?.organizationId || "" },
     {
-      enabled: 
-        status === "authenticated" && 
+      enabled:
+        status === "authenticated" &&
         !!(session?.user as ExtendedUser)?.organizationId,
       // Add staleTime and refetchInterval to ensure data is fresh
       staleTime: 0, // Consider data stale immediately
@@ -179,6 +293,7 @@ export default function LocationsPage() {
       setFormData({
         id: locationData.id,
         name: locationData.name,
+        slug: locationData.slug || slugify(locationData.name),
         address: locationData.address,
         city: locationData.city,
         state: locationData.state || "",
@@ -206,11 +321,11 @@ export default function LocationsPage() {
       setIsModalOpen(false);
       resetForm();
       setIsSubmitting(false);
-      
+
       // Explicitly refetch locations
       console.log("Refetching locations after creation...");
       void refetchLocations();
-      
+
       // Clear success message after 5 seconds
       setTimeout(() => {
         setSuccess("");
@@ -231,11 +346,11 @@ export default function LocationsPage() {
       resetForm();
       setIsSubmitting(false);
       setSelectedLocation(null);
-      
+
       // Explicitly refetch locations
       console.log("Refetching locations after update...");
       void refetchLocations();
-      
+
       // Clear success message after 5 seconds
       setTimeout(() => {
         setSuccess("");
@@ -255,11 +370,11 @@ export default function LocationsPage() {
       setIsDeleteModalOpen(false);
       setSelectedLocation(null);
       setIsSubmitting(false);
-      
+
       // Explicitly refetch locations
       console.log("Refetching locations after deletion...");
       void refetchLocations();
-      
+
       // Clear success message after 5 seconds
       setTimeout(() => {
         setSuccess("");
@@ -276,8 +391,8 @@ export default function LocationsPage() {
   const { data: adminData, refetch: refetchAdmins } = api.user.getLocationAdmins.useQuery(
     { organizationId: (session?.user as ExtendedUser)?.organizationId || "" },
     {
-      enabled: 
-        status === "authenticated" && 
+      enabled:
+        status === "authenticated" &&
         !!(session?.user as ExtendedUser)?.organizationId,
     }
   );
@@ -346,13 +461,13 @@ export default function LocationsPage() {
         setIsSubmitting(false);
         return;
       }
-      
+
       // Update location admins
       await updateLocationAdminsMutation.mutateAsync({
         locationId: selectedLocation,
         adminIds: selectedAdmins
       });
-      
+
       setSuccess("Location admins updated successfully!");
       setIsAdminModalOpen(false);
       setIsSubmitting(false);
@@ -386,6 +501,7 @@ export default function LocationsPage() {
   const resetForm = () => {
     setFormData({
       name: "",
+      slug: "",
       address: "",
       city: "",
       state: "",
@@ -414,7 +530,7 @@ export default function LocationsPage() {
     }));
   };
 
-  // Handle error in form submission
+  // Handle error in form submission - CORRECTED: Only one definition
   const handleSubmitError = (error: unknown) => {
     console.error("Error in form submission:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
@@ -422,52 +538,67 @@ export default function LocationsPage() {
     setIsSubmitting(false);
   };
 
+
+  const slugify = (str: string) => {
+    return str
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsSubmitting(true);
-    
+
     // Get organization ID from session
     const organizationId = (session?.user as ExtendedUser)?.organizationId;
-    
+
     console.log("Form submission - Session:", session);
     console.log("Form submission - Organization ID:", organizationId);
-    
+
     if (!organizationId) {
       console.error("Organization ID not found in session", session?.user as ExtendedUser);
       setError("Organization ID is required. Please try logging out and logging back in.");
       setIsSubmitting(false);
       return;
     }
-    
+
     try {
-      // Ensure the organizationId is set in the form data
+      // Generate slug from name
+      const slug = slugify(formData.name);
+      // Ensure the organizationId and slug are set in the form data
       const locationData = {
         ...formData,
+        slug,
         organizationId,
       };
-      
-      console.log("Submitting location with organization ID:", organizationId);
-      
+
+      console.log("Submitting location with organization ID and slug:", organizationId, slug);
+
       if (selectedLocation) {
-        // Update existing location
+        // Update existing location (optional: update slug if name changes)
         updateLocationMutation.mutate({
           id: selectedLocation,
           data: {
             name: locationData.name,
+            slug: locationData.slug,
             address: locationData.address,
             city: locationData.city,
             state: locationData.state,
             zipCode: locationData.zipCode,
             country: locationData.country,
             quota: locationData.quota,
-          },
+          }
         });
       } else {
         // Create new location
         console.log("Creating location with data:", locationData);
         createLocationMutation.mutate({
           name: locationData.name,
+          slug: locationData.slug,
           address: locationData.address,
           city: locationData.city,
           state: locationData.state,
@@ -486,14 +617,14 @@ export default function LocationsPage() {
     setIsSubmitting(true);
     setError("");
     setSuccess("");
-    
+
     try {
       if (!selectedLocation) {
         setError("No location selected");
         setIsSubmitting(false);
         return;
       }
-      
+
       deleteLocationMutation.mutate({ id: selectedLocation });
     } catch (err) {
       handleSubmitError(err);
@@ -514,8 +645,8 @@ export default function LocationsPage() {
   const { data: activeYear } = api.year.getActiveYear.useQuery(
     { organizationId: (session?.user as ExtendedUser)?.organizationId || "" },
     {
-      enabled: 
-        status === "authenticated" && 
+      enabled:
+        status === "authenticated" &&
         !!(session?.user as ExtendedUser)?.organizationId,
     }
   );
@@ -535,22 +666,23 @@ export default function LocationsPage() {
 
   // Get signup links for all locations at once
   const { data: signupLinks = [] } = api.signupLink.getByOrganization.useQuery(
-    { 
+    {
       organizationId: (session?.user as ExtendedUser)?.organizationId || "",
-      yearId: activeYear?.id 
+      yearId: activeYear?.id
     },
     {
-      enabled: 
-        status === "authenticated" && 
-        !!(session?.user as ExtendedUser)?.organizationId && 
+      enabled:
+        status === "authenticated" &&
+        !!(session?.user as ExtendedUser)?.organizationId &&
         !!activeYear?.id,
     }
   );
 
   // Helper function to find signup link for a location (not a hook)
-  const getSignupLinkForLocation = (locationId: string) => {
-    return signupLinks.find((link: { locationId: string }) => link.locationId === locationId);
+  const getSignupLinkForLocation = (locationId: string): SignupLink | undefined => {
+    return signupLinks.find((link: SignupLink) => link.locationId === locationId);
   };
+
 
   // Generate signup link for a location
   const handleGenerateSignupLink = (locationId: string) => {
@@ -561,11 +693,15 @@ export default function LocationsPage() {
     });
   };
 
-  // Copy signup link to clipboard
-  const handleCopySignupLink = (token: string, locationId: string) => {
+  // Copy signup link to clipboard (new slug_year format)
+  const handleCopySignupLink = (locationId: string) => {
     const baseUrl = window.location.origin;
-    const signupUrl = `${baseUrl}/signup/${token}`;
-    
+    const link = getSignupLinkForLocation(locationId);
+    if (!link || !link.location?.slug || !link.year?.name) {
+      setError("Signup link not available for this location.");
+      return;
+    }
+    const signupUrl = `${baseUrl}/signup/${link.location.slug}_${link.year.name}`;
     navigator.clipboard.writeText(signupUrl)
       .then(() => {
         setCopiedLinkId(locationId);
@@ -580,7 +716,6 @@ export default function LocationsPage() {
   if (status === "loading") {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
-
   return (
     <ModernDashboardLayout>
       <div>
@@ -592,15 +727,15 @@ export default function LocationsPage() {
               </svg>
               <span>{error}</span>
             </div>
-            <button 
-              onClick={() => setError("")} 
+            <button
+              onClick={() => setError("")}
               className="mt-2 text-xs text-red-700 underline"
             >
               Dismiss
             </button>
           </div>
         )}
-        
+
         {success && (
           <div className="mb-4 rounded-md bg-green-50 p-4 text-sm text-green-700">
             <div className="flex items-center">
@@ -611,7 +746,7 @@ export default function LocationsPage() {
             </div>
           </div>
         )}
-        
+
         <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-xl font-semibold text-gray-800">Locations</h2>
@@ -639,13 +774,13 @@ export default function LocationsPage() {
             </button>
           )}
         </div>
-        
+
         {locationsError && (
           <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
             Error loading locations: {locationsError.message || "You don't have permission to view locations for this organization"}
           </div>
         )}
-        
+
         {showLocationsTable && (
           <div>
             {isLoadingLocations ? (
@@ -655,12 +790,39 @@ export default function LocationsPage() {
               </div>
             ) : locations.length > 0 ? (
               <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-                <table className="min-w-full divide-y divide-gray-200">
+                <div className="mb-2 flex flex-wrap gap-2">
+  <button
+    onClick={handleBulkEnable}
+    disabled={isBulkActionLoading || selectedLocationIds.length === 0}
+    className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400"
+    data-testid="bulk-enable-btn"
+  >
+    {isBulkActionLoading ? "Enabling..." : "Enable Selected"}
+  </button>
+  <button
+    onClick={handleBulkDisable}
+    disabled={isBulkActionLoading || selectedLocationIds.length === 0}
+    className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:bg-gray-200 disabled:text-gray-400"
+    data-testid="bulk-disable-btn"
+  >
+    {isBulkActionLoading ? "Disabling..." : "Disable Selected"}
+  </button>
+</div>
+<table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Name
-                      </th>
+  <tr>
+    <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+      <input
+        type="checkbox"
+        checked={selectAll}
+        onChange={handleSelectAll}
+        aria-label="Select All Locations"
+        data-testid="select-all-checkbox"
+      />
+    </th>
+    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+      Name
+    </th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                         Address
                       </th>
@@ -680,6 +842,7 @@ export default function LocationsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {locations.map((location) => {
+  const isChecked = selectedLocationIds.includes(location.id);
                       // Get signup link for this location (using the helper function, not a hook)
                       const signupLink = getSignupLinkForLocation(location.id);
                       // Assigned Admin: show all admins (comma-separated)
@@ -694,9 +857,18 @@ export default function LocationsPage() {
                       );
                       return (
                         <tr key={location.id}>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                            {location.name}
-                          </td>
+  <td className="whitespace-nowrap px-3 py-4 text-sm">
+    <input
+      type="checkbox"
+      checked={isChecked}
+      onChange={() => handleSelectLocation(location.id)}
+      aria-label={`Select location ${location.name}`}
+      data-testid={`select-location-checkbox-${location.id}`}
+    />
+  </td>
+  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+    {location.name}
+  </td>
                           <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                             {location.address}, {location.city}
                             {location.state && `, ${location.state}`}
@@ -704,7 +876,7 @@ export default function LocationsPage() {
                             {location.country && `, ${location.country}`}
                           </td>
                           <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500 cursor-pointer hover:underline"
-                              onClick={() => router.push(`/admin/locations/${location.id}`)}
+                              onClick={() => router.push(`/admin/locations/${location.id}`)} // Consider if this navigation is intended on click
                           >
                             {assignedAdmins}
                           </td>
@@ -717,7 +889,7 @@ export default function LocationsPage() {
                             ) : signupLink ? (
                               <div className="flex items-center space-x-2">
                                 <button
-                                  onClick={() => handleCopySignupLink(signupLink.token, location.id)}
+                                  onClick={() => handleCopySignupLink(location.id)}
                                   className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
                                   data-testid={`copy-link-btn-${location.id}`}
                                 >
@@ -804,49 +976,34 @@ export default function LocationsPage() {
               </div>
             ) : (
               <div className="rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-                <p className="text-gray-500">No locations found. Add your first location!</p>
+                <p className="text-gray-500">No locations found for this organization.</p>
               </div>
             )}
           </div>
         )}
-      </div>
 
-      {/* Create/Edit Location Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black bg-opacity-50">
-          <div className="relative w-full max-w-md p-4 md:p-0">
-            <div className="relative rounded-lg bg-white p-6 shadow-lg">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-lg font-medium text-gray-900">
-                  {selectedLocation ? "Edit Location" : "Add New Location"}
-                </h3>
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-500"
-                  disabled={isSubmitting}
-                >
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              {isLoadingLocation && selectedLocation ? (
-                <div className="flex h-64 items-center justify-center">
-                  <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
-                  <span className="ml-2">Loading location details...</span>
+        {/* Location Modal (Create/Edit) */}
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-600 bg-opacity-50">
+            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+              <h3 className="mb-4 text-lg font-semibold text-gray-900">
+                {selectedLocation ? "Edit Location" : "Add New Location"}
+              </h3>
+              {error && (
+                <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+              {isLoadingLocation ? (
+                 <div className="flex items-center justify-center p-4">
+                  <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
+                  <span className="ml-2 text-gray-600">Loading location details...</span>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit}>
-                  {error && (
-                    <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
-                      {error}
-                    </div>
-                  )}
-                  
                   <div className="mb-4">
                     <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                      Name
+                      Location Name
                     </label>
                     <input
                       type="text"
@@ -854,12 +1011,23 @@ export default function LocationsPage() {
                       name="name"
                       value={formData.name}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
                       required
-                      disabled={isSubmitting}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     />
                   </div>
-                  
+                   <div className="mb-4">
+                    <label htmlFor="quota" className="block text-sm font-medium text-gray-700">
+                      Quota (Optional)
+                    </label>
+                    <input
+                      type="number"
+                      id="quota"
+                      name="quota"
+                      value={formData.quota ?? 0}
+                      onChange={(e) => setFormData({ ...formData, quota: parseInt(e.target.value, 10) || 0 })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    />
+                  </div>
                   <div className="mb-4">
                     <label htmlFor="address" className="block text-sm font-medium text-gray-700">
                       Address
@@ -870,12 +1038,10 @@ export default function LocationsPage() {
                       name="address"
                       value={formData.address}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
                       required
-                      disabled={isSubmitting}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     />
                   </div>
-                  
                   <div className="mb-4">
                     <label htmlFor="city" className="block text-sm font-medium text-gray-700">
                       City
@@ -886,60 +1052,36 @@ export default function LocationsPage() {
                       name="city"
                       value={formData.city}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
                       required
-                      disabled={isSubmitting}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     />
                   </div>
-                  
                   <div className="mb-4">
-                    <label htmlFor="quota" className="block text-sm font-medium text-gray-700">
-                      Quota
+                    <label htmlFor="state" className="block text-sm font-medium text-gray-700">
+                      State / Province (Optional)
                     </label>
                     <input
-                      type="number"
-                      id="quota"
-                      name="quota"
-                      value={formData.quota ?? 0}
-                      min={0}
-                      onChange={e => setFormData(prev => ({ ...prev, quota: Number(e.target.value) }))}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
-                      disabled={isSubmitting}
+                      type="text"
+                      id="state"
+                      name="state"
+                      value={formData.state ?? ""}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     />
                   </div>
-                  
-                  <div className="mb-4 grid grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="state" className="block text-sm font-medium text-gray-700">
-                        State/Province
-                      </label>
-                      <input
-                        type="text"
-                        id="state"
-                        name="state"
-                        value={formData.state}
-                        onChange={handleInputChange}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-                    
-                    <div>
-                      <label htmlFor="zipCode" className="block text-sm font-medium text-gray-700">
-                        Zip/Postal Code
-                      </label>
-                      <input
-                        type="text"
-                        id="zipCode"
-                        name="zipCode"
-                        value={formData.zipCode}
-                        onChange={handleInputChange}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                        disabled={isSubmitting}
-                      />
-                    </div>
+                  <div className="mb-4">
+                    <label htmlFor="zipCode" className="block text-sm font-medium text-gray-700">
+                      Zip / Postal Code (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="zipCode"
+                      name="zipCode"
+                      value={formData.zipCode ?? ""}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    />
                   </div>
-                  
                   <div className="mb-4">
                     <label htmlFor="country" className="block text-sm font-medium text-gray-700">
                       Country
@@ -950,163 +1092,126 @@ export default function LocationsPage() {
                       name="country"
                       value={formData.country}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
                       required
-                      disabled={isSubmitting}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     />
                   </div>
-                  
-                  <div className="mt-6 flex justify-end space-x-3">
-                    {(canCreateLocation || (selectedLocation && canUpdateLocation)) && (
-                      <button
-                        type="submit"
-                        className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-400"
-                        disabled={isSubmitting}
-                        data-testid="modal-save-btn"
-                      >
-                        {isSubmitting
-                          ? "Saving..."
-                          : selectedLocation
-                          ? "Update Location"
-                          : "Create Location"}
-                      </button>
-                    )}
+                  <div className="flex justify-end">
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      disabled={isSubmitting}
+                      className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                     >
                       Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                    >
+                      {isSubmitting ? "Saving..." : selectedLocation ? "Update Location" : "Add Location"}
                     </button>
                   </div>
                 </form>
               )}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Delete Confirmation Modal */}
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black bg-opacity-50">
-          <div className="relative w-full max-w-md p-4 md:p-0">
-            <div className="relative rounded-lg bg-white p-6 shadow-lg">
-              <div className="mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Confirm Deletion</h3>
-                <p className="mt-2 text-sm text-gray-500">
-                  Are you sure you want to delete this location? This action cannot be undone.
-                </p>
-              </div>
-              
-              <div className="mt-6 flex justify-end space-x-3">
+        {/* Delete Confirmation Modal */}
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-600 bg-opacity-50">
+            <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+              <h3 className="mb-4 text-lg font-semibold text-gray-900">Confirm Deletion</h3>
+              {error && (
+                 <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+                   {error}
+                 </div>
+               )}
+              <p className="text-sm text-gray-500">
+                Are you sure you want to delete this location? This action cannot be undone.
+              </p>
+              <div className="mt-5 flex justify-end">
                 <button
                   type="button"
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  disabled={isSubmitting}
+                  className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                   Cancel
                 </button>
-                {canDeleteLocation && (
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    className="flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:bg-red-400"
-                    disabled={isSubmitting}
-                    data-testid="modal-delete-btn"
-                  >
-                    {isSubmitting ? "Deleting..." : "Delete Location"}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                   disabled={isSubmitting}
+                  className="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50"
+                >
+                   {isSubmitting ? "Deleting..." : "Delete"}
+                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Admin Management Modal */}
-      {isAdminModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black bg-opacity-50">
-          <div className="relative w-full max-w-md p-4 md:p-0">
-            <div className="relative rounded-lg bg-white p-6 shadow-lg">
-              <div className="mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Manage Admins</h3>
-                <p className="mt-2 text-sm text-gray-500">
-                  Select admins for this location.
-                </p>
-              </div>
-              
-              <div className="mb-4">
-                <h4 className="font-medium text-gray-700 mb-2">Current Assignments</h4>
-                {selectedAdmins.length > 0 ? (
-                  <div className="mb-4 p-3 bg-blue-50 rounded-md border border-blue-100">
-                    <p className="text-sm text-blue-700 mb-2">
-                      {selectedAdmins.length} admin{selectedAdmins.length !== 1 ? 's' : ''} currently assigned
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {locationAdmins.map(admin => (
-                        <span key={admin.id} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {admin.firstName} {admin.lastName}
-                        </span>
-                      ))}
-                    </div>
+        {/* Manage Admins Modal */}
+        {isAdminModalOpen && selectedLocation && (
+           <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-600 bg-opacity-50">
+             <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+               <h3 className="mb-4 text-lg font-semibold text-gray-900">Manage Location Admins</h3>
+                {error && (
+                  <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+                    {error}
                   </div>
-                ) : (
-                  <p className="text-sm text-gray-500 mb-4">No admins currently assigned to this location.</p>
                 )}
-                
-                <h4 className="font-medium text-gray-700 mb-2">Available Location Admins</h4>
-                {availableAdmins.length > 0 ? (
-                  availableAdmins.map(admin => (
-                    <div key={admin.id} className="flex items-center p-2 border-b border-gray-100">
-                      <input
-                        type="checkbox"
-                        id={admin.id}
-                        name={`admin-${admin.id}`}
-                        checked={selectedAdmins.includes(admin.id)}
-                        onChange={(e) => handleAdminSelection(admin.id, e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-3"
-                      />
-                      <label htmlFor={admin.id} className="flex flex-col cursor-pointer">
-                        <span className="font-medium text-gray-700">{admin.firstName} {admin.lastName}</span>
-                        <span className="text-sm text-gray-500">{admin.email}</span>
-                      </label>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-center py-4">No location admins available. Create users with Location Admin role first.</p>
+                {/* Display location name here */}
+                {locations.find(loc => loc.id === selectedLocation)?.name && (
+                   <p className="mb-4 text-sm text-gray-600">
+                     For Location: <span className="font-medium">{locations.find(loc => loc.id === selectedLocation)?.name}</span>
+                   </p>
                 )}
-              </div>
-              
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsAdminModalOpen(false)}
-                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveAdmins}
-                  className="flex items-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:bg-green-400"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting && (
-                    <svg className="mr-2 h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  )}
-                  {isSubmitting ? "Saving..." : "Save Admins"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
+               <div className="mb-4 max-h-60 overflow-y-auto rounded border border-gray-200 p-2">
+                 <p className="mb-2 text-sm font-medium text-gray-700">Available Admins (Role: LOCATION_ADMIN)</p>
+                 {availableAdmins.length === 0 ? (
+                    <p className="text-sm text-gray-500">No available admins found.</p>
+                 ) : (
+                   availableAdmins.map((admin) => (
+                     <div key={admin.id} className="flex items-center justify-between py-1">
+                       <label className="flex items-center text-sm text-gray-700">
+                         <input
+                           type="checkbox"
+                           checked={selectedAdmins.includes(admin.id)}
+                           onChange={(e) => handleAdminSelection(admin.id, e.target.checked)}
+                           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                         />
+                         <span className="ml-2">
+                           {admin.firstName || admin.lastName ? `${admin.firstName ?? ''} ${admin.lastName ?? ''}`.trim() : admin.email}
+                         </span>
+                       </label>
+                     </div>
+                   ))
+                 )}
+               </div>
+               <div className="flex justify-end">
+                 <button
+                   type="button"
+                   onClick={() => setIsAdminModalOpen(false)}
+                   className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                 >
+                   Cancel
+                 </button>
+                 <button
+                   type="button"
+                   onClick={handleSaveAdmins}
+                    disabled={isSubmitting}
+                   className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                 >
+                   {isSubmitting ? "Saving..." : "Save Admins"}
+                 </button>
+               </div>
+             </div>
+           </div>
+        )}
+      </div>
     </ModernDashboardLayout>
   );
 }

@@ -27,7 +27,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const toggleText = isSignIn 
     ? 'Don\'t have an account? Sign Up' 
     : 'Already have an account? Sign In';
-  const toggleLink = isSignIn ? '/auth/signup' : '/auth/signin';
+  const toggleLink = isSignIn ? '/auth/signup' : '/login';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -169,7 +169,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           </button>
         </form>
         <div className="mt-4 text-center">
-          <Link href="/auth/signin" className="text-sm text-blue-600 hover:text-blue-800">
+          <Link href="/login" className="text-sm text-blue-600 hover:text-blue-800">
             Already have an account? Sign In
           </Link>
         </div>

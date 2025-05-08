@@ -14,7 +14,7 @@ export default function AuthErrorPage() {
         </p>
         <div className="flex justify-center space-x-4">
           <Link
-            href="/auth/signin"
+            href="/login"
             className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             Sign In
