@@ -17,13 +17,15 @@ export async function POST(req: NextRequest) {
     let organizationId = null;
     let locationId = null
     if (token) {
-      const signupLink = await prisma.signupLink.findUnique({
-        where: { token },
-        include: { location: { include: { organization: true } } },
+      console.log('errrrrrr', token)
+      const [locationName, year]= token.split('_')
+      const location = await prisma.location.findFirst({
+        where: { slug: locationName },
       });
-      if (signupLink) {
-        organizationId = signupLink.location.organization.id;
-        locationId = signupLink.location.id;
+      console.log('locationxxxx', location?.organizationId)
+      if (location) {
+        organizationId = location.organizationId;
+        locationId = location.id;
       }
     }
     user = await prisma.user.create({

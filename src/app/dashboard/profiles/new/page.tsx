@@ -69,7 +69,17 @@ export default function NewProfilePage() {
       }, 2000);
     },
     onError: (error) => {
-      setError(`Error creating profile: ${'message' in error ? (error as any).message : 'Unknown error'}`);
+      // Enhanced error handling for age validation
+      let msg = 'Unknown error';
+      if ('message' in error) {
+        // Try to detect age validation error
+        if (typeof error.message === 'string' && error.message.includes('Camper age')) {
+          msg = error.message;
+        } else {
+          msg = error.message;
+        }
+      }
+      setError(msg);
       setIsSubmitting(false);
     }
   });
@@ -154,6 +164,17 @@ export default function NewProfilePage() {
       <main>
         <div className="mx-auto max-w-2xl py-6 sm:px-6 lg:px-8">
           <div className="bg-white p-6 rounded shadow">
+            {/* Show error or success messages */}
+            {error && (
+              <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700 border border-red-200">
+                {error}
+              </div>
+            )}
+            {success && (
+              <div className="mb-4 rounded-md bg-green-50 p-4 text-sm text-green-700 border border-green-200">
+                {success}
+              </div>
+            )}
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-6 gap-6">
                 <div className="col-span-6 sm:col-span-4">

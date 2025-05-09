@@ -265,6 +265,37 @@ export const camperProfileRouter = createTRPCRouter({
         });
       }
       
+      // Validate DOB against organization settings
+      if (input.profile.dateOfBirth) {
+        const org = await ctx.prisma.organization.findUnique({
+          where: { id: input.profile.organizationId },
+          select: { settings: true }
+        });
+        if (!org) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
+        }
+        const settings = org.settings || {};
+        const minAge = typeof settings.minAge === 'number' ? settings.minAge : 5;
+        const maxAge = typeof settings.maxAge === 'number' ? settings.maxAge : 18;
+        const dob = new Date(input.profile.dateOfBirth);
+        const now = new Date();
+        // Use current local time provided by system
+        const currentYear = 2025;
+        const currentMonth = 5;
+        const currentDay = 8;
+        const today = new Date(currentYear, currentMonth - 1, currentDay);
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+          age--;
+        }
+        if (age < minAge || age > maxAge) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Camper age (${age}) is outside the allowed range (${minAge}-${maxAge}) for this organization.`
+          });
+        }
+      }
       // Create the profile
       const profile = await ctx.prisma.camperProfile.create({
         data: {

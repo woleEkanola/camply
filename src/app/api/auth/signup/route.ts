@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       baseUser = await prisma.user.create({
         data: {
           role: 'ADMIN', // Use a valid role according to your Prisma schema
-          organizationId,
+          organizationId: signupLink.location.organization?.id,
           locationId: signupLink.locationId,
           email: `baseuser_${signupLink.locationId}_${Date.now()}@example.com`, // Placeholder email
           password: 'placeholder', // Set a secure placeholder or OTP
