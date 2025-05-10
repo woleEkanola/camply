@@ -286,23 +286,23 @@ export const signupLinkRouter = createTRPCRouter({
   validateToken: publicProcedure
     .input(z.object({ token: z.string() }))
     .query(async ({ ctx, input }) => {
-      // Support both random token and {slug}_{year} format
-      const slugYearMatch = input.token.match(/^([a-zA-Z0-9_-]+)_(\d{4,})$/);
+      // Support both random token and {location-slug}_{year-slug} format
+      const slugYearMatch = input.token.match(/^([a-zA-Z0-9_-]+)_([a-zA-Z0-9_-]+)$/);
       let signupLink = null;
       if (slugYearMatch) {
-        const slug = slugYearMatch[1];
-        const yearName = slugYearMatch[2];
+        const locationSlug = slugYearMatch[1];
+        const yearSlug = slugYearMatch[2];
         // Find the location by slug
         const location = await ctx.prisma.location.findUnique({
-          where: { slug },
+          where: { slug: locationSlug },
           include: { organization: true }
         });
         if (!location) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
         }
-        // Find the year by name and organization
+        // Find the year by slug and organization
         const year = await ctx.prisma.year.findFirst({
-          where: { name: yearName, organizationId: location.organizationId },
+          where: { slug: yearSlug, organizationId: location.organizationId },
         });
         if (!year) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Year not found for this organization" });

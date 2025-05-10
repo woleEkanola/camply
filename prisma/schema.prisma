@@ -167,6 +167,7 @@ model ProfileFieldValue {
 model Year {
   id               String          @id @default(cuid())
   name             String          // e.g., "2025", "Summer 2025"
+  slug             String          // URL-friendly version of name, e.g., "summer-2025"
   startDate        DateTime
   endDate          DateTime
   active           Boolean         @default(false)
@@ -179,6 +180,7 @@ model Year {
   updatedAt        DateTime        @updatedAt
 
   @@unique([organizationId, name])
+  @@unique([organizationId, slug])
 }
 
 model SignupLink {

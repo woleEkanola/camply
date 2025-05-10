@@ -2,9 +2,18 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 
+// Helper function to generate a slug from a name
+const generateSlug = (name: string): string => {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, '') // Remove special characters
+    .replace(/\s+/g, '-'); // Replace spaces with hyphens
+};
+
 // Schema for year data validation
 const yearSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
+  slug: z.string().optional(), // Optional because we'll generate it if not provided
   startDate: z.date(),
   endDate: z.date(),
   active: z.boolean().default(false),
@@ -174,9 +183,15 @@ export const yearRouter = createTRPCRouter({
         });
       }
       
+      // Generate slug if not provided
+      const data = { ...input };
+      if (!data.slug) {
+        data.slug = generateSlug(data.name);
+      }
+      
       // Create the year
       const year = await ctx.prisma.year.create({
-        data: input
+        data
       });
       
       // If this is the first year or it's set as active, make it the active year for the organization
@@ -243,9 +258,16 @@ export const yearRouter = createTRPCRouter({
       }
       
       // Update the year
+      const data = { ...input.data };
+      
+      // If name is being updated but slug isn't, regenerate the slug
+      if (data.name && !data.slug) {
+        data.slug = generateSlug(data.name);
+      }
+      
       const updatedYear = await ctx.prisma.year.update({
         where: { id: input.id },
-        data: input.data
+        data
       });
       
       // If setting this year as active, update the organization's active year

@@ -3,6 +3,16 @@ const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
+// Helper function to create URL-friendly slugs
+function slugify(text: string) {
+  return text.toString().toLowerCase()
+    .replace(/\s+/g, '-') // Replace spaces with -
+    .replace(/[^\w\-]+/g, '') // Remove all non-word chars
+    .replace(/\-\-+/g, '-') // Replace multiple - with single -
+    .replace(/^-+/, '') // Trim - from start of text
+    .replace(/-+$/, ''); // Trim - from end of text
+}
+
 async function main() {
   // Create a Super Admin user if it doesn't exist
   const superAdminEmail = "superadmin@camply.com";
@@ -34,9 +44,11 @@ async function main() {
   
   // Create a default year for the organization
   const currentYear = new Date().getFullYear();
+  
   const year = await prisma.year.create({
     data: {
       name: `${currentYear}`,
+      slug: slugify(`${currentYear}`),
       startDate: new Date(currentYear, 0, 1), // January 1st of current year
       endDate: new Date(currentYear, 11, 31), // December 31st of current year
       active: true,
@@ -89,14 +101,6 @@ async function main() {
   const locationAdminPassword = await bcrypt.hash("password123", 10);
   
   // Create a location
-  // Simple slugify function
-  function slugify(text: string) {
-    return text.toString().toLowerCase().replace(/\s+/g, '-') // Replace spaces with -
-      .replace(/[^\w\-]+/g, '') // Remove all non-word chars
-      .replace(/\-\-+/g, '-') // Replace multiple - with single -
-      .replace(/^-+/, '') // Trim - from start of text
-      .replace(/-+$/, ''); // Trim - from end of text
-  }
 
   const location = await prisma.location.create({
     data: {

@@ -693,15 +693,15 @@ export default function LocationsPage() {
     });
   };
 
-  // Copy signup link to clipboard (new slug_year format)
+  // Copy signup link to clipboard (using location-slug_year-slug format)
   const handleCopySignupLink = (locationId: string) => {
     const baseUrl = window.location.origin;
     const link = getSignupLinkForLocation(locationId);
-    if (!link || !link.location?.slug || !link.year?.name) {
+    if (!link || !link.location?.slug || !link.year?.slug) {
       setError("Signup link not available for this location.");
       return;
     }
-    const signupUrl = `${baseUrl}/signup/${link.location.slug}_${link.year.name}`;
+    const signupUrl = `${baseUrl}/signup/${link.location.slug}_${link.year.slug}`;
     navigator.clipboard.writeText(signupUrl)
       .then(() => {
         setCopiedLinkId(locationId);
