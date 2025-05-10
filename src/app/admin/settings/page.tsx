@@ -36,9 +36,14 @@ export default function AdminSettingsPage() {
         <p className="mb-6 text-gray-600 text-lg">Configure registration age range and cut-off date for your organization. These settings control camper eligibility for registration.</p>
         <div className="mb-6">
           <AgeRangeSettings
+            organizationId={organizationId}
             initialMin={initialMin}
             initialMax={initialMax}
             initialCutoffDate={initialCutoffDate}
+            onSettingsSaved={() => {
+              // Refetch organization settings after save
+              refetch();
+            }}
           />
         </div>
       </div>

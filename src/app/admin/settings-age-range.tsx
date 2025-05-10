@@ -1,11 +1,21 @@
 "use client";
 import { useState } from "react";
+import { api } from "@/utils/trpc";
 
-export default function AgeRangeSettings({ initialMin = 5, initialMax = 18, initialCutoffDate, onSave }: {
+export default function AgeRangeSettings({
+  organizationId,
+  initialMin = 5,
+  initialMax = 18,
+  initialCutoffDate,
+  onSave,
+  onSettingsSaved
+}: {
+  organizationId: string;
   initialMin?: number;
   initialMax?: number;
   initialCutoffDate?: string;
   onSave?: (min: number, max: number, cutoffDate: string) => void;
+  onSettingsSaved?: () => void;
 }) {
   const [minAge, setMinAge] = useState(initialMin);
   const [maxAge, setMaxAge] = useState(initialMax);
@@ -14,21 +24,31 @@ export default function AgeRangeSettings({ initialMin = 5, initialMax = 18, init
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
+  const updateSettings = api.organization.updateSettings.useMutation();
+
   const handleSave = async () => {
     setSaving(true);
     setError("");
     try {
-      // TODO: Replace with real API call
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await updateSettings.mutateAsync({
+        organizationId,
+        settings: {
+          minAge,
+          maxAge,
+          cutoffDate,
+        },
+      });
       setSuccess(true);
       if (onSave) onSave(minAge, maxAge, cutoffDate);
+      if (onSettingsSaved) onSettingsSaved();
       setTimeout(() => setSuccess(false), 2000);
-    } catch (e) {
-      setError("Failed to save settings");
+    } catch (e: any) {
+      setError(e?.message || "Failed to save settings");
     } finally {
       setSaving(false);
     }
   };
+
 
   return (
     <div className="max-w-md p-6 bg-white rounded shadow">
