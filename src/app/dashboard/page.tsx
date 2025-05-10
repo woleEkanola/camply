@@ -81,8 +81,8 @@ export default function UserDashboard() {
 
   if (status === "loading" || isLoadingProfiles || isLoadingRegistrations || isLoadingFields) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-emerald-500"></div>
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-[#E67E22]"></div>
       </div>
     );
   }
@@ -92,12 +92,12 @@ export default function UserDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-gray-900">User Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Welcome back, {session.user.name || session.user.email}
+    <div className="min-h-screen bg-white">
+      <header className="border-b border-gray-200">
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+          <h1 className="text-2xl font-bold text-gray-900">User Dashboard</h1>
+          <p className="text-sm text-gray-600">
+            Welcome back, {session.user.email}
           </p>
         </div>
       </header>
@@ -105,14 +105,14 @@ export default function UserDashboard() {
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* Tabs */}
         <div className="mb-6 border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
+          <nav className="flex space-x-8">
             <button
               onClick={() => setActiveTab("profiles")}
               className={`${
                 activeTab === "profiles"
-                  ? "border-emerald-500 text-emerald-600"
-                  : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-              } whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium`}
+                  ? "border-b-2 border-[#E67E22] text-[#E67E22] font-medium"
+                  : "text-gray-500 hover:text-gray-700"
+              } px-1 py-4 text-sm`}
             >
               Camper Profiles
             </button>
@@ -120,9 +120,9 @@ export default function UserDashboard() {
               onClick={() => setActiveTab("registrations")}
               className={`${
                 activeTab === "registrations"
-                  ? "border-emerald-500 text-emerald-600"
-                  : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-              } whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium`}
+                  ? "border-b-2 border-[#E67E22] text-[#E67E22] font-medium"
+                  : "text-gray-500 hover:text-gray-700"
+              } px-1 py-4 text-sm`}
             >
               Registrations
             </button>

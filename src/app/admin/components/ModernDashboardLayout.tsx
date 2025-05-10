@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -27,6 +27,26 @@ export default function ModernDashboardLayout({
   const pathname = usePathname();
   const { data: session } = useSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [organizationName, setOrganizationName] = useState<string>("");
+
+  // Fetch organization name when component mounts
+  useEffect(() => {
+    const fetchOrganization = async () => {
+      if (session?.user?.organizationId) {
+        try {
+          const response = await fetch(`/api/organizations/${session.user.organizationId}`);
+          if (response.ok) {
+            const data = await response.json();
+            setOrganizationName(data.name);
+          }
+        } catch (error) {
+          console.error("Error fetching organization:", error);
+        }
+      }
+    };
+
+    fetchOrganization();
+  }, [session?.user?.organizationId]);
 
   const handleLogout = async () => {
     await signOut({ redirect: false });
@@ -94,19 +114,23 @@ export default function ModernDashboardLayout({
       <div
         className={`${
           sidebarOpen ? "w-64" : "w-20"
-        } fixed inset-y-0 left-0 z-10 flex flex-col bg-emerald-600 text-white transition-all duration-300`}
+        } fixed inset-y-0 left-0 z-10 flex flex-col bg-[#E67E22] text-white transition-all duration-300`}
       >
         <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center">
             {sidebarOpen ? (
-              <span className="text-xl font-bold">Camply</span>
+              <span className="text-xl font-bold">
+                {organizationName || "Admin Dashboard"}
+              </span>
             ) : (
-              <span className="text-xl font-bold">C</span>
+              <span className="text-xl font-bold">
+                {organizationName ? organizationName.charAt(0) : "A"}
+              </span>
             )}
           </div>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="rounded-md p-1 text-white hover:bg-emerald-700"
+            className="rounded-md p-1 text-white hover:bg-[#D35400]"
           >
             <svg
               className="h-6 w-6"
@@ -147,8 +171,8 @@ export default function ModernDashboardLayout({
                     href={item.href}
                     className={`flex items-center rounded-md px-2 py-2 text-sm font-medium ${
                       item.current
-                        ? "bg-emerald-700 text-white"
-                        : "text-white hover:bg-emerald-700"
+                        ? "bg-[#D35400] text-white"
+                        : "text-white hover:bg-[#D35400]"
                     }`}
                   >
                     <item.icon className="mr-3 h-5 w-5" aria-hidden="true" />
@@ -160,10 +184,10 @@ export default function ModernDashboardLayout({
           </nav>
         </div>
 
-        <div className="border-t border-emerald-700 p-4">
+        <div className="border-t border-[#D35400] p-4">
           <button
             onClick={handleLogout}
-            className="flex w-full items-center rounded-md px-2 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+            className="flex w-full items-center rounded-md px-2 py-2 text-sm font-medium text-white hover:bg-[#D35400]"
           >
             <ArrowRightOnRectangleIcon className="mr-3 h-5 w-5" aria-hidden="true" />
             <span className={sidebarOpen ? "" : "hidden"}>Logout</span>
@@ -179,7 +203,7 @@ export default function ModernDashboardLayout({
               <span className="text-xl font-bold text-gray-800">
                 {session?.user?.email && (
                   <div className="flex items-center">
-                    <span className="mr-2 rounded-full bg-emerald-100 p-2 text-emerald-600">
+                    <span className="mr-2 rounded-full bg-orange-100 p-2 text-[#E67E22]">
                       {session.user.email.charAt(0).toUpperCase()}
                     </span>
                     <span>{session.user.email}</span>

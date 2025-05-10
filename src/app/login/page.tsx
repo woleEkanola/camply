@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import Image from "next/image";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
-  const [step, setStep] = useState(1); // 1: email, 2: otp/password
+  const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [isBaseUser, setIsBaseUser] = useState(false);
@@ -19,24 +20,29 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      // Check if email exists and is base_user
       const res = await fetch("/api/base-user/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email }),
       });
       const data = await res.json();
+      
       if (res.status === 200) {
+        // Success - OTP sent to base user
         setIsBaseUser(true);
         setStep(2);
-      } else if (data.message && data.message.includes("No user found") || data.message?.includes("not a base user")) {
-        setError("No base user found with this email. If you are an admin, please use your password.");
+      } else if (data.message?.includes("not a base user")) {
+        // User exists but is an admin type - proceed to password
         setIsBaseUser(false);
         setStep(2);
+      } else if (data.message?.includes("No user found")) {
+        // No user found with this email
+        setError("Email not found. Please check and try again.");
       } else {
+        // Other errors
         setError(data.message || "Failed to send OTP");
       }
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.");
     } finally {
       setLoading(false);
@@ -48,48 +54,38 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      if (isBaseUser) {
-        // OTP login
-        const authRes = await signIn("credentials", {
-          redirect: false,
-          email,
-          otp,
-        });
-        if (authRes?.error) {
-          setError("OTP authentication failed");
-        } else {
-          // Fetch session to get user role
-          const sessionRes = await fetch("/api/auth/session");
-          const session = await sessionRes.json();
-          const role = session?.user?.role;
-          if (role === "BASE_USER") router.push("/dashboard");
-          else if (role === "OWNER" || role === "ADMIN") router.push("/admin");
-          else if (role === "LOCATION_ADMIN") router.push("/location-admin-dashboard");
-          else if (role === "SUPER_ADMIN") router.push("/super-admin");
-          else router.push("/");
-        }
+      const authRes = await signIn("credentials", {
+        redirect: false,
+        email,
+        ...(isBaseUser ? { otp } : { password }),
+      });
+
+      if (authRes?.error) {
+        setError(isBaseUser ? "OTP authentication failed" : "Password authentication failed");
       } else {
-        // Password login
-        const authRes = await signIn("credentials", {
-          redirect: false,
-          email,
-          password,
-        });
-        if (authRes?.error) {
-          setError("Password authentication failed");
-        } else {
-          // Fetch session to get user role
-          const sessionRes = await fetch("/api/auth/session");
-          const session = await sessionRes.json();
-          const role = session?.user?.role;
-          if (role === "OWNER" || role === "ADMIN") router.push("/admin");
-          else if (role === "LOCATION_ADMIN") router.push("/location-admin-dashboard");
-          else if (role === "SUPER_ADMIN") router.push("/super-admin");
-          else if (role === "BASE_USER") router.push("/dashboard");
-          else router.push("/");
+        const sessionRes = await fetch("/api/auth/session");
+        const session = await sessionRes.json();
+        const role = session?.user?.role;
+
+        switch (role) {
+          case "BASE_USER":
+            router.push("/dashboard");
+            break;
+          case "OWNER":
+          case "ADMIN":
+            router.push("/admin");
+            break;
+          case "LOCATION_ADMIN":
+            router.push("/location-admin-dashboard");
+            break;
+          case "SUPER_ADMIN":
+            router.push("/super-admin");
+            break;
+          default:
+            router.push("/");
         }
       }
-    } catch (err) {
+    } catch {
       setError("Authentication failed. Try again.");
     } finally {
       setLoading(false);
@@ -97,91 +93,94 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-100">
-      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
-        <h1 className="mb-6 text-center text-2xl font-bold text-gray-800">Login to Camply</h1>
-        {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
-            {error}
+    <div className="flex h-screen overflow-hidden font-sans">
+      {/* Left Panel */}
+      <div className="w-[50%] h-full flex items-center justify-center p-4">
+        <div className="ml-[5%] w-[76%] h-[90vh] bg-[#E67E22] flex flex-col items-center justify-center p-6 text-white rounded-2xl">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-wide">JESUS TRIBE</h1>
+          <h2 className="text-2xl md:text-3xl font-medium mt-1">Teens Camp</h2>
+
+          <div className="my-4 md:my-6">
+            <Image src="/logo.png" alt="Logo" width={120} height={120} />
           </div>
-        )}
-        {step === 1 && (
-          <form onSubmit={handleEmailSubmit}>
-            <div className="mb-4">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
-              <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                required
+
+          <div className="w-full flex-grow flex items-center justify-center max-h-[40vh] relative">
+            <div className="absolute w-[120%] left-1/2 -translate-x-1/2">
+              <Image
+                src="/group_pix.png"
+                alt="Group"
+                width={700}
+                height={280}
+                className="rounded-lg w-full object-contain"
+                priority
               />
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
-            >
-              {loading ? "Sending..." : "Next"}
-            </button>
-          </form>
-        )}
-        {step === 2 && (
-          <form onSubmit={handleAuthSubmit}>
-            {isBaseUser ? (
-              <>
-                <div className="mb-6">
-                  <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
-                    OTP
-                  </label>
-                  <input
-                    type="text"
-                    id="otp"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  {loading ? "Verifying..." : "Verify OTP"}
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="mb-6">
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    id="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  {loading ? "Logging in..." : "Login"}
-                </button>
-              </>
-            )}
-          </form>
-        )}
-        <div className="mt-4 text-center text-sm text-gray-600">
-          <p>Super Admin: superadmin@camply.com / password123</p>
+          </div>
+        </div>
+      </div>
+      {/* Right Panel */}
+      <div className="w-[44%] h-full flex items-center justify-center bg-[#FDFDFD] p-4">
+        <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
+          <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Login</h2>
+
+          {error && (
+            <div className="mb-4 rounded-md bg-red-100 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {step === 1 && (
+            <form onSubmit={handleEmailSubmit}>
+              <div className="mb-5">
+                <input
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50"
+              >
+                {loading ? "Sending..." : "Next"}
+              </button>
+            </form>
+          )}
+
+          {step === 2 && (
+            <form onSubmit={handleAuthSubmit}>
+              <div className="mb-5">
+                <input
+                  type={isBaseUser ? "text" : "password"}
+                  placeholder={isBaseUser ? "Enter OTP" : "Enter Password"}
+                  value={isBaseUser ? otp : password}
+                  onChange={(e) =>
+                    isBaseUser ? setOtp(e.target.value) : setPassword(e.target.value)
+                  }
+                  required
+                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50"
+              >
+                {loading
+                  ? isBaseUser
+                    ? "Verifying..."
+                    : "Logging in..."
+                  : isBaseUser
+                  ? "Verify OTP"
+                  : "Login"}
+              </button>
+            </form>
+          )}
+
         </div>
       </div>
     </div>

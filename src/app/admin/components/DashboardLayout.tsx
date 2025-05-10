@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { useState, useEffect, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -26,6 +26,26 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
   const { data: session, status } = useSession();
+  const [organizationName, setOrganizationName] = useState<string>("");
+
+  // Fetch organization name when component mounts
+  useEffect(() => {
+    const fetchOrganization = async () => {
+      if (session?.user?.organizationId) {
+        try {
+          const response = await fetch(`/api/organizations/${session.user.organizationId}`);
+          if (response.ok) {
+            const data = await response.json();
+            setOrganizationName(data.name);
+          }
+        } catch (error) {
+          console.error("Error fetching organization:", error);
+        }
+      }
+    };
+
+    fetchOrganization();
+  }, [session?.user?.organizationId]);
 
   // Only show sidebar links based on user role
   const isLocationAdmin = session?.user?.role === "LOCATION_ADMIN";
@@ -47,7 +67,7 @@ export default function DashboardLayout({
   if (status === "loading") {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-[#E67E22]"></div>
       </div>
     );
   }
@@ -69,13 +89,13 @@ export default function DashboardLayout({
         }`}
       >
         <div className="mb-8 flex items-center justify-center">
-          <h1 className="text-xl font-bold text-blue-600">Camply Admin</h1>
+          <h1 className="text-xl font-bold text-[#E67E22]">{organizationName || "Admin"} Dashboard</h1>
         </div>
 
-        <div className="mb-6 rounded-lg bg-blue-50 p-4">
+        <div className="mb-6 rounded-lg bg-orange-50 p-4">
           <div className="mb-2 text-sm font-medium text-gray-500">Logged in as</div>
           <div className="font-medium text-gray-900">{session?.user?.email}</div>
-          <div className="mt-1 text-sm text-blue-600">
+          <div className="mt-1 text-sm text-[#E67E22]">
             {session?.user?.role} {session?.user?.organizationId ? "• Organization" : ""}
           </div>
         </div>
@@ -87,8 +107,8 @@ export default function DashboardLayout({
                 href="/admin"
                 className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                   activeTab === "locations"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-700 hover:bg-gray-100"
+                    ? "bg-orange-50 text-[#E67E22]"
+                    : "text-gray-700 hover:bg-orange-50"
                 }`}
               >
                 <HomeIcon className="mr-3 h-5 w-5" />
@@ -99,8 +119,8 @@ export default function DashboardLayout({
                 href="/admin?tab=locations"
                 className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                   activeTab === "locations"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-700 hover:bg-gray-100"
+                    ? "bg-orange-50 text-[#E67E22]"
+                    : "text-gray-700 hover:bg-orange-50"
                 }`}
               >
                 <BuildingOfficeIcon className="mr-3 h-5 w-5" />
@@ -111,8 +131,8 @@ export default function DashboardLayout({
                 href="/admin?tab=admins"
                 className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                   activeTab === "admins"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-700 hover:bg-gray-100"
+                    ? "bg-orange-50 text-[#E67E22]"
+                    : "text-gray-700 hover:bg-orange-50"
                 }`}
               >
                 <UserGroupIcon className="mr-3 h-5 w-5" />
@@ -127,8 +147,8 @@ export default function DashboardLayout({
               href={link.href}
               className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                 activeTab === link.href.replace("/location-admin-dashboard", "location-admin")
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-orange-50 text-[#E67E22]"
+                  : "text-gray-700 hover:bg-orange-50"
               }`}
             >
               <link.icon className="mr-3 h-5 w-5" />
@@ -140,8 +160,8 @@ export default function DashboardLayout({
             href={isLocationAdmin ? "/location-admin-dashboard" : "/admin/location-admin-dashboard"}
             className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
               activeTab === "location-admin"
-                ? "bg-blue-50 text-blue-700"
-                : "text-gray-700 hover:bg-gray-100"
+                ? "bg-orange-50 text-[#E67E22]"
+                : "text-gray-700 hover:bg-orange-50"
             }`}
           >
             <UserGroupIcon className="mr-3 h-5 w-5" />
@@ -153,8 +173,8 @@ export default function DashboardLayout({
               href="/admin?tab=settings"
               className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                 activeTab === "settings"
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-orange-50 text-[#E67E22]"
+                  : "text-gray-700 hover:bg-orange-50"
               }`}
             >
               <Cog6ToothIcon className="mr-3 h-5 w-5" />
