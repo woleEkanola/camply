@@ -115,135 +115,332 @@ function SignupForm({ token }: { token: string }) {
 
   if (isSignupLinkLoading) {
     return (
-      <div className="flex h-screen overflow-hidden font-sans">
-        <div className="w-full flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#E67E22] mb-4"></div>
-          <p className="ml-3">Validating signup link...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (signupLinkError) {
-    return (
-      <div className="flex h-screen overflow-hidden font-sans">
-        {/* Left Panel */}
-        <div className="w-[50%] h-full flex items-center justify-center p-4">
-          <div className="ml-[5%] w-[76%] h-[90vh] bg-[#E67E22] flex flex-col items-center justify-center p-6 text-white rounded-2xl">
-            <h1 className="text-4xl md:text-5xl font-bold tracking-wide">JESUS TRIBE</h1>
-            <h2 className="text-2xl md:text-3xl font-medium mt-1">Teens Camp</h2>
-
-            <div className="my-4 md:my-6">
-              <Image src="/logo.png" alt="Logo" width={120} height={120} />
+      <>
+        {/* Mobile View */}
+        <div className="md:hidden relative h-screen overflow-hidden font-sans">
+          {/* Full screen orange background with image */}
+          <div className="absolute inset-0 bg-[#E67E22] flex flex-col items-center">
+            {/* Logo and group image positioning */}
+            <div className="mt-6 mb-6">
+              <Image src="/logo.png" alt="Logo" width={100} height={100} />
             </div>
-
-            <div className="w-full flex-grow flex items-center justify-center max-h-[40vh] relative">
-              <div className="absolute w-[120%] left-1/2 -translate-x-1/2">
+            
+            <div className="w-full relative mt-4">
+              <div className="w-full">
                 <Image
                   src="/group_pix.png"
                   alt="Group"
                   width={700}
                   height={280}
-                  className="rounded-lg w-full object-contain"
+                  className="w-full object-contain max-h-[35vh]"
                   priority
                 />
               </div>
             </div>
           </div>
-        </div>
-        {/* Right Panel */}
-        <div className="w-[44%] h-full flex items-center justify-center bg-[#FDFDFD] p-4">
-          <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Signup Error</h2>
-            <div className="text-red-600 mb-4 p-3 bg-red-100 rounded-lg">Invalid or expired signup link.</div>
-            <div className="text-center mt-4">
-              <Link href="/login" className="text-[#E67E22] hover:underline font-medium">Return to login</Link>
+
+          {/* Loading indicator with higher z-index */}
+          <div className="absolute inset-x-0 bottom-[20%] z-10 flex justify-center">
+            <div className="w-[85%] bg-white p-6 rounded-2xl shadow-lg text-center">
+              <div className="flex justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#E67E22]"></div>
+              </div>
+              <p className="mt-4 text-gray-700">Validating signup link...</p>
+            </div>
+          </div>
+          
+          {/* Jesus Tribe text below login form with reduced size */}
+          <div className="absolute inset-x-0 bottom-[5%] z-10 flex justify-center">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold tracking-wide text-white">JESUS TRIBE</h1>
+              <h2 className="text-lg font-medium mt-1 text-white">Teens Camp</h2>
             </div>
           </div>
         </div>
-      </div>
+
+        {/* Desktop View */}
+        <div className="hidden md:flex h-screen overflow-hidden font-sans">
+          <div className="w-full flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#E67E22] mb-4"></div>
+            <p className="ml-3">Validating signup link...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (signupLinkError) {
+    return (
+      <>
+        {/* Mobile View */}
+        <div className="md:hidden relative h-screen overflow-hidden font-sans">
+          {/* Full screen orange background with image */}
+          <div className="absolute inset-0 bg-[#E67E22] flex flex-col items-center">
+            {/* Logo and group image positioning */}
+            <div className="mt-6 mb-6">
+              <Image src="/logo.png" alt="Logo" width={100} height={100} />
+            </div>
+            
+            <div className="w-full relative mt-4">
+              <div className="w-full">
+                <Image
+                  src="/group_pix.png"
+                  alt="Group"
+                  width={700}
+                  height={280}
+                  className="w-full object-contain max-h-[35vh]"
+                  priority
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Error message with higher z-index */}
+          <div className="absolute inset-x-0 bottom-[20%] z-10 flex justify-center">
+            <div className="w-[85%] bg-white p-6 rounded-2xl shadow-lg">
+              <h2 className="text-xl font-bold text-center mb-4 text-gray-800">Invalid Signup Link</h2>
+              <div className="bg-red-100 p-4 rounded-lg text-red-700 mb-6">
+                {signupLinkError.message || "The signup link is invalid or has expired."}
+              </div>
+              <Link href="/login" className="block w-full text-center py-3 bg-[#E67E22] text-white rounded-full hover:bg-[#D35400] transition">
+                Go to Login
+              </Link>
+            </div>
+          </div>
+          
+          {/* Jesus Tribe text below form with reduced size */}
+          <div className="absolute inset-x-0 bottom-[5%] z-10 flex justify-center">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold tracking-wide text-white">JESUS TRIBE</h1>
+              <h2 className="text-lg font-medium mt-1 text-white">Teens Camp</h2>
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop View - Original Layout */}
+        <div className="hidden md:flex h-screen overflow-hidden font-sans">
+          {/* Left Panel */}
+          <div className="w-[50%] h-full flex items-center justify-center p-4">
+            <div className="ml-[5%] w-[76%] h-[90vh] bg-[#E67E22] flex flex-col items-center justify-center p-6 text-white rounded-2xl">
+              <h1 className="text-4xl md:text-5xl font-bold tracking-wide">JESUS TRIBE</h1>
+              <h2 className="text-2xl md:text-3xl font-medium mt-1">Teens Camp</h2>
+
+              <div className="my-4 md:my-6">
+                <Image src="/logo.png" alt="Logo" width={120} height={120} />
+              </div>
+
+              <div className="w-full flex-grow flex items-center justify-center max-h-[40vh] relative">
+                <div className="absolute w-[120%] left-1/2 -translate-x-1/2">
+                  <Image
+                    src="/group_pix.png"
+                    alt="Group"
+                    width={700}
+                    height={280}
+                    className="rounded-lg w-full object-contain"
+                    priority
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Right Panel */}
+          <div className="w-[44%] h-full flex items-center justify-center bg-[#FDFDFD] p-4">
+            <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
+              <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Invalid Signup Link</h2>
+              <div className="bg-red-100 p-4 rounded-lg text-red-700 mb-6">
+                {signupLinkError.message || "The signup link is invalid or has expired."}
+              </div>
+              <Link href="/login" className="block w-full text-center py-3 bg-[#E67E22] text-white rounded-full hover:bg-[#D35400] transition">
+                Go to Login
+              </Link>
+            </div>
+          </div>
+        </div>
+      </>
     );
   }
 
   // Step 1: Collect Email and create user, send OTP
   if (step === 'email') {
     return (
-      <div className="flex h-screen overflow-hidden font-sans">
-        {/* Left Panel */}
-        <div className="w-[50%] h-full flex items-center justify-center p-4">
-          <div className="ml-[5%] w-[76%] h-[90vh] bg-[#E67E22] flex flex-col items-center justify-center p-6 text-white rounded-2xl">
-            <h1 className="text-4xl md:text-5xl font-bold tracking-wide">JESUS TRIBE</h1>
-            <h2 className="text-2xl md:text-3xl font-medium mt-1">Teens Camp</h2>
-
-            <div className="my-4 md:my-6">
-              <Image src="/logo.png" alt="Logo" width={120} height={120} />
+      <>
+        {/* Mobile View */}
+        <div className="md:hidden relative h-screen overflow-hidden font-sans">
+          {/* Full screen orange background with image */}
+          <div className="absolute inset-0 bg-[#E67E22] flex flex-col items-center">
+            {/* Logo and group image positioning */}
+            <div className="mt-6 mb-6">
+              <Image src="/logo.png" alt="Logo" width={100} height={100} />
             </div>
-
-            <div className="w-full flex-grow flex items-center justify-center max-h-[40vh] relative">
-              <div className="absolute w-[120%] left-1/2 -translate-x-1/2">
+            
+            <div className="w-full relative mt-4">
+              <div className="w-full">
                 <Image
                   src="/group_pix.png"
                   alt="Group"
                   width={700}
                   height={280}
-                  className="rounded-lg w-full object-contain"
+                  className="w-full object-contain max-h-[35vh]"
                   priority
                 />
               </div>
             </div>
           </div>
-        </div>
-        {/* Right Panel */}
-        <div className="w-[44%] h-full flex items-center justify-center bg-[#FDFDFD] p-4">
-          <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Sign Up</h2>
-            
-            {error && (
-              <div className="mb-4 rounded-md bg-red-100 p-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-            
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              setIsLoading(true);
-              setError("");
-              // Create base user and send OTP
-              const res = await fetch('/api/base-user/create-and-send-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, token }),
-              });
-              const data = await res.json();
-              if (!res.ok) {
-                setError(data.message || 'Error creating user or sending OTP');
-                setIsLoading(false);
-                return;
-              }
-              setStep('otp');
-              setIsLoading(false);
-            }}>
-              <div className="mb-5">
-                <input 
-                  type="email" 
-                  placeholder="Email"
-                  value={email} 
-                  onChange={e => setEmail(e.target.value)} 
-                  required 
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
-                />
-              </div>
-              <button 
-                className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50" 
-                type="submit" 
-                disabled={isLoading}
-              >
-                {isLoading ? 'Processing...' : 'Continue'}
-              </button>
-            </form>
+
+          {/* Email form with higher z-index */}
+          <div className="absolute inset-x-0 bottom-[20%] z-10 flex justify-center">
+            <div className="w-[85%] bg-white p-6 rounded-2xl shadow-lg">
+              <h2 className="text-xl font-bold text-center mb-6 text-gray-800">Sign Up</h2>
+              
+              {error && (
+                <div className="mb-4 rounded-md bg-red-100 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+              
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setError("");
+                setIsLoading(true);
+                try {
+                  const res = await fetch('/api/base-user/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                      email, 
+                      organizationId: signupLinkData?.organizationId,
+                      locationId: signupLinkData?.locationId,
+                      yearId: signupLinkData?.yearId
+                    }),
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    setStep('otp');
+                  } else {
+                    setError(data.message || 'Failed to create account');
+                  }
+                } catch (err) {
+                  setError('Network error. Please try again.');
+                } finally {
+                  setIsLoading(false);
+                }
+              }}>
+                <div className="mb-5">
+                  <input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50"
+                >
+                  {isLoading ? "Sending..." : "Next"}
+                </button>
+              </form>
+            </div>
+          </div>
+          
+          {/* Jesus Tribe text below form with reduced size */}
+          <div className="absolute inset-x-0 bottom-[5%] z-10 flex justify-center">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold tracking-wide text-white">JESUS TRIBE</h1>
+              <h2 className="text-lg font-medium mt-1 text-white">Teens Camp</h2>
+            </div>
           </div>
         </div>
-      </div>
+
+        {/* Desktop View - Original Layout */}
+        <div className="hidden md:flex h-screen overflow-hidden font-sans">
+          {/* Left Panel */}
+          <div className="w-[50%] h-full flex items-center justify-center p-4">
+            <div className="ml-[5%] w-[76%] h-[90vh] bg-[#E67E22] flex flex-col items-center justify-center p-6 text-white rounded-2xl">
+              <h1 className="text-4xl md:text-5xl font-bold tracking-wide">JESUS TRIBE</h1>
+              <h2 className="text-2xl md:text-3xl font-medium mt-1">Teens Camp</h2>
+
+              <div className="my-4 md:my-6">
+                <Image src="/logo.png" alt="Logo" width={120} height={120} />
+              </div>
+
+              <div className="w-full flex-grow flex items-center justify-center max-h-[40vh] relative">
+                <div className="absolute w-[120%] left-1/2 -translate-x-1/2">
+                  <Image
+                    src="/group_pix.png"
+                    alt="Group"
+                    width={700}
+                    height={280}
+                    className="rounded-lg w-full object-contain"
+                    priority
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Right Panel */}
+          <div className="w-[44%] h-full flex items-center justify-center bg-[#FDFDFD] p-4">
+            <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
+              <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Sign Up</h2>
+              
+              {error && (
+                <div className="mb-4 rounded-md bg-red-100 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+              
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setError("");
+                setIsLoading(true);
+                try {
+                  const res = await fetch('/api/base-user/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                      email, 
+                      organizationId: signupLinkData?.organizationId,
+                      locationId: signupLinkData?.locationId,
+                      yearId: signupLinkData?.yearId
+                    }),
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    setStep('otp');
+                  } else {
+                    setError(data.message || 'Failed to create account');
+                  }
+                } catch (err) {
+                  setError('Network error. Please try again.');
+                } finally {
+                  setIsLoading(false);
+                }
+              }}>
+                <div className="mb-5">
+                  <input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50"
+                >
+                  {isLoading ? "Sending..." : "Next"}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </>
     );
   }
 

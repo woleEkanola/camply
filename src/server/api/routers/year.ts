@@ -184,15 +184,10 @@ export const yearRouter = createTRPCRouter({
       }
       
       // Generate slug if not provided
-      const data = { 
-        name: input.name,
-        active: input.active,
-        organizationId: input.organizationId,
-        startDate: input.startDate,
-        endDate: input.endDate,
-        // Always provide a slug, either from input or generated
-        slug: input.slug || generateSlug(input.name)
-      };
+      const data = { ...input };
+      if (!data.slug) {
+        data.slug = generateSlug(data.name);
+      }
       
       // Create the year
       const year = await ctx.prisma.year.create({
@@ -263,19 +258,11 @@ export const yearRouter = createTRPCRouter({
       }
       
       // Update the year
-      let data = { ...input.data };
+      const data = { ...input.data };
       
       // If name is being updated but slug isn't, regenerate the slug
       if (data.name && !data.slug) {
-        data = {
-          ...data,
-          slug: generateSlug(data.name)
-        };
-      }
-      
-      // Ensure slug is never undefined if it's being updated
-      if (data.slug === undefined) {
-        delete data.slug;
+        data.slug = generateSlug(data.name);
       }
       
       const updatedYear = await ctx.prisma.year.update({
