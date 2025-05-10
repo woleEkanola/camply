@@ -15,6 +15,7 @@ export interface SignupLink {
   year: {
     id: string;
     name: string;
+    slug: string;
     active: boolean;
   };
 }

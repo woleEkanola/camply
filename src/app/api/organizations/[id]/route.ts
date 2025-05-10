@@ -1,24 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "../../../../server/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../server/auth/authOptions";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// Define the GET handler for /api/organizations/[id]
+export async function GET(request: Request) {
   try {
+    // Extract the ID from the URL
+    const url = new URL(request.url);
+    const id = url.pathname.split('/').pop();
+    
+    if (!id) {
+      return NextResponse.json({ error: "Organization ID is required" }, { status: 400 });
+    }
+
     // Check authentication
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const organizationId = params.id;
-    
     // Fetch organization data
     const organization = await prisma.organization.findUnique({
-      where: { id: organizationId },
+      where: { id },
       select: {
         id: true,
         name: true,

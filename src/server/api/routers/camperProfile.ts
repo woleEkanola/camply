@@ -2,6 +2,13 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 
+// Define organization settings type
+type OrganizationSettings = {
+  minAge?: number;
+  maxAge?: number;
+  cutoffDate?: string;
+};
+
 // Removed unused import: UserRole
 
 // Schema for camper profile data validation
@@ -274,7 +281,8 @@ export const camperProfileRouter = createTRPCRouter({
         if (!org) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
         }
-        const settings = org.settings || {};
+        // Parse settings from JSON
+        const settings = org.settings ? JSON.parse(JSON.stringify(org.settings)) : {};
         const minAge = typeof settings.minAge === 'number' ? settings.minAge : 5;
         const maxAge = typeof settings.maxAge === 'number' ? settings.maxAge : 18;
         const dob = new Date(input.profile.dateOfBirth);

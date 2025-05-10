@@ -12,7 +12,7 @@ export default function AdminSettingsPage() {
   const { data: session } = useSession();
   const organizationId = session?.user?.organizationId || "";
   // Fetch settings only if organizationId is available
-  const { data: settings, isLoading } = api.organization.getSettings.useQuery(
+  const { data: settings, isLoading, refetch } = api.organization.getSettings.useQuery(
     { organizationId },
     { enabled: !!organizationId }
   );
