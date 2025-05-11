@@ -386,7 +386,7 @@ export default function RegistrationsPage() {
           </h1>
           <button
             onClick={openCreateModal}
-            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            className="rounded-md bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
           >
             Add Registration
           </button>
@@ -442,7 +442,7 @@ export default function RegistrationsPage() {
               id="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
               placeholder="Search by name or email"
             />
           </div>
@@ -455,7 +455,7 @@ export default function RegistrationsPage() {
               id="locationFilter"
               value={filterLocation}
               onChange={(e) => setFilterLocation(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
             >
               <option value="">All Locations</option>
               {locations.map((location: any) => (
@@ -474,7 +474,7 @@ export default function RegistrationsPage() {
               id="statusFilter"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as RegistrationStatus | "")}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
             >
               <option value="">All Statuses</option>
               <option value="PENDING">Pending</option>
@@ -562,7 +562,7 @@ export default function RegistrationsPage() {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       <button
                         onClick={() => openEditModal(registration.id)}
-                        className="mr-2 text-blue-600 hover:text-blue-900"
+                        className="mr-2 text-orange-600 hover:text-orange-900"
                       >
                         Edit
                       </button>
@@ -626,7 +626,7 @@ export default function RegistrationsPage() {
                       name="camperProfileId"
                       value={formData.camperProfileId}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
                       required
                     >
                       <option value="">Select a camper profile</option>
@@ -647,7 +647,7 @@ export default function RegistrationsPage() {
                       name="locationId"
                       value={formData.locationId}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
                       required
                     >
                       <option value="">Select a location</option>
@@ -668,7 +668,7 @@ export default function RegistrationsPage() {
                       name="status"
                       value={formData.status}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
                       required
                     >
                       <option value="PENDING">Pending</option>
@@ -688,7 +688,7 @@ export default function RegistrationsPage() {
                       value={formData.notes}
                       onChange={handleInputChange}
                       rows={3}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
                       placeholder="Add any notes about this registration"
                     />
                   </div>
@@ -704,7 +704,7 @@ export default function RegistrationsPage() {
                     </button>
                     <button
                       type="submit"
-                      className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-400"
+                      className="flex items-center rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:bg-orange-400"
                       disabled={isSubmitting}
                     >
                       {isSubmitting && (

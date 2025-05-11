@@ -67,13 +67,13 @@ export default function DashboardLayout({
   if (status === "loading") {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-[#E67E22]"></div>
+        <div className="h-12 w-12 animate-spin rounded-full border-orange-500 border-t-2 border-[#E67E22]"></div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-orange-100">
       {/* Sidebar for mobile */}
       <div
         className={`fixed inset-0 z-40 transform bg-gray-900 bg-opacity-50 transition-opacity duration-300 lg:hidden ${
@@ -108,7 +108,7 @@ export default function DashboardLayout({
                 className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                   activeTab === "locations"
                     ? "bg-orange-50 text-[#E67E22]"
-                    : "text-gray-700 hover:bg-orange-50"
+                    : "text-orange-700 hover:bg-orange-50"
                 }`}
               >
                 <HomeIcon className="mr-3 h-5 w-5" />
@@ -120,7 +120,7 @@ export default function DashboardLayout({
                 className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                   activeTab === "locations"
                     ? "bg-orange-50 text-[#E67E22]"
-                    : "text-gray-700 hover:bg-orange-50"
+                    : "text-orange-700 hover:bg-orange-50"
                 }`}
               >
                 <BuildingOfficeIcon className="mr-3 h-5 w-5" />
@@ -132,7 +132,7 @@ export default function DashboardLayout({
                 className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                   activeTab === "admins"
                     ? "bg-orange-50 text-[#E67E22]"
-                    : "text-gray-700 hover:bg-orange-50"
+                    : "text-orange-700 hover:bg-orange-50"
                 }`}
               >
                 <UserGroupIcon className="mr-3 h-5 w-5" />
@@ -148,7 +148,7 @@ export default function DashboardLayout({
               className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                 activeTab === link.href.replace("/location-admin-dashboard", "location-admin")
                   ? "bg-orange-50 text-[#E67E22]"
-                  : "text-gray-700 hover:bg-orange-50"
+                  : "text-orange-700 hover:bg-orange-50"
               }`}
             >
               <link.icon className="mr-3 h-5 w-5" />
@@ -161,7 +161,7 @@ export default function DashboardLayout({
             className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
               activeTab === "location-admin"
                 ? "bg-orange-50 text-[#E67E22]"
-                : "text-gray-700 hover:bg-orange-50"
+                : "text-orange-700 hover:bg-orange-50"
             }`}
           >
             <UserGroupIcon className="mr-3 h-5 w-5" />
@@ -174,7 +174,7 @@ export default function DashboardLayout({
               className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                 activeTab === "settings"
                   ? "bg-orange-50 text-[#E67E22]"
-                  : "text-gray-700 hover:bg-orange-50"
+                  : "text-orange-700 hover:bg-orange-50"
               }`}
             >
               <Cog6ToothIcon className="mr-3 h-5 w-5" />
@@ -186,7 +186,7 @@ export default function DashboardLayout({
         <div className="mt-auto pt-10">
           <button
             onClick={handleLogout}
-            className="flex w-full items-center rounded-lg px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+            className="flex w-full items-center rounded-lg px-4 py-2 text-sm font-medium text-orange-600 hover:bg-orange-50"
           >
             <ArrowLeftOnRectangleIcon className="mr-3 h-5 w-5" />
             Logout
@@ -200,7 +200,7 @@ export default function DashboardLayout({
         <header className="bg-white shadow-sm">
           <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
             <button
-              className="text-gray-500 focus:outline-none lg:hidden"
+              className="text-orange-500 focus:outline-none lg:hidden"
               onClick={() => setSidebarOpen(true)}
             >
               <svg
@@ -219,12 +219,12 @@ export default function DashboardLayout({
               </svg>
             </button>
 
-            <h1 className="text-xl font-semibold text-gray-800">{title}</h1>
+            <h1 className="text-xl font-semibold text-orange-800">{title}</h1>
 
             <div className="flex items-center">
               <div className="ml-3 relative">
                 <div className="flex items-center">
-                  <span className="hidden text-sm text-gray-700 sm:block">
+                  <span className="hidden text-sm text-orange-700 sm:block">
                     {session?.user?.email}
                   </span>
                 </div>
@@ -234,7 +234,7 @@ export default function DashboardLayout({
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto bg-gray-100 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-orange-100 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

@@ -88,7 +88,7 @@ export default function AgeRangeSettings({
       {error && <div className="text-red-600 mb-2">{error}</div>}
       {success && <div className="text-green-600 mb-2">Saved!</div>}
       <button
-        className="bg-blue-600 text-white rounded px-4 py-2"
+        className="bg-orange-600 text-white rounded px-4 py-2"
         onClick={handleSave}
         disabled={saving}
       >

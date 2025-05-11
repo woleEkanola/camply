@@ -303,7 +303,7 @@ function SignupForm({ token }: { token: string }) {
                 setError("");
                 setIsLoading(true);
                 try {
-                  const res = await fetch('/api/base-user/create', {
+                  const res = await fetch('/api/base-user/create-and-send-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
@@ -397,7 +397,7 @@ function SignupForm({ token }: { token: string }) {
                 setError("");
                 setIsLoading(true);
                 try {
-                  const res = await fetch('/api/base-user/create', {
+                  const res = await fetch('/api/base-user/create-and-send-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 

@@ -32,7 +32,7 @@ export default function AdminSettingsPage() {
   return (
     <ModernDashboardLayout>
       <div className="max-w-2xl mx-auto mt-8 bg-white rounded-xl shadow-lg p-8 border border-gray-100">
-        <h1 className="text-3xl font-bold mb-4 text-blue-700">Admin Dashboard Settings</h1>
+        <h1 className="text-3xl font-bold mb-4 text-orange-700">Admin Dashboard Settings</h1>
         <p className="mb-6 text-gray-600 text-lg">Configure registration age range and cut-off date for your organization. These settings control camper eligibility for registration.</p>
         <div className="mb-6">
           <AgeRangeSettings

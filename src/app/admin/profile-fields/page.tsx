@@ -140,7 +140,7 @@ export default function ProfileFieldsPage() {
           {success && <div className="text-green-600">{success}</div>}
           <button
             type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
             disabled={createField.status === "pending"}
           >
             {createField.status === "pending" ? "Creating..." : "Add Field"}

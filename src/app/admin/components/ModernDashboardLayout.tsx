@@ -109,7 +109,7 @@ export default function ModernDashboardLayout({
   const menuItems = getMenuItems();
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
+    <div className="flex h-screen bg-orange-100 overflow-hidden">
       {/* Sidebar */}
       <div
         className={`${
@@ -119,11 +119,11 @@ export default function ModernDashboardLayout({
         <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center">
             {sidebarOpen ? (
-              <span className="text-xl font-bold">
+              <span className="text-orange-600 font-bold">
                 {organizationName || "Admin Dashboard"}
               </span>
             ) : (
-              <span className="text-xl font-bold">
+              <span className="text-orange-600 font-bold">
                 {organizationName ? organizationName.charAt(0) : "A"}
               </span>
             )}
@@ -184,7 +184,7 @@ export default function ModernDashboardLayout({
           </nav>
         </div>
 
-        <div className="border-t border-[#D35400] p-4">
+        <div className="border-orange-200 border-[#D35400] p-4">
           <button
             onClick={handleLogout}
             className="flex w-full items-center rounded-md px-2 py-2 text-sm font-medium text-white hover:bg-[#D35400]"
@@ -200,7 +200,7 @@ export default function ModernDashboardLayout({
         <header className="sticky top-0 z-10 bg-white shadow">
           <div className="flex h-16 items-center justify-between px-4">
             <div className="flex items-center">
-              <span className="text-xl font-bold text-gray-800">
+              <span className="text-orange-600 font-bold text-gray-800">
                 {session?.user?.email && (
                   <div className="flex items-center">
                     <span className="mr-2 rounded-full bg-orange-100 p-2 text-[#E67E22]">
@@ -212,7 +212,7 @@ export default function ModernDashboardLayout({
               </span>
             </div>
             <div className="flex items-center space-x-4">
-              <button className="rounded-full bg-gray-100 p-2 text-gray-600 hover:bg-gray-200">
+              <button className="rounded-full bg-orange-100 p-2 text-gray-600 hover:bg-orange-200">
                 <Cog6ToothIcon className="h-5 w-5" />
               </button>
             </div>

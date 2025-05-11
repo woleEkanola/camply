@@ -767,7 +767,7 @@ export default function LocationsPage() {
           {canCreateLocation && (
             <button
               onClick={openCreateModal}
-              className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+              className="rounded-md bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
               data-testid="add-location-btn"
             >
               Add Location
@@ -847,7 +847,7 @@ export default function LocationsPage() {
                       const signupLink = getSignupLinkForLocation(location.id);
                       // Assigned Admin: show all admins (comma-separated)
                       const assignedAdmins = location.admins && location.admins.length > 0 ? (
-                        <span className="inline-flex rounded-full bg-blue-100 px-2 text-xs font-semibold leading-5 text-blue-800">
+                        <span className="inline-flex rounded-full bg-orange-100 px-2 text-xs font-semibold leading-5 text-orange-800">
                           {location.admins.map(a => (a.firstName || a.lastName) ? `${a.firstName ?? ''} ${a.lastName ?? ''}`.trim() : a.id).join(', ')}
                         </span>
                       ) : (
@@ -917,7 +917,7 @@ export default function LocationsPage() {
                               <button
                                 onClick={() => handleGenerateSignupLink(location.id)}
                                 disabled={generatingLinkFor === location.id}
-                                className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400"
+                                className="inline-flex items-center rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100 disabled:bg-gray-100 disabled:text-gray-400"
                                 data-testid={`generate-link-btn-${location.id}`}
                               >
                                 {generatingLinkFor === location.id ? (
@@ -943,7 +943,7 @@ export default function LocationsPage() {
                             {canUpdateLocation && (
                               <button
                                 onClick={() => openEditModal(location.id)}
-                                className="mr-2 text-blue-600 hover:text-blue-900"
+                                className="mr-2 text-orange-600 hover:text-orange-900"
                                 data-testid={`edit-location-btn-${location.id}`}
                               >
                                 Edit
@@ -1012,7 +1012,7 @@ export default function LocationsPage() {
                       value={formData.name}
                       onChange={handleInputChange}
                       required
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
                     />
                   </div>
                    <div className="mb-4">
@@ -1025,7 +1025,7 @@ export default function LocationsPage() {
                       name="quota"
                       value={formData.quota ?? 0}
                       onChange={(e) => setFormData({ ...formData, quota: parseInt(e.target.value, 10) || 0 })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
                     />
                   </div>
                   <div className="mb-4">
@@ -1039,7 +1039,7 @@ export default function LocationsPage() {
                       value={formData.address}
                       onChange={handleInputChange}
                       required
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
                     />
                   </div>
                   <div className="mb-4">
@@ -1053,7 +1053,7 @@ export default function LocationsPage() {
                       value={formData.city}
                       onChange={handleInputChange}
                       required
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
                     />
                   </div>
                   <div className="mb-4">
@@ -1066,7 +1066,7 @@ export default function LocationsPage() {
                       name="state"
                       value={formData.state ?? ""}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
                     />
                   </div>
                   <div className="mb-4">
@@ -1079,7 +1079,7 @@ export default function LocationsPage() {
                       name="zipCode"
                       value={formData.zipCode ?? ""}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
                     />
                   </div>
                   <div className="mb-4">
@@ -1093,21 +1093,21 @@ export default function LocationsPage() {
                       value={formData.country}
                       onChange={handleInputChange}
                       required
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
                     />
                   </div>
                   <div className="flex justify-end">
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                      className="inline-flex justify-center rounded-md border border-transparent bg-orange-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50"
                     >
                       {isSubmitting ? "Saving..." : selectedLocation ? "Update Location" : "Add Location"}
                     </button>
@@ -1135,7 +1135,7 @@ export default function LocationsPage() {
                 <button
                   type="button"
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
                 >
                   Cancel
                 </button>
@@ -1181,7 +1181,7 @@ export default function LocationsPage() {
                            type="checkbox"
                            checked={selectedAdmins.includes(admin.id)}
                            onChange={(e) => handleAdminSelection(admin.id, e.target.checked)}
-                           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                           className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                          />
                          <span className="ml-2">
                            {admin.firstName || admin.lastName ? `${admin.firstName ?? ''} ${admin.lastName ?? ''}`.trim() : admin.email}
@@ -1195,7 +1195,7 @@ export default function LocationsPage() {
                  <button
                    type="button"
                    onClick={() => setIsAdminModalOpen(false)}
-                   className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                   className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
                  >
                    Cancel
                  </button>
@@ -1203,7 +1203,7 @@ export default function LocationsPage() {
                    type="button"
                    onClick={handleSaveAdmins}
                     disabled={isSubmitting}
-                   className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                   className="inline-flex justify-center rounded-md border border-transparent bg-orange-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50"
                  >
                    {isSubmitting ? "Saving..." : "Save Admins"}
                  </button>

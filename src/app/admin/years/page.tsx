@@ -290,7 +290,7 @@ export default function YearsPage() {
           <h1 className="text-2xl font-bold text-gray-800">Year Management</h1>
           <button
             onClick={openCreateModal}
-            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            className="rounded-md bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
           >
             Add Year
           </button>
@@ -354,7 +354,7 @@ export default function YearsPage() {
         {/* Years List */}
         {isLoadingYears ? (
           <div className="flex h-64 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-orange-500"></div>
           </div>
         ) : years.length > 0 ? (
           <div className="overflow-x-auto">
@@ -404,7 +404,7 @@ export default function YearsPage() {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       <button
                         onClick={() => openEditModal(year.id)}
-                        className="mr-2 text-blue-600 hover:text-blue-900"
+                        className="mr-2 text-orange-600 hover:text-orange-900"
                       >
                         Edit
                       </button>
@@ -456,7 +456,7 @@ export default function YearsPage() {
                       name="name"
                       value={formData.name}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
                       placeholder="e.g., 2025, Summer 2025"
                       required
                     />
@@ -472,7 +472,7 @@ export default function YearsPage() {
                       name="startDate"
                       value={formData.startDate}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
                       required
                     />
                   </div>
@@ -487,7 +487,7 @@ export default function YearsPage() {
                       name="endDate"
                       value={formData.endDate}
                       onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
                       required
                     />
                   </div>
@@ -500,7 +500,7 @@ export default function YearsPage() {
                         name="active"
                         checked={formData.active}
                         onChange={handleInputChange}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                       />
                       <label htmlFor="active" className="ml-2 block text-sm text-gray-700">
                         Set as active year
@@ -522,7 +522,7 @@ export default function YearsPage() {
                     </button>
                     <button
                       type="submit"
-                      className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-400"
+                      className="flex items-center rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:bg-orange-400"
                       disabled={isSubmitting}
                     >
                       {isSubmitting && (
