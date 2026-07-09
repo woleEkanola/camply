@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { Card, CardBody } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 export default function VerifyOtpPage() {
   const [email, setEmail] = useState("");
@@ -32,48 +35,34 @@ export default function VerifyOtpPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md p-8 bg-white rounded shadow">
-        <h2 className="text-2xl font-bold mb-6 text-center">Verify OTP</h2>
-        <form onSubmit={handleVerify}>
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email Address
-            </label>
-            <input
+    <div className="flex min-h-screen items-center justify-center bg-neutral-50">
+      <Card className="w-full max-w-md">
+        <CardBody>
+          <h2 className="mb-6 text-center text-xl font-semibold text-neutral-900">Verify OTP</h2>
+          <form onSubmit={handleVerify} className="space-y-4">
+            <Input
+              label="Email Address"
               id="email"
               type="email"
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
             />
-          </div>
-          <div className="mb-4">
-            <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-1">
-              OTP Code
-            </label>
-            <input
+            <Input
+              label="OTP Code"
               id="otp"
               type="text"
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={otp}
               onChange={e => setOtp(e.target.value)}
               required
               maxLength={6}
             />
-          </div>
-          {error && <div className="mb-2 text-red-600 text-sm">{error}</div>}
-          {success && <div className="mb-2 text-green-600 text-sm">{success}</div>}
-          <button
-            type="submit"
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition disabled:bg-blue-300"
-            disabled={loading}
-          >
-            {loading ? "Verifying..." : "Verify OTP"}
-          </button>
-        </form>
-      </div>
+            {error && <div className="text-sm text-danger-600">{error}</div>}
+            {success && <div className="text-sm text-success-600">{success}</div>}
+            <Button type="submit" className="w-full" loading={loading}>Verify OTP</Button>
+          </form>
+        </CardBody>
+      </Card>
     </div>
   );
 }

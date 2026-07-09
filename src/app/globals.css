@@ -1,8 +1,31 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens for the Camply UI (see REGISTRATION_BUILD_PLAN.md's UI
+ * modernization plan). Tailwind v4 already ships a full default type/
+ * spacing/radius/shadow scale via `@theme` — we only add custom color
+ * tokens here, we don't need to redefine typography/spacing from scratch.
+ *
+ * IMPORTANT: keep everything in ONE `@theme` block. Multiple `@theme`
+ * at-rules in the same file silently only honor the last one in this
+ * Tailwind v4 setup — an earlier version of this file split brand colors
+ * into their own `@theme` block ahead of an `@theme inline` block for
+ * background/foreground/fonts, and every brand color utility (bg-accent-*,
+ * bg-warning-* etc.) compiled to nothing as a result.
+ *
+ * - neutral-*  : all chrome (sidebar, cards, table backgrounds, borders,
+ *                muted text). Never use raw gray-*/zinc-* utilities in new
+ *                components — use these so the palette stays centralized.
+ * - accent-*   : the single brand color (anchored on the existing
+ *                #E67E22 orange as accent-600). Primary buttons, active
+ *                nav indicator, links, selection — nothing else.
+ * - success/warning/danger/info/attention-* : reserved for status meaning
+ *                only (see StatusBadge, src/components/ui/StatusBadge.tsx,
+ *                for the canonical RegistrationStatus -> tone mapping).
+ */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #18181b;
 }
 
 @theme inline {
@@ -10,12 +33,68 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f4f4f5;
+  --color-neutral-200: #e4e4e7;
+  --color-neutral-300: #d4d4d8;
+  --color-neutral-400: #a1a1aa;
+  --color-neutral-500: #71717a;
+  --color-neutral-600: #52525b;
+  --color-neutral-700: #3f3f46;
+  --color-neutral-800: #27272a;
+  --color-neutral-900: #18181b;
+  --color-neutral-950: #09090b;
+
+  --color-accent-50: #fef6ec;
+  --color-accent-100: #fdead2;
+  --color-accent-200: #fad2a5;
+  --color-accent-300: #f6b06d;
+  --color-accent-400: #f18f3f;
+  --color-accent-500: #ea7f24;
+  --color-accent-600: #e67e22;
+  --color-accent-700: #c2620f;
+  --color-accent-800: #9a4d10;
+  --color-accent-900: #7c3f11;
+
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-500: #22c55e;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  --color-info-50: #eff6ff;
+  --color-info-100: #dbeafe;
+  --color-info-500: #3b82f6;
+  --color-info-600: #2563eb;
+  --color-info-700: #1d4ed8;
+
+  /* Fifth status tone — for states that are neither pure success/warning/
+     danger/info (e.g. WAITLISTED). */
+  --color-attention-50: #faf5ff;
+  --color-attention-100: #f3e8ff;
+  --color-attention-500: #a855f7;
+  --color-attention-600: #9333ea;
+  --color-attention-700: #7e22ce;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@utility scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
 

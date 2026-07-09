@@ -53,6 +53,21 @@ async function main() {
       endDate: new Date(currentYear, 11, 31), // December 31st of current year
       active: true,
       organizationId: organization.id,
+      theme: "Demo Camp Theme",
+      description: "A demo camp used for local development and seed data.",
+      registrationOpensAt: new Date(currentYear, 0, 1),
+      registrationClosesAt: new Date(currentYear, 11, 1),
+      arrivalDate: new Date(currentYear, 11, 15),
+      departureDate: new Date(currentYear, 11, 20),
+      minAge: 6,
+      maxAge: 17,
+      ageCutoffDate: new Date(currentYear, 11, 1),
+      maxRegistrations: 500,
+      capacityBehavior: "WAITLIST",
+      approvalMode: "MANUAL",
+      allowResubmission: true,
+      status: "OPEN",
+      orgCode: "DEMO",
     },
   });
   
@@ -112,7 +127,34 @@ async function main() {
       zipCode: "12345",
       country: "Demo Country",
       organizationId: organization.id,
+      code: "DEM",
+      contactEmail: "location@camply.com",
+      contactPhone: "+1-555-0100",
+      quota: 250,
+      visible: true,
     },
+  });
+
+  // Document requirements for the demo camp
+  await prisma.documentRequirement.createMany({
+    data: [
+      {
+        yearId: year.id,
+        name: "Birth Certificate",
+        description: "A clear photo or scan of the camper's birth certificate.",
+        required: true,
+        scope: "CAMPER",
+        sortOrder: 0,
+      },
+      {
+        yearId: year.id,
+        name: "Parent Consent Form",
+        description: "Signed consent form for this camp.",
+        required: true,
+        scope: "REGISTRATION",
+        sortOrder: 1,
+      },
+    ],
   });
   
   const locationAdmin = await prisma.user.create({
@@ -141,6 +183,10 @@ async function main() {
   const camperProfile = await prisma.camperProfile.create({
     data: {
       name: "Demo Camper",
+      firstName: "Demo",
+      lastName: "Camper",
+      dateOfBirth: new Date(currentYear - 12, 5, 1),
+      gender: "MALE",
       userId: locationAdmin.id, // Assign to location admin for testing
       organizationId: organization.id,
       locationId: location.id,

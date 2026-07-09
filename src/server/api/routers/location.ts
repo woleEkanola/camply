@@ -183,6 +183,53 @@ export const locationRouter = createTRPCRouter({
       });
     }),
 
+  // Update centre configuration fields (PRD Part 2 §8)
+  updateCentreConfig: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      data: z.object({
+        code: z.string().nullable().optional(),
+        contactPhone: z.string().nullable().optional(),
+        contactEmail: z.string().nullable().optional(),
+        mapsUrl: z.string().nullable().optional(),
+        visible: z.boolean().optional(),
+        fullBehavior: z.enum(["CLOSE", "PENDING_OK", "REDIRECT"]).optional(),
+        quota: z.number().int().min(0).optional(),
+        signupOpen: z.boolean().optional(),
+      }),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const location = await prisma.location.findUnique({ where: { id: input.id } });
+      if (!location) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
+      }
+
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
+        currentUser.role === "ADMIN" ||
+        (currentUser.role === "LOCATION_ADMIN" &&
+          (await prisma.location.findFirst({
+            where: { id: input.id, admins: { some: { id: currentUser.id } } },
+          })));
+
+      if (!hasPermission) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to configure this centre" });
+      }
+
+      if (input.data.quota != null && location.quota !== undefined) {
+        const approvedCount = await prisma.registration.count({ where: { locationId: input.id, status: "APPROVED" } });
+        if (input.data.quota < approvedCount) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Capacity cannot be less than approved registrations." });
+        }
+      }
+
+      return prisma.location.update({ where: { id: input.id }, data: input.data });
+    }),
+
   // Delete a location
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))

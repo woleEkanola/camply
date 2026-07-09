@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import ModernDashboardLayout from "../components/ModernDashboardLayout";
+import AppShell from "@/components/layout/AppShell";
 import AccessControl from "../components/AccessControl";
 
 // Define extended session user type
@@ -42,10 +42,10 @@ export default function AccessControlPage() {
   }
 
   return (
-    <ModernDashboardLayout>
+    <AppShell area="admin">
       {(session?.user as ExtendedUser)?.organizationId && (
         <AccessControl organizationId={(session.user as ExtendedUser).organizationId as string} />
       )}
-    </ModernDashboardLayout>
+    </AppShell>
   );
 }

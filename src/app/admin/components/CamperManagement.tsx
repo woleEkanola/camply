@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
 import EditCamperProfileModal from "./EditCamperProfileModal";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { StatCard } from "@/components/ui/StatCard";
+import { Table, type Column } from "@/components/ui/Table";
+import { Dialog } from "@/components/ui/Dialog";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Select } from "@/components/ui/Input";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
@@ -174,6 +181,29 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     setIsDeleteModalOpen(true);
   };
 
+  const columns: Column<CamperProfileType>[] = [
+    {
+      header: "Name",
+      accessor: (profile) => (
+        <a href={`/admin/camper-profile/${profile.id}`} className="font-medium text-neutral-900 hover:text-accent-700 hover:underline">
+          {profile.name}
+        </a>
+      ),
+    },
+    {
+      header: "Parent",
+      accessor: (profile) => (
+        <div>
+          <div>{profile.user.firstName} {profile.user.lastName}</div>
+          <div className="text-xs text-neutral-400">{profile.user.email}</div>
+        </div>
+      ),
+    },
+    { header: "Centre", accessor: (profile) => profile.location ? profile.location.name : "No centre" },
+    { header: "Status", accessor: (profile) => <Badge tone={profile.active ? "success" : "danger"}>{profile.active ? "Active" : "Inactive"}</Badge> },
+    { header: "Created", accessor: (profile) => new Date(profile.createdAt).toLocaleDateString() },
+  ];
+
   return (
     <div>
       {/* Edit Camper Profile Modal */}
@@ -188,186 +218,64 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           }}
         />
       )}
+
       {/* Filters and Search */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-1 flex-wrap items-center gap-4">
-          <div className="w-64">
-            <input
-              type="text"
-              placeholder="Search campers..."
-              className="w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="w-48">
-            <select
-              className="w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none"
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value === "all" ? "all" : e.target.value)}
-            >
-              <option value="all">All Locations</option>
-              {locationsData?.map((location: { id: string; name: string }) => (
-                <option key={location.id} value={location.id}>
-                  {location.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="w-40">
-            <select
-              className="w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none"
-              value={activeFilter === "all" ? "all" : activeFilter ? "active" : "inactive"}
-              onChange={(e) => {
-                if (e.target.value === "all") {
-                  setActiveFilter("all");
-                } else if (e.target.value === "active") {
-                  setActiveFilter(true);
-                } else {
-                  setActiveFilter(false);
-                }
-              }}
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
+        <div className="flex flex-1 flex-wrap items-center gap-3">
+          <SearchBar containerClassName="w-64" placeholder="Search campers..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <Select
+            containerClassName="w-48"
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value === "all" ? "all" : e.target.value)}
+          >
+            <option value="all">All Centres</option>
+            {locationsData?.map((location: { id: string; name: string }) => (
+              <option key={location.id} value={location.id}>{location.name}</option>
+            ))}
+          </Select>
+          <Select
+            containerClassName="w-40"
+            value={activeFilter === "all" ? "all" : activeFilter ? "active" : "inactive"}
+            onChange={(e) => {
+              if (e.target.value === "all") setActiveFilter("all");
+              else if (e.target.value === "active") setActiveFilter(true);
+              else setActiveFilter(false);
+            }}
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </Select>
         </div>
-        <button
-          onClick={() => {
-            setSelectedProfile(null);
-            setIsModalOpen(true);
-          }}
-          className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-        >
-          Add Camper Profile
-        </button>
+        <Button onClick={() => { setSelectedProfile(null); setIsModalOpen(true); }}>Add Camper Profile</Button>
       </div>
 
       {/* Stats Cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-lg bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-500">Total Campers</h3>
-          <p className="text-2xl font-bold text-gray-800">{camperProfiles.length}</p>
-        </div>
-        <div className="rounded-lg bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-500">Active Campers</h3>
-          <p className="text-2xl font-bold text-green-600">
-            {camperProfiles.filter((profile) => profile.active).length}
-          </p>
-        </div>
-        <div className="rounded-lg bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-500">Inactive Campers</h3>
-          <p className="text-2xl font-bold text-red-600">
-            {camperProfiles.filter((profile) => !profile.active).length}
-          </p>
-        </div>
+        <StatCard label="Total Campers" value={camperProfiles.length} />
+        <StatCard label="Active Campers" value={camperProfiles.filter((p) => p.active).length} tone="success" />
+        <StatCard label="Inactive Campers" value={camperProfiles.filter((p) => !p.active).length} tone="danger" />
       </div>
 
-      {/* Camper Profiles List */}
-      {isLoading ? (
-        <div className="flex h-64 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
-        </div>
-      ) : filteredProfiles.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  User
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Location
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Created
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {filteredProfiles.map((profile) => (
-                <tr key={profile.id}>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                    <button
-                      className="text-left w-full h-full"
-                      style={{ all: "unset", cursor: "pointer" }}
-                      onClick={() => window.location.assign(`/admin/camper-profile/${profile.id}`)}
-                    >
-                      {profile.name}
-                    </button>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                    {profile.user.firstName} {profile.user.lastName}
-                    <div className="text-xs text-gray-400">{profile.user.email}</div>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                    {profile.location ? profile.location.name : "No location"}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                    <span
-                      className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
-                        profile.active
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
-                      }`}
-                    >
-                      {profile.active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                    {new Date(profile.createdAt).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-          <p className="text-gray-500">No camper profiles found.</p>
-        </div>
-      )}
+      <Table
+        mode="controlled"
+        toolbar={<span className="text-xs text-neutral-400">{filteredProfiles.length} camper{filteredProfiles.length === 1 ? "" : "s"}</span>}
+        columns={columns}
+        data={filteredProfiles}
+        rowKey={(profile) => profile.id}
+        isLoading={isLoading}
+        emptyTitle="No camper profiles found"
+        emptyDescription="Try adjusting your search or filters."
+      />
 
       {/* Delete Confirmation Modal */}
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black bg-opacity-50">
-          <div className="relative w-full max-w-md p-4 md:p-0">
-            <div className="relative rounded-lg bg-white p-6 shadow-lg">
-              <div className="mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Confirm Deletion</h3>
-                <p className="mt-2 text-sm text-gray-500">
-                  Are you sure you want to delete this camper profile? This action cannot be undone.
-                </p>
-              </div>
-              
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteProfile}
-                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-                >
-                  Delete Profile
-                </button>
-              </div>
-            </div>
-          </div>
+      <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion" size="sm">
+        <p className="text-sm text-neutral-500">Are you sure you want to delete this camper profile? This action cannot be undone.</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
+          <Button variant="danger" onClick={handleDeleteProfile}>Delete Profile</Button>
         </div>
-      )}
+      </Dialog>
     </div>
   );
 };

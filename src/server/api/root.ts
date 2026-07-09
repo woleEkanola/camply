@@ -11,6 +11,10 @@ import { profileFieldRouter } from "./routers/profileField";
 import { yearRouter } from "./routers/year";
 import { registrationRouter } from "./routers/registration";
 import { signupLinkRouter } from "./routers/signupLink";
+import { documentRequirementRouter } from "./routers/documentRequirement";
+import { documentRouter } from "./routers/document";
+import { notificationRouter } from "./routers/notification";
+import { tribeRouter } from "./routers/tribe";
 
 /**
  * This is the primary router for your server.
@@ -30,6 +34,10 @@ export const appRouter = createTRPCRouter({
   year: yearRouter,
   registration: registrationRouter,
   signupLink: signupLinkRouter,
+  documentRequirement: documentRequirementRouter,
+  document: documentRouter,
+  notification: notificationRouter,
+  tribe: tribeRouter,
   // booking: bookingRouter, // removed because booking router file was deleted
   // eventType: eventTypeRouter, // removed because eventType router file was deleted
   // schedule: scheduleRouter, // removed because schedule router file was deleted

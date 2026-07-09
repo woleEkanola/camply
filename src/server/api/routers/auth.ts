@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "../trpc/trpc";
+import { TRPCError } from "@trpc/server";
+import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import bcrypt from "bcryptjs";
 
@@ -34,7 +35,7 @@ export const authRouter = createTRPCRouter({
       };
     }),
     
-  signup: publicProcedure
+  signup: protectedProcedure
     .input(z.object({
       email: z.string().email(),
       password: z.string().min(8),
@@ -43,7 +44,16 @@ export const authRouter = createTRPCRouter({
       role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"]),
       organizationId: z.string()
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      // Only privileged roles may create accounts, and only a SUPER_ADMIN
+      // may create another SUPER_ADMIN.
+      const callerRole = ctx.session?.user.role;
+      if (callerRole !== "SUPER_ADMIN" && callerRole !== "OWNER") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not allowed to create users" });
+      }
+      if (input.role === "SUPER_ADMIN" && callerRole !== "SUPER_ADMIN") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not allowed to create super admins" });
+      }
       try {
         // Check if user already exists
         const existingUser = await prisma.user.findUnique({

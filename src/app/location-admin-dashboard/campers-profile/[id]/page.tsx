@@ -4,9 +4,13 @@ import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { api } from "@/utils/api";
 import Link from "next/link";
-import DashboardLayout from "../../components/DashboardLayout";
 import FileUpload from "@/components/file-upload";
 import { useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card, CardBody } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 
 type CamperProfile = {
   id: string;
@@ -118,56 +122,60 @@ export default function CamperProfileDetailPage() {
   } as CamperProfile;
 
   return (
-    <DashboardLayout title="Camper Profile Details">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-4">Camper Profile Details</h1>
-        {/* Navigation and Index */}
-        <div className="flex items-center gap-4 mb-6">
-          <button
-            className="px-4 py-2 rounded bg-gray-200 text-gray-700 disabled:opacity-50"
-            disabled={!prevCamperId}
-            onClick={() => prevCamperId && router.push(`/location-admin-dashboard/campers-profile/${prevCamperId}`)}
-          >
-            Back
-          </button>
-          <span className="text-gray-700">
-            Camper {camperIndex + 1} of {totalCampers}
-          </span>
-          <button
-            className="px-4 py-2 rounded bg-gray-200 text-gray-700 disabled:opacity-50"
-            disabled={!nextCamperId}
-            onClick={() => nextCamperId && router.push(`/location-admin-dashboard/campers-profile/${nextCamperId}`)}
-          >
-            Next
-          </button>
-        </div>
-        <div className="bg-white p-6 rounded shadow max-w-2xl">
-          <div className="mb-2"><b>Name:</b> {typedProfile.name}</div>
-          <div className="mb-2"><b>Date of Birth:</b> {typedProfile.dateOfBirth ? new Date(typedProfile.dateOfBirth).toLocaleDateString() : "-"}</div>
-          <div className="mb-2"><b>Gender:</b> {typedProfile.gender || "-"}</div>
-          <div className="mb-2"><b>Email:</b> {typedProfile.user?.email || "-"}</div>
-          <div className="mb-2"><b>Location:</b> {typedProfile.location?.name || "-"}</div>
-          <div className="mb-2"><b>DOB Approved:</b> {typedProfile.dobApproved ? "Yes" : "No"}</div>
-          <div className="mb-2"><b>Birth Certificate:</b>
+    <AppShell area="location-admin">
+      <PageHeader title="Camper Profile Details" />
+
+      <div className="mb-6 flex items-center gap-4">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!prevCamperId}
+          onClick={() => prevCamperId && router.push(`/location-admin-dashboard/campers-profile/${prevCamperId}`)}
+        >
+          Back
+        </Button>
+        <span className="text-sm text-neutral-600">Camper {camperIndex + 1} of {totalCampers}</span>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!nextCamperId}
+          onClick={() => nextCamperId && router.push(`/location-admin-dashboard/campers-profile/${nextCamperId}`)}
+        >
+          Next
+        </Button>
+      </div>
+
+      <Card className="max-w-2xl">
+        <CardBody className="space-y-2 text-sm">
+          <div><span className="font-medium text-neutral-700">Name:</span> {typedProfile.name}</div>
+          <div><span className="font-medium text-neutral-700">Date of Birth:</span> {typedProfile.dateOfBirth ? new Date(typedProfile.dateOfBirth).toLocaleDateString() : "-"}</div>
+          <div><span className="font-medium text-neutral-700">Gender:</span> {typedProfile.gender || "-"}</div>
+          <div><span className="font-medium text-neutral-700">Email:</span> {typedProfile.user?.email || "-"}</div>
+          <div><span className="font-medium text-neutral-700">Centre:</span> {typedProfile.location?.name || "-"}</div>
+          <div>
+            <span className="font-medium text-neutral-700">DOB Approved:</span>{" "}
+            <Badge tone={typedProfile.dobApproved ? "success" : "neutral"}>{typedProfile.dobApproved ? "Yes" : "No"}</Badge>
+          </div>
+          <div>
+            <span className="font-medium text-neutral-700">Birth Certificate:</span>
             {typedProfile.birthCert ? (
               <div className="my-2">
-                <img src={typedProfile.birthCert} alt="Birth Certificate" className="max-w-xs border rounded shadow mb-2" />
-                <div>
-                  <a href={typedProfile.birthCert} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">View Full</a>
-                </div>
+                <img src={typedProfile.birthCert} alt="Birth Certificate" className="mb-2 max-w-xs rounded-md border border-neutral-200" />
+                <a href={typedProfile.birthCert} target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">View Full</a>
               </div>
             ) : (
-              <span>No</span>
+              <span> No</span>
             )}
           </div>
-          <div className="flex gap-4 my-4">
-            <button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded disabled:opacity-50"
-              disabled={isApprovingDOB || typedProfile.dobApproved}
+          <div className="my-4 flex gap-4">
+            <Button
+              className="bg-success-600 text-white hover:bg-success-700"
+              disabled={typedProfile.dobApproved}
+              loading={isApprovingDOB}
               onClick={handleApproveDOB}
             >
-              {typedProfile.dobApproved ? "DOB Approved" : isApprovingDOB ? "Approving..." : "Approve DOB"}
-            </button>
+              {typedProfile.dobApproved ? "DOB Approved" : "Approve DOB"}
+            </Button>
             <div>
               <FileUpload
                 value={typedProfile.birthCert || ""}
@@ -175,26 +183,26 @@ export default function CamperProfileDetailPage() {
                 disabled={isUploadingBirthCert}
                 label="Upload Birth Certificate"
               />
-              {birthCertError && <div className="text-red-600 text-xs mt-1">{birthCertError}</div>}
-              {birthCertSuccess && <div className="text-green-600 text-xs mt-1">{birthCertSuccess}</div>}
+              {birthCertError && <div className="mt-1 text-xs text-danger-600">{birthCertError}</div>}
+              {birthCertSuccess && <div className="mt-1 text-xs text-success-600">{birthCertSuccess}</div>}
             </div>
           </div>
-          {/* Custom Fields */}
           {typedProfile.fieldValues && typedProfile.fieldValues.length > 0 && (
-            <div className="mb-2">
-              <b>Custom Fields:</b>
-              <ul className="list-disc ml-6">
+            <div>
+              <span className="font-medium text-neutral-700">Custom Fields:</span>
+              <ul className="ml-6 list-disc">
                 {typedProfile.fieldValues.map((fv: any) => (
-                  <li key={fv.fieldId}><b>{fv.field?.label || fv.fieldId}:</b> {fv.value}</li>
+                  <li key={fv.fieldId}><span className="font-medium">{fv.field?.label || fv.fieldId}:</span> {fv.value}</li>
                 ))}
               </ul>
             </div>
           )}
-        </div>
-        <div className="mt-6">
-          <Link href="/location-admin-dashboard/campers-profile" className="text-emerald-700 underline">Back to Camper Profiles</Link>
-        </div>
+        </CardBody>
+      </Card>
+
+      <div className="mt-6">
+        <Link href="/location-admin-dashboard/campers-profile" className="text-sm text-accent-700 underline">← Back to Camper Profiles</Link>
       </div>
-    </DashboardLayout>
+    </AppShell>
   );
 }

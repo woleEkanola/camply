@@ -1,0 +1,10 @@
+ALTER TYPE "ProfileFieldType" ADD VALUE 'LONG_TEXT';
+ALTER TYPE "ProfileFieldType" ADD VALUE 'CHECKBOX';
+ALTER TYPE "ProfileFieldType" ADD VALUE 'RADIO';
+
+ALTER TYPE "RegistrationStatus" ADD VALUE 'DRAFT';
+ALTER TYPE "RegistrationStatus" ADD VALUE 'SUBMITTED';
+ALTER TYPE "RegistrationStatus" ADD VALUE 'REQUIRES_ACTION';
+ALTER TYPE "RegistrationStatus" ADD VALUE 'CHECKED_IN';
+ALTER TYPE "RegistrationStatus" ADD VALUE 'COMPLETED';
+ALTER TYPE "RegistrationStatus" ADD VALUE 'ARCHIVED';

@@ -43,6 +43,23 @@ export const organizationRouter = createTRPCRouter({
       });
     }),
   
+  // Get basic organization info (name, for the app shell) — any authenticated
+  // member of the org. Replaces the old raw fetch to /api/organizations/[id].
+  getById: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ input, ctx }) => {
+      const requester = await prisma.user.findUnique({ where: { id: ctx.userId } });
+      if (!requester || (requester.role !== "SUPER_ADMIN" && requester.organizationId !== input.id)) {
+        throw new Error("Not authorized to view this organization");
+      }
+      const organization = await prisma.organization.findUnique({
+        where: { id: input.id },
+        select: { id: true, name: true },
+      });
+      if (!organization) throw new Error("Organization not found");
+      return organization;
+    }),
+
   // Get organization settings (any admin/owner)
   getSettings: protectedProcedure
     .input(z.object({ organizationId: z.string() }))

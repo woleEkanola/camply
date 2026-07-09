@@ -29,77 +29,97 @@ enum PermissionType {
 
 enum ProfileFieldType {
   TEXT
+  LONG_TEXT
   NUMBER
   DATE
   BOOLEAN
+  CHECKBOX
   SELECT
   MULTI_SELECT
+  RADIO
   FILE
 }
 
 enum RegistrationStatus {
+  DRAFT
+  SUBMITTED
   PENDING
+  REQUIRES_ACTION
   APPROVED
   REJECTED
   WAITLISTED
   CANCELLED
+  CHECKED_IN
+  COMPLETED
+  ARCHIVED
 }
 
 model User {
-  id             String       @id @default(cuid())
-  email          String       @unique
-  password       String
-  role           UserRole
-  firstName      String?
-  lastName       String?
-  phone          String?
-  active         Boolean      @default(true)
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
-  location       Location?    @relation("UserLocation", fields: [locationId], references: [id])
-  locationId     String?
-  managedLocations Location[]  @relation("LocationAdmins")
-  permissions    Permission[]
-  camperProfiles CamperProfile[] // User can have multiple camper profiles
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id               String          @id @default(cuid())
+  email            String          @unique
+  password         String
+  role             UserRole
+  firstName        String?
+  lastName         String?
+  phone            String?
+  active           Boolean         @default(true)
+  organization     Organization?   @relation(fields: [organizationId], references: [id])
+  organizationId   String?
+  location         Location?       @relation("UserLocation", fields: [locationId], references: [id])
+  locationId       String?
+  managedLocations Location[]      @relation("LocationAdmins")
+  permissions      Permission[]
+  camperProfiles   CamperProfile[] // User can have multiple camper profiles
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 }
 
 model Organization {
-  id              String           @id @default(cuid())
-  name            String           @unique
-  users           User[]
-  locations       Location[]
-  profileFields   ProfileField[]   // Organization defines profile fields
-  camperProfiles  CamperProfile[]  // Organization has many camper profiles
-  years           Year[]           // Organization has many years
-  activeYearId    String?          // Reference to the active year
-  activeYear      Year?            @relation("ActiveYear", fields: [activeYearId], references: [id])
-  settings        Json?            // Holds admin settings such as age range, cutoff date, etc.
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id             String          @id @default(cuid())
+  name           String          @unique
+  users          User[]
+  locations      Location[]
+  profileFields  ProfileField[] // Organization defines profile fields
+  camperProfiles CamperProfile[] // Organization has many camper profiles
+  years          Year[] // Organization has many years
+  activeYearId   String? // Reference to the active year
+  activeYear     Year?           @relation("ActiveYear", fields: [activeYearId], references: [id])
+  settings       Json? // Holds admin settings such as age range, cutoff date, etc.
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model Location {
-  id             String       @id @default(cuid())
+  id             String          @id @default(cuid())
   name           String
-  slug           String       @unique
+  slug           String          @unique
   address        String
   city           String
   state          String?
   zipCode        String?
   country        String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
-  admins         User[]       @relation("LocationAdmins")
-  users          User[]       @relation("UserLocation")
+  admins         User[]          @relation("LocationAdmins")
+  users          User[]          @relation("UserLocation")
   camperProfiles CamperProfile[] // Location can have many camper profiles
   registrations  Registration[] // Location can have many registrations
   signupLinks    SignupLink[] // Location can have many signup links
-  quota          Int          @default(0)
-  signupOpen     Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  quota          Int             @default(0)
+  signupOpen     Boolean         @default(true)
+
+  // Centre Configuration (PRD Part 2 §8)
+  code         String?
+  contactPhone String?
+  contactEmail String?
+  mapsUrl      String?
+  visible      Boolean @default(true)
+  fullBehavior String  @default("CLOSE") // CLOSE | PENDING_OK | REDIRECT
+
+  registrationCounters RegistrationCounter[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([organizationId, name])
 }
@@ -116,26 +136,52 @@ model Permission {
 }
 
 model ProfileField {
-  id             String           @id @default(cuid())
+  id             String              @id @default(cuid())
   name           String
   label          String
   type           ProfileFieldType
-  required       Boolean          @default(false)
-  options        String?          // JSON string for select options
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  required       Boolean             @default(false)
+  options        String? // JSON string for select options
+  helpText       String?
+  placeholder    String?
+  defaultValue   String?
+  sortOrder      Int                 @default(0)
+  validation     Json?
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
   fieldValues    ProfileFieldValue[]
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@unique([organizationId, name])
 }
 
 model CamperProfile {
-  id             String              @id @default(cuid())
-  name           String
-  dateOfBirth    DateTime?           // Date of birth field
-  gender         String?             // Gender field
+  id            String    @id @default(cuid())
+  name          String
+  firstName     String?
+  middleName    String?
+  lastName      String?
+  preferredName String?
+  dateOfBirth   DateTime? // Date of birth field
+  gender        String? // Gender field
+  photoUrl      String?
+
+  // Medical / Emergency (PRD Part 3 §8)
+  allergies             String?
+  medicalConditions     String?
+  medications           String?
+  dietaryRestrictions   String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  relationship          String?
+
+  // Education / Church
+  school       String?
+  currentClass String?
+  church       String?
+  pastor       String?
+
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId         String
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -143,56 +189,86 @@ model CamperProfile {
   location       Location?           @relation(fields: [locationId], references: [id])
   locationId     String?
   fieldValues    ProfileFieldValue[]
-  registrations  Registration[]      // Profile can have many registrations
+  registrations  Registration[] // Profile can have many registrations
+  documents      Document[]
   active         Boolean             @default(true)
   dobApproved    Boolean             @default(false)
-  birthCert      String?             // URL to uploaded birth certificate
+  birthCert      String? // URL to uploaded birth certificate
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 }
 
 model ProfileFieldValue {
-  id               String         @id @default(cuid())
-  value            String         // Stored as string, converted based on field type
-  field            ProfileField   @relation(fields: [fieldId], references: [id], onDelete: Cascade)
-  fieldId          String
-  camperProfile    CamperProfile  @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
-  camperProfileId  String
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id              String        @id @default(cuid())
+  value           String // Stored as string, converted based on field type
+  field           ProfileField  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  fieldId         String
+  camperProfile   CamperProfile @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
+  camperProfileId String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@unique([fieldId, camperProfileId])
 }
 
 model Year {
-  id               String          @id @default(cuid())
-  name             String          // e.g., "2025", "Summer 2025"
-  slug             String          // URL-friendly version of name, e.g., "summer-2025"
-  startDate        DateTime
-  endDate          DateTime
-  active           Boolean         @default(false)
-  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId   String
-  registrations    Registration[]  // Year can have many registrations
-  activeForOrgs    Organization[]  @relation("ActiveYear")
-  signupLinks      SignupLink[]    // Year can have many signup links
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id                   String                @id @default(cuid())
+  name                 String // e.g., "2025", "Summer 2025"
+  slug                 String // URL-friendly version of name, e.g., "summer-2025"
+  startDate            DateTime
+  endDate              DateTime
+  active               Boolean               @default(false)
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId       String
+  registrations        Registration[] // Year can have many registrations
+  activeForOrgs        Organization[]        @relation("ActiveYear")
+  signupLinks          SignupLink[] // Year can have many signup links
+  documentRequirements DocumentRequirement[]
+  registrationCounters RegistrationCounter[]
+
+  // Tribe Allocation (PRD Part 4A)
+  tribeAllocationEnabled Boolean @default(false)
+  tribeAllocationMode    String  @default("MANUAL") // MANUAL | AUTOMATIC | HYBRID
+  tribeAllocationRules   Json? // ordered array: [{ criterion: "POPULATION"|"GENDER"|"AGE"|"CENTRE"|"CHURCH"|"SCHOOL"|"SIBLINGS_TOGETHER"|"SIBLINGS_APART"|"RETURNING_CAMPER", enabled: true }]
+  tribes                 Tribe[]
+
+  // Camp Configuration (PRD Part 2)
+  theme                String?
+  description          String?
+  bannerUrl            String?
+  logoUrl              String?
+  registrationOpensAt  DateTime?
+  registrationClosesAt DateTime?
+  arrivalDate          DateTime?
+  departureDate        DateTime?
+  minAge               Int?
+  maxAge               Int?
+  ageCutoffDate        DateTime?
+  maxRegistrations     Int? // null = unlimited
+  capacityBehavior     String    @default("CLOSE") // CLOSE | WAITLIST | PENDING_OK
+  approvalMode         String    @default("MANUAL") // MANUAL | AUTO
+  allowResubmission    Boolean   @default(true)
+  status               String    @default("DRAFT") // DRAFT | OPEN | CLOSED | ARCHIVED
+  orgCode              String?
+  remindersHtml        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([organizationId, name])
   @@unique([organizationId, slug])
 }
 
 model SignupLink {
-  id             String       @id @default(cuid())
-  token          String       @unique // The unique token for the URL
-  location       Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  locationId     String
-  year           Year         @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId         String
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id         String   @id @default(cuid())
+  token      String   @unique // The unique token for the URL
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId String
+  year       Year     @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId     String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@unique([locationId, yearId])
 }
@@ -201,20 +277,158 @@ model OTP {
   email     String   @id
   code      String
   expiresAt DateTime
+  attempts  Int      @default(0)
 }
 
 model Registration {
-  id               String             @id @default(cuid())
-  status           RegistrationStatus @default(PENDING)
-  notes            String?
-  camperProfile    CamperProfile      @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
-  camperProfileId  String
-  year             Year               @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId           String
-  location         Location           @relation(fields: [locationId], references: [id])
-  locationId       String
-  parentConsent    String?             // URL to uploaded parent consent form
-  published        Boolean            @default(false)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  id              String             @id @default(cuid())
+  status          RegistrationStatus @default(DRAFT)
+  notes           String?
+  camperProfile   CamperProfile      @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
+  camperProfileId String
+  year            Year               @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId          String
+  location        Location           @relation(fields: [locationId], references: [id])
+  locationId      String
+  parentConsent   String? // URL to uploaded parent consent form
+  published       Boolean            @default(false)
+
+  // Registration Engine fields (PRD Part 4)
+  registrationNumber String?   @unique
+  qrToken            String?   @unique
+  submittedAt        DateTime?
+  approvedAt         DateTime?
+  rejectionReason    String?
+  correctionRequest  String?
+  reviewerId         String?
+  checkedInAt        DateTime?
+  checkedInById      String?
+  checkedOutAt       DateTime?
+  internalNotes      Json? // [{authorId, text, at}]
+  waitlistPosition   Int?
+
+  // Tribe Allocation (PRD Part 4A)
+  tribe                 Tribe?    @relation(fields: [tribeId], references: [id])
+  tribeId               String?
+  tribeAssignedAt       DateTime?
+  tribeAssignmentMethod String? // AUTOMATIC | MANUAL | HYBRID_OVERRIDE
+
+  documents     Document[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([camperProfileId, yearId])
+  @@index([locationId, status])
+  @@index([yearId, status])
+}
+
+model DocumentRequirement {
+  id              String     @id @default(cuid())
+  year            Year       @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId          String
+  name            String
+  description     String?
+  required        Boolean    @default(true)
+  acceptedFormats String     @default("pdf,jpg,png,webp")
+  maxSizeMb       Int        @default(10)
+  scope           String     @default("CAMPER") // CAMPER | REGISTRATION
+  sortOrder       Int        @default(0)
+  documents       Document[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Document {
+  id              String               @id @default(cuid())
+  requirement     DocumentRequirement? @relation(fields: [requirementId], references: [id])
+  requirementId   String?
+  camperProfile   CamperProfile?       @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
+  camperProfileId String?
+  registration    Registration?        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId  String?
+  url             String
+  fileName        String
+  fileType        String
+  fileSize        Int
+  status          String               @default("UPLOADED") // UPLOADED | APPROVED | REJECTED
+  rejectionReason String?
+  uploadedById    String
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+}
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  organizationId String
+  registration   Registration? @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId String?
+  actorId        String?
+  action         String
+  previousValue  Json?
+  newValue       Json?
+  createdAt      DateTime      @default(now())
+
+  @@index([registrationId])
+  @@index([organizationId, createdAt])
+}
+
+model Notification {
+  id             String        @id @default(cuid())
+  organizationId String
+  userId         String
+  registration   Registration? @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId String?
+  channel        String        @default("IN_APP") // IN_APP | EMAIL
+  title          String
+  body           String
+  status         String        @default("QUEUED") // QUEUED | SENT | DELIVERED | FAILED
+  readAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([userId, readAt])
+}
+
+model Tribe {
+  id            String         @id @default(cuid())
+  year          Year           @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId        String
+  name          String
+  color         String?
+  logoUrl       String?
+  description   String?
+  maxCapacity   Int?
+  status        String         @default("ACTIVE") // ACTIVE | INACTIVE
+  registrations Registration[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([yearId, name])
+}
+
+model SideEffect {
+  id             String   @id @default(cuid())
+  registrationId String
+  type           String // ACCEPTANCE_WORKFLOW | RESUBMISSION_NOTICE | ...
+  status         String   @default("QUEUED") // QUEUED | DONE | FAILED
+  attempts       Int      @default(0)
+  lastError      String?
+  runAfter       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, runAfter])
+}
+
+model RegistrationCounter {
+  id         String   @id @default(cuid())
+  year       Year     @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId     String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId String
+  value      Int      @default(0)
+
+  @@unique([yearId, locationId])
 }

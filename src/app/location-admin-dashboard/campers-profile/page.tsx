@@ -1,7 +1,8 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import DashboardLayout from "../components/DashboardLayout";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
 import LocationAdminCamperProfiles from "../components/LocationAdminCamperProfiles";
 
 export default function LocationAdminCamperProfilesPage() {
@@ -18,15 +19,13 @@ export default function LocationAdminCamperProfilesPage() {
   const locationId = managedLocations[0];
 
   return (
-    <DashboardLayout title="Campers Profiles">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-4">Campers Profiles</h1>
-        {locationId ? (
-          <LocationAdminCamperProfiles locationId={locationId} />
-        ) : (
-          <div>No managed locations found for this admin.</div>
-        )}
-      </div>
-    </DashboardLayout>
+    <AppShell area="location-admin">
+      <PageHeader title="Camper Profiles" />
+      {locationId ? (
+        <LocationAdminCamperProfiles locationId={locationId} />
+      ) : (
+        <div className="text-sm text-neutral-500">No managed locations found for this admin.</div>
+      )}
+    </AppShell>
   );
 }

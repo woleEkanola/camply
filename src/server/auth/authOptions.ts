@@ -2,6 +2,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "../db";
 import { verifyPassword } from "../../lib/auth";
+import { rateLimit } from "../rateLimit";
+import { MAX_OTP_ATTEMPTS, otpEqual } from "../otp";
 import { type NextAuthOptions } from "next-auth";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
@@ -18,8 +20,12 @@ export const authOptions: NextAuthOptions = {
         otp: { label: "OTP", type: "text" },
       },
       async authorize(credentials) {
-        console.log("Authorize called with:", credentials);
         if (!credentials?.email || (!credentials?.password && !credentials?.otp)) {
+          return null;
+        }
+
+        // Throttle login attempts per email (in-memory, per instance)
+        if (!rateLimit(`login:${credentials.email}`, 10, 15 * 60 * 1000)) {
           return null;
         }
 
@@ -36,7 +42,17 @@ export const authOptions: NextAuthOptions = {
           // Check OTP in the OTP table
           const otpRecord = await prisma.oTP.findUnique({ where: { email: credentials.email } });
           if (!otpRecord) return null;
-          if (otpRecord.code !== credentials.otp || otpRecord.expiresAt.getTime() < Date.now()) return null;
+          if (otpRecord.expiresAt.getTime() < Date.now() || otpRecord.attempts >= MAX_OTP_ATTEMPTS) {
+            return null;
+          }
+          if (!otpEqual(otpRecord.code, credentials.otp)) {
+            // Count the failed attempt so the code can't be brute-forced
+            await prisma.oTP.update({
+              where: { email: credentials.email },
+              data: { attempts: { increment: 1 } },
+            });
+            return null;
+          }
           // OTP is valid, delete it (one-time use)
           await prisma.oTP.delete({ where: { email: credentials.email } });
           // Only allow login for valid roles (including BASE_USER)
@@ -109,9 +125,6 @@ export const authOptions: NextAuthOptions = {
           });
           token.managedLocations = dbUser?.managedLocations?.map((loc: { id: string }) => loc.id) || [];
         }
-        console.log("JWT Callback - User ID:", user.id);
-        console.log("JWT Callback - User Organization ID:", user.organizationId);
-        console.log("JWT Callback - Token:", token);
       }
       return token;
     },
@@ -123,9 +136,6 @@ export const authOptions: NextAuthOptions = {
         if (token.role === "LOCATION_ADMIN") {
           session.user.managedLocations = token.managedLocations || [];
         }
-        console.log("Session Callback - Token ID:", token.id);
-        console.log("Session Callback - Token Organization ID:", token.organizationId);
-        console.log("Session Callback - Session User:", session.user);
       }
       return session;
     },

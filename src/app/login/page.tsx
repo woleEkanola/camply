@@ -10,9 +10,14 @@ export default function LoginPage() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isBaseUser, setIsBaseUser] = useState(false);
-  const [otp, setOtp] = useState("");
-  const [password, setPassword] = useState("");
+  // A single field for either a password (admin/owner/location-admin) or an
+  // OTP code (base user). The send-otp endpoint intentionally responds
+  // identically whether or not the email exists/is a base user (anti account
+  // enumeration), so the client can no longer know in advance which kind of
+  // credential to expect — instead it triggers an OTP send opportunistically
+  // and tries both credential shapes on submit; NextAuth's authorize() already
+  // branches correctly on whichever field is populated.
+  const [authValue, setAuthValue] = useState("");
   const router = useRouter();
 
   async function handleEmailSubmit(e: React.FormEvent) {
@@ -20,30 +25,15 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/base-user/send-otp", {
+      // Fire-and-forget: sends an OTP if this email belongs to a base user,
+      // and is a silent no-op otherwise. Errors here shouldn't block the
+      // password path, so they're not surfaced to the user.
+      await fetch("/api/base-user/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      
-      if (res.status === 200) {
-        // Success - OTP sent to base user
-        setIsBaseUser(true);
-        setStep(2);
-      } else if (data.message?.includes("not a base user")) {
-        // User exists but is an admin type - proceed to password
-        setIsBaseUser(false);
-        setStep(2);
-      } else if (data.message?.includes("No user found")) {
-        // No user found with this email
-        setError("Email not found. Please check and try again.");
-      } else {
-        // Other errors
-        setError(data.message || "Failed to send OTP");
-      }
-    } catch {
-      setError("Network error. Please try again.");
+      }).catch(() => {});
+      setStep(2);
     } finally {
       setLoading(false);
     }
@@ -54,14 +44,16 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const authRes = await signIn("credentials", {
-        redirect: false,
-        email,
-        ...(isBaseUser ? { otp } : { password }),
-      });
+      // Try password auth first (covers admin/owner/location-admin/super-admin).
+      let authRes = await signIn("credentials", { redirect: false, email, password: authValue });
 
       if (authRes?.error) {
-        setError(isBaseUser ? "OTP authentication failed" : "Password authentication failed");
+        // Fall back to OTP auth (covers base users).
+        authRes = await signIn("credentials", { redirect: false, email, otp: authValue });
+      }
+
+      if (authRes?.error) {
+        setError("Incorrect password or verification code.");
       } else {
         const sessionRes = await fetch("/api/auth/session");
         const session = await sessionRes.json();
@@ -154,28 +146,23 @@ export default function LoginPage() {
               <form onSubmit={handleAuthSubmit}>
                 <div className="mb-5">
                   <input
-                    type={isBaseUser ? "text" : "password"}
-                    placeholder={isBaseUser ? "Enter OTP" : "Enter Password"}
-                    value={isBaseUser ? otp : password}
-                    onChange={(e) =>
-                      isBaseUser ? setOtp(e.target.value) : setPassword(e.target.value)
-                    }
+                    type="text"
+                    placeholder="Enter Password"
+                    value={authValue}
+                    onChange={(e) => setAuthValue(e.target.value)}
                     required
                     className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
                   />
+                  <p className="mt-1 ml-2 text-xs text-gray-500">
+                    Enter your password, or the verification code emailed to you.
+                  </p>
                 </div>
                 <button
                   type="submit"
                   disabled={loading}
                   className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50"
                 >
-                  {loading
-                    ? isBaseUser
-                      ? "Verifying..."
-                      : "Logging in..."
-                    : isBaseUser
-                    ? "Verify OTP"
-                    : "Login"}
+                  {loading ? "Logging in..." : "Login"}
                 </button>
               </form>
             )}
@@ -254,28 +241,23 @@ export default function LoginPage() {
               <form onSubmit={handleAuthSubmit}>
                 <div className="mb-5">
                   <input
-                    type={isBaseUser ? "text" : "password"}
-                    placeholder={isBaseUser ? "Enter OTP" : "Enter Password"}
-                    value={isBaseUser ? otp : password}
-                    onChange={(e) =>
-                      isBaseUser ? setOtp(e.target.value) : setPassword(e.target.value)
-                    }
+                    type="text"
+                    placeholder="Enter Password"
+                    value={authValue}
+                    onChange={(e) => setAuthValue(e.target.value)}
                     required
                     className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
                   />
+                  <p className="mt-1 ml-2 text-xs text-gray-500">
+                    Enter your password, or the verification code emailed to you.
+                  </p>
                 </div>
                 <button
                   type="submit"
                   disabled={loading}
                   className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50"
                 >
-                  {loading
-                    ? isBaseUser
-                      ? "Verifying..."
-                      : "Logging in..."
-                    : isBaseUser
-                    ? "Verify OTP"
-                    : "Login"}
+                  {loading ? "Logging in..." : "Login"}
                 </button>
               </form>
             )}

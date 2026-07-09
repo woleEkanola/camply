@@ -4,8 +4,9 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
-import ModernDashboardLayout from "../components/ModernDashboardLayout";
+import AppShell from "@/components/layout/AppShell";
 import CamperManagement from "../components/CamperManagement";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 // UserRole and ProfileFieldType do not exist as types or enums in the generated Prisma client after the downgrade.
 // If you need these enums for UI logic, define them locally to match your schema.
@@ -47,38 +48,19 @@ export default function CampersPage() {
   const organizationId = (session?.user as ExtendedUser)?.organizationId || "";
 
   return (
-    <ModernDashboardLayout>
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="mb-6 text-2xl font-bold text-gray-800">Camper Profiles</h1>
-        
+    <AppShell area="admin">
+      <div className="mx-auto">
+        <PageHeader title="Camper Profiles" />
+
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
-            <div className="flex items-center">
-              <svg className="mr-2 h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <span>{error}</span>
-            </div>
-            <button 
-              onClick={() => setError("")} 
-              className="mt-2 text-xs text-red-700 underline"
-            >
-              Dismiss
-            </button>
+          <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+            <span>{error}</span>
+            <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
           </div>
         )}
-        
-        {success && (
-          <div className="mb-4 rounded-md bg-green-50 p-4 text-sm text-green-700">
-            <div className="flex items-center">
-              <svg className="mr-2 h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>{success}</span>
-            </div>
-          </div>
-        )}
-        
+
+        {success && <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700">{success}</div>}
+
         {status === "authenticated" && organizationId && (
           <CamperManagement 
             organizationId={organizationId} 
@@ -88,6 +70,6 @@ export default function CampersPage() {
           />
         )}
       </div>
-    </ModernDashboardLayout>
+    </AppShell>
   );
 }

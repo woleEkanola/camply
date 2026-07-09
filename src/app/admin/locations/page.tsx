@@ -5,7 +5,13 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
-import ModernDashboardLayout from "../components/ModernDashboardLayout";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { Table, type Column } from "@/components/ui/Table";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
@@ -716,502 +722,205 @@ export default function LocationsPage() {
   if (status === "loading") {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
+
+  const columns: Column<LocationWithAdmins>[] = [
+    {
+      header: "",
+      accessor: (location) => (
+        <input
+          type="checkbox"
+          checked={selectedLocationIds.includes(location.id)}
+          onChange={() => handleSelectLocation(location.id)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Select location ${location.name}`}
+        />
+      ),
+      className: "w-8",
+    },
+    { header: "Name", accessor: "name", searchable: true },
+    {
+      header: "Address",
+      accessor: (location) =>
+        [location.address, location.city, location.state, location.zipCode, location.country].filter(Boolean).join(", "),
+    },
+    {
+      header: "Assigned Admin",
+      accessor: (location) =>
+        location.admins && location.admins.length > 0 ? (
+          <Badge tone="attention">
+            {location.admins
+              .map((a) => ((a.firstName || a.lastName) ? `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim() : a.id))
+              .join(", ")}
+          </Badge>
+        ) : (
+          <Badge tone="neutral">No admin assigned</Badge>
+        ),
+    },
+    { header: "Quota", accessor: (location) => (typeof location.quota === "number" ? location.quota : 0) },
+    {
+      header: "Signup Link",
+      accessor: (location) => {
+        const signupLink = getSignupLinkForLocation(location.id);
+        if (!activeYear) return <span className="text-warning-600">No active year set</span>;
+        if (signupLink) {
+          return (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleCopySignupLink(location.id)}
+                className="inline-flex items-center rounded-md bg-success-50 px-2 py-1 text-xs font-medium text-success-700 hover:bg-success-100"
+              >
+                {copiedLinkId === location.id ? "Copied!" : "Copy Link"}
+              </button>
+              <span className="text-xs text-neutral-500">{signupLink.active ? "Active" : "Inactive"}</span>
+            </div>
+          );
+        }
+        if (canGenerateSignupLink) {
+          return (
+            <button
+              onClick={() => handleGenerateSignupLink(location.id)}
+              disabled={generatingLinkFor === location.id}
+              className="inline-flex items-center rounded-md bg-accent-50 px-2 py-1 text-xs font-medium text-accent-700 hover:bg-accent-100 disabled:bg-neutral-100 disabled:text-neutral-400"
+            >
+              {generatingLinkFor === location.id ? "Generating..." : "Generate Link"}
+            </button>
+          );
+        }
+        return null;
+      },
+    },
+  ];
+
+  const actions = (location: LocationWithAdmins) => (
+    <div className="flex justify-end gap-3 text-sm">
+      {canUpdateLocation && (
+        <button onClick={() => openEditModal(location.id)} className="text-accent-700 hover:underline">Edit</button>
+      )}
+      {canDeleteLocation && (
+        <button onClick={() => openDeleteModal(location.id)} className="text-danger-600 hover:underline">Delete</button>
+      )}
+      {canManageAdmins && (
+        <button onClick={() => openAdminModal(location.id)} className="text-success-700 hover:underline">Manage Admins</button>
+      )}
+    </div>
+  );
+
   return (
-    <ModernDashboardLayout>
-      <div>
-        {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
-            <div className="flex items-center">
-              <svg className="mr-2 h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <span>{error}</span>
-            </div>
-            <button
-              onClick={() => setError("")}
-              className="mt-2 text-xs text-red-700 underline"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
+    <AppShell area="admin">
+      <PageHeader
+        title="Centres"
+        description={session?.user?.email ?? undefined}
+        actions={canCreateLocation ? <Button onClick={openCreateModal}>Add Centre</Button> : undefined}
+      />
 
-        {success && (
-          <div className="mb-4 rounded-md bg-green-50 p-4 text-sm text-green-700">
-            <div className="flex items-center">
-              <svg className="mr-2 h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>{success}</span>
-            </div>
-          </div>
-        )}
+      {error && (
+        <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+          <span>{error}</span>
+          <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
+        </div>
+      )}
+      {success && <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700">{success}</div>}
 
-        <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-800">Locations</h2>
-            {session?.user && (
-              <div className="mt-1 text-sm text-gray-600">
-                <span className="font-medium">{session.user.email}</span>
-                {Array.isArray(userPermissions) && userPermissions.length > 0 && (
-                  <span className="ml-2 text-xs text-gray-500">[
-                    {userPermissions.join(', ')}
-                  ]</span>
-                )}
-                {(!userPermissions || userPermissions.length === 0) && (
-                  <span className="ml-2 text-xs text-gray-400">[No explicit permissions]</span>
-                )}
-              </div>
-            )}
-          </div>
-          {canCreateLocation && (
-            <button
-              onClick={openCreateModal}
-              className="rounded-md bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
-              data-testid="add-location-btn"
-            >
-              Add Location
-            </button>
+      {showLocationsTable && (
+        <>
+          {selectedLocationIds.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-neutral-500">{selectedLocationIds.length} selected</span>
+              <Button size="sm" className="bg-success-600 text-white hover:bg-success-700" disabled={isBulkActionLoading} onClick={handleBulkEnable}>
+                {isBulkActionLoading ? "Enabling..." : "Enable Selected"}
+              </Button>
+              <Button size="sm" variant="danger" disabled={isBulkActionLoading} onClick={handleBulkDisable}>
+                {isBulkActionLoading ? "Disabling..." : "Disable Selected"}
+              </Button>
+              <button onClick={handleSelectAll} className="text-xs text-neutral-500 underline">
+                {selectAll ? "Deselect all" : "Select all"}
+              </button>
+            </div>
+          )}
+          <Table
+            columns={columns}
+            data={locations}
+            rowKey={(location) => location.id}
+            actions={actions}
+            isLoading={isLoadingLocations}
+            emptyTitle="No centres yet"
+            emptyDescription="Add your first centre to start accepting registrations."
+            emptyAction={canCreateLocation ? <Button onClick={openCreateModal}>Add Centre</Button> : undefined}
+            searchPlaceholder="Search centres..."
+          />
+        </>
+      )}
+
+      {/* Location Modal (Create/Edit) */}
+      <Dialog open={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedLocation ? "Edit Centre" : "Add New Centre"}>
+        {error && <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
+        {isLoadingLocation ? (
+          <div className="p-4 text-sm text-neutral-500">Loading centre details...</div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Input label="Centre Name" id="name" name="name" value={formData.name} onChange={handleInputChange} required />
+            <Input
+              label="Quota (Optional)"
+              type="number"
+              id="quota"
+              name="quota"
+              value={formData.quota ?? 0}
+              onChange={(e) => setFormData({ ...formData, quota: parseInt(e.target.value, 10) || 0 })}
+            />
+            <Input label="Address" id="address" name="address" value={formData.address} onChange={handleInputChange} required />
+            <Input label="City" id="city" name="city" value={formData.city} onChange={handleInputChange} required />
+            <Input label="State / Province (Optional)" id="state" name="state" value={formData.state ?? ""} onChange={handleInputChange} />
+            <Input label="Zip / Postal Code (Optional)" id="zipCode" name="zipCode" value={formData.zipCode ?? ""} onChange={handleInputChange} />
+            <Input label="Country" id="country" name="country" value={formData.country} onChange={handleInputChange} required />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+              <Button type="submit" loading={isSubmitting}>{selectedLocation ? "Update Centre" : "Add Centre"}</Button>
+            </div>
+          </form>
+        )}
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion" size="sm">
+        {error && <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
+        <p className="text-sm text-neutral-500">Are you sure you want to delete this centre? This action cannot be undone.</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
+          <Button variant="danger" loading={isSubmitting} onClick={handleDelete}>Delete</Button>
+        </div>
+      </Dialog>
+
+      {/* Manage Admins Modal */}
+      <Dialog open={isAdminModalOpen && !!selectedLocation} onClose={() => setIsAdminModalOpen(false)} title="Manage Centre Admins">
+        {error && <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
+        {locations.find((loc) => loc.id === selectedLocation)?.name && (
+          <p className="mb-4 text-sm text-neutral-600">
+            For centre: <span className="font-medium">{locations.find((loc) => loc.id === selectedLocation)?.name}</span>
+          </p>
+        )}
+        <div className="mb-4 max-h-60 overflow-y-auto rounded-md border border-neutral-200 p-2">
+          <p className="mb-2 text-sm font-medium text-neutral-700">Available Admins (Role: LOCATION_ADMIN)</p>
+          {availableAdmins.length === 0 ? (
+            <p className="text-sm text-neutral-500">No available admins found.</p>
+          ) : (
+            availableAdmins.map((admin) => (
+              <label key={admin.id} className="flex items-center gap-2 py-1 text-sm text-neutral-700">
+                <input
+                  type="checkbox"
+                  checked={selectedAdmins.includes(admin.id)}
+                  onChange={(e) => handleAdminSelection(admin.id, e.target.checked)}
+                  className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                />
+                {admin.firstName || admin.lastName ? `${admin.firstName ?? ""} ${admin.lastName ?? ""}`.trim() : admin.email}
+              </label>
+            ))
           )}
         </div>
-
-        {locationsError && (
-          <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
-            Error loading locations: {locationsError.message || "You don't have permission to view locations for this organization"}
-          </div>
-        )}
-
-        {showLocationsTable && (
-          <div>
-            {isLoadingLocations ? (
-              <div className="flex h-64 items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
-                <span className="ml-2">Loading locations...</span>
-              </div>
-            ) : locations.length > 0 ? (
-              <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-                <div className="mb-2 flex flex-wrap gap-2">
-  <button
-    onClick={handleBulkEnable}
-    disabled={isBulkActionLoading || selectedLocationIds.length === 0}
-    className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400"
-    data-testid="bulk-enable-btn"
-  >
-    {isBulkActionLoading ? "Enabling..." : "Enable Selected"}
-  </button>
-  <button
-    onClick={handleBulkDisable}
-    disabled={isBulkActionLoading || selectedLocationIds.length === 0}
-    className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:bg-gray-200 disabled:text-gray-400"
-    data-testid="bulk-disable-btn"
-  >
-    {isBulkActionLoading ? "Disabling..." : "Disable Selected"}
-  </button>
-</div>
-<table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-  <tr>
-    <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-      <input
-        type="checkbox"
-        checked={selectAll}
-        onChange={handleSelectAll}
-        aria-label="Select All Locations"
-        data-testid="select-all-checkbox"
-      />
-    </th>
-    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-      Name
-    </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Address
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Assigned Admin
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Quota
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Signup Link
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {locations.map((location) => {
-  const isChecked = selectedLocationIds.includes(location.id);
-                      // Get signup link for this location (using the helper function, not a hook)
-                      const signupLink = getSignupLinkForLocation(location.id);
-                      // Assigned Admin: show all admins (comma-separated)
-                      const assignedAdmins = location.admins && location.admins.length > 0 ? (
-                        <span className="inline-flex rounded-full bg-orange-100 px-2 text-xs font-semibold leading-5 text-orange-800">
-                          {location.admins.map(a => (a.firstName || a.lastName) ? `${a.firstName ?? ''} ${a.lastName ?? ''}`.trim() : a.id).join(', ')}
-                        </span>
-                      ) : (
-                        <span className="inline-flex rounded-full bg-gray-100 px-2 text-xs font-semibold leading-5 text-gray-500">
-                          No admin assigned
-                        </span>
-                      );
-                      return (
-                        <tr key={location.id}>
-  <td className="whitespace-nowrap px-3 py-4 text-sm">
-    <input
-      type="checkbox"
-      checked={isChecked}
-      onChange={() => handleSelectLocation(location.id)}
-      aria-label={`Select location ${location.name}`}
-      data-testid={`select-location-checkbox-${location.id}`}
-    />
-  </td>
-  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-    {location.name}
-  </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                            {location.address}, {location.city}
-                            {location.state && `, ${location.state}`}
-                            {location.zipCode && ` ${location.zipCode}`}
-                            {location.country && `, ${location.country}`}
-                          </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500 cursor-pointer hover:underline"
-                              onClick={() => router.push(`/admin/locations/${location.id}`)} // Consider if this navigation is intended on click
-                          >
-                            {assignedAdmins}
-                          </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                            {typeof location.quota === "number" ? location.quota : 0}
-                          </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                            {!activeYear ? (
-                              <span className="text-yellow-500">No active year set</span>
-                            ) : signupLink ? (
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => handleCopySignupLink(location.id)}
-                                  className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
-                                  data-testid={`copy-link-btn-${location.id}`}
-                                >
-                                  {copiedLinkId === location.id ? (
-                                    <>
-                                      <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                      </svg>
-                                      Copied!
-                                    </>
-                                  ) : (
-                                    <>
-                                      <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                      </svg>
-                                      Copy Link
-                                    </>
-                                  )}
-                                </button>
-                                <span className="text-xs text-gray-500">
-                                  {signupLink.active ? 'Active' : 'Inactive'}
-                                </span>
-                              </div>
-                            ) : canGenerateSignupLink ? (
-                              <button
-                                onClick={() => handleGenerateSignupLink(location.id)}
-                                disabled={generatingLinkFor === location.id}
-                                className="inline-flex items-center rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100 disabled:bg-gray-100 disabled:text-gray-400"
-                                data-testid={`generate-link-btn-${location.id}`}
-                              >
-                                {generatingLinkFor === location.id ? (
-                                  <>
-                                    <svg className="mr-1 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    Generating...
-                                  </>
-                                ) : (
-                                  <>
-                                    <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                    </svg>
-                                    Generate Link
-                                  </>
-                                )}
-                              </button>
-                            ) : null}
-                          </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                            {canUpdateLocation && (
-                              <button
-                                onClick={() => openEditModal(location.id)}
-                                className="mr-2 text-orange-600 hover:text-orange-900"
-                                data-testid={`edit-location-btn-${location.id}`}
-                              >
-                                Edit
-                              </button>
-                            )}
-                            {canDeleteLocation && (
-                              <button
-                                onClick={() => openDeleteModal(location.id)}
-                                className="text-red-600 hover:text-red-900"
-                                data-testid={`delete-location-btn-${location.id}`}
-                              >
-                                Delete
-                              </button>
-                            )}
-                            {canManageAdmins && (
-                              <button
-                                onClick={() => openAdminModal(location.id)}
-                                className="text-green-600 hover:text-green-900"
-                                data-testid={`manage-admins-btn-${location.id}`}
-                              >
-                                Manage Admins
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-                <p className="text-gray-500">No locations found for this organization.</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Location Modal (Create/Edit) */}
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-600 bg-opacity-50">
-            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-              <h3 className="mb-4 text-lg font-semibold text-gray-900">
-                {selectedLocation ? "Edit Location" : "Add New Location"}
-              </h3>
-              {error && (
-                <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-              {isLoadingLocation ? (
-                 <div className="flex items-center justify-center p-4">
-                  <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
-                  <span className="ml-2 text-gray-600">Loading location details...</span>
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit}>
-                  <div className="mb-4">
-                    <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                      Location Name
-                    </label>
-                    <input
-                      type="text"
-                      id="name"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      required
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
-                    />
-                  </div>
-                   <div className="mb-4">
-                    <label htmlFor="quota" className="block text-sm font-medium text-gray-700">
-                      Quota (Optional)
-                    </label>
-                    <input
-                      type="number"
-                      id="quota"
-                      name="quota"
-                      value={formData.quota ?? 0}
-                      onChange={(e) => setFormData({ ...formData, quota: parseInt(e.target.value, 10) || 0 })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                      Address
-                    </label>
-                    <input
-                      type="text"
-                      id="address"
-                      name="address"
-                      value={formData.address}
-                      onChange={handleInputChange}
-                      required
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="city" className="block text-sm font-medium text-gray-700">
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      id="city"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      required
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="state" className="block text-sm font-medium text-gray-700">
-                      State / Province (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      id="state"
-                      name="state"
-                      value={formData.state ?? ""}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="zipCode" className="block text-sm font-medium text-gray-700">
-                      Zip / Postal Code (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      id="zipCode"
-                      name="zipCode"
-                      value={formData.zipCode ?? ""}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="country" className="block text-sm font-medium text-gray-700">
-                      Country
-                    </label>
-                    <input
-                      type="text"
-                      id="country"
-                      name="country"
-                      value={formData.country}
-                      onChange={handleInputChange}
-                      required
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm"
-                    />
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="inline-flex justify-center rounded-md border border-transparent bg-orange-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50"
-                    >
-                      {isSubmitting ? "Saving..." : selectedLocation ? "Update Location" : "Add Location"}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Delete Confirmation Modal */}
-        {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-600 bg-opacity-50">
-            <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-              <h3 className="mb-4 text-lg font-semibold text-gray-900">Confirm Deletion</h3>
-              {error && (
-                 <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
-                   {error}
-                 </div>
-               )}
-              <p className="text-sm text-gray-500">
-                Are you sure you want to delete this location? This action cannot be undone.
-              </p>
-              <div className="mt-5 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                   disabled={isSubmitting}
-                  className="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                   {isSubmitting ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Manage Admins Modal */}
-        {isAdminModalOpen && selectedLocation && (
-           <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-600 bg-opacity-50">
-             <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-               <h3 className="mb-4 text-lg font-semibold text-gray-900">Manage Location Admins</h3>
-                {error && (
-                  <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
-                    {error}
-                  </div>
-                )}
-                {/* Display location name here */}
-                {locations.find(loc => loc.id === selectedLocation)?.name && (
-                   <p className="mb-4 text-sm text-gray-600">
-                     For Location: <span className="font-medium">{locations.find(loc => loc.id === selectedLocation)?.name}</span>
-                   </p>
-                )}
-
-               <div className="mb-4 max-h-60 overflow-y-auto rounded border border-gray-200 p-2">
-                 <p className="mb-2 text-sm font-medium text-gray-700">Available Admins (Role: LOCATION_ADMIN)</p>
-                 {availableAdmins.length === 0 ? (
-                    <p className="text-sm text-gray-500">No available admins found.</p>
-                 ) : (
-                   availableAdmins.map((admin) => (
-                     <div key={admin.id} className="flex items-center justify-between py-1">
-                       <label className="flex items-center text-sm text-gray-700">
-                         <input
-                           type="checkbox"
-                           checked={selectedAdmins.includes(admin.id)}
-                           onChange={(e) => handleAdminSelection(admin.id, e.target.checked)}
-                           className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                         />
-                         <span className="ml-2">
-                           {admin.firstName || admin.lastName ? `${admin.firstName ?? ''} ${admin.lastName ?? ''}`.trim() : admin.email}
-                         </span>
-                       </label>
-                     </div>
-                   ))
-                 )}
-               </div>
-               <div className="flex justify-end">
-                 <button
-                   type="button"
-                   onClick={() => setIsAdminModalOpen(false)}
-                   className="mr-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-                 >
-                   Cancel
-                 </button>
-                 <button
-                   type="button"
-                   onClick={handleSaveAdmins}
-                    disabled={isSubmitting}
-                   className="inline-flex justify-center rounded-md border border-transparent bg-orange-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50"
-                 >
-                   {isSubmitting ? "Saving..." : "Save Admins"}
-                 </button>
-               </div>
-             </div>
-           </div>
-        )}
-      </div>
-    </ModernDashboardLayout>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setIsAdminModalOpen(false)}>Cancel</Button>
+          <Button loading={isSubmitting} onClick={handleSaveAdmins}>Save Admins</Button>
+        </div>
+      </Dialog>
+    </AppShell>
   );
 }

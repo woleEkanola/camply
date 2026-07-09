@@ -1,9 +1,13 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import DashboardLayout from "./components/DashboardLayout";
 import { api } from "@/utils/api";
 import { useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatCard } from "@/components/ui/StatCard";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 export default function LocationAdminDashboard() {
   const { data: session, status } = useSession({ required: true });
@@ -58,51 +62,31 @@ export default function LocationAdminDashboard() {
   const registrationsCount = registrations ? registrations.length : 0;
 
   return (
-    <DashboardLayout title="Location Admin Dashboard">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-4">Location Summary</h1>
-        {locationId ? (
-          <>
-
-            {/* Signup Link Section */}
-            <div className="mb-4">
-              <label className="block font-semibold mb-1">Signup Link</label>
-              {isSignupLinksLoading ? (
-                <div>Loading signup link...</div>
-              ) : signupLinks ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    className="border rounded px-2 py-1 w-full text-xs"
-                    value={`${window.location.origin}/signup/${signupLinks.token}`}
-                    readOnly
-                  />
-                  <button
-                    className="px-2 py-1 bg-blue-600 text-white rounded text-xs"
-                    onClick={() => handleCopySignupLink(signupLinks.token)}
-                    type="button"
-                  >
-                    {copied ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-              ) : (
-                <div>No signup link found for this location.</div>
-              )}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white rounded shadow p-6">
-                <div className="text-gray-500">Total Campers</div>
-                <div className="text-3xl font-bold">{campersCount}</div>
+    <AppShell area="location-admin">
+      <PageHeader title="Location Summary" />
+      {locationId ? (
+        <>
+          <div className="mb-6">
+            <label className="mb-1 block text-sm font-medium text-neutral-700">Signup Link</label>
+            {isSignupLinksLoading ? (
+              <div className="text-sm text-neutral-500">Loading signup link...</div>
+            ) : signupLinks ? (
+              <div className="flex items-center gap-2">
+                <Input containerClassName="flex-1" className="text-xs" value={`${window.location.origin}/signup/${signupLinks.token}`} readOnly />
+                <Button size="sm" onClick={() => handleCopySignupLink(signupLinks.token)}>{copied ? "Copied!" : "Copy"}</Button>
               </div>
-              <div className="bg-white rounded shadow p-6">
-                <div className="text-gray-500">Total Registrations</div>
-                <div className="text-3xl font-bold">{registrationsCount}</div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div>No managed locations found for this admin.</div>
-        )}
-      </div>
-    </DashboardLayout>
+            ) : (
+              <div className="text-sm text-neutral-500">No signup link found for this location.</div>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <StatCard label="Total Campers" value={campersCount} />
+            <StatCard label="Total Registrations" value={registrationsCount} />
+          </div>
+        </>
+      ) : (
+        <div className="text-sm text-neutral-500">No managed locations found for this admin.</div>
+      )}
+    </AppShell>
   );
 }

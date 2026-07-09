@@ -6,26 +6,30 @@ import bcrypt from "bcryptjs";
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER";
 
 export const userRouter = createTRPCRouter({
-  getAll: publicProcedure.query(async ({ ctx }) => {
-    return await ctx.prisma.user.findMany();
+  getAll: protectedProcedure.query(async ({ ctx }) => {
+    return await ctx.prisma.user.findMany({
+      omit: { password: true },
+    });
   }),
-  
-  getById: publicProcedure
+
+  getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       return await ctx.prisma.user.findUnique({
         where: { id: input.id },
+        omit: { password: true },
         include: {
           managedLocations: true,
         },
       });
     }),
-    
-  getByEmail: publicProcedure
+
+  getByEmail: protectedProcedure
     .input(z.object({ email: z.string().email() }))
     .query(async ({ ctx, input }) => {
       return await ctx.prisma.user.findUnique({
         where: { email: input.email },
+        omit: { password: true },
       });
     }),
     

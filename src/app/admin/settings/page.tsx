@@ -3,8 +3,9 @@ import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
 import { useMemo } from "react";
-import DashboardLayout from "../components/DashboardLayout";
-import ModernDashboardLayout from "../components/ModernDashboardLayout";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card, CardBody } from "@/components/ui/Card";
 
 const AgeRangeSettings = dynamic(() => import("../settings-age-range"), { ssr: false });
 
@@ -30,23 +31,27 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <ModernDashboardLayout>
-      <div className="max-w-2xl mx-auto mt-8 bg-white rounded-xl shadow-lg p-8 border border-gray-100">
-        <h1 className="text-3xl font-bold mb-4 text-orange-700">Admin Dashboard Settings</h1>
-        <p className="mb-6 text-gray-600 text-lg">Configure registration age range and cut-off date for your organization. These settings control camper eligibility for registration.</p>
-        <div className="mb-6">
-          <AgeRangeSettings
-            organizationId={organizationId}
-            initialMin={initialMin}
-            initialMax={initialMax}
-            initialCutoffDate={initialCutoffDate}
-            onSettingsSaved={() => {
-              // Refetch organization settings after save
-              refetch();
-            }}
-          />
-        </div>
+    <AppShell area="admin">
+      <div className="mx-auto max-w-2xl">
+        <PageHeader
+          title="Settings"
+          description="Configure registration age range and cut-off date for your organization. These settings control camper eligibility for registration."
+        />
+        <Card>
+          <CardBody>
+            <AgeRangeSettings
+              organizationId={organizationId}
+              initialMin={initialMin}
+              initialMax={initialMax}
+              initialCutoffDate={initialCutoffDate}
+              onSettingsSaved={() => {
+                // Refetch organization settings after save
+                refetch();
+              }}
+            />
+          </CardBody>
+        </Card>
       </div>
-    </ModernDashboardLayout>
+    </AppShell>
   );
 }

@@ -7,6 +7,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Tab } from "@headlessui/react";
 import FileUpload from "@/components/file-upload";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 export default function CamperProfilePage() {
   const router = useRouter();
@@ -144,12 +148,12 @@ export default function CamperProfilePage() {
     return missing;
   };
 
-  // Registration mutation
-  const registerMutation = api.registration.create.useMutation({
-    onSuccess: () => {
-      setSuccess("Registration submitted!");
+  // Registration mutation — creates a draft via the Registration Engine and
+  // sends the parent to the document upload / review wizard to finish it.
+  const registerMutation = api.registration.createDraft.useMutation({
+    onSuccess: (draft) => {
       setIsRegistering(false);
-      refetchRegistrations();
+      router.push(`/dashboard/register/${draft.id}`);
     },
     onError: (err) => {
       setError(`Registration failed: ${err.message}`);
@@ -248,29 +252,33 @@ export default function CamperProfilePage() {
   );
 
   if (isLoadingProfile || isLoadingYear || isLoadingFields || isLoadingAllFields) {
-    return <div>Loading profile...</div>;
+    return (
+      <AppShell area="dashboard">
+        <div>Loading profile...</div>
+      </AppShell>
+    );
   }
   if (!profile) {
-    return <div>Profile not found</div>;
+    return (
+      <AppShell area="dashboard">
+        <div>Profile not found</div>
+      </AppShell>
+    );
   }
 
-  // Debug: log birthCert and completeness on every render
-  console.log("DEBUG: profile.birthCert", profile?.birthCert);
-  console.log("DEBUG: profile completion %", getProfileCompletion());
-  
-  console.log("DEBUG: profile", profile);
-
   return (
-    <div className="max-w-2xl mx-auto py-8">
-      <h1 className="text-2xl font-bold mb-4">Camper Profile: {profile.name}</h1>
-      {error && <div className="mb-4 text-red-600">{error}</div>}
-      {success && <div className="mb-4 text-green-600">{success}</div>}
-      <div className="mb-6 p-4 bg-white rounded shadow">
-        <h2 className="text-lg font-semibold mb-2">Registration Status</h2>
+    <AppShell area="dashboard">
+    <div className="max-w-2xl mx-auto">
+      <PageHeader title={`Camper Profile: ${profile.name}`} />
+      {error && <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
+      {success && <div className="mb-4 rounded-md bg-success-50 p-3 text-sm text-success-700">{success}</div>}
+      <div className="mb-6 p-4 bg-white rounded-lg shadow-sm border border-neutral-200">
+        <h2 className="text-sm font-semibold mb-2 text-neutral-900">Registration Status</h2>
         {currentYearRegistration ? (
           <>
             <div className="mb-2">
-              <span className="font-medium">Status:</span> {currentYearRegistration.status || 'Registered'}
+              <span className="font-medium text-neutral-700">Status:</span>{" "}
+              <StatusBadge status={currentYearRegistration.status || "PENDING"} />
             </div>
             {/* Consent form logic */}
             {currentYearRegistration.parentConsent ? (
@@ -318,21 +326,16 @@ export default function CamperProfilePage() {
               >
                 {/* Edit/Save Button (only for custom fields) */}
                 <div className="mb-4 flex gap-2">
-                  <button
+                  <Button
                     type="button"
-                    className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded"
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setIsEditing((prev) => !prev)}
                   >
                     {isEditing ? 'Cancel' : 'Edit Profile Fields'}
-                  </button>
+                  </Button>
                   {isEditing && (
-                    <button
-                      type="submit"
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
-                      disabled={isSaving}
-                    >
-                      {isSaving ? 'Saving...' : 'Save'}
-                    </button>
+                    <Button type="submit" size="sm" loading={isSaving}>Save</Button>
                   )}
                 </div>
 
@@ -544,13 +547,13 @@ export default function CamperProfilePage() {
                 </div>
               ) : (
                 <>
-                  <button
+                  <Button
                     onClick={handleRegister}
-                    className={`bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed`}
-                    disabled={getProfileCompletion() < 100 || isRegistering}
+                    disabled={getProfileCompletion() < 100}
+                    loading={isRegistering}
                   >
-                    {isRegistering ? "Registering..." : (activeYear ? `Register for ${activeYear.name}` : "Register")}
-                  </button>
+                    {activeYear ? `Register for ${activeYear.name}` : "Register"}
+                  </Button>
                   {getProfileCompletion() < 100 && (
                     <p className="mt-2 text-sm text-gray-500 text-right">
                       <span className="font-medium text-emerald-700">Note:</span> You can only register after completing your profile.
@@ -569,8 +572,9 @@ export default function CamperProfilePage() {
         </div>
       )}
       <div className="mt-6">
-        <Link href="/dashboard">Back to Dashboard</Link>
+        <Link href="/dashboard" className="text-sm text-accent-700 underline">← Back to Dashboard</Link>
       </div>
     </div>
+    </AppShell>
   );
 }

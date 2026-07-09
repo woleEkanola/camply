@@ -89,6 +89,8 @@ function SignupForm({ token }: { token: string }) {
     error: signupLinkError
   } = api.signupLink.validateToken.useQuery({ token }, { retry: false });
 
+  const createDraft = api.registration.createDraft.useMutation();
+
   // Fetch organizationId after OTP verified
   useEffect(() => {
     if (step === 'profile' && !organizationId && signupLinkData) {
@@ -593,6 +595,7 @@ function SignupForm({ token }: { token: string }) {
                 value: dynamicValues[field.id] || ""
               }));
               const payload = {
+                email,
                 name,
                 dob,
                 gender,
@@ -610,11 +613,22 @@ function SignupForm({ token }: { token: string }) {
                 setIsLoading(false);
                 return;
               }
-              setSuccess('Signup complete! Redirecting...');
-              setIsLoading(false);
-              setTimeout(() => {
-                router.push('/login');
-              }, 1500);
+
+              // Create a draft registration for this camper against the camp/centre
+              // encoded in the signup link, then send the parent to finish it.
+              try {
+                const draft = await createDraft.mutateAsync({
+                  camperProfileId: data.camperProfileId,
+                  yearId: signupLinkData!.yearId,
+                  locationId: signupLinkData!.locationId,
+                });
+                setSuccess('Profile created! Continuing to registration...');
+                setIsLoading(false);
+                router.push(`/dashboard/register/${draft.id}`);
+              } catch {
+                setIsLoading(false);
+                router.push('/dashboard');
+              }
             }}>
               <div className="mb-4">
                 <input 

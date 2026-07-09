@@ -4,7 +4,11 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { api } from "@/utils/api";
-import Link from "next/link";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card, CardBody } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 export default function NewProfilePage() {
   const { data: session, status } = useSession();
@@ -155,97 +159,36 @@ export default function NewProfilePage() {
   }
   
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Create Camper Profile</h1>
-        </div>
-      </header>
-      <main>
-        <div className="mx-auto max-w-2xl py-6 sm:px-6 lg:px-8">
-          <div className="bg-white p-6 rounded shadow">
-            {/* Show error or success messages */}
-            {error && (
-              <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700 border border-red-200">
-                {error}
-              </div>
-            )}
-            {success && (
-              <div className="mb-4 rounded-md bg-green-50 p-4 text-sm text-green-700 border border-green-200">
-                {success}
-              </div>
-            )}
-            <form onSubmit={handleSubmit}>
-              <div className="grid grid-cols-6 gap-6">
-                <div className="col-span-6 sm:col-span-4">
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                    Camper Name
+    <AppShell area="dashboard">
+      <div className="mx-auto max-w-2xl">
+        <PageHeader title="Create Camper Profile" />
+        <Card>
+          <CardBody>
+            {error && <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">{error}</div>}
+            {success && <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700">{success}</div>}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <Input label="Camper Name" name="name" value={formData.name} onChange={handleInputChange} required />
+              <Input label="Date of Birth" type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleInputChange} required />
+              <div>
+                <label className="mb-1 block text-sm font-medium text-neutral-700">Gender</label>
+                <div className="mt-1 flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm text-neutral-700">
+                    <input type="radio" name="gender" value="Male" checked={formData.gender === 'Male'} onChange={handleInputChange} required />
+                    Male
                   </label>
-                  <input
-                    type="text"
-                    name="name"
-                    id="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm"
-                    required
-                  />
-                </div>
-                <div className="col-span-6 sm:col-span-4">
-                  <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">
-                    Date of Birth
+                  <label className="flex items-center gap-2 text-sm text-neutral-700">
+                    <input type="radio" name="gender" value="Female" checked={formData.gender === 'Female'} onChange={handleInputChange} required />
+                    Female
                   </label>
-                  <input
-                    type="date"
-                    name="dateOfBirth"
-                    id="dateOfBirth"
-                    value={formData.dateOfBirth}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm"
-                    required
-                  />
-                </div>
-                <div className="col-span-6 sm:col-span-4">
-                  <label className="block text-sm font-medium text-gray-700">Gender</label>
-                  <div className="flex gap-4 items-center mt-1">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="gender"
-                        value="Male"
-                        checked={formData.gender === 'Male'}
-                        onChange={handleInputChange}
-                        required
-                      />
-                      Male
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="gender"
-                        value="Female"
-                        checked={formData.gender === 'Female'}
-                        onChange={handleInputChange}
-                        required
-                      />
-                      Female
-                    </label>
-                  </div>
                 </div>
               </div>
-              <div className="bg-gray-50 px-4 py-3 text-right sm:px-6 mt-4">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="inline-flex justify-center rounded-md border border-transparent bg-emerald-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  {isSubmitting ? "Creating..." : "Create Profile"}
-                </button>
+              <div className="flex justify-end pt-2">
+                <Button type="submit" loading={isSubmitting}>Create Profile</Button>
               </div>
             </form>
-          </div>
-        </div>
-      </main>
-    </div>
+          </CardBody>
+        </Card>
+      </div>
+    </AppShell>
   );
 }

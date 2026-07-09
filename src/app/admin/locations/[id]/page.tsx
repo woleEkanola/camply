@@ -1,8 +1,8 @@
 "use client";
 import { useParams } from "next/navigation";
 import { api } from "@/utils/api";
-import ModernDashboardLayout from "../../components/ModernDashboardLayout";
-import React from "react";
+import AppShell from "@/components/layout/AppShell";
+import React, { useEffect, useState } from "react";
 import StatCard from "../../components/StatCard";
 import LineChart from "../../components/LineChart";
 
@@ -10,10 +10,42 @@ const LocationDetailsPage = () => {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : Array.isArray(params.id) ? params.id[0] : "";
 
-  const { data: location, isLoading, error } = api.location.getById.useQuery(
+  const { data: location, isLoading, error, refetch } = api.location.getById.useQuery(
     { id },
     { enabled: !!id }
   );
+
+  const [config, setConfig] = useState({
+    code: "",
+    contactPhone: "",
+    contactEmail: "",
+    visible: true,
+    fullBehavior: "CLOSE" as "CLOSE" | "PENDING_OK" | "REDIRECT",
+    quota: 0,
+    signupOpen: true,
+  });
+  const [configMsg, setConfigMsg] = useState("");
+
+  useEffect(() => {
+    if (!location) return;
+    setConfig({
+      code: (location as any).code ?? "",
+      contactPhone: (location as any).contactPhone ?? "",
+      contactEmail: (location as any).contactEmail ?? "",
+      visible: (location as any).visible ?? true,
+      fullBehavior: (location as any).fullBehavior ?? "CLOSE",
+      quota: location.quota ?? 0,
+      signupOpen: (location as any).signupOpen ?? true,
+    });
+  }, [location]);
+
+  const updateConfig = api.location.updateCentreConfig.useMutation({
+    onSuccess: () => {
+      setConfigMsg("Centre configuration saved.");
+      refetch();
+    },
+    onError: (e) => setConfigMsg(e.message),
+  });
 
   const { data: stats, isLoading: statsLoading, error: statsError } = api.location.getStats.useQuery(
     { locationId: id },
@@ -26,14 +58,14 @@ const LocationDetailsPage = () => {
 
   if (error || !location) {
     return (
-      <ModernDashboardLayout>
+      <AppShell area="admin">
         <div className="p-8 text-center text-red-600">Error loading location details.</div>
-      </ModernDashboardLayout>
+      </AppShell>
     );
   }
 
   return (
-    <ModernDashboardLayout>
+    <AppShell area="admin">
       <div className="max-w-3xl mx-auto p-8">
         <h1 className="text-2xl font-bold mb-4">{location.name}</h1>
         <div className="mb-6">
@@ -61,6 +93,55 @@ const LocationDetailsPage = () => {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Centre Configuration */}
+        <div className="mb-6 bg-white p-4 rounded-lg shadow">
+          <h2 className="text-lg font-semibold mb-2">Centre Configuration</h2>
+          {configMsg && <div className="text-sm text-blue-700 mb-2">{configMsg}</div>}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Centre Code</label>
+              <input className="w-full border rounded px-3 py-2" value={config.code} onChange={(e) => setConfig({ ...config, code: e.target.value })} placeholder="e.g. IKJ" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Capacity (0 = unlimited)</label>
+              <input type="number" className="w-full border rounded px-3 py-2" value={config.quota} onChange={(e) => setConfig({ ...config, quota: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Contact Phone</label>
+              <input className="w-full border rounded px-3 py-2" value={config.contactPhone} onChange={(e) => setConfig({ ...config, contactPhone: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Contact Email</label>
+              <input className="w-full border rounded px-3 py-2" value={config.contactEmail} onChange={(e) => setConfig({ ...config, contactEmail: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">When Full</label>
+              <select className="w-full border rounded px-3 py-2" value={config.fullBehavior} onChange={(e) => setConfig({ ...config, fullBehavior: e.target.value as any })}>
+                <option value="CLOSE">Close Registration</option>
+                <option value="PENDING_OK">Continue Accepting Pending</option>
+                <option value="REDIRECT">Suggest Another Centre</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-4 mt-6">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={config.visible} onChange={(e) => setConfig({ ...config, visible: e.target.checked })} />
+                Visible to parents
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={config.signupOpen} onChange={(e) => setConfig({ ...config, signupOpen: e.target.checked })} />
+                Accepting registrations
+              </label>
+            </div>
+          </div>
+          <button
+            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            disabled={updateConfig.isPending}
+            onClick={() => updateConfig.mutate({ id, data: config })}
+          >
+            {updateConfig.isPending ? "Saving..." : "Save Centre Configuration"}
+          </button>
         </div>
 
         {/* Stats Section */}
@@ -100,7 +181,7 @@ const LocationDetailsPage = () => {
           )}
         </div>
       </div>
-    </ModernDashboardLayout>
+    </AppShell>
   );
 };
 

@@ -3,8 +3,13 @@
 import React, { useState } from "react";
 import { api } from "@/utils/trpc";
 import { useSession } from "next-auth/react";
-import DashboardLayout from "../components/DashboardLayout";
-import ModernDashboardLayout from "../components/ModernDashboardLayout";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card, CardBody } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input, Select } from "@/components/ui/Input";
+import { Table, type Column } from "@/components/ui/Table";
+import { Badge } from "@/components/ui/Badge";
 
 const FIELD_TYPES = [
   { value: "text", label: "Text" },
@@ -53,12 +58,14 @@ export default function ProfileFieldsPage() {
   }
 
   return (
-    <ModernDashboardLayout>
-      <div className="max-w-2xl mx-auto py-8">
-        <h2 className="text-2xl font-bold mb-6">Manage Profile Fields</h2>
+    <AppShell area="admin">
+      <div className="mx-auto max-w-2xl">
+        <PageHeader title="Profile Fields" description="Custom fields collected on every camper profile." />
 
+        <Card className="mb-8">
+        <CardBody>
         <form
-          className="bg-white rounded shadow p-4 mb-8 space-y-4"
+          className="space-y-4"
           onSubmit={e => {
             e.preventDefault();
             setError("");
@@ -85,97 +92,53 @@ export default function ProfileFieldsPage() {
             });
           }}
         >
-          <div>
-            <label className="block font-medium">Field Name</label>
-            <input
-              className="border rounded px-2 py-1 w-full"
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              required
-            />
-          </div>
-          <div>
-            <label className="block font-medium">Field Label</label>
-            <input
-              className="border rounded px-2 py-1 w-full"
-              value={form.label}
-              onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
-              required
-            />
-          </div>
-          <div>
-            <label className="block font-medium">Field Type</label>
-            <select
-              className="border rounded px-2 py-1 w-full"
-              value={form.type}
-              onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-            >
-              {FIELD_TYPES.map(ft => (
-                <option key={ft.value} value={ft.value}>{ft.label}</option>
-              ))}
-            </select>
-          </div>
+          <Input label="Field Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
+          <Input label="Field Label" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} required />
+          <Select label="Field Type" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+            {FIELD_TYPES.map(ft => (
+              <option key={ft.value} value={ft.value}>{ft.label}</option>
+            ))}
+          </Select>
           {form.type === "dropdown" && (
-            <div>
-              <label className="block font-medium">Dropdown Options (comma separated)</label>
-              <input
-                className="border rounded px-2 py-1 w-full"
-                value={form.options}
-                onChange={e => setForm(f => ({ ...f, options: e.target.value }))}
-                placeholder="e.g. Option 1, Option 2, Option 3"
-                required={form.type === "dropdown"}
-              />
-            </div>
+            <Input
+              label="Dropdown Options (comma separated)"
+              value={form.options}
+              onChange={e => setForm(f => ({ ...f, options: e.target.value }))}
+              placeholder="e.g. Option 1, Option 2, Option 3"
+              required={form.type === "dropdown"}
+            />
           )}
-          <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
             <input
               type="checkbox"
               checked={form.required}
               onChange={e => setForm(f => ({ ...f, required: e.target.checked }))}
-              id="required"
+              className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
             />
-            <label htmlFor="required">Required</label>
-          </div>
-          {error && <div className="text-red-600">{error}</div>}
-          {success && <div className="text-green-600">{success}</div>}
-          <button
-            type="submit"
-            className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
-            disabled={createField.status === "pending"}
-          >
-            {createField.status === "pending" ? "Creating..." : "Add Field"}
-          </button>
+            Required
+          </label>
+          {error && <div className="text-sm text-danger-600">{error}</div>}
+          {success && <div className="text-sm text-success-600">{success}</div>}
+          <Button type="submit" loading={createField.status === "pending"}>Add Field</Button>
         </form>
+        </CardBody>
+        </Card>
 
-        <h3 className="text-xl font-semibold mb-3">Current Fields</h3>
-        {isLoading ? (
-          <div>Loading...</div>
-        ) : fields.length === 0 ? (
-          <div>No custom fields yet.</div>
-        ) : (
-          <table className="min-w-full bg-white border rounded">
-            <thead>
-              <tr>
-                <th className="px-4 py-2 border-b">Name</th>
-                <th className="px-4 py-2 border-b">Type</th>
-                <th className="px-4 py-2 border-b">Required</th>
-                <th className="px-4 py-2 border-b">Options</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fields.map((field: any) => (
-                <tr key={field.id}>
-                  <td className="px-4 py-2 border-b">{field.name}</td>
-                  <td className="px-4 py-2 border-b">{field.type}</td>
-                  <td className="px-4 py-2 border-b">{field.required ? "Yes" : "No"}</td>
-                  <td className="px-4 py-2 border-b">{Array.isArray(field.options) ? field.options.join(", ") : "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <h3 className="mb-3 text-sm font-semibold text-neutral-900">Current Fields</h3>
+        <Table
+          columns={[
+            { header: "Name", accessor: "name" },
+            { header: "Type", accessor: "type" },
+            { header: "Required", accessor: (field: any) => <Badge tone={field.required ? "attention" : "neutral"}>{field.required ? "Yes" : "No"}</Badge> },
+            { header: "Options", accessor: (field: any) => Array.isArray(field.options) ? field.options.join(", ") : "-" },
+          ] as Column<any>[]}
+          data={fields}
+          rowKey={(field: any) => field.id}
+          isLoading={isLoading}
+          emptyTitle="No custom fields yet"
+        />
       </div>
-    </ModernDashboardLayout>
+    </AppShell>
   );
 }
 

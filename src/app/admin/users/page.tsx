@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import ModernDashboardLayout from "../components/ModernDashboardLayout";
+import AppShell from "@/components/layout/AppShell";
 import UserManagement from "../components/UserManagement";
 
 // Define extended session user type
@@ -50,10 +50,10 @@ export default function UsersPage() {
   }
 
   return (
-    <ModernDashboardLayout>
+    <AppShell area="admin">
       {(session?.user as ExtendedUser)?.organizationId && (
         <UserManagement organizationId={(session.user as ExtendedUser).organizationId as string} />
       )}
-    </ModernDashboardLayout>
+    </AppShell>
   );
 }

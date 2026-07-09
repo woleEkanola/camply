@@ -4,7 +4,13 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
-import ModernDashboardLayout from "../components/ModernDashboardLayout";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { Table, type Column } from "@/components/ui/Table";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
@@ -283,308 +289,111 @@ export default function YearsPage() {
     });
   };
 
+  const columns: Column<any>[] = [
+    { header: "Name", accessor: "name", searchable: true },
+    { header: "Camp Start", accessor: (year) => new Date(year.startDate).toLocaleDateString() },
+    { header: "Camp End", accessor: (year) => new Date(year.endDate).toLocaleDateString() },
+    { header: "Status", accessor: (year) => <Badge tone={year.active ? "success" : "neutral"}>{year.active ? "Active" : "Inactive"}</Badge> },
+  ];
+
+  const actions = (year: any) => (
+    <div className="flex justify-end gap-3 text-sm">
+      <button onClick={() => router.push(`/admin/years/${year.id}/config`)} className="text-info-600 hover:underline">Configure</button>
+      <button onClick={() => openEditModal(year.id)} className="text-accent-700 hover:underline">Edit</button>
+      <button onClick={() => openDeleteModal(year.id)} className="text-danger-600 hover:underline">Delete</button>
+      {!year.active && (
+        <button onClick={() => handleSetActiveYear(year.id)} className="text-success-700 hover:underline">Set Active</button>
+      )}
+    </div>
+  );
+
   return (
-    <ModernDashboardLayout>
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-800">Year Management</h1>
-          <button
-            onClick={openCreateModal}
-            className="rounded-md bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
-          >
-            Add Year
-          </button>
+    <AppShell area="admin">
+      <PageHeader title="Camps" actions={<Button onClick={openCreateModal}>Add Camp</Button>} />
+
+      {error && (
+        <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+          <span>{error}</span>
+          <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
         </div>
+      )}
+      {success && <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700">{success}</div>}
 
-        {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
-            <div className="flex items-center">
-              <svg className="mr-2 h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <span>{error}</span>
+      {/* Active Year Card */}
+      <div className="mb-6 rounded-lg border border-success-200 bg-success-50 p-4">
+        <h2 className="mb-2 text-sm font-semibold text-neutral-900">Active Camp</h2>
+        {activeYear ? (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xl font-semibold text-success-700">{activeYear.name}</p>
+              <p className="text-sm text-neutral-500">
+                {new Date(activeYear.startDate).toLocaleDateString()} - {new Date(activeYear.endDate).toLocaleDateString()}
+              </p>
             </div>
-            <button 
-              onClick={() => setError("")} 
-              className="mt-2 text-xs text-red-700 underline"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-        
-        {success && (
-          <div className="mb-4 rounded-md bg-green-50 p-4 text-sm text-green-700">
-            <div className="flex items-center">
-              <svg className="mr-2 h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>{success}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Active Year Card */}
-        <div className="mb-6">
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 shadow-sm">
-            <h2 className="mb-2 text-lg font-medium text-gray-800">Active Year</h2>
-            {activeYear ? (
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xl font-bold text-green-600">{activeYear.name}</p>
-                  <p className="text-sm text-gray-500">
-                    {new Date(activeYear.startDate).toLocaleDateString()} - {new Date(activeYear.endDate).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <button
-                    onClick={() => openEditModal(activeYear.id)}
-                    className="ml-2 rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700"
-                  >
-                    Edit Active Year
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-gray-500">No active year set. Please create a year and set it as active.</p>
-            )}
-          </div>
-        </div>
-
-        {/* Years List */}
-        {isLoadingYears ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-orange-500"></div>
-          </div>
-        ) : years.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Camp Start Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Camp End Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {years.map((year: any) => (
-                  <tr key={year.id} className={year.active ? "bg-green-50" : ""}>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                      {year.name}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {new Date(year.startDate).toLocaleDateString()}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {new Date(year.endDate).toLocaleDateString()}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      <span
-                        className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
-                          year.active
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {year.active ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      <button
-                        onClick={() => openEditModal(year.id)}
-                        className="mr-2 text-orange-600 hover:text-orange-900"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => openDeleteModal(year.id)}
-                        className="mr-2 text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
-                      {!year.active && (
-                        <button
-                          onClick={() => handleSetActiveYear(year.id)}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          Set Active
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Button size="sm" className="bg-success-600 text-white hover:bg-success-700" onClick={() => openEditModal(activeYear.id)}>
+              Edit Active Camp
+            </Button>
           </div>
         ) : (
-          <div className="rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-            <p className="text-gray-500">No years found. Add your first year!</p>
-          </div>
-        )}
-
-        {/* Year Form Modal */}
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black bg-opacity-50">
-            <div className="relative w-full max-w-md p-4 md:p-0">
-              <div className="relative rounded-lg bg-white p-6 shadow-lg">
-                <div className="mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    {selectedYear ? "Edit Year" : "Add Year"}
-                  </h3>
-                </div>
-                
-                <form onSubmit={handleSubmit}>
-                  <div className="mb-4">
-                    <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                      Name
-                    </label>
-                    <input
-                      type="text"
-                      id="name"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
-                      placeholder="e.g., 2025, Summer 2025"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="mb-4">
-                    <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
-                      Camp Start Date
-                    </label>
-                    <input
-                      type="date"
-                      id="startDate"
-                      name="startDate"
-                      value={formData.startDate}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="mb-4">
-                    <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">
-                      Camp End Date
-                    </label>
-                    <input
-                      type="date"
-                      id="endDate"
-                      name="endDate"
-                      value={formData.endDate}
-                      onChange={handleInputChange}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-orange-500 sm:text-sm"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="mb-4">
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="active"
-                        name="active"
-                        checked={formData.active}
-                        onChange={handleInputChange}
-                        className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                      />
-                      <label htmlFor="active" className="ml-2 block text-sm text-gray-700">
-                        Set as active year
-                      </label>
-                    </div>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Setting this as active will make it the default year for all registrations.
-                    </p>
-                  </div>
-                  
-                  <div className="mt-6 flex justify-end space-x-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      disabled={isSubmitting}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex items-center rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:bg-orange-400"
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting && (
-                        <svg className="mr-2 h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      )}
-                      {isSubmitting
-                        ? "Saving..."
-                        : selectedYear
-                        ? "Update Year"
-                        : "Create Year"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Delete Confirmation Modal */}
-        {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black bg-opacity-50">
-            <div className="relative w-full max-w-md p-4 md:p-0">
-              <div className="relative rounded-lg bg-white p-6 shadow-lg">
-                <div className="mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Confirm Deletion</h3>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Are you sure you want to delete this year? This action cannot be undone.
-                  </p>
-                </div>
-                
-                <div className="mt-6 flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsDeleteModalOpen(false)}
-                    className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    disabled={isSubmitting}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    className="flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:bg-red-400"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting && (
-                      <svg className="mr-2 h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    )}
-                    {isSubmitting ? "Deleting..." : "Delete Year"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <p className="text-sm text-neutral-500">No active camp set. Please create a camp and set it as active.</p>
         )}
       </div>
-    </ModernDashboardLayout>
+
+      <Table
+        columns={columns}
+        data={years}
+        rowKey={(year: any) => year.id}
+        actions={actions}
+        isLoading={isLoadingYears}
+        emptyTitle="No camps yet"
+        emptyDescription="Add your first camp to start configuring registration."
+        emptyAction={<Button onClick={openCreateModal}>Add Camp</Button>}
+        searchPlaceholder="Search camps..."
+      />
+
+      {/* Year Form Modal */}
+      <Dialog open={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedYear ? "Edit Camp" : "Add Camp"}>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Input
+            label="Name"
+            id="name"
+            name="name"
+            value={formData.name}
+            onChange={handleInputChange}
+            placeholder="e.g., 2025, Summer 2025"
+            required
+          />
+          <Input label="Camp Start Date" type="date" id="startDate" name="startDate" value={formData.startDate} onChange={handleInputChange} required />
+          <Input label="Camp End Date" type="date" id="endDate" name="endDate" value={formData.endDate} onChange={handleInputChange} required />
+          <div>
+            <label className="flex items-center gap-2 text-sm text-neutral-700">
+              <input
+                type="checkbox"
+                id="active"
+                name="active"
+                checked={formData.active}
+                onChange={handleInputChange}
+                className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+              />
+              Set as active camp
+            </label>
+            <p className="mt-1 text-xs text-neutral-500">Setting this as active will make it the default camp for all registrations.</p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+            <Button type="submit" loading={isSubmitting}>{selectedYear ? "Update Camp" : "Create Camp"}</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion" size="sm">
+        <p className="text-sm text-neutral-500">Are you sure you want to delete this camp? This action cannot be undone.</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
+          <Button variant="danger" loading={isSubmitting} onClick={handleDelete}>Delete Camp</Button>
+        </div>
+      </Dialog>
+    </AppShell>
   );
 }

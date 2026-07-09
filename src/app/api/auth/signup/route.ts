@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '@/server/db';
 
 // Define validation schema for signup request
 const signupSchema = z.object({
+  email: z.string().email('A valid email is required'),
   name: z.string().min(1, 'Name is required'),
   dob: z.string().min(1, 'Date of birth is required'),
   gender: z.string().min(1, 'Gender is required'),
@@ -24,15 +27,18 @@ export async function POST(request: Request) {
       );
     }
     
-    const { name, dob, gender, token, fieldValues } = result.data;
+    const { email, name, dob, gender, token, fieldValues } = result.data;
 
     // Look up signup link by token to get org/location/year
     const signupLink = await prisma.signupLink.findUnique({
       where: { token },
       include: { location: { include: { organization: true } }, year: true },
     });
-    if (!signupLink) {
+    if (!signupLink || !signupLink.active) {
       return NextResponse.json({ message: 'Invalid or expired signup link' }, { status: 400 });
+    }
+    if (!signupLink.location.signupOpen) {
+      return NextResponse.json({ message: 'Signup is currently closed for this location' }, { status: 403 });
     }
 
     // Get organizationId from signupLink.location.organization.id
@@ -43,34 +49,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Organization not found for this signup link/location.' }, { status: 400 });
     }
 
-    // Find the BASE_USER for this org/location. You may want to improve this lookup using email if available.
-    let baseUser = await prisma.user.findFirst({
-      where: {
-        role: 'BASE_USER',
-        organizationId,
-        locationId: signupLink.locationId, // Ensure correct location
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // The parent must be the exact user who verified OTP for this email —
+    // never guess by picking "the most recently created user at this location".
+    let baseUser = await prisma.user.findUnique({ where: { email } });
     if (!baseUser) {
-      // If not found, create one for this location
+      // Should already exist from the OTP step, but create defensively.
+      const placeholderPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
       baseUser = await prisma.user.create({
         data: {
-          role: 'ADMIN', // Use a valid role according to your Prisma schema
-          organizationId: signupLink.location.organization?.id,
+          role: 'BASE_USER',
+          organizationId,
           locationId: signupLink.locationId,
-          email: `baseuser_${signupLink.locationId}_${Date.now()}@example.com`, // Placeholder email
-          password: 'placeholder', // Set a secure placeholder or OTP
+          email,
+          password: placeholderPassword,
           active: true,
         },
       });
-      // Fetch user again to ensure relation is hydrated
-      baseUser = await prisma.user.findUnique({
+    } else if (!baseUser.organizationId || !baseUser.locationId) {
+      baseUser = await prisma.user.update({
         where: { id: baseUser.id },
-        include: { location: true },
+        data: { organizationId, locationId: signupLink.locationId },
       });
     }
-    console.log('DEBUG baseUser:', baseUser);
 
     // Create camper profile for this BASE_USER
     const camperProfile = await prisma.camperProfile.create({

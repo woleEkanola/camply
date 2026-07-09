@@ -4,7 +4,7 @@ import React from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import ModernDashboardLayout from "./components/ModernDashboardLayout";
+import AppShell from "@/components/layout/AppShell";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import BaseUsersPage from "./base-users";
 
@@ -46,9 +46,9 @@ export default function AdminDashboard() {
   }
 
   return (
-    <ModernDashboardLayout>
+    <AppShell area="admin">
       <AnalyticsDashboard />
       
-    </ModernDashboardLayout>
+    </AppShell>
   );
 }

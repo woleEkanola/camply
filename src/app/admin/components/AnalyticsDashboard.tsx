@@ -1,19 +1,23 @@
 "use client";
 
-import { useState } from "react";
 import { useSession } from "next-auth/react";
-import StatCard from "./StatCard";
-import DashboardPanel from "./DashboardPanel";
 import { api } from "@/utils/trpc";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatCard } from "@/components/ui/StatCard";
+import { Table, type Column } from "@/components/ui/Table";
+
+interface RecentCamperProfile {
+  id: string;
+  name: string;
+  user?: { email?: string };
+  location?: { name?: string } | null;
+  createdAt: string | Date;
+}
 
 export default function AnalyticsDashboard() {
-  const [activeVariation, setActiveVariation] = useState<number>(1);
-
   const { data: session } = useSession();
   const organizationId = session?.user?.organizationId;
 
-  // Fetch relevant stats using existing APIs
-  // Example: Get total users, total campers, total locations, recent activity
   const { data: usersData, isLoading: usersLoading } = api.user.getBaseUsersWithCamperCounts.useQuery({});
   const { data: adminsData, isLoading: adminsLoading } = api.admin.getByOrganization.useQuery(
     organizationId ? { organizationId } : { organizationId: "" },
@@ -28,96 +32,37 @@ export default function AnalyticsDashboard() {
     { enabled: !!organizationId }
   );
 
-  // Calculate stats
-  const totalBaseUsers = usersData?.length || 0;
-  const totalAdmins = adminsData?.length || 0;
-  const totalCampers = campersData?.length || 0;
-  const totalLocations = locationsData?.length || 0;
-
-  // Define type for recentCampers to avoid implicit any
-  interface RecentCamperProfile {
-    id: string;
-    name: string;
-    user?: { email?: string };
-    location?: { name?: string } | null;
-    createdAt: string | Date;
-  }
-
-  // Example: Recent activity (last 5 campers created)
   const recentCampers: RecentCamperProfile[] = campersData?.slice(-5).reverse() || [];
+
+  const columns: Column<RecentCamperProfile>[] = [
+    { header: "Name", accessor: "name" },
+    { header: "Parent Email", accessor: (row) => row.user?.email || "—" },
+    { header: "Centre", accessor: (row) => row.location?.name || "—" },
+    { header: "Created", accessor: (row) => new Date(row.createdAt).toLocaleDateString() },
+  ];
 
   return (
     <div className="w-full">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Admin Dashboard</h1>
-          <p className="text-sm text-gray-500">
-            Dashboard metrics reflect live data from your organization.
-          </p>
-        </div>
-      </div>
+      <PageHeader title="Dashboard" description="Live overview of your organization." />
 
-      {/* Main Stats */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Base Users"
-          value={usersLoading ? '...' : totalBaseUsers}
-          change={0}
-          icon="users"
-          color="blue"
-        />
-        <StatCard
-          title="Admins"
-          value={adminsLoading ? '...' : totalAdmins}
-          change={0}
-          icon="shield"
-          color="emerald"
-        />
-        <StatCard
-          title="Campers"
-          value={campersLoading ? '...' : totalCampers}
-          change={0}
-          icon="userGroup"
-          color="amber"
-        />
-        <StatCard
-          title="Locations"
-          value={locationsLoading ? '...' : totalLocations}
-          change={0}
-          icon="mapPin"
-          color="rose"
-        />
+        <StatCard label="Base Users" value={usersLoading ? "…" : usersData?.length ?? 0} />
+        <StatCard label="Admins" value={adminsLoading ? "…" : adminsData?.length ?? 0} />
+        <StatCard label="Campers" value={campersLoading ? "…" : campersData?.length ?? 0} />
+        <StatCard label="Centres" value={locationsLoading ? "…" : locationsData?.length ?? 0} />
       </div>
 
-      {/* Recent Campers Table */}
-      <DashboardPanel title="Recent Camper Profiles">
-        {campersLoading ? (
-          <div>Loading recent campers...</div>
-        ) : recentCampers.length === 0 ? (
-          <div>No camper profiles found.</div>
-        ) : (
-          <table className="min-w-full bg-white border border-gray-200 rounded shadow">
-            <thead>
-              <tr>
-                <th className="px-4 py-2 border-b">Name</th>
-                <th className="px-4 py-2 border-b">User Email</th>
-                <th className="px-4 py-2 border-b">Location</th>
-                <th className="px-4 py-2 border-b">Created At</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentCampers.map((profile: RecentCamperProfile) => (
-                <tr key={profile.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 border-b">{profile.name}</td>
-                  <td className="px-4 py-2 border-b">{profile.user?.email || '-'}</td>
-                  <td className="px-4 py-2 border-b">{profile.location?.name || '-'}</td>
-                  <td className="px-4 py-2 border-b">{new Date(profile.createdAt).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </DashboardPanel>
+      <h2 className="mb-2 text-sm font-semibold text-neutral-900">Recent Camper Profiles</h2>
+      <Table
+        mode="controlled"
+        toolbar={<span className="text-xs text-neutral-400">Last 5 profiles created</span>}
+        columns={columns}
+        data={recentCampers}
+        rowKey={(row) => row.id}
+        isLoading={campersLoading}
+        emptyTitle="No camper profiles yet"
+        emptyDescription="Camper profiles will show up here as parents register."
+      />
     </div>
   );
 }

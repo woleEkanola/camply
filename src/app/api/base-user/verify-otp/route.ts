@@ -1,28 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/server/auth/authOptions";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/server/db";
+import { MAX_OTP_ATTEMPTS, otpEqual } from "@/server/otp";
 
 export async function POST(req: NextRequest) {
   try {
     const { email, otp } = await req.json();
-    if (!email || !otp) {
+    if (!email || !otp || typeof email !== "string" || typeof otp !== "string") {
       return NextResponse.json({ message: "Email and OTP are required." }, { status: 400 });
     }
 
     // Find OTP record for this email
     const otpRecord = await prisma.oTP.findUnique({ where: { email } });
     if (!otpRecord) {
-      return NextResponse.json({ message: "No OTP found for this email." }, { status: 404 });
+      return NextResponse.json({ message: "Invalid or expired OTP." }, { status: 401 });
     }
 
-    // Check if OTP matches and is not expired
+    // Check expiry and attempt limit
     if (
-      otpRecord.code !== otp ||
-      otpRecord.expiresAt.getTime() < Date.now()
+      otpRecord.expiresAt.getTime() < Date.now() ||
+      otpRecord.attempts >= MAX_OTP_ATTEMPTS
     ) {
+      return NextResponse.json({ message: "Invalid or expired OTP." }, { status: 401 });
+    }
+
+    // Constant-time comparison; count failed attempts to block brute force
+    if (!otpEqual(otpRecord.code, otp)) {
+      await prisma.oTP.update({
+        where: { email },
+        data: { attempts: { increment: 1 } },
+      });
       return NextResponse.json({ message: "Invalid or expired OTP." }, { status: 401 });
     }
 

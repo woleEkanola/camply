@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { prisma } from "@/server/db";
 import { sendOtpEmail } from "@/server/email/sendOtpEmail";
+import { rateLimit } from "@/server/rateLimit";
+
+// Generic response used regardless of whether the email exists, so this
+// endpoint can't be used to enumerate registered accounts.
+const GENERIC_OK = { message: "If the email is registered, an OTP has been sent." };
 
 function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 export async function POST(req: NextRequest) {
@@ -15,14 +21,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Email is required" }, { status: 400 });
     }
 
-    // Check if user exists with this email
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      console.error("[SEND-OTP] No user found with email", { email });
-      return NextResponse.json({ message: "No user found with this email." }, { status: 404 });
+    // Throttle OTP sends per email
+    if (!rateLimit(`send-otp:${email}`, 3, 15 * 60 * 1000)) {
+      return NextResponse.json({ message: "Too many requests. Try again later." }, { status: 429 });
     }
-    if (user.role !== "BASE_USER") {
-      return NextResponse.json({ message: "User is not a base user." }, { status: 403 });
+
+    // Check if user exists with this email — respond identically either way
+    // so the endpoint can't be used to probe for registered emails.
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || user.role !== "BASE_USER") {
+      return NextResponse.json(GENERIC_OK, { status: 200 });
     }
 
     // Generate OTP and store it (optionally, with expiry)
@@ -31,10 +39,10 @@ export async function POST(req: NextRequest) {
     try {
       await prisma.oTP.upsert({
         where: { email },
-        update: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) }, // 10 min expiry
+        update: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), attempts: 0 }, // 10 min expiry
         create: { email, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
       });
-      console.log("[SEND-OTP] OTP stored in DB", { email, otp });
+      console.log("[SEND-OTP] OTP stored in DB", { email });
     } catch (err) {
       console.error("[SEND-OTP] Error storing OTP in DB", err);
       throw err;
@@ -49,7 +57,7 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    return NextResponse.json({ message: "OTP sent if email is correct." }, { status: 200 });
+    return NextResponse.json(GENERIC_OK, { status: 200 });
   } catch (error: any) {
     console.error("[SEND-OTP] Unhandled error", error);
     return NextResponse.json({ message: error.message || "Server error" }, { status: 500 });

@@ -357,6 +357,92 @@ export const yearRouter = createTRPCRouter({
       return { success: true };
     }),
     
+  // Update camp configuration fields (PRD Part 2)
+  updateCampConfig: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      data: z.object({
+        theme: z.string().nullable().optional(),
+        description: z.string().nullable().optional(),
+        bannerUrl: z.string().nullable().optional(),
+        logoUrl: z.string().nullable().optional(),
+        registrationOpensAt: z.date().nullable().optional(),
+        registrationClosesAt: z.date().nullable().optional(),
+        arrivalDate: z.date().nullable().optional(),
+        departureDate: z.date().nullable().optional(),
+        minAge: z.number().int().min(0).nullable().optional(),
+        maxAge: z.number().int().min(0).nullable().optional(),
+        ageCutoffDate: z.date().nullable().optional(),
+        maxRegistrations: z.number().int().min(0).nullable().optional(),
+        capacityBehavior: z.enum(["CLOSE", "WAITLIST", "PENDING_OK"]).optional(),
+        approvalMode: z.enum(["MANUAL", "AUTO"]).optional(),
+        allowResubmission: z.boolean().optional(),
+        status: z.enum(["DRAFT", "OPEN", "CLOSED", "ARCHIVED"]).optional(),
+        orgCode: z.string().nullable().optional(),
+        remindersHtml: z.string().nullable().optional(),
+      }),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const year = await ctx.prisma.year.findUnique({ where: { id: input.id } });
+      if (!year) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        (currentUser.role === "OWNER" && currentUser.organizationId === year.organizationId) ||
+        (currentUser.role === "ADMIN" && currentUser.organizationId === year.organizationId);
+      if (!hasPermission) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to configure this camp" });
+      }
+
+      const opens = input.data.registrationOpensAt ?? year.registrationOpensAt;
+      const closes = input.data.registrationClosesAt ?? year.registrationClosesAt;
+      if (opens && closes && opens >= closes) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Registration opening date must occur before the closing date." });
+      }
+      const minAge = input.data.minAge ?? year.minAge;
+      const maxAge = input.data.maxAge ?? year.maxAge;
+      if (minAge != null && maxAge != null && minAge > maxAge) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Minimum age cannot exceed maximum age." });
+      }
+
+      return ctx.prisma.year.update({ where: { id: input.id }, data: input.data });
+    }),
+
+  // Registration readiness checklist (PRD Part 2 §10)
+  readiness: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const year = await ctx.prisma.year.findUnique({
+        where: { id: input.id },
+        include: {
+          documentRequirements: true,
+          signupLinks: { where: { active: true } },
+        },
+      });
+      if (!year) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+
+      const centreCount = await ctx.prisma.location.count({ where: { organizationId: year.organizationId, visible: true } });
+
+      const checklist = {
+        registrationDatesConfigured: !!(year.registrationOpensAt && year.registrationClosesAt),
+        campDatesConfigured: !!(year.arrivalDate && year.departureDate),
+        ageRulesConfigured: year.minAge != null && year.maxAge != null && !!year.ageCutoffDate,
+        atLeastOneCentre: centreCount > 0,
+        capacityDefined: year.maxRegistrations != null || centreCount > 0,
+        registrationLinkGenerated: year.signupLinks.length > 0,
+        requiredDocumentsConfigured: year.documentRequirements.some((d) => d.required),
+      };
+
+      const ready = Object.values(checklist).every(Boolean);
+      return { checklist, ready };
+    }),
+
   // Delete a year
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
