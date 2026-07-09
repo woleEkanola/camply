@@ -1,24 +1,16 @@
-import nodemailer from "nodemailer";
+import { Resend } from 'resend';
+
+let resend: Resend | null = null;
 
 export async function sendOtpEmail(email: string, otp: string) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === "true" || false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false, // Allow self-signed certs for development
-    },
-  });
-
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  await resend.emails.send({
+    from: 'camply@eleto.online',
     to: email,
-    subject: "Your OTP Code",
+    subject: 'Your OTP Code',
     text: `Your OTP code is: ${otp}`,
-    html: `<p>Your OTP code is: <b>${otp}</b></p>`
+    html: `<p>Your OTP code is: <b>${otp}</b></p>`,
   });
 }

@@ -1,38 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/server/db";
+import { sendOtpEmail } from "@/server/email/sendOtpEmail";
 
-const prisma = new PrismaClient();
-
-// Utility: Generate a 6-digit OTP
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// Utility: Send OTP email using nodemailer (or your preferred email service)
-import nodemailer from "nodemailer";
-
-async function sendOtpEmail(email: string, otp: string) {
-  // Configure your transport (example: Gmail SMTP, ideally use environment variables)
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === "true" || false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
-  });
-
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    to: email,
-    subject: "Your OTP Code",
-    text: `Your OTP code is: ${otp}`,
-    html: `<p>Your OTP code is: <b>${otp}</b></p>`
-  });
 }
 
 export async function POST(req: NextRequest) {
