@@ -53,7 +53,13 @@ export async function POST(req: NextRequest) {
     create: { email, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
   });
 
-  await sendOtpEmail(email, otp);
+  // Best-effort delivery — the OTP is already persisted, so a transient email
+  // failure (e.g. no RESEND_API_KEY configured) shouldn't block the flow.
+  try {
+    await sendOtpEmail(email, otp);
+  } catch (e) {
+    console.error("[staff/send-otp] Failed to send OTP email", e);
+  }
 
   return NextResponse.json({ success: true });
 }
