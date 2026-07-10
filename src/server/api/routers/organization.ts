@@ -79,10 +79,13 @@ export const organizationRouter = createTRPCRouter({
     .input(z.object({
       organizationId: z.string(),
       settings: z.object({
-        minAge: z.number().min(0),
-        maxAge: z.number().min(0),
+        minAge: z.number().min(0).optional(),
+        maxAge: z.number().min(0).optional(),
         cutoffDate: z.string().optional(),
-      })
+        logoUrl: z.string().optional(),
+        colorTheme: z.string().optional(),
+      }),
+      name: z.string().min(2, "Church name must be at least 2 characters").optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       // Only allow admins/owners
@@ -93,11 +96,105 @@ export const organizationRouter = createTRPCRouter({
       if (!["ADMIN", "OWNER", "SUPER_ADMIN"].includes(user.role)) {
         throw new Error("Not authorized");
       }
+
+      // Fetch the current organization to merge JSON settings
+      const currentOrg = await prisma.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { settings: true }
+      });
+      if (!currentOrg) throw new Error("Organization not found");
+
+      const currentSettings = (currentOrg.settings as Record<string, any>) || {};
+      const newSettings = { ...currentSettings, ...input.settings };
+
       const updated = await prisma.organization.update({
         where: { id: input.organizationId },
-        data: { settings: input.settings },
+        data: { 
+          settings: newSettings,
+          ...(input.name ? { name: input.name } : {})
+        },
         select: { settings: true }
       });
       return updated.settings;
     }),
+
+  // Update organization name (Super Admin only)
+  update: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(2, "Organization name must be at least 2 characters")
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Verify user is a Super Admin
+      const user = await prisma.user.findUnique({ 
+        where: { id: ctx.userId } 
+      });
+      
+      if (!user || user.role !== "SUPER_ADMIN") {
+        throw new Error("Only Super Admins can update organizations");
+      }
+      
+      // Update organization name
+      const organization = await prisma.organization.update({
+        where: { id: input.id },
+        data: { name: input.name }
+      });
+      
+      return organization;
+    }),
+
+  // Bulk delete organizations (Super Admin only)
+  deleteMany: protectedProcedure
+    .input(z.object({
+      ids: z.array(z.string())
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Verify user is a Super Admin
+      const user = await prisma.user.findUnique({ 
+        where: { id: ctx.userId } 
+      });
+      
+      if (!user || user.role !== "SUPER_ADMIN") {
+        throw new Error("Only Super Admins can delete organizations");
+      }
+
+      const organizationIds = input.ids;
+
+      // Execute deletion sequence in a transaction to prevent partial deletion and constraint violations
+      await prisma.$transaction(async (tx) => {
+        // Break circular references between Organization and Year
+        await tx.organization.updateMany({
+          where: { id: { in: organizationIds } },
+          data: { activeYearId: null }
+        });
+
+        // 1. Delete AuditLogs and Notifications for these organizations
+        await tx.auditLog.deleteMany({
+          where: { organizationId: { in: organizationIds } }
+        });
+        await tx.notification.deleteMany({
+          where: { organizationId: { in: organizationIds } }
+        });
+
+        // 2. Delete registrations for these organizations
+        await tx.registration.deleteMany({
+          where: {
+            year: { organizationId: { in: organizationIds } }
+          }
+        });
+
+        // 3. Delete users belonging to these organizations (cascades to CamperProfiles, etc.)
+        await tx.user.deleteMany({
+          where: { organizationId: { in: organizationIds } }
+        });
+
+        // 4. Delete the organizations themselves (cascades to Locations, Years, ProfileFields, etc.)
+        await tx.organization.deleteMany({
+          where: { id: { in: organizationIds } }
+        });
+      });
+
+      return { success: true };
+    }),
 });
+

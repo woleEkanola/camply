@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -166,6 +167,12 @@ export default function LoginPage() {
                 </button>
               </form>
             )}
+            <div className="mt-4 text-center text-sm text-neutral-500">
+              Are you a church owner?{" "}
+              <Link href="/signup-org" className="text-[#E67E22] hover:underline font-semibold">
+                Register your church
+              </Link>
+            </div>
           </div>
         </div>
         
@@ -261,6 +268,12 @@ export default function LoginPage() {
                 </button>
               </form>
             )}
+            <div className="mt-5 text-center text-sm text-neutral-500">
+              Are you a church owner?{" "}
+              <Link href="/signup-org" className="text-[#E67E22] hover:underline font-semibold">
+                Register your church
+              </Link>
+            </div>
           </div>
         </div>
       </div>

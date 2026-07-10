@@ -120,6 +120,7 @@ export default function LocationsPage() {
     setSelectedLocationIds([]);
     setSelectAll(false);
     void refetchLocations();
+    void refetchSignupLinks();
   } catch (error) {
     setError("An unexpected error occurred during bulk enable.");
   } finally {
@@ -160,6 +161,7 @@ export default function LocationsPage() {
     setSelectedLocationIds([]);
     setSelectAll(false);
     void refetchLocations();
+    void refetchSignupLinks();
   } catch (error) {
     setError("An unexpected error occurred during bulk disable.");
   } finally {
@@ -663,6 +665,7 @@ export default function LocationsPage() {
       setSuccess("Signup link generated successfully!");
       setGeneratingLinkFor(null);
       void refetchLocations();
+      void refetchSignupLinks();
     },
     onError: (error) => {
       setError(`Error generating signup link: ${error.message}`);
@@ -671,7 +674,7 @@ export default function LocationsPage() {
   });
 
   // Get signup links for all locations at once
-  const { data: signupLinks = [] } = api.signupLink.getByOrganization.useQuery(
+  const { data: signupLinks = [], refetch: refetchSignupLinks } = api.signupLink.getByOrganization.useQuery(
     {
       organizationId: (session?.user as ExtendedUser)?.organizationId || "",
       yearId: activeYear?.id

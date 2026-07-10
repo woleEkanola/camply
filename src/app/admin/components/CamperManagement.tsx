@@ -206,14 +206,15 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
 
   return (
     <div>
-      {/* Edit Camper Profile Modal */}
-      {isModalOpen && selectedProfile && (
+      {/* Edit/Add Camper Profile Modal */}
+      {isModalOpen && (
         <EditCamperProfileModal
           profileId={selectedProfile}
+          organizationId={organizationId}
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onSuccess={() => {
-            setSuccess("Camper profile updated successfully");
+            setSuccess(selectedProfile ? "Camper profile updated successfully" : "Camper profile created successfully");
             void refetchProfiles();
           }}
         />

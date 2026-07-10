@@ -95,5 +95,71 @@ export const authRouter = createTRPCRouter({
           message: `Error creating user: ${err.message}`
         };
       }
-    })
+    }),
+
+  // Register a new organization/church and its owner
+  registerOrganization: publicProcedure
+    .input(z.object({
+      churchName: z.string().min(2, "Church name must be at least 2 characters"),
+      email: z.string().email("Invalid email address"),
+      password: z.string().min(8, "Password must be at least 8 characters"),
+      firstName: z.string().min(1, "First name is required"),
+      lastName: z.string().min(1, "Last name is required"),
+    }))
+    .mutation(async ({ input }) => {
+      // 1. Check if user already exists
+      const existingUser = await prisma.user.findUnique({
+        where: { email: input.email }
+      });
+      if (existingUser) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "User with this email already exists"
+        });
+      }
+
+      // 2. Check if organization already exists
+      const existingOrg = await prisma.organization.findUnique({
+        where: { name: input.churchName }
+      });
+      if (existingOrg) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "A church/organization with this name already exists"
+        });
+      }
+
+      // 3. Create organization and owner in a transaction
+      const result = await prisma.$transaction(async (tx) => {
+        // Create the organization
+        const organization = await tx.organization.create({
+          data: { name: input.churchName }
+        });
+
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(input.password, 10);
+
+        // Create the user with role OWNER
+        const user = await tx.user.create({
+          data: {
+            email: input.email,
+            password: hashedPassword,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            role: "OWNER",
+            organizationId: organization.id,
+            active: true
+          }
+        });
+
+        return { organization, user };
+      });
+
+      return {
+        success: true,
+        organizationId: result.organization.id,
+        userId: result.user.id,
+        message: "Church and Owner registered successfully"
+      };
+    }),
 });

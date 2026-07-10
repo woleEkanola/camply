@@ -1,4 +1,5 @@
 "use client";
+
 import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
@@ -8,17 +9,31 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody } from "@/components/ui/Card";
 
 const AgeRangeSettings = dynamic(() => import("../settings-age-range"), { ssr: false });
+const OrgProfileSettings = dynamic(() => import("../settings-org-profile"), { ssr: false });
 
 export default function AdminSettingsPage() {
   const { data: session } = useSession();
   const organizationId = session?.user?.organizationId || "";
+
   // Fetch settings only if organizationId is available
-  const { data: settings, isLoading, refetch } = api.organization.getSettings.useQuery(
+  const { data: settings, isLoading: isSettingsLoading, refetch: refetchSettings } = api.organization.getSettings.useQuery(
     { organizationId },
     { enabled: !!organizationId }
   );
 
+  // Fetch organization info to get the name
+  const { data: orgData, isLoading: isOrgLoading, refetch: refetchOrg } = api.organization.getById.useQuery(
+    { id: organizationId },
+    { enabled: !!organizationId }
+  );
+
+  const isLoading = isSettingsLoading || isOrgLoading;
+
   // Memoize initial values to avoid prop changes after mount
+  const initialName = orgData?.name || "";
+  const initialLogoUrl = useMemo(() => (typeof settings === 'object' && settings !== null && 'logoUrl' in settings ? (settings as any).logoUrl : undefined) ?? "", [settings]);
+  const initialColorTheme = useMemo(() => (typeof settings === 'object' && settings !== null && 'colorTheme' in settings ? (settings as any).colorTheme : undefined) ?? "#E67E22", [settings]);
+
   const initialMin = useMemo(() => (typeof settings === 'object' && settings !== null && 'minAge' in settings ? (settings as any).minAge : undefined) ?? 5, [settings]);
   const initialMax = useMemo(() => (typeof settings === 'object' && settings !== null && 'maxAge' in settings ? (settings as any).maxAge : undefined) ?? 18, [settings]);
   const initialCutoffDate = useMemo(() => (typeof settings === 'object' && settings !== null && 'cutoffDate' in settings ? (settings as any).cutoffDate : undefined) ?? "", [settings]);
@@ -32,11 +47,29 @@ export default function AdminSettingsPage() {
 
   return (
     <AppShell area="admin">
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-2xl space-y-6">
         <PageHeader
           title="Settings"
-          description="Configure registration age range and cut-off date for your organization. These settings control camper eligibility for registration."
+          description="Configure your church profile, branding, and registration age rules."
         />
+
+        {/* Church Profile Card */}
+        <Card>
+          <CardBody>
+            <OrgProfileSettings
+              organizationId={organizationId}
+              initialName={initialName}
+              initialLogoUrl={initialLogoUrl}
+              initialColorTheme={initialColorTheme}
+              onSaveSuccess={() => {
+                refetchSettings();
+                refetchOrg();
+              }}
+            />
+          </CardBody>
+        </Card>
+
+        {/* Age Range Card */}
         <Card>
           <CardBody>
             <AgeRangeSettings
@@ -45,8 +78,7 @@ export default function AdminSettingsPage() {
               initialMax={initialMax}
               initialCutoffDate={initialCutoffDate}
               onSettingsSaved={() => {
-                // Refetch organization settings after save
-                refetch();
+                refetchSettings();
               }}
             />
           </CardBody>

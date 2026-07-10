@@ -1,6 +1,9 @@
 "use client";
+
 import { useState } from "react";
 import { api } from "@/utils/trpc";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 export default function AgeRangeSettings({
   organizationId,
@@ -29,6 +32,20 @@ export default function AgeRangeSettings({
   const handleSave = async () => {
     setSaving(true);
     setError("");
+    setSuccess(false);
+    
+    if (minAge < 0 || maxAge < 0) {
+      setError("Age limits cannot be negative");
+      setSaving(false);
+      return;
+    }
+    
+    if (minAge > maxAge) {
+      setError("Minimum age cannot be greater than maximum age");
+      setSaving(false);
+      return;
+    }
+
     try {
       await updateSettings.mutateAsync({
         organizationId,
@@ -41,7 +58,7 @@ export default function AgeRangeSettings({
       setSuccess(true);
       if (onSave) onSave(minAge, maxAge, cutoffDate);
       if (onSettingsSaved) onSettingsSaved();
-      setTimeout(() => setSuccess(false), 2000);
+      setTimeout(() => setSuccess(false), 3000);
     } catch (e: any) {
       setError(e?.message || "Failed to save settings");
     } finally {
@@ -49,51 +66,53 @@ export default function AgeRangeSettings({
     }
   };
 
-
   return (
-    <div className="max-w-md p-6 bg-white rounded shadow">
-      <h2 className="text-lg font-bold mb-4">Set Registration Age Range</h2>
-      <div className="flex gap-4 mb-4">
-        <label className="flex flex-col">
-          <span className="text-sm text-gray-600">Minimum Age</span>
-          <input
-            type="number"
-            min={0}
-            max={maxAge}
-            value={minAge}
-            onChange={e => setMinAge(Number(e.target.value))}
-            className="border rounded px-2 py-1"
-          />
-        </label>
-        <label className="flex flex-col">
-          <span className="text-sm text-gray-600">Maximum Age</span>
-          <input
-            type="number"
-            min={minAge}
-            value={maxAge}
-            onChange={e => setMaxAge(Number(e.target.value))}
-            className="border rounded px-2 py-1"
-          />
-        </label>
-        <label className="flex flex-col">
-          <span className="text-sm text-gray-600">Cut-off Date</span>
-          <input
-            type="date"
-            value={cutoffDate}
-            onChange={e => setCutoffDate(e.target.value)}
-            className="border rounded px-2 py-1"
-          />
-        </label>
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-bold text-neutral-900">Registration Age Rules</h3>
+        <p className="text-sm text-neutral-500">
+          Configure registration age limits and cutoff dates. These rules control camper eligibility.
+        </p>
       </div>
-      {error && <div className="text-red-600 mb-2">{error}</div>}
-      {success && <div className="text-green-600 mb-2">Saved!</div>}
-      <button
-        className="bg-orange-600 text-white rounded px-4 py-2"
-        onClick={handleSave}
-        disabled={saving}
-      >
-        {saving ? "Saving..." : "Save Settings"}
-      </button>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Input
+          label="Minimum Age"
+          type="number"
+          min={0}
+          max={maxAge}
+          value={minAge}
+          onChange={e => setMinAge(Number(e.target.value))}
+          required
+        />
+        <Input
+          label="Maximum Age"
+          type="number"
+          min={minAge}
+          value={maxAge}
+          onChange={e => setMaxAge(Number(e.target.value))}
+          required
+        />
+        <Input
+          label="Cut-off Date"
+          type="date"
+          value={cutoffDate}
+          onChange={e => setCutoffDate(e.target.value)}
+          helpText="Age is calculated as of this date."
+        />
+      </div>
+
+      {error && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
+      {success && <div className="rounded-md bg-success-50 p-3 text-sm text-success-700">Age rules saved successfully!</div>}
+
+      <div className="flex justify-end pt-2">
+        <Button
+          loading={saving}
+          onClick={handleSave}
+        >
+          Save Age Rules
+        </Button>
+      </div>
     </div>
   );
 }
