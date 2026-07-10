@@ -29,56 +29,56 @@ export async function POST(request: Request) {
     
     const { email, name, dob, gender, token, fieldValues } = result.data;
 
-    // Look up signup link by token to get org/location/year
+    // Look up signup link by token to get org/campus/camp
     const signupLink = await prisma.signupLink.findUnique({
       where: { token },
-      include: { location: { include: { organization: true } }, year: true },
+      include: { campus: { include: { organization: true } }, camp: true },
     });
     if (!signupLink || !signupLink.active) {
       return NextResponse.json({ message: 'Invalid or expired signup link' }, { status: 400 });
     }
-    if (!signupLink.location.signupOpen) {
-      return NextResponse.json({ message: 'Signup is currently closed for this location' }, { status: 403 });
+    if (!signupLink.campus.signupOpen) {
+      return NextResponse.json({ message: 'Signup is currently closed for this campus' }, { status: 403 });
     }
 
-    // Get organizationId from signupLink.location.organization.id
-    const organizationId = signupLink.location.organization?.id;
+    // Get organizationId from signupLink.campus.organization.id
+    const organizationId = signupLink.campus.organization?.id;
     console.log('DEBUG organizationId:', organizationId);
-    console.log('DEBUG signupLink.location:', signupLink.location);
+    console.log('DEBUG signupLink.campus:', signupLink.campus);
     if (!organizationId) {
-      return NextResponse.json({ message: 'Organization not found for this signup link/location.' }, { status: 400 });
+      return NextResponse.json({ message: 'Organization not found for this signup link/campus.' }, { status: 400 });
     }
 
     // The parent must be the exact user who verified OTP for this email —
-    // never guess by picking "the most recently created user at this location".
-    let baseUser = await prisma.user.findUnique({ where: { email } });
-    if (!baseUser) {
+    // never guess by picking "the most recently created user at this campus".
+    let parent = await prisma.user.findUnique({ where: { email } });
+    if (!parent) {
       // Should already exist from the OTP step, but create defensively.
       const placeholderPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
-      baseUser = await prisma.user.create({
+      parent = await prisma.user.create({
         data: {
-          role: 'BASE_USER',
+          role: 'PARENT',
           organizationId,
-          locationId: signupLink.locationId,
+          homeCampusId: signupLink.campusId,
           email,
           password: placeholderPassword,
           active: true,
         },
       });
-    } else if (!baseUser.organizationId || !baseUser.locationId) {
-      baseUser = await prisma.user.update({
-        where: { id: baseUser.id },
-        data: { organizationId, locationId: signupLink.locationId },
+    } else if (!parent.organizationId || !parent.homeCampusId) {
+      parent = await prisma.user.update({
+        where: { id: parent.id },
+        data: { organizationId, homeCampusId: signupLink.campusId },
       });
     }
 
-    // Create camper profile for this BASE_USER
-    const camperProfile = await prisma.camperProfile.create({
+    // Create camper for this PARENT
+    const camper = await prisma.camper.create({
       data: {
         name,
-        userId: baseUser!.id,
+        userId: parent!.id,
         organizationId,
-        locationId: baseUser!.locationId, // Always use location from base user
+        homeCampusId: parent!.homeCampusId, // Always use campus from parent account
         dateOfBirth: dob ? new Date(dob) : undefined, // Ensure ISO DateTime
         gender,
         active: true,
@@ -90,16 +90,16 @@ export async function POST(request: Request) {
         },
       },
     });
-    console.log('DEBUG camperProfile created:', camperProfile);
+    console.log('DEBUG camper created:', camper);
 
-    // Optionally, update user role from BASE_USER to CAMPER (if you want to promote the user after first profile)
+    // Optionally, update user role from PARENT to CAMPER (if you want to promote the user after first profile)
     // await prisma.user.update({
-    //   where: { id: baseUser.id },
+    //   where: { id: parent.id },
     //   data: { role: 'CAMPER' },
     // });
 
     return NextResponse.json(
-      { message: 'User profile completed and camper profile created', camperProfileId: camperProfile.id },
+      { message: 'User profile completed and camper created', camperId: camper.id },
       { status: 201 }
     );
   } catch (error) {

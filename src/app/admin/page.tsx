@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import AppShell from "@/components/layout/AppShell";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
-import BaseUsersPage from "./base-users";
+import ParentsPage from "./parents";
 
 // Define extended session user type
 interface ExtendedUser {
@@ -40,7 +40,7 @@ export default function AdminDashboard() {
     }
   }, [session, status, router]);
 
-  if (status === "loading" || (status === "authenticated" && ["BASE_USER", "LOCATION_ADMIN"].includes((session?.user as ExtendedUser)?.role))) {
+  if (status === "loading" || (status === "authenticated" && ["PARENT", "CAMPUS_REPRESENTATIVE"].includes((session?.user as ExtendedUser)?.role))) {
     // Prevent dashboard flash for unauthorized roles
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }

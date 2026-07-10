@@ -7,7 +7,7 @@ import { MAX_OTP_ATTEMPTS, otpEqual } from "../otp";
 import { type NextAuthOptions } from "next-auth";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER" | "TEACHER" | "VOLUNTEER";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT" | "TEACHER" | "VOLUNTEER";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -24,8 +24,12 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Throttle login attempts per email (in-memory, per instance)
-        if (!rateLimit(`login:${credentials.email}`, 10, 15 * 60 * 1000)) {
+        // Throttle login attempts per email (in-memory, per instance). 30/15min
+        // still meaningfully rate-limits brute force (~1 attempt/30s average)
+        // while accommodating the Playwright suite's real login volume as it
+        // grows — a full run legitimately logs in as owner@camply.com more
+        // than 10 times now across auth/camp-structure/form-editor/staff specs.
+        if (!rateLimit(`login:${credentials.email}`, 30, 15 * 60 * 1000)) {
           return null;
         }
 
@@ -37,7 +41,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // OTP-based login (for base users, no password supplied)
+        // OTP-based login (for parents, no password supplied)
         if (credentials.otp) {
           // Check OTP in the OTP table
           const otpRecord = await prisma.oTP.findUnique({ where: { email: credentials.email } });
@@ -55,13 +59,13 @@ export const authOptions: NextAuthOptions = {
           }
           // OTP is valid, delete it (one-time use)
           await prisma.oTP.delete({ where: { email: credentials.email } });
-          // Only allow login for valid roles (including BASE_USER, TEACHER, VOLUNTEER)
+          // Only allow login for valid roles (including PARENT, TEACHER, VOLUNTEER)
           if (
             user.role === "SUPER_ADMIN" ||
             user.role === "OWNER" ||
             user.role === "ADMIN" ||
-            user.role === "LOCATION_ADMIN" ||
-            user.role === "BASE_USER" ||
+            user.role === "CAMPUS_REPRESENTATIVE" ||
+            user.role === "PARENT" ||
             user.role === "TEACHER" ||
             user.role === "VOLUNTEER"
           ) {
@@ -89,12 +93,12 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Only return user if their role is a valid UserRole (exclude BASE_USER)
+        // Only return user if their role is a valid UserRole (exclude PARENT)
         if (
           user.role === "SUPER_ADMIN" ||
           user.role === "OWNER" ||
           user.role === "ADMIN" ||
-          user.role === "LOCATION_ADMIN"
+          user.role === "CAMPUS_REPRESENTATIVE"
         ) {
           return {
             id: user.id,
@@ -104,7 +108,7 @@ export const authOptions: NextAuthOptions = {
             organizationId: user.organizationId ?? undefined,
           };
         } else {
-          // Invalid/legacy role (e.g., BASE_USER), do not authorize
+          // Invalid/legacy role (e.g., PARENT), do not authorize
           return null;
         }
       },
@@ -120,12 +124,12 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.role = user.role;
         token.organizationId = user.organizationId;
-        if (user.role === "LOCATION_ADMIN") {
+        if (user.role === "CAMPUS_REPRESENTATIVE") {
           const dbUser = await prisma.user.findUnique({
             where: { id: user.id },
-            include: { managedLocations: true },
+            include: { managedCampuses: true },
           });
-          token.managedLocations = dbUser?.managedLocations?.map((loc: { id: string }) => loc.id) || [];
+          token.managedCampuses = dbUser?.managedCampuses?.map((c: { id: string }) => c.id) || [];
         }
       }
       return token;
@@ -135,8 +139,8 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.role = token.role;
         session.user.organizationId = token.organizationId as string;
-        if (token.role === "LOCATION_ADMIN") {
-          session.user.managedLocations = token.managedLocations || [];
+        if (token.role === "CAMPUS_REPRESENTATIVE") {
+          session.user.managedCampuses = token.managedCampuses || [];
         }
       }
       return session;

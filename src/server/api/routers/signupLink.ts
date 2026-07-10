@@ -5,64 +5,64 @@ import { randomBytes } from "crypto";
 
 // Schema for signup link validation
 const signupLinkSchema = z.object({
-  locationId: z.string(),
-  yearId: z.string().optional(), // If not provided, use active year
+  campusId: z.string(),
+  campId: z.string().optional(), // If not provided, use active camp
 });
 
 export const signupLinkRouter = createTRPCRouter({
   // Get all signup links for an organization
   getByOrganization: protectedProcedure
-    .input(z.object({ 
+    .input(z.object({
       organizationId: z.string(),
-      yearId: z.string().optional() // If not provided, use active year
+      campId: z.string().optional() // If not provided, use active camp
     }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
+
       // Check if user has permission to view signup links for this organization
-      const hasPermission = 
-        currentUser.role === "SUPER_ADMIN" || 
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
         (currentUser.role === "OWNER" && currentUser.organizationId === input.organizationId) ||
         (currentUser.role === "ADMIN" && currentUser.organizationId === input.organizationId) ||
-        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === input.organizationId);
-      
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" && currentUser.organizationId === input.organizationId);
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to view signup links for this organization" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to view signup links for this organization"
         });
       }
-      
-      // Get the year ID to filter by
-      let yearId = input.yearId;
-      
-      // If no year ID provided, use the active year
-      if (!yearId) {
+
+      // Get the camp ID to filter by
+      let campId = input.campId;
+
+      // If no camp ID provided, use the active camp
+      if (!campId) {
         const organization = await ctx.prisma.organization.findUnique({
           where: { id: input.organizationId },
-          select: { activeYearId: true }
+          select: { activeCampId: true }
         });
-        
-        if (!organization || !organization.activeYearId) {
-          throw new TRPCError({ 
-            code: "BAD_REQUEST", 
-            message: "No active year set for this organization" 
+
+        if (!organization || !organization.activeCampId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "No active camp set for this organization"
           });
         }
-        
-        yearId = organization.activeYearId;
+
+        campId = organization.activeCampId;
       }
-      
-      // For location admins, only show signup links for their managed locations
-      if (currentUser.role === "LOCATION_ADMIN") {
-        const managedLocationIds = await ctx.prisma.location.findMany({
+
+      // For campus reps, only show signup links for their managed campuses
+      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
+        const managedCampuses = await ctx.prisma.campus.findMany({
           where: {
             organizationId: input.organizationId,
-            admins: {
+            reps: {
               some: {
                 id: currentUser.id
               }
@@ -70,254 +70,254 @@ export const signupLinkRouter = createTRPCRouter({
           },
           select: { id: true }
         });
-        
-        const locationIds = managedLocationIds.map((loc: { id: string }) => loc.id);
-        
+
+        const campusIds = managedCampuses.map((c: { id: string }) => c.id);
+
         return await ctx.prisma.signupLink.findMany({
-          where: { 
-            yearId,
-            locationId: { in: locationIds }
+          where: {
+            campId,
+            campusId: { in: campusIds }
           },
           include: {
-            location: true,
-            year: true
+            campus: true,
+            camp: true
           }
         });
       }
-      
+
       // For other roles, show all signup links for the organization
       return await ctx.prisma.signupLink.findMany({
-        where: { 
-          yearId,
-          location: {
+        where: {
+          campId,
+          campus: {
             organizationId: input.organizationId
           }
         },
         include: {
-          location: true,
-          year: true
+          campus: true,
+          camp: true
         }
       });
     }),
-    
-  // Get signup link for a location and year
-  getByLocationAndYear: protectedProcedure
-    .input(z.object({ 
-      locationId: z.string(),
-      yearId: z.string().optional() // If not provided, use active year
+
+  // Get signup link for a campus and camp
+  getByCampusAndCamp: protectedProcedure
+    .input(z.object({
+      campusId: z.string(),
+      campId: z.string().optional() // If not provided, use active camp
     }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
-      // Get the location to check permissions
-      const location = await ctx.prisma.location.findUnique({
-        where: { id: input.locationId },
+
+      // Get the campus to check permissions
+      const campus = await ctx.prisma.campus.findUnique({
+        where: { id: input.campusId },
         include: { organization: true }
       });
-      
-      if (!location) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
+
+      if (!campus) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
-      
-      // Check if user has permission to view signup links for this location
-      const hasPermission = 
-        currentUser.role === "SUPER_ADMIN" || 
-        (currentUser.role === "OWNER" && currentUser.organizationId === location.organizationId) ||
-        (currentUser.role === "ADMIN" && currentUser.organizationId === location.organizationId) ||
-        (currentUser.role === "LOCATION_ADMIN" && 
-         await ctx.prisma.location.findFirst({
+
+      // Check if user has permission to view signup links for this campus
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        (currentUser.role === "OWNER" && currentUser.organizationId === campus.organizationId) ||
+        (currentUser.role === "ADMIN" && currentUser.organizationId === campus.organizationId) ||
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+         await ctx.prisma.campus.findFirst({
            where: {
-             id: location.id,
-             admins: {
+             id: campus.id,
+             reps: {
                some: {
                  id: currentUser.id
                }
              }
            }
          }));
-      
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to view signup links for this location" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to view signup links for this campus"
         });
       }
-      
-      // Get the year ID to filter by
-      let yearId = input.yearId;
-      
-      // If no year ID provided, use the active year
-      if (!yearId) {
+
+      // Get the camp ID to filter by
+      let campId = input.campId;
+
+      // If no camp ID provided, use the active camp
+      if (!campId) {
         const organization = await ctx.prisma.organization.findUnique({
-          where: { id: location.organizationId },
-          select: { activeYearId: true }
+          where: { id: campus.organizationId },
+          select: { activeCampId: true }
         });
-        
-        if (!organization || !organization.activeYearId) {
-          throw new TRPCError({ 
-            code: "BAD_REQUEST", 
-            message: "No active year set for this organization" 
+
+        if (!organization || !organization.activeCampId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "No active camp set for this organization"
           });
         }
-        
-        yearId = organization.activeYearId;
+
+        campId = organization.activeCampId;
       }
-      
+
       // Find the signup link
       const signupLink = await ctx.prisma.signupLink.findUnique({
         where: {
-          locationId_yearId: {
-            locationId: input.locationId,
-            yearId: yearId
+          campusId_campId: {
+            campusId: input.campusId,
+            campId: campId
           }
         },
         include: {
-          location: true,
-          year: true
+          campus: true,
+          camp: true
         }
       });
-      
+
       return signupLink;
     }),
-    
-  // Generate a signup link for a location and year
+
+  // Generate a signup link for a campus and camp
   generate: protectedProcedure
     .input(signupLinkSchema)
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
-      // Get the location to check permissions
-      const location = await ctx.prisma.location.findUnique({
-        where: { id: input.locationId },
+
+      // Get the campus to check permissions
+      const campus = await ctx.prisma.campus.findUnique({
+        where: { id: input.campusId },
         include: { organization: true }
       });
-      
-      if (!location) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
+
+      if (!campus) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
-      
-      // Check if user has permission to generate signup links for this location
-      const hasPermission = 
-        currentUser.role === "SUPER_ADMIN" || 
-        (currentUser.role === "OWNER" && currentUser.organizationId === location.organizationId) ||
-        (currentUser.role === "ADMIN" && currentUser.organizationId === location.organizationId) ||
-        (currentUser.role === "LOCATION_ADMIN" && 
-         await ctx.prisma.location.findFirst({
+
+      // Check if user has permission to generate signup links for this campus
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        (currentUser.role === "OWNER" && currentUser.organizationId === campus.organizationId) ||
+        (currentUser.role === "ADMIN" && currentUser.organizationId === campus.organizationId) ||
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+         await ctx.prisma.campus.findFirst({
            where: {
-             id: location.id,
-             admins: {
+             id: campus.id,
+             reps: {
                some: {
                  id: currentUser.id
                }
              }
            }
          }));
-      
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to generate signup links for this location" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to generate signup links for this campus"
         });
       }
-      
-      // Get the year ID to use
-      let yearId = input.yearId;
-      
-      // If no year ID provided, use the active year
-      if (!yearId) {
+
+      // Get the camp ID to use
+      let campId = input.campId;
+
+      // If no camp ID provided, use the active camp
+      if (!campId) {
         const organization = await ctx.prisma.organization.findUnique({
-          where: { id: location.organizationId },
-          select: { activeYearId: true }
+          where: { id: campus.organizationId },
+          select: { activeCampId: true }
         });
-        
-        if (!organization || !organization.activeYearId) {
-          throw new TRPCError({ 
-            code: "BAD_REQUEST", 
-            message: "No active year set for this organization" 
+
+        if (!organization || !organization.activeCampId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "No active camp set for this organization"
           });
         }
-        
-        yearId = organization.activeYearId;
+
+        campId = organization.activeCampId;
       }
-      
-      // Check if a signup link already exists for this location and year
+
+      // Check if a signup link already exists for this campus and camp
       const existingLink = await ctx.prisma.signupLink.findUnique({
         where: {
-          locationId_yearId: {
-            locationId: input.locationId,
-            yearId: yearId
+          campusId_campId: {
+            campusId: input.campusId,
+            campId: campId
           }
         }
       });
-      
+
       if (existingLink) {
         return existingLink;
       }
-      
+
       // Generate a unique token
       const token = randomBytes(16).toString('hex');
-      
+
       // Create the signup link
       const signupLink = await ctx.prisma.signupLink.create({
         data: {
           token,
-          locationId: input.locationId,
-          yearId: yearId,
+          campusId: input.campusId,
+          campId: campId,
           active: true
         },
         include: {
-          location: true,
-          year: true
+          campus: true,
+          camp: true
         }
       });
-      
+
       return signupLink;
     }),
-    
+
   // Validate a signup link token
   validateToken: publicProcedure
     .input(z.object({ token: z.string() }))
     .query(async ({ ctx, input }) => {
-      // Support both random token and {location-slug}_{year-slug} format
-      const slugYearMatch = input.token.match(/^([a-zA-Z0-9_-]+)_([a-zA-Z0-9_-]+)$/);
+      // Support both random token and {campus-slug}_{camp-slug} format
+      const slugCampMatch = input.token.match(/^([a-zA-Z0-9_-]+)_([a-zA-Z0-9_-]+)$/);
       let signupLink = null;
-      if (slugYearMatch) {
-        const locationSlug = slugYearMatch[1];
-        const yearSlug = slugYearMatch[2];
-        // Find the location by slug
-        const location = await ctx.prisma.location.findUnique({
-          where: { slug: locationSlug },
+      if (slugCampMatch) {
+        const campusSlug = slugCampMatch[1];
+        const campSlug = slugCampMatch[2];
+        // Find the campus by slug
+        const campus = await ctx.prisma.campus.findUnique({
+          where: { slug: campusSlug },
           include: { organization: true }
         });
-        if (!location) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
+        if (!campus) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
         }
-        // Find the year by slug and organization
-        const year = await ctx.prisma.year.findFirst({
-          where: { slug: yearSlug, organizationId: location.organizationId },
+        // Find the camp by slug and organization
+        const camp = await ctx.prisma.camp.findFirst({
+          where: { slug: campSlug, organizationId: campus.organizationId },
         });
-        if (!year) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Year not found for this organization" });
+        if (!camp) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found for this organization" });
         }
-        // Find the signup link by locationId and yearId
+        // Find the signup link by campusId and campId
         signupLink = await ctx.prisma.signupLink.findUnique({
           where: {
-            locationId_yearId: {
-              locationId: location.id,
-              yearId: year.id
+            campusId_campId: {
+              campusId: campus.id,
+              campId: camp.id
             }
           },
           include: {
-            location: { include: { organization: true } },
-            year: true
+            campus: { include: { organization: true } },
+            camp: true
           }
         });
       } else {
@@ -325,193 +325,187 @@ export const signupLinkRouter = createTRPCRouter({
         signupLink = await ctx.prisma.signupLink.findUnique({
           where: { token: input.token },
           include: {
-            location: { include: { organization: true } },
-            year: true
+            campus: { include: { organization: true } },
+            camp: true
           }
         });
       }
       console.log('validateToken called with token:', input.token);
-      if (!signupLink || !signupLink.year) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found or year missing" });
+      if (!signupLink || !signupLink.camp) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found or camp missing" });
       }
       if (!signupLink.active) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Signup link is inactive" });
       }
-      if (!signupLink.year.active) {
-        throw new TRPCError({ 
-          code: "BAD_REQUEST", 
-          message: "This signup link is for an inactive year" 
+      if (!signupLink.camp.active) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This signup link is for an inactive camp"
         });
       }
       // Return the signup link details
       return {
-        locationId: signupLink.locationId,
-        locationName: signupLink.location.name,
-        organizationId: signupLink.location.organization.id,
-        organizationName: signupLink.location.organization.name,
-        yearId: signupLink.yearId,
-        yearName: signupLink.year.name
+        campusId: signupLink.campusId,
+        campusName: signupLink.campus.name,
+        organizationId: signupLink.campus.organization.id,
+        organizationName: signupLink.campus.organization.name,
+        campId: signupLink.campId,
+        campName: signupLink.camp.name
       };
 
     }),
 
-  // Validate a signup link by slug and year
+  // Validate a signup link by slug and camp
   validateSlug: publicProcedure
-    .input(z.object({ slug: z.string(), year: z.string() }))
+    .input(z.object({ slug: z.string(), camp: z.string() }))
     .query(async ({ ctx, input }) => {
-      // Find the location by slug
-      const location = await ctx.prisma.location.findUnique({
+      // Find the campus by slug
+      const campus = await ctx.prisma.campus.findUnique({
         where: { slug: input.slug },
         include: { organization: true }
       });
-      if (!location) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
+      if (!campus) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
-      // Find the year by id and ensure it belongs to the same org
-      const year = await ctx.prisma.year.findUnique({
-        where: { id: input.year },
+      // Find the camp by id and ensure it belongs to the same org
+      const camp = await ctx.prisma.camp.findUnique({
+        where: { id: input.camp },
         include: { organization: true }
       });
-      if (!year || year.organizationId !== location.organizationId) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Year not found for this organization" });
+      if (!camp || camp.organizationId !== campus.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found for this organization" });
       }
-      // Find the signup link by locationId and yearId
+      // Find the signup link by campusId and campId
       const signupLink = await ctx.prisma.signupLink.findUnique({
         where: {
-          locationId_yearId: {
-            locationId: location.id,
-            yearId: year.id
+          campusId_campId: {
+            campusId: campus.id,
+            campId: camp.id
           }
         },
         include: {
-          location: { include: { organization: true } },
-          year: true
+          campus: { include: { organization: true } },
+          camp: true
         }
       });
       if (!signupLink) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found for this location and year" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found for this campus and camp" });
       }
       if (!signupLink.active) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Signup link is inactive" });
       }
-      if (!signupLink.year.active) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "This signup link is for an inactive year" });
+      if (!signupLink.camp.active) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This signup link is for an inactive camp" });
       }
       return {
-        locationId: signupLink.locationId,
-        locationName: signupLink.location.name,
-        organizationId: signupLink.location.organization.id,
-        organizationName: signupLink.location.organization.name,
-        yearId: signupLink.yearId,
-        yearName: signupLink.year.name
+        campusId: signupLink.campusId,
+        campusName: signupLink.campus.name,
+        organizationId: signupLink.campus.organization.id,
+        organizationName: signupLink.campus.organization.name,
+        campId: signupLink.campId,
+        campName: signupLink.camp.name
       };
     }),
-    
+
   // Deactivate a signup link
   deactivate: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // DEBUG LOGGING - DEACTIVATE
-      console.log('[DEBUG][DEACTIVATE] User:', ctx.session?.user);
-      console.log('[DEBUG][DEACTIVATE] Input:', input);
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
+
       // Get the signup link to check permissions
       const signupLink = await ctx.prisma.signupLink.findUnique({
         where: { id: input.id },
         include: {
-          location: true
+          campus: true
         }
       });
-      
+
       if (!signupLink) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found" });
       }
-      
+
       // Check if user has permission to deactivate this signup link
-      const hasPermission = 
-        currentUser.role === "SUPER_ADMIN" || 
-        (currentUser.role === "OWNER" && currentUser.organizationId === signupLink.location.organizationId) ||
-        (currentUser.role === "ADMIN" && currentUser.organizationId === signupLink.location.organizationId) ||
-        (currentUser.role === "LOCATION_ADMIN" && 
-         await ctx.prisma.location.findFirst({
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        (currentUser.role === "OWNER" && currentUser.organizationId === signupLink.campus.organizationId) ||
+        (currentUser.role === "ADMIN" && currentUser.organizationId === signupLink.campus.organizationId) ||
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+         await ctx.prisma.campus.findFirst({
            where: {
-             id: signupLink.locationId,
-             admins: {
+             id: signupLink.campusId,
+             reps: {
                some: {
                  id: currentUser.id
                }
              }
            }
          }));
-      
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to deactivate this signup link" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to deactivate this signup link"
         });
       }
-      
+
       // Deactivate the signup link
       return await ctx.prisma.signupLink.update({
         where: { id: input.id },
         data: { active: false }
       });
     }),
-    
+
   // Reactivate a signup link
   reactivate: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // DEBUG LOGGING - REACTIVATE
-      console.log('[DEBUG][REACTIVATE] User:', ctx.session?.user);
-      console.log('[DEBUG][REACTIVATE] Input:', input);
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
+
       // Get the signup link to check permissions
       const signupLink = await ctx.prisma.signupLink.findUnique({
         where: { id: input.id },
         include: {
-          location: true
+          campus: true
         }
       });
-      
+
       if (!signupLink) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found" });
       }
-      
+
       // Check if user has permission to reactivate this signup link
-      const hasPermission = 
-        currentUser.role === "SUPER_ADMIN" || 
-        (currentUser.role === "OWNER" && currentUser.organizationId === signupLink.location.organizationId) ||
-        (currentUser.role === "ADMIN" && currentUser.organizationId === signupLink.location.organizationId) ||
-        (currentUser.role === "LOCATION_ADMIN" && 
-         await ctx.prisma.location.findFirst({
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        (currentUser.role === "OWNER" && currentUser.organizationId === signupLink.campus.organizationId) ||
+        (currentUser.role === "ADMIN" && currentUser.organizationId === signupLink.campus.organizationId) ||
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+         await ctx.prisma.campus.findFirst({
            where: {
-             id: signupLink.locationId,
-             admins: {
+             id: signupLink.campusId,
+             reps: {
                some: {
                  id: currentUser.id
                }
              }
            }
          }));
-      
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to reactivate this signup link" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to reactivate this signup link"
         });
       }
-      
+
       // Reactivate the signup link
       return await ctx.prisma.signupLink.update({
         where: { id: input.id },

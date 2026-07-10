@@ -11,9 +11,9 @@ export default function LoginPage() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  // A single field for either a password (admin/owner/location-admin) or an
-  // OTP code (base user). The send-otp endpoint intentionally responds
-  // identically whether or not the email exists/is a base user (anti account
+  // A single field for either a password (admin/owner/campus-rep) or an
+  // OTP code (parent). The send-otp endpoint intentionally responds
+  // identically whether or not the email exists/is a parent (anti account
   // enumeration), so the client can no longer know in advance which kind of
   // credential to expect — instead it triggers an OTP send opportunistically
   // and tries both credential shapes on submit; NextAuth's authorize() already
@@ -26,7 +26,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      // Fire-and-forget: sends an OTP if this email belongs to a base user,
+      // Fire-and-forget: sends an OTP if this email belongs to a parent,
       // and is a silent no-op otherwise. Errors here shouldn't block the
       // password path, so they're not surfaced to the user.
       await fetch("/api/base-user/send-otp", {
@@ -45,11 +45,11 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      // Try password auth first (covers admin/owner/location-admin/super-admin).
+      // Try password auth first (covers admin/owner/campus-rep/super-admin).
       let authRes = await signIn("credentials", { redirect: false, email, password: authValue });
 
       if (authRes?.error) {
-        // Fall back to OTP auth (covers base users).
+        // Fall back to OTP auth (covers parents).
         authRes = await signIn("credentials", { redirect: false, email, otp: authValue });
       }
 
@@ -61,15 +61,15 @@ export default function LoginPage() {
         const role = session?.user?.role;
 
         switch (role) {
-          case "BASE_USER":
+          case "PARENT":
             router.push("/dashboard");
             break;
           case "OWNER":
           case "ADMIN":
             router.push("/admin");
             break;
-          case "LOCATION_ADMIN":
-            router.push("/location-admin-dashboard");
+          case "CAMPUS_REPRESENTATIVE":
+            router.push("/campus-rep-dashboard");
             break;
           case "SUPER_ADMIN":
             router.push("/super-admin");

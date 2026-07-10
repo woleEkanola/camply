@@ -12,14 +12,14 @@ import { getNavGroups, type Role } from "./navConfig";
 import { CommandPalette } from "./CommandPalette";
 
 export interface AppShellProps {
-  area: "admin" | "dashboard" | "location-admin" | "super-admin" | "teacher" | "volunteer";
+  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer";
   children: React.ReactNode;
 }
 
 /**
  * Single shared shell for every authenticated area of the app (replaces
  * admin/components/ModernDashboardLayout.tsx plus the ad-hoc headers each
- * of dashboard/, location-admin-dashboard/, and super-admin/ used to build
+ * of dashboard/, campus-rep-dashboard/, and super-admin/ used to build
  * inline). Navigation is grouped by workflow via navConfig.ts rather than
  * a flat per-entity list.
  */
@@ -76,7 +76,7 @@ export default function AppShell({ area, children }: AppShellProps) {
               {group.items.map((item) => {
                 // Area root paths (e.g. "/admin") only match exactly — otherwise every
                 // nested page (e.g. "/admin/registrations") would also highlight "Dashboard".
-                const isAreaRoot = ["/admin", "/dashboard", "/location-admin-dashboard", "/super-admin", "/teacher", "/volunteer"].includes(item.href);
+                const isAreaRoot = ["/admin", "/dashboard", "/campus-rep-dashboard", "/super-admin", "/teacher", "/volunteer"].includes(item.href);
                 const active = isAreaRoot ? pathname === item.href : pathname === item.href || pathname?.startsWith(item.href + "/");
                 return (
                   <Link

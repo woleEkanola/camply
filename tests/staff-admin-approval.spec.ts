@@ -6,9 +6,10 @@ test.describe("Admin: staff approval and assignment", () => {
 
   const email = `e2e-approve-${Date.now()}@camply.test`;
   let departmentId: string;
+  let venueId: string;
 
   test.beforeAll(async () => {
-    const { organizationId, yearId } = await getFixtureOrgContext();
+    const { organizationId, campId } = await getFixtureOrgContext();
 
     const user = await prisma.user.create({
       data: { email, password: "placeholder-not-used-for-login", role: "TEACHER", organizationId },
@@ -17,7 +18,7 @@ test.describe("Admin: staff approval and assignment", () => {
       data: {
         userId: user.id,
         organizationId,
-        yearId,
+        campId,
         type: "TEACHER",
         status: "PENDING",
         firstName: "Approve",
@@ -31,20 +32,26 @@ test.describe("Admin: staff approval and assignment", () => {
     // and department assignment is worth covering independently of whatever
     // an admin happened to create by hand.
     const dept = await prisma.department.upsert({
-      where: { organizationId_yearId_name: { organizationId, yearId, name: "E2E Test Department" } },
+      where: { organizationId_campId_name: { organizationId, campId, name: "E2E Test Department" } },
       update: {},
-      create: { organizationId, yearId, name: "E2E Test Department" },
+      create: { organizationId, campId, name: "E2E Test Department" },
     });
     departmentId = dept.id;
+
+    // A venue fixture — the Assignment tab's "Centre" field assigns a Venue
+    // (operational, post-approval), not a Campus.
+    const venue = await prisma.venue.create({ data: { campId, name: `E2E Assignment Venue ${Date.now()}` } });
+    venueId = venue.id;
   });
 
   test.afterAll(async () => {
     await deleteStaffByEmail(email);
     await prisma.department.deleteMany({ where: { id: departmentId } });
+    await prisma.venue.deleteMany({ where: { id: venueId } });
   });
 
   test("owner can approve a pending teacher, assign a centre and department, and mark them Department Head", async ({ page }) => {
-    const { locationId, locationName } = await getFixtureOrgContext();
+    const venue = await prisma.venue.findUniqueOrThrow({ where: { id: venueId } });
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/teachers");
@@ -59,7 +66,7 @@ test.describe("Admin: staff approval and assignment", () => {
     await expect(dialog.getByText("APPROVED", { exact: true })).toBeVisible({ timeout: 10000 });
 
     await page.getByRole("tab", { name: "Assignment" }).click();
-    await fieldByLabel(page, "Centre").selectOption({ label: locationName });
+    await fieldByLabel(page, "Venue").selectOption({ label: venue.name });
     await fieldByLabel(page, "Department").selectOption({ label: "E2E Test Department" });
     await page.getByText("Department Head", { exact: true }).click();
 
@@ -68,19 +75,19 @@ test.describe("Admin: staff approval and assignment", () => {
         async () => {
           const updated = await prisma.staffProfile.findFirst({ where: { email } });
           return {
-            assignedLocationId: updated?.assignedLocationId,
+            assignedVenueId: updated?.assignedVenueId,
             departmentId: updated?.departmentId,
             isDepartmentHead: updated?.isDepartmentHead,
           };
         },
         { timeout: 10000 }
       )
-      .toEqual({ assignedLocationId: locationId, departmentId, isDepartmentHead: true });
+      .toEqual({ assignedVenueId: venueId, departmentId, isDepartmentHead: true });
   });
 
   test("owner can reject a pending volunteer with a reason", async ({ page }) => {
     const rejectEmail = `e2e-reject-${Date.now()}@camply.test`;
-    const { organizationId, yearId } = await getFixtureOrgContext();
+    const { organizationId, campId } = await getFixtureOrgContext();
     const user = await prisma.user.create({
       data: { email: rejectEmail, password: "placeholder-not-used-for-login", role: "VOLUNTEER", organizationId },
     });
@@ -88,7 +95,7 @@ test.describe("Admin: staff approval and assignment", () => {
       data: {
         userId: user.id,
         organizationId,
-        yearId,
+        campId,
         type: "VOLUNTEER",
         status: "PENDING",
         firstName: "Reject",

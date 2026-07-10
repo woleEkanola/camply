@@ -26,7 +26,7 @@ function VolunteerMealsContent({ profile, organizationId }: { profile: any; orga
   );
 
   const utils = api.useUtils();
-  const { data: allergyList = [] } = api.meal.allergyList.useQuery({ organizationId, yearId: profile.yearId }, { enabled: !!organizationId });
+  const { data: allergyList = [] } = api.meal.allergyList.useQuery({ organizationId, campId: profile.campId }, { enabled: !!organizationId });
   const serve = api.meal.serve.useMutation({
     onSuccess: (data) => {
       setAllergyWarning(data.allergyWarning);
@@ -69,7 +69,7 @@ function VolunteerMealsContent({ profile, organizationId }: { profile: any; orga
                 <Button
                   size="sm"
                   loading={serve.isPending}
-                  onClick={() => serve.mutate({ organizationId, yearId: profile.yearId, registrationId: r.registrationId, meal, date: new Date() })}
+                  onClick={() => serve.mutate({ organizationId, campId: profile.campId, registrationId: r.registrationId, meal, date: new Date() })}
                 >
                   Serve
                 </Button>

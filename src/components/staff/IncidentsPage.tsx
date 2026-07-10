@@ -8,7 +8,7 @@ import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 
-export function IncidentsPage({ yearId }: { yearId: string }) {
+export function IncidentsPage({ campId }: { campId: string }) {
   const { data: session } = useSession();
   const organizationId = (session?.user as any)?.organizationId ?? "";
 
@@ -42,7 +42,7 @@ export function IncidentsPage({ yearId }: { yearId: string }) {
             <Button
               disabled={!title || !description}
               loading={create.isPending}
-              onClick={() => create.mutate({ organizationId, yearId, severity, title, description })}
+              onClick={() => create.mutate({ organizationId, campId, severity, title, description })}
             >
               Submit Report
             </Button>

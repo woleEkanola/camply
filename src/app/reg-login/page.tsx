@@ -44,7 +44,7 @@ export default function RegLoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-neutral-50">
       <Card className="w-full max-w-md">
         <CardBody>
-          <h2 className="mb-6 text-center text-xl font-semibold text-neutral-900">Base User Login</h2>
+          <h2 className="mb-6 text-center text-xl font-semibold text-neutral-900">Parent Login</h2>
           {!otpSent ? (
             <form onSubmit={handleSendOtp} className="space-y-4">
               <Input

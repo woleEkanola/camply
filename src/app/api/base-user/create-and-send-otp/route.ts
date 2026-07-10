@@ -23,31 +23,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Too many requests. Try again later." }, { status: 429 });
   }
 
-  // Create BASE_USER if not exists
+  // Create PARENT if not exists
   let user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     // Placeholder password: random and hashed so it can never be used to log in
     const placeholderPassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
-    // Lookup signup link by token if provided (to get location and organization)
+    // Lookup signup link by token if provided (to get campus and organization)
     let organizationId = null;
-    let locationId = null
+    let homeCampusId = null
     if (token) {
-      const [locationName] = token.split('_')
-      const location = await prisma.location.findFirst({
-        where: { slug: locationName },
+      const [campusSlug] = token.split('_')
+      const campus = await prisma.campus.findFirst({
+        where: { slug: campusSlug },
       });
-      if (location) {
-        organizationId = location.organizationId;
-        locationId = location.id;
+      if (campus) {
+        organizationId = campus.organizationId;
+        homeCampusId = campus.id;
       }
     }
     user = await prisma.user.create({
       data: {
         email,
-        role: "BASE_USER",
+        role: "PARENT",
         password: placeholderPassword,
         organizationId: organizationId || undefined,
-        locationId: locationId || undefined,
+        homeCampusId: homeCampusId || undefined,
         // Add other fields as needed
       },
     });
@@ -63,8 +63,13 @@ export async function POST(req: NextRequest) {
     create: { email, code: otp, expiresAt },
   });
 
-  // Send OTP to email
-  await sendOtpEmail(email, otp);
+  // Best-effort delivery — the OTP is already persisted, so a transient email
+  // failure (e.g. no RESEND_API_KEY configured) shouldn't block the flow.
+  try {
+    await sendOtpEmail(email, otp);
+  } catch (e) {
+    console.error("[base-user/create-and-send-otp] Failed to send OTP email", e);
+  }
 
   return NextResponse.json({ success: true });
 }

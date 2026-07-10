@@ -162,10 +162,10 @@ export const organizationRouter = createTRPCRouter({
 
       // Execute deletion sequence in a transaction to prevent partial deletion and constraint violations
       await prisma.$transaction(async (tx) => {
-        // Break circular references between Organization and Year
+        // Break circular references between Organization and Camp
         await tx.organization.updateMany({
           where: { id: { in: organizationIds } },
-          data: { activeYearId: null }
+          data: { activeCampId: null }
         });
 
         // 1. Delete AuditLogs and Notifications for these organizations
@@ -179,16 +179,16 @@ export const organizationRouter = createTRPCRouter({
         // 2. Delete registrations for these organizations
         await tx.registration.deleteMany({
           where: {
-            year: { organizationId: { in: organizationIds } }
+            camp: { organizationId: { in: organizationIds } }
           }
         });
 
-        // 3. Delete users belonging to these organizations (cascades to CamperProfiles, etc.)
+        // 3. Delete users belonging to these organizations (cascades to Campers, etc.)
         await tx.user.deleteMany({
           where: { organizationId: { in: organizationIds } }
         });
 
-        // 4. Delete the organizations themselves (cascades to Locations, Years, ProfileFields, etc.)
+        // 4. Delete the organizations themselves (cascades to Campuses, Camps, ProfileFields, etc.)
         await tx.organization.deleteMany({
           where: { id: { in: organizationIds } }
         });

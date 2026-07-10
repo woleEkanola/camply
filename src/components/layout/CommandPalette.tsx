@@ -23,7 +23,7 @@ interface PaletteResult {
  * that currently supports server-side search (see plan Step 3: only wire
  * up search that actually exists, don't fabricate new backend search).
  */
-export function CommandPalette({ area }: { area: "admin" | "dashboard" | "location-admin" | "super-admin" | "teacher" | "volunteer" }) {
+export function CommandPalette({ area }: { area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer" }) {
   const router = useRouter();
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
@@ -67,7 +67,7 @@ export function CommandPalette({ area }: { area: "admin" | "dashboard" | "locati
 
   const registrationItems: PaletteResult[] = (registrationResults?.items ?? []).map((r: any) => ({
     id: r.id,
-    label: r.camperProfile?.name ?? "Registration",
+    label: r.camper?.name ?? "Registration",
     sublabel: `${r.registrationNumber ?? "No number yet"} · ${r.status}`,
     href: `/admin/registrations?open=${r.id}`,
   }));

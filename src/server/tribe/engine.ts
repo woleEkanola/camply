@@ -20,7 +20,7 @@ type Criterion =
   | "RETURNING_CAMPER"
   | "GENDER"
   | "AGE"
-  | "CENTRE"
+  | "CAMPUS"
   | "CHURCH"
   | "SCHOOL"
   | "POPULATION";
@@ -60,31 +60,31 @@ export interface TribeSuggestion {
 export async function suggestTribe(tx: TxClient, registrationId: string): Promise<TribeSuggestion | null> {
   const registration = await tx.registration.findUniqueOrThrow({
     where: { id: registrationId },
-    include: { camperProfile: true, year: true, location: true },
+    include: { camper: true, camp: true, campus: true },
   });
 
   const tribes = await tx.tribe.findMany({
-    where: { yearId: registration.yearId, status: "ACTIVE" },
-    include: { registrations: { select: { id: true, camperProfile: true, locationId: true } } },
+    where: { campId: registration.campId, status: "ACTIVE" },
+    include: { registrations: { select: { id: true, camper: true, campusId: true } } },
   });
   if (tribes.length === 0) return null;
 
-  const rules: Rule[] = Array.isArray(registration.year.tribeAllocationRules)
-    ? (registration.year.tribeAllocationRules as unknown as Rule[])
+  const rules: Rule[] = Array.isArray(registration.camp.tribeAllocationRules)
+    ? (registration.camp.tribeAllocationRules as unknown as Rule[])
     : DEFAULT_RULES;
   const enabledRules = rules.filter((r) => r.enabled);
 
-  const cutoff = registration.year.ageCutoffDate ?? registration.year.startDate;
-  const camperAgeGroup = ageGroup(registration.camperProfile.dateOfBirth, cutoff);
+  const cutoff = registration.camp.ageCutoffDate ?? registration.camp.startDate;
+  const camperAgeGroup = ageGroup(registration.camper.dateOfBirth, cutoff);
 
-  // Siblings: other campers under the same parent already assigned to a tribe this year.
+  // Siblings: other campers under the same parent already assigned to a tribe this camp.
   const siblingTribeIds = new Set(
     (
       await tx.registration.findMany({
         where: {
-          yearId: registration.yearId,
+          campId: registration.campId,
           tribeId: { not: null },
-          camperProfile: { userId: registration.camperProfile.userId },
+          camper: { userId: registration.camper.userId },
           id: { not: registration.id },
         },
         select: { tribeId: true },
@@ -117,13 +117,13 @@ export async function suggestTribe(tx: TxClient, registrationId: string): Promis
         case "GENDER": {
           const counts = tribe.registrations.reduce(
             (acc, r) => {
-              const g = (r.camperProfile as any).gender;
+              const g = (r.camper as any).gender;
               if (g) acc[g] = (acc[g] ?? 0) + 1;
               return acc;
             },
             {} as Record<string, number>
           );
-          const myGender = registration.camperProfile.gender;
+          const myGender = registration.camper.gender;
           const myCount = myGender ? counts[myGender] ?? 0 : 0;
           score += 100 - myCount; // fewer of my gender here = better
           if (myCount === Math.min(...Object.values(counts), 0)) reasons.push("Gender balance maintained");
@@ -131,29 +131,29 @@ export async function suggestTribe(tx: TxClient, registrationId: string): Promis
         }
         case "AGE": {
           const sameAgeGroupCount = tribe.registrations.filter(
-            (r) => ageGroup((r.camperProfile as any).dateOfBirth, cutoff) === camperAgeGroup
+            (r) => ageGroup((r.camper as any).dateOfBirth, cutoff) === camperAgeGroup
           ).length;
           score += 100 - sameAgeGroupCount;
           reasons.push("Age balance maintained");
           break;
         }
-        case "CENTRE": {
-          const sameCentreCount = tribe.registrations.filter((r) => r.locationId === registration.locationId).length;
-          score += 50 - sameCentreCount;
+        case "CAMPUS": {
+          const sameCampusCount = tribe.registrations.filter((r) => r.campusId === registration.campusId).length;
+          score += 50 - sameCampusCount;
           break;
         }
         case "CHURCH": {
-          const church = (registration.camperProfile as any).church;
+          const church = (registration.camper as any).church;
           const sameChurchCount = church
-            ? tribe.registrations.filter((r) => (r.camperProfile as any).church === church).length
+            ? tribe.registrations.filter((r) => (r.camper as any).church === church).length
             : 0;
           score += 20 - sameChurchCount;
           break;
         }
         case "SCHOOL": {
-          const school = (registration.camperProfile as any).school;
+          const school = (registration.camper as any).school;
           const sameSchoolCount = school
-            ? tribe.registrations.filter((r) => (r.camperProfile as any).school === school).length
+            ? tribe.registrations.filter((r) => (r.camper as any).school === school).length
             : 0;
           score += 20 - sameSchoolCount;
           break;
@@ -190,11 +190,11 @@ async function assignTribeInTx(
 ) {
   const registration = await tx.registration.findUniqueOrThrow({
     where: { id: params.registrationId },
-    include: { camperProfile: true },
+    include: { camper: true },
   });
 
   const tribe = await tx.tribe.findUniqueOrThrow({ where: { id: params.tribeId }, include: { registrations: true } });
-  if (tribe.yearId !== registration.yearId) {
+  if (tribe.campId !== registration.campId) {
     throw new TribeAllocationError("WRONG_CAMP", "This tribe does not belong to the same camp as the registration.");
   }
   if (tribe.status !== "ACTIVE") {
@@ -212,7 +212,7 @@ async function assignTribeInTx(
   });
 
   await logEvent(tx, {
-    organizationId: registration.camperProfile.organizationId,
+    organizationId: registration.camper.organizationId,
     registrationId: registration.id,
     actorId: params.actorId,
     action: previousTribeId ? "TRIBE_CHANGED" : "TRIBE_ASSIGNED",
@@ -237,8 +237,8 @@ export async function assignTribe(params: {
 /** Called from the Registration Engine on approval when tribeAllocationMode === AUTOMATIC. Never throws. */
 export async function autoAssignTribeOnApproval(registrationId: string) {
   try {
-    const registration = await prisma.registration.findUnique({ where: { id: registrationId }, include: { year: true } });
-    if (!registration || !registration.year.tribeAllocationEnabled || registration.year.tribeAllocationMode !== "AUTOMATIC") {
+    const registration = await prisma.registration.findUnique({ where: { id: registrationId }, include: { camp: true } });
+    if (!registration || !registration.camp.tribeAllocationEnabled || registration.camp.tribeAllocationMode !== "AUTOMATIC") {
       return;
     }
     if (registration.tribeId) return; // already assigned
@@ -259,7 +259,7 @@ export async function reassignTribe(params: { registrationId: string; tribeId: s
   const result = await prisma.$transaction((tx) => assignTribeInTx(tx, { ...params, method: "MANUAL" }));
   if (params.reason) {
     await logEvent(prisma, {
-      organizationId: (await prisma.camperProfile.findUniqueOrThrow({ where: { id: result.camperProfileId } })).organizationId,
+      organizationId: (await prisma.camper.findUniqueOrThrow({ where: { id: result.camperId } })).organizationId,
       registrationId: result.id,
       actorId: params.actorId,
       action: "TRIBE_REASSIGNMENT_REASON",
@@ -273,14 +273,14 @@ export async function clearTribeAssignment(params: { registrationId: string; act
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
     const updated = await tx.registration.update({
       where: { id: registration.id },
       data: { tribeId: null, tribeAssignedAt: null, tribeAssignmentMethod: null },
     });
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "TRIBE_ASSIGNMENT_CLEARED",
@@ -290,10 +290,10 @@ export async function clearTribeAssignment(params: { registrationId: string; act
   });
 }
 
-/** Bulk-assigns tribes for every un-tribed approved registration in a year using automatic suggestion. */
-export async function bulkAutoAssignTribes(params: { yearId: string; actorId: string }) {
+/** Bulk-assigns tribes for every un-tribed approved registration in a camp using automatic suggestion. */
+export async function bulkAutoAssignTribes(params: { campId: string; actorId: string }) {
   const registrations = await prisma.registration.findMany({
-    where: { yearId: params.yearId, status: { in: ["APPROVED", "CHECKED_IN"] }, tribeId: null },
+    where: { campId: params.campId, status: { in: ["APPROVED", "CHECKED_IN"] }, tribeId: null },
     select: { id: true },
   });
 

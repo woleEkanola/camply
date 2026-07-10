@@ -24,14 +24,14 @@ export default function AnnouncementsPage() {
 
   const organizationId = (session?.user as ExtendedUser)?.organizationId || "";
 
-  const { data: locations = [] } = api.location.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
-  const { data: years = [] } = api.year.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
+  const { data: campuses = [] } = api.campus.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
+  const { data: camps = [] } = api.camp.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
   const { data: history, refetch: refetchHistory } = api.notification.broadcastHistory.useQuery({ organizationId }, { enabled: !!organizationId });
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [yearId, setYearId] = useState("");
-  const [locationId, setLocationId] = useState("");
+  const [campId, setCampId] = useState("");
+  const [campusId, setCampusId] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [audience, setAudience] = useState<"PARENTS" | "TEACHERS" | "VOLUNTEERS" | "ALL">("PARENTS");
   const [result, setResult] = useState("");
@@ -66,16 +66,16 @@ export default function AnnouncementsPage() {
             </Select>
 
             <div className="grid grid-cols-3 gap-3">
-              <Select label="Camp" value={yearId} onChange={(e) => setYearId(e.target.value)}>
+              <Select label="Camp" value={campId} onChange={(e) => setCampId(e.target.value)}>
                 <option value="">All Camps</option>
-                {years.map((y: any) => (
-                  <option key={y.id} value={y.id}>{y.name}</option>
+                {camps.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </Select>
-              <Select label="Centre" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-                <option value="">All Centres</option>
-                {locations.map((l: any) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
+              <Select label="Campus" value={campusId} onChange={(e) => setCampusId(e.target.value)}>
+                <option value="">All Campuses</option>
+                {campuses.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </Select>
               <Select label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -94,8 +94,8 @@ export default function AnnouncementsPage() {
                   organizationId,
                   title,
                   body,
-                  yearId: yearId || undefined,
-                  locationId: locationId || undefined,
+                  campId: campId || undefined,
+                  campusId: campusId || undefined,
                   status: statusFilter || undefined,
                   audience,
                 })

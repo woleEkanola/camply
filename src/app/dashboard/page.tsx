@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { api } from "@/utils/api";
+import { api } from "@/utils/trpc";
+import type { FormFieldDTO } from "@/components/forms/types";
 import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -25,18 +26,18 @@ export default function UserDashboard() {
       router.push("/login");
     } else if (session.user.role === "OWNER" || session.user.role === "ADMIN") {
       router.push("/admin");
-    } else if (session.user.role === "LOCATION_ADMIN") {
-      router.push("/location-admin-dashboard");
+    } else if (session.user.role === "CAMPUS_REPRESENTATIVE") {
+      router.push("/campus-rep-dashboard");
     } else if (session.user.role === "TEACHER") {
       router.push("/teacher");
     } else if (session.user.role === "VOLUNTEER") {
       router.push("/volunteer");
-    } else if (session.user.role !== undefined && session.user.role !== "BASE_USER") {
+    } else if (session.user.role !== undefined && session.user.role !== "PARENT") {
       router.push("/login");
     }
   }, [session, status, router]);
 
-  const { data: camperProfiles, isLoading: isLoadingProfiles, error: profilesError } = api.camperProfile.getByUserId.useQuery(
+  const { data: campers, isLoading: isLoadingProfiles, error: profilesError } = api.camper.getByUserId.useQuery(
     undefined,
     { enabled: !!session?.user?.id }
   );
@@ -47,19 +48,18 @@ export default function UserDashboard() {
   );
 
   const organizationId = session?.user?.organizationId ?? "";
-  const { data: profileFields = [], isLoading: isLoadingFields } = api.profileField.getByOrganization.useQuery(
-    { organizationId },
+  const { data: fields = [], isLoading: isLoadingFields } = api.formField.list.useQuery(
+    { organizationId, audience: "CAMPER" },
     { enabled: !!organizationId }
   );
 
   function getProfileCompletion(profile: any) {
-    if (!profileFields.length) return 0;
-    const requiredFields = profileFields.filter((f: any) => f.required);
+    const requiredFields = fields.filter((f: FormFieldDTO) => f.visible && f.required);
     if (!requiredFields.length) return 100;
     let filled = 0;
     for (const field of requiredFields) {
-      if (["name", "dateOfBirth", "gender", "locationId"].includes(field.name)) {
-        if (profile[field.name]) filled++;
+      if (field.source === "SYSTEM") {
+        if (profile[field.systemKey!]) filled++;
       } else {
         const val = profile.fieldValues?.find((fv: any) => fv.fieldId === field.id)?.value;
         if (val && val !== "") filled++;
@@ -84,14 +84,14 @@ export default function UserDashboard() {
   if (!session) return null;
 
   const registrationColumns: Column<any>[] = [
-    { header: "Camper", accessor: (r) => r.camperProfile.name },
+    { header: "Camper", accessor: (r) => r.camper.name },
     { header: "Camp", accessor: (r) => r.year.name },
     { header: "Centre", accessor: (r) => r.location.name },
     { header: "Status", accessor: (r) => <StatusBadge status={r.status} /> },
     {
       header: "Profile Completion",
       accessor: (r) => {
-        const percent = getProfileCompletion(r.camperProfile);
+        const percent = getProfileCompletion(r.camper);
         return (
           <div className="flex min-w-[100px] items-center gap-2">
             <div className="h-2 w-full rounded bg-neutral-200">
@@ -108,19 +108,19 @@ export default function UserDashboard() {
   const profilesTab = (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-neutral-900">Your Camper Profiles</h2>
+        <h2 className="text-lg font-semibold text-neutral-900">Your Campers</h2>
         <Link href="/dashboard/profiles/new"><Button>Create New Profile</Button></Link>
       </div>
 
-      {camperProfiles?.length === 0 ? (
+      {campers?.length === 0 ? (
         <EmptyState
           title="No profiles yet"
-          description="Get started by creating your first camper profile."
+          description="Get started by creating your first camper."
           action={<Link href="/dashboard/profiles/new"><Button>Create Profile</Button></Link>}
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {camperProfiles?.map((profile: any) => (
+          {campers?.map((profile: any) => (
             <Card key={profile.id}>
               <CardBody>
                 <h3 className="font-medium text-neutral-900">{profile.name}</h3>
@@ -158,7 +158,7 @@ export default function UserDashboard() {
   return (
     <AppShell area="dashboard">
       <PageHeader title="Dashboard" description={`Welcome back, ${session.user.email}`} />
-      <Tabs tabs={[{ label: "Camper Profiles", content: profilesTab }, { label: "Registrations", content: registrationsTab }]} />
+      <Tabs tabs={[{ label: "Campers", content: profilesTab }, { label: "Registrations", content: registrationsTab }]} />
     </AppShell>
   );
 }

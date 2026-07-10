@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/server/db";
+import { validateFormFields } from "@/server/registration/validateFormFields";
 
 const bodySchema = z.object({
   token: z.string().min(1),
@@ -21,7 +22,7 @@ const bodySchema = z.object({
   previousCampExperience: z.string().optional(),
   areasOfStrength: z.string().optional(),
   preferredAgeGroup: z.string().optional(),
-  preferredLocationId: z.string().optional(),
+  preferredCampusId: z.string().optional(),
   preferredTribeId: z.string().optional(),
 
   volunteerCategory: z.string().optional(),
@@ -46,11 +47,11 @@ export async function POST(request: Request) {
     }
     const { token, email, fieldValues, dateOfBirth, ...rest } = parsed.data;
 
-    const link = await prisma.staffSignupLink.findUnique({ where: { token }, include: { year: true } });
+    const link = await prisma.staffSignupLink.findUnique({ where: { token }, include: { camp: true } });
     if (!link || !link.active) {
       return NextResponse.json({ message: "Invalid or expired registration link" }, { status: 400 });
     }
-    if (!link.year.active) {
+    if (!link.camp.active) {
       return NextResponse.json({ message: "Registration for this camp is not currently open" }, { status: 403 });
     }
 
@@ -60,17 +61,29 @@ export async function POST(request: Request) {
     }
 
     const existing = await prisma.staffProfile.findUnique({
-      where: { userId_yearId: { userId: user.id, yearId: link.yearId } },
+      where: { userId_campId: { userId: user.id, campId: link.campId } },
     });
     if (existing) {
       return NextResponse.json({ message: "You have already registered for this camp", staffProfileId: existing.id }, { status: 200 });
+    }
+
+    const submittedValues: Record<string, unknown> = { ...rest, dateOfBirth };
+    for (const fv of fieldValues || []) {
+      submittedValues[fv.fieldId] = fv.value;
+    }
+    const fieldFailures = await validateFormFields(prisma, link.organizationId, link.type, submittedValues);
+    if (fieldFailures.length > 0) {
+      return NextResponse.json(
+        { message: `Missing required field(s): ${fieldFailures.map((f) => f.label).join(", ")}`, fields: fieldFailures },
+        { status: 400 }
+      );
     }
 
     const profile = await prisma.staffProfile.create({
       data: {
         userId: user.id,
         organizationId: link.organizationId,
-        yearId: link.yearId,
+        campId: link.campId,
         type: link.type,
         status: "PENDING",
         email,

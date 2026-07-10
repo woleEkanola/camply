@@ -141,9 +141,9 @@ export default function RegistrationWizardPage() {
     { enabled: !!registrationId }
   );
 
-  const { data: requirements } = api.documentRequirement.listByYear.useQuery(
-    { yearId: registration?.yearId ?? "" },
-    { enabled: !!registration?.yearId }
+  const { data: requirements } = api.documentRequirement.listByCamp.useQuery(
+    { campId: registration?.campId ?? "" },
+    { enabled: !!registration?.campId }
   );
 
   const { data: documents, refetch: refetchDocs } = api.document.listForRegistration.useQuery(
@@ -282,9 +282,9 @@ export default function RegistrationWizardPage() {
           )}
 
           <div className="space-y-2 text-sm">
-            <div><span className="font-medium">Camper:</span> {registration.camperProfile?.name}</div>
-            <div><span className="font-medium">Camp:</span> {registration.year?.name}</div>
-            <div><span className="font-medium">Centre:</span> {registration.location?.name}</div>
+            <div><span className="font-medium">Camper:</span> {registration.camper?.name}</div>
+            <div><span className="font-medium">Camp:</span> {registration.camp?.name}</div>
+            <div><span className="font-medium">Campus:</span> {registration.campus?.name}</div>
             <div><span className="font-medium">Documents:</span> {(documents ?? []).length} uploaded</div>
           </div>
 

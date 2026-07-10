@@ -14,7 +14,7 @@ export default function TeacherIncidentsPage() {
   return (
     <AppShell area="teacher">
       <PageHeader title="Incidents" />
-      <StaffGate>{(profile) => <IncidentsPage yearId={profile.yearId} />}</StaffGate>
+      <StaffGate>{(profile) => <IncidentsPage campId={profile.campId} />}</StaffGate>
     </AppShell>
   );
 }

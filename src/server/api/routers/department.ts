@@ -15,28 +15,28 @@ async function assertOrgAdmin(ctx: { session: any }, organizationId: string) {
 async function assertOrgMember(ctx: { session: any }, organizationId: string) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (currentUser.role === "BASE_USER") throw new TRPCError({ code: "FORBIDDEN" });
+  if (currentUser.role === "PARENT") throw new TRPCError({ code: "FORBIDDEN" });
   if (currentUser.organizationId !== organizationId) throw new TRPCError({ code: "FORBIDDEN" });
   return currentUser;
 }
 
 export const departmentRouter = createTRPCRouter({
   list: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string().optional() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       await assertOrgMember(ctx, input.organizationId);
       return ctx.prisma.department.findMany({
-        where: { organizationId: input.organizationId, ...(input.yearId && { yearId: input.yearId }), status: "ACTIVE" },
+        where: { organizationId: input.organizationId, ...(input.campId && { campId: input.campId }), status: "ACTIVE" },
         orderBy: { name: "asc" },
       });
     }),
 
   create: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string().optional(), name: z.string(), description: z.string().optional() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional(), name: z.string(), description: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdmin(ctx, input.organizationId);
       return ctx.prisma.department.create({
-        data: { organizationId: input.organizationId, yearId: input.yearId ?? null, name: input.name, description: input.description },
+        data: { organizationId: input.organizationId, campId: input.campId ?? null, name: input.name, description: input.description },
       });
     }),
 

@@ -7,7 +7,7 @@ function assertAdminForOrg(currentUser: { role: string; organizationId?: string 
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
   const hasPermission =
     currentUser.role === "SUPER_ADMIN" ||
-    (["OWNER", "ADMIN", "LOCATION_ADMIN"].includes(currentUser.role) && currentUser.organizationId === organizationId);
+    (["OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"].includes(currentUser.role) && currentUser.organizationId === organizationId);
   if (!hasPermission) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage staff signup links for this organization" });
   }
@@ -15,31 +15,31 @@ function assertAdminForOrg(currentUser: { role: string; organizationId?: string 
 
 export const staffSignupLinkRouter = createTRPCRouter({
   // Both the Teacher and Volunteer links for a camp (Year), with live registration counts
-  getByYear: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string().optional() }))
+  getByCamp: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       assertAdminForOrg(currentUser, input.organizationId);
 
-      let yearId = input.yearId;
-      if (!yearId) {
+      let campId = input.campId;
+      if (!campId) {
         const organization = await ctx.prisma.organization.findUnique({
           where: { id: input.organizationId },
-          select: { activeYearId: true },
+          select: { activeCampId: true },
         });
-        if (!organization?.activeYearId) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "No active year set for this organization" });
+        if (!organization?.activeCampId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "No active camp set for this organization" });
         }
-        yearId = organization.activeYearId;
+        campId = organization.activeCampId;
       }
 
       const links = await ctx.prisma.staffSignupLink.findMany({
-        where: { yearId, organizationId: input.organizationId },
+        where: { campId, organizationId: input.organizationId },
       });
 
       const counts = await ctx.prisma.staffProfile.groupBy({
         by: ["type"],
-        where: { yearId, organizationId: input.organizationId },
+        where: { campId, organizationId: input.organizationId },
         _count: { _all: true },
       });
 
@@ -53,13 +53,13 @@ export const staffSignupLinkRouter = createTRPCRouter({
     }),
 
   generate: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string(), type: z.enum(["TEACHER", "VOLUNTEER"]) }))
+    .input(z.object({ organizationId: z.string(), campId: z.string(), type: z.enum(["TEACHER", "VOLUNTEER"]) }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       assertAdminForOrg(currentUser, input.organizationId);
 
       const existing = await ctx.prisma.staffSignupLink.findUnique({
-        where: { yearId_type: { yearId: input.yearId, type: input.type } },
+        where: { campId_type: { campId: input.campId, type: input.type } },
       });
       if (existing) return existing;
 
@@ -67,7 +67,7 @@ export const staffSignupLinkRouter = createTRPCRouter({
         data: {
           token: randomBytes(16).toString("hex"),
           type: input.type,
-          yearId: input.yearId,
+          campId: input.campId,
           organizationId: input.organizationId,
           active: true,
         },
@@ -114,23 +114,23 @@ export const staffSignupLinkRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const link = await ctx.prisma.staffSignupLink.findUnique({
         where: { token: input.token },
-        include: { year: { include: { organization: true } } },
+        include: { camp: { include: { organization: true } } },
       });
-      if (!link || !link.year) {
+      if (!link || !link.camp) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Registration link not found" });
       }
       if (!link.active) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "This registration link has been disabled" });
       }
-      if (!link.year.active) {
+      if (!link.camp.active) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Registration for this camp is not currently open" });
       }
       return {
         type: link.type as "TEACHER" | "VOLUNTEER",
-        yearId: link.yearId,
-        yearName: link.year.name,
-        organizationId: link.year.organization.id,
-        organizationName: link.year.organization.name,
+        campId: link.campId,
+        campName: link.camp.name,
+        organizationId: link.camp.organization.id,
+        organizationName: link.camp.organization.name,
       };
     }),
 });

@@ -4,11 +4,11 @@ import { TRPCError } from "@trpc/server";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
-/** Rejects BASE_USER outright — Camp Structure is a staff/admin-only module. */
+/** Rejects PARENT outright — Camp Structure is a staff/admin-only module. */
 function assertStaffModuleAccess(ctx: { session: any }) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (currentUser.role === "BASE_USER") throw new TRPCError({ code: "FORBIDDEN", message: "Not available for this account type" });
+  if (currentUser.role === "PARENT") throw new TRPCError({ code: "FORBIDDEN", message: "Not available for this account type" });
   return currentUser;
 }
 
@@ -35,20 +35,20 @@ type StaffNode = {
 export const orgStructureRouter = createTRPCRouter({
   // ─── Leadership tree ────────────────────────────────────────────────────
   getLeadershipTree: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
-      // Top-of-chart: org admins (OWNER/ADMIN) + centre managers (LOCATION_ADMIN), one flat query.
+      // Top-of-chart: org admins (OWNER/ADMIN) + campus reps (CAMPUS_REPRESENTATIVE), one flat query.
       const leaders = await ctx.prisma.user.findMany({
-        where: { organizationId: input.organizationId, role: { in: ["OWNER", "ADMIN", "LOCATION_ADMIN"] }, active: true },
+        where: { organizationId: input.organizationId, role: { in: ["OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"] }, active: true },
       });
 
-      // All staff for the year, one flat query with everything the tree needs.
+      // All staff for the camp, one flat query with everything the tree needs.
       const staff = await ctx.prisma.staffProfile.findMany({
-        where: { organizationId: input.organizationId, yearId: input.yearId, status: "APPROVED" },
-        include: { user: true, department: true, assignedTribe: true, assignedLocation: true },
+        where: { organizationId: input.organizationId, campId: input.campId, status: "APPROVED" },
+        include: { user: true, department: true, assignedTribe: true, assignedVenue: true },
       });
 
       // Build node id space: "user:<id>" for leaders, "staff:<id>" for staff.
@@ -56,7 +56,7 @@ export const orgStructureRouter = createTRPCRouter({
       const nodes = new Map<NodeId, StaffNode & { parentId: NodeId | null }>();
 
       for (const leader of leaders) {
-        const title = leader.role === "OWNER" ? "Camp Director" : leader.role === "ADMIN" ? "Camp Administrator" : "Centre Manager";
+        const title = leader.role === "OWNER" ? "Camp Director" : leader.role === "ADMIN" ? "Camp Administrator" : "Campus Representative";
         nodes.set(`user:${leader.id}`, {
           kind: "staff",
           staffProfileId: "",
@@ -69,7 +69,7 @@ export const orgStructureRouter = createTRPCRouter({
           centre: null,
           reportsToId: null, // leaders don't have a reportsTo relation today; wired up as roots
           children: [],
-          parentId: leader.role === "LOCATION_ADMIN" ? null : null, // owner/admin/centre-managers are all roots for now (no leader-to-leader hierarchy modeled)
+          parentId: leader.role === "CAMPUS_REPRESENTATIVE" ? null : null, // owner/admin/campus-reps are all roots for now (no leader-to-leader hierarchy modeled)
         });
       }
 
@@ -91,7 +91,7 @@ export const orgStructureRouter = createTRPCRouter({
           title,
           department: s.department?.name ?? null,
           tribe: s.assignedTribe?.name ?? null,
-          centre: s.assignedLocation?.name ?? null,
+          centre: s.assignedVenue?.name ?? null,
           reportsToId: parentId,
           children: [],
           parentId,
@@ -119,13 +119,13 @@ export const orgStructureRouter = createTRPCRouter({
 
   // ─── Department structure ──────────────────────────────────────────────
   getDepartmentStructure: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
       const departments = await ctx.prisma.department.findMany({
-        where: { organizationId: input.organizationId, yearId: input.yearId, status: "ACTIVE" },
+        where: { organizationId: input.organizationId, campId: input.campId, status: "ACTIVE" },
         include: {
           staff: { where: { status: "APPROVED" }, include: { user: true } },
         },
@@ -152,13 +152,13 @@ export const orgStructureRouter = createTRPCRouter({
 
   // ─── Tribe structure ────────────────────────────────────────────────────
   getTribeStructure: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
       const tribes = await ctx.prisma.tribe.findMany({
-        where: { yearId: input.yearId },
+        where: { campId: input.campId },
         include: {
           _count: { select: { registrations: true } },
           assignedStaff: { where: { status: "APPROVED" }, include: { user: true, assignedHostel: true } },
@@ -186,17 +186,17 @@ export const orgStructureRouter = createTRPCRouter({
 
   // ─── My Position ────────────────────────────────────────────────────────
   getMyPosition: protectedProcedure
-    .input(z.object({ yearId: z.string() }))
+    .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = assertStaffModuleAccess(ctx);
 
       if (currentUser.role === "TEACHER" || currentUser.role === "VOLUNTEER") {
         const profile = await ctx.prisma.staffProfile.findFirst({
-          where: { userId: ctx.userId, yearId: input.yearId },
+          where: { userId: ctx.userId, campId: input.campId },
           include: {
             department: true,
             assignedTribe: true,
-            assignedLocation: true,
+            assignedVenue: true,
             assignedHostel: true,
             assignedRoom: true,
             reportsTo: { include: { user: true } },
@@ -223,7 +223,7 @@ export const orgStructureRouter = createTRPCRouter({
           title,
           department: profile.department?.name ?? null,
           tribe: profile.assignedTribe?.name ?? null,
-          centre: profile.assignedLocation?.name ?? null,
+          centre: profile.assignedVenue?.name ?? null,
           reportsTo: reportsToName,
           directReportsCount: profile.directReports.length,
           camperCount: profile.camperAssignments.length,
@@ -232,9 +232,9 @@ export const orgStructureRouter = createTRPCRouter({
         };
       }
 
-      if (currentUser.role === "LOCATION_ADMIN") {
-        const location = await ctx.prisma.location.findFirst({ where: { admins: { some: { id: ctx.userId } } } });
-        return { role: "LOCATION_ADMIN", title: "Centre Manager", centre: location?.name ?? null, department: null, tribe: null, reportsTo: null, directReportsCount: null, camperCount: null, hostel: null, room: null };
+      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
+        const campus = await ctx.prisma.campus.findFirst({ where: { reps: { some: { id: ctx.userId } } } });
+        return { role: "CAMPUS_REPRESENTATIVE", title: "Campus Representative", centre: campus?.name ?? null, department: null, tribe: null, reportsTo: null, directReportsCount: null, camperCount: null, hostel: null, room: null };
       }
 
       if (currentUser.role === "OWNER" || currentUser.role === "ADMIN") {
@@ -259,13 +259,13 @@ export const orgStructureRouter = createTRPCRouter({
           user: true,
           department: true,
           assignedTribe: true,
-          assignedLocation: true,
+          assignedVenue: true,
           assignedHostel: true,
           assignedRoom: true,
           reportsTo: { include: { user: true } },
           reportsToUser: true,
           directReports: { include: { user: true } },
-          camperAssignments: { include: { registration: { include: { camperProfile: true } } } },
+          camperAssignments: { include: { registration: { include: { camper: true } } } },
         },
       });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
@@ -274,7 +274,7 @@ export const orgStructureRouter = createTRPCRouter({
 
   // ─── Search ──────────────────────────────────────────────────────────────
   search: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string(), query: z.string().min(1) }))
+    .input(z.object({ organizationId: z.string(), campId: z.string(), query: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const currentUser = assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
@@ -284,14 +284,14 @@ export const orgStructureRouter = createTRPCRouter({
         ctx.prisma.staffProfile.findMany({
           where: {
             organizationId: input.organizationId,
-            yearId: input.yearId,
+            campId: input.campId,
             OR: [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }],
           },
-          include: { department: true, assignedTribe: true, assignedLocation: true },
+          include: { department: true, assignedTribe: true, assignedVenue: true },
           take: 10,
         }),
-        ctx.prisma.department.findMany({ where: { organizationId: input.organizationId, yearId: input.yearId, name: { contains: q, mode: "insensitive" } }, take: 5 }),
-        ctx.prisma.tribe.findMany({ where: { yearId: input.yearId, name: { contains: q, mode: "insensitive" } }, take: 5 }),
+        ctx.prisma.department.findMany({ where: { organizationId: input.organizationId, campId: input.campId, name: { contains: q, mode: "insensitive" } }, take: 5 }),
+        ctx.prisma.tribe.findMany({ where: { campId: input.campId, name: { contains: q, mode: "insensitive" } }, take: 5 }),
         ctx.prisma.hostel.findMany({ where: { organizationId: input.organizationId, name: { contains: q, mode: "insensitive" } }, take: 5 }),
       ]);
 
@@ -300,7 +300,7 @@ export const orgStructureRouter = createTRPCRouter({
           kind: "staff" as const,
           id: s.id,
           label: `${s.firstName} ${s.lastName}`,
-          path: [s.department?.name, s.assignedTribe?.name, s.assignedLocation?.name].filter(Boolean).join(" · "),
+          path: [s.department?.name, s.assignedTribe?.name, s.assignedVenue?.name].filter(Boolean).join(" · "),
         })),
         ...departments.map((d: any) => ({ kind: "department" as const, id: d.id, label: d.name, path: "Department" })),
         ...tribes.map((t: any) => ({ kind: "tribe" as const, id: t.id, label: t.name, path: "Tribe" })),

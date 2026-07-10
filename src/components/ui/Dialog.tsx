@@ -42,7 +42,7 @@ export function Dialog({ open, onClose, title, children, footer, size = "md" }: 
             leaveFrom="opacity-100 scale-100"
             leaveTo="opacity-0 scale-95"
           >
-            <HeadlessDialog.Panel className={cn("w-full rounded-lg bg-white shadow-lg", sizeClasses[size])}>
+            <HeadlessDialog.Panel className={cn("flex max-h-[90vh] w-full flex-col rounded-lg bg-white shadow-lg", sizeClasses[size])}>
               {title && (
                 <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
                   <HeadlessDialog.Title className="text-sm font-semibold text-neutral-900">{title}</HeadlessDialog.Title>
@@ -55,7 +55,7 @@ export function Dialog({ open, onClose, title, children, footer, size = "md" }: 
                   </button>
                 </div>
               )}
-              <div className="px-5 py-4">{children}</div>
+              <div className="overflow-y-auto px-5 py-4">{children}</div>
               {footer && <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-4">{footer}</div>}
             </HeadlessDialog.Panel>
           </Transition.Child>

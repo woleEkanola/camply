@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { api } from "@/utils/api";
+import { api } from "@/utils/trpc";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
@@ -10,35 +10,36 @@ import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
-export default function AdminCamperProfileViewPage() {
+export default function AdminCamperViewPage() {
   const params = useParams();
   const profileId = params?.id as string;
   const [error, setError] = useState("");
 
   // Fetch profile details
-  const { data: profile, isLoading: isLoadingProfile } = api.camperProfile.getById.useQuery(
+  const { data: profile, isLoading: isLoadingProfile } = api.camper.getById.useQuery(
     { id: profileId },
     { enabled: !!profileId }
   );
 
   // Fetch registrations for this profile
-  const { data: registrations } = api.registration.getByCamperProfile.useQuery(
-    { camperProfileId: profileId },
+  const { data: registrations } = api.registration.getByCamper.useQuery(
+    { camperId: profileId },
     { enabled: !!profileId }
   );
 
-  // Fetch active year for the profile's organization
+  // Fetch active camp for the profile's organization
   const organizationId = profile?.organizationId ?? "";
-  const { data: activeYear } = api.year.getActiveYear.useQuery(
+  const { data: activeCamp } = api.camp.getActiveCamp.useQuery(
     { organizationId },
     { enabled: !!organizationId }
   );
 
-  // Fetch custom profile fields for the organization
-  const { data: customFields = [] } = api.profileField.getByOrganization.useQuery(
-    { organizationId },
+  // Fetch this org's CAMPER custom fields (system fields aren't shown here — they're already displayed above via profile.*)
+  const { data: fields = [] } = api.formField.list.useQuery(
+    { organizationId, audience: "CAMPER" },
     { enabled: !!organizationId }
   );
+  const customFields = fields.filter((f: { source: string; visible: boolean }) => f.source === "CUSTOM" && f.visible);
 
   // Prepare state for dynamic field values
   const [fieldValues, setFieldValues] = useState<{ [fieldId: string]: string }>({});
@@ -74,7 +75,7 @@ export default function AdminCamperProfileViewPage() {
   return (
     <AppShell area="admin">
       <div className="mx-auto max-w-3xl space-y-6">
-        <PageHeader title={profile.name} description="Camper Profile (View Only)" />
+        <PageHeader title={profile.name} description="Camper (View Only)" />
         {error && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
 
         <Card>
@@ -84,7 +85,7 @@ export default function AdminCamperProfileViewPage() {
               <span className="font-medium text-neutral-700">Status:</span>{" "}
               <Badge tone={profile.active ? "success" : "neutral"}>{profile.active ? "Active" : "Inactive"}</Badge>
             </div>
-            <div><span className="font-medium text-neutral-700">Centre:</span> {profile.location?.name || "-"}</div>
+            <div><span className="font-medium text-neutral-700">Campus:</span> {profile.homeCampus?.name || "-"}</div>
             <div><span className="font-medium text-neutral-700">Created:</span> {profile && (profile as any).createdAt ? new Date((profile as any).createdAt).toLocaleDateString() : "-"}</div>
 
             {customFields.length > 0 && (

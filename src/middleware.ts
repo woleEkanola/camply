@@ -7,7 +7,7 @@ const DASHBOARD_ROUTE: Record<string, string> = {
   SUPER_ADMIN: "/super-admin",
   OWNER: "/admin",
   ADMIN: "/dashboard",
-  LOCATION_ADMIN: "/location-admin-dashboard",
+  CAMPUS_REPRESENTATIVE: "/campus-rep-dashboard",
   TEACHER: "/teacher",
   VOLUNTEER: "/volunteer",
 };

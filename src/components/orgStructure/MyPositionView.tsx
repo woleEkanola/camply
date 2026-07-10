@@ -18,10 +18,10 @@ function Step({ label, value }: { label: string; value: string | number | null }
 export function MyPositionView() {
   const { data: session } = useSession();
   const organizationId = (session?.user as any)?.organizationId ?? "";
-  const { data: activeYear } = api.year.getActiveYear.useQuery({ organizationId }, { enabled: !!organizationId });
-  const yearId = activeYear?.id ?? "";
+  const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
+  const campId = activeCamp?.id ?? "";
 
-  const { data: position, isLoading } = api.orgStructure.getMyPosition.useQuery({ yearId }, { enabled: !!yearId });
+  const { data: position, isLoading } = api.orgStructure.getMyPosition.useQuery({ campId }, { enabled: !!campId });
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
   if (!position) return <EmptyState title="No position information yet" description="Your registration may still be pending approval." />;

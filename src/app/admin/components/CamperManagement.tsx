@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
-import EditCamperProfileModal from "./EditCamperProfileModal";
+import EditCamperModal from "./EditCamperModal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { StatCard } from "@/components/ui/StatCard";
@@ -10,7 +10,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { Select } from "@/components/ui/Input";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
 
 interface ExtendedUser {
   id: string;
@@ -21,12 +21,12 @@ interface ExtendedUser {
   image?: string | null;
 }
 
-interface CamperProfileType {
+interface CamperType {
   id: string;
   name: string;
   userId: string;
   organizationId: string;
-  locationId: string | null;
+  homeCampusId: string | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -36,7 +36,7 @@ interface CamperProfileType {
     firstName: string | null;
     lastName: string | null;
   };
-  location: {
+  homeCampus: {
     id: string;
     name: string;
   } | null;
@@ -68,17 +68,17 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   setError,
   setSuccess,
 }) => {
-  const [camperProfiles, setCamperProfiles] = useState<CamperProfileType[]>([]);
+  const [campers, setCampers] = useState<CamperType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [locationFilter, setLocationFilter] = useState<string | "all">("all");
+  const [campusFilter, setCampusFilter] = useState<string | "all">("all");
   const [activeFilter, setActiveFilter] = useState<boolean | "all">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
-  // Get camper profiles
-  const { data: profilesData, refetch: refetchProfiles, error: profilesError, isSuccess } = api.camperProfile.getByOrganization.useQuery(
+  // Get campers
+  const { data: profilesData, refetch: refetchProfiles, error: profilesError, isSuccess } = api.camper.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
@@ -91,18 +91,18 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     }
   }, [isSuccess]);
 
-  // Get locations for filtering
-  const { data: locationsData, error: locationsError } = api.location.getByOrganization.useQuery(
+  // Get campuses for filtering
+  const { data: campusesData, error: campusesError } = api.campus.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
     }
   );
 
-  // Update camper profiles when data changes
+  // Update campers when data changes
   useEffect(() => {
     if (profilesData) {
-      setCamperProfiles(profilesData as CamperProfileType[]);
+      setCampers(profilesData as CamperType[]);
     }
   }, [profilesData]);
 
@@ -124,16 +124,16 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   // Handle query errors
   useEffect(() => {
     if (profilesError) {
-      setError(`Error loading camper profiles: ${profilesError.message}`);
+      setError(`Error loading campers: ${profilesError.message}`);
       setIsLoading(false);
     }
-    if (locationsError) {
-      setError(`Error loading locations: ${locationsError.message}`);
+    if (campusesError) {
+      setError(`Error loading campuses: ${campusesError.message}`);
     }
-  }, [profilesError, locationsError, setError]);
+  }, [profilesError, campusesError, setError]);
 
-  // Filter camper profiles
-  const filteredProfiles = camperProfiles.filter((profile) => {
+  // Filter campers
+  const filteredProfiles = campers.filter((profile) => {
     // Search term filter
     const matchesSearch =
       searchTerm === "" ||
@@ -141,21 +141,21 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       profile.user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (profile.user.firstName && profile.user.firstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (profile.user.lastName && profile.user.lastName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (profile.location && profile.location.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (profile.homeCampus && profile.homeCampus.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    // Location filter
-    const matchesLocation =
-      locationFilter === "all" || profile.locationId === locationFilter;
+    // Campus filter
+    const matchesCampus =
+      campusFilter === "all" || profile.homeCampusId === campusFilter;
 
     // Active filter
     const matchesActive =
       activeFilter === "all" || profile.active === activeFilter;
 
-    return matchesSearch && matchesLocation && matchesActive;
+    return matchesSearch && matchesCampus && matchesActive;
   });
 
-  // Delete camper profile
-  const deleteCamperMutation = api.camperProfile.delete.useMutation({
+  // Delete camper
+  const deleteCamperMutation = api.camper.delete.useMutation({
     onSuccess: () => {
       setSuccess("Camper profile deleted successfully");
       setIsDeleteModalOpen(false);
@@ -166,7 +166,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   // Handle mutation errors
   useEffect(() => {
     if (deleteCamperMutation.error) {
-      setError(`Error deleting camper profile: ${deleteCamperMutation.error.message}`);
+      setError(`Error deleting camper: ${deleteCamperMutation.error.message}`);
     }
   }, [deleteCamperMutation.error, setError]);
 
@@ -181,7 +181,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     setIsDeleteModalOpen(true);
   };
 
-  const columns: Column<CamperProfileType>[] = [
+  const columns: Column<CamperType>[] = [
     {
       header: "Name",
       accessor: (profile) => (
@@ -199,16 +199,16 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         </div>
       ),
     },
-    { header: "Centre", accessor: (profile) => profile.location ? profile.location.name : "No centre" },
+    { header: "Campus", accessor: (profile) => profile.homeCampus ? profile.homeCampus.name : "No campus" },
     { header: "Status", accessor: (profile) => <Badge tone={profile.active ? "success" : "danger"}>{profile.active ? "Active" : "Inactive"}</Badge> },
     { header: "Created", accessor: (profile) => new Date(profile.createdAt).toLocaleDateString() },
   ];
 
   return (
     <div>
-      {/* Edit/Add Camper Profile Modal */}
+      {/* Edit/Add Camper Modal */}
       {isModalOpen && (
-        <EditCamperProfileModal
+        <EditCamperModal
           profileId={selectedProfile}
           organizationId={organizationId}
           isOpen={isModalOpen}
@@ -226,12 +226,12 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           <SearchBar containerClassName="w-64" placeholder="Search campers..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           <Select
             containerClassName="w-48"
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value === "all" ? "all" : e.target.value)}
+            value={campusFilter}
+            onChange={(e) => setCampusFilter(e.target.value === "all" ? "all" : e.target.value)}
           >
-            <option value="all">All Centres</option>
-            {locationsData?.map((location: { id: string; name: string }) => (
-              <option key={location.id} value={location.id}>{location.name}</option>
+            <option value="all">All Campuses</option>
+            {campusesData?.map((campus: { id: string; name: string }) => (
+              <option key={campus.id} value={campus.id}>{campus.name}</option>
             ))}
           </Select>
           <Select
@@ -248,14 +248,14 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             <option value="inactive">Inactive</option>
           </Select>
         </div>
-        <Button onClick={() => { setSelectedProfile(null); setIsModalOpen(true); }}>Add Camper Profile</Button>
+        <Button onClick={() => { setSelectedProfile(null); setIsModalOpen(true); }}>Add Camper</Button>
       </div>
 
       {/* Stats Cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard label="Total Campers" value={camperProfiles.length} />
-        <StatCard label="Active Campers" value={camperProfiles.filter((p) => p.active).length} tone="success" />
-        <StatCard label="Inactive Campers" value={camperProfiles.filter((p) => !p.active).length} tone="danger" />
+        <StatCard label="Total Campers" value={campers.length} />
+        <StatCard label="Active Campers" value={campers.filter((p) => p.active).length} tone="success" />
+        <StatCard label="Inactive Campers" value={campers.filter((p) => !p.active).length} tone="danger" />
       </div>
 
       <Table
@@ -265,13 +265,13 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         data={filteredProfiles}
         rowKey={(profile) => profile.id}
         isLoading={isLoading}
-        emptyTitle="No camper profiles found"
+        emptyTitle="No campers found"
         emptyDescription="Try adjusting your search or filters."
       />
 
       {/* Delete Confirmation Modal */}
       <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion" size="sm">
-        <p className="text-sm text-neutral-500">Are you sure you want to delete this camper profile? This action cannot be undone.</p>
+        <p className="text-sm text-neutral-500">Are you sure you want to delete this camper? This action cannot be undone.</p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
           <Button variant="danger" onClick={handleDeleteProfile}>Delete Profile</Button>

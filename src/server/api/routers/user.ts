@@ -3,7 +3,7 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/t
 import bcrypt from "bcryptjs";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT";
 
 export const userRouter = createTRPCRouter({
   getAll: protectedProcedure.query(async ({ ctx }) => {
@@ -19,7 +19,7 @@ export const userRouter = createTRPCRouter({
         where: { id: input.id },
         omit: { password: true },
         include: {
-          managedLocations: true,
+          managedCampuses: true,
         },
       });
     }),
@@ -32,32 +32,32 @@ export const userRouter = createTRPCRouter({
         omit: { password: true },
       });
     }),
-    
+
   getByOrganization: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
       // Check if user has permission to view users in this organization
       const currentUser = ctx.session?.user;
-      
+
       console.log("getByOrganization called with:", {
         organizationId: input.organizationId,
         currentUser,
       });
-      
+
       if (!currentUser) {
         throw new Error("User not authenticated");
       }
-      
+
       try {
         // Super admin can view all users
         if (currentUser.role === "SUPER_ADMIN") {
           console.log("User is SUPER_ADMIN, fetching all users");
           const users = await ctx.prisma.user.findMany({
-            where: { 
-              organizationId: input.organizationId 
+            where: {
+              organizationId: input.organizationId
             },
             include: {
-              managedLocations: true,
+              managedCampuses: true,
             },
             orderBy: {
               createdAt: 'desc',
@@ -66,17 +66,17 @@ export const userRouter = createTRPCRouter({
           console.log(`Found ${users.length} users as SUPER_ADMIN`);
           return users;
         }
-        
+
         // Owner can view users in their organization
         if (currentUser.role === "OWNER" && currentUser.organizationId === input.organizationId) {
           console.log("User is OWNER, fetching all users except SUPER_ADMIN");
           const users = await ctx.prisma.user.findMany({
-            where: { 
+            where: {
               organizationId: input.organizationId,
               role: { not: "SUPER_ADMIN" },
             },
             include: {
-              managedLocations: true,
+              managedCampuses: true,
             },
             orderBy: {
               createdAt: 'desc',
@@ -85,17 +85,17 @@ export const userRouter = createTRPCRouter({
           console.log(`Found ${users.length} users as OWNER`);
           return users;
         }
-        
-        // Admin can view location admins in their organization
+
+        // Admin can view campus reps in their organization
         if (currentUser.role === "ADMIN" && currentUser.organizationId === input.organizationId) {
-          console.log("User is ADMIN, fetching only LOCATION_ADMIN users");
+          console.log("User is ADMIN, fetching only CAMPUS_REPRESENTATIVE users");
           const users = await ctx.prisma.user.findMany({
-            where: { 
+            where: {
               organizationId: input.organizationId,
-              role: "LOCATION_ADMIN",
+              role: "CAMPUS_REPRESENTATIVE",
             },
             include: {
-              managedLocations: true,
+              managedCampuses: true,
             },
             orderBy: {
               createdAt: 'desc',
@@ -104,15 +104,15 @@ export const userRouter = createTRPCRouter({
           console.log(`Found ${users.length} users as ADMIN`);
           return users;
         }
-        
+
         // For any other role, just return users from the same organization
         console.log("User has another role, fetching users from same organization");
         const users = await ctx.prisma.user.findMany({
-          where: { 
+          where: {
             organizationId: input.organizationId,
           },
           include: {
-            managedLocations: true,
+            managedCampuses: true,
           },
           orderBy: {
             createdAt: 'desc',
@@ -126,144 +126,144 @@ export const userRouter = createTRPCRouter({
       }
     }),
 
-  getLocationAdmins: protectedProcedure
+  getCampusReps: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new Error("User not authenticated");
       }
-      
-      // Check if user has permission to view location admins
+
+      // Check if user has permission to view campus reps
       if (
-        currentUser.role !== "SUPER_ADMIN" && 
-        currentUser.role !== "OWNER" && 
+        currentUser.role !== "SUPER_ADMIN" &&
+        currentUser.role !== "OWNER" &&
         currentUser.role !== "ADMIN" &&
         currentUser.organizationId !== input.organizationId
       ) {
-        throw new Error("Not authorized to view location admins");
+        throw new Error("Not authorized to view campus representatives");
       }
-      
-      // Get all location admins for the organization
+
+      // Get all campus reps for the organization
       return await ctx.prisma.user.findMany({
-        where: { 
+        where: {
           organizationId: input.organizationId,
-          role: "LOCATION_ADMIN",
+          role: "CAMPUS_REPRESENTATIVE",
         },
         include: {
-          managedLocations: true,
+          managedCampuses: true,
         },
         orderBy: {
           createdAt: 'desc',
         },
       });
     }),
-    
-  assignLocationToAdmin: protectedProcedure
-    .input(z.object({ 
+
+  assignCampusToRep: protectedProcedure
+    .input(z.object({
       userId: z.string(),
-      locationId: z.string(),
+      campusId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new Error("User not authenticated");
       }
-      
-      // Check if user has permission to assign locations
+
+      // Check if user has permission to assign campuses
       if (
-        currentUser.role !== "SUPER_ADMIN" && 
-        currentUser.role !== "OWNER" && 
+        currentUser.role !== "SUPER_ADMIN" &&
+        currentUser.role !== "OWNER" &&
         currentUser.role !== "ADMIN"
       ) {
-        throw new Error("Not authorized to assign locations");
+        throw new Error("Not authorized to assign campuses");
       }
-      
+
       // Get the user to update
       const userToUpdate = await ctx.prisma.user.findUnique({
         where: { id: input.userId },
       });
-      
+
       if (!userToUpdate) {
         throw new Error("User not found");
       }
-      
-      // Check if user is a location admin
-      if (userToUpdate.role !== "LOCATION_ADMIN") {
-        throw new Error("Only location admins can be assigned to locations");
+
+      // Check if user is a campus rep
+      if (userToUpdate.role !== "CAMPUS_REPRESENTATIVE") {
+        throw new Error("Only campus representatives can be assigned to campuses");
       }
-      
-      // Assign the location to the admin
-      await ctx.prisma.location.update({
-        where: { id: input.locationId },
+
+      // Assign the campus to the rep
+      await ctx.prisma.campus.update({
+        where: { id: input.campusId },
         data: {
-          admins: {
+          reps: {
             connect: { id: input.userId }
           }
         }
       });
-      
+
       return { success: true };
     }),
-    
-  removeLocationFromAdmin: protectedProcedure
-    .input(z.object({ 
+
+  removeCampusFromRep: protectedProcedure
+    .input(z.object({
       userId: z.string(),
-      locationId: z.string(),
+      campusId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new Error("User not authenticated");
       }
-      
-      // Check if user has permission to remove locations
+
+      // Check if user has permission to remove campuses
       if (
-        currentUser.role !== "SUPER_ADMIN" && 
-        currentUser.role !== "OWNER" && 
+        currentUser.role !== "SUPER_ADMIN" &&
+        currentUser.role !== "OWNER" &&
         currentUser.role !== "ADMIN"
       ) {
-        throw new Error("Not authorized to remove locations");
+        throw new Error("Not authorized to remove campuses");
       }
-      
+
       // Get the user to update
       const userToUpdate = await ctx.prisma.user.findUnique({
         where: { id: input.userId },
       });
-      
+
       if (!userToUpdate) {
         throw new Error("User not found");
       }
-      
-      // Check if user is a location admin
-      if (userToUpdate.role !== "LOCATION_ADMIN") {
-        throw new Error("Only location admins can be removed from locations");
+
+      // Check if user is a campus rep
+      if (userToUpdate.role !== "CAMPUS_REPRESENTATIVE") {
+        throw new Error("Only campus representatives can be removed from campuses");
       }
-      
-      // Remove the location from the admin
-      await ctx.prisma.location.update({
-        where: { id: input.locationId },
+
+      // Remove the campus from the rep
+      await ctx.prisma.campus.update({
+        where: { id: input.campusId },
         data: {
-          admins: {
+          reps: {
             disconnect: { id: input.userId }
           }
         }
       });
-      
+
       return { success: true };
     }),
-    
+
   getProfile: protectedProcedure
     .query(async ({ ctx }) => {
       const userId = ctx.session?.user.id;
-      
+
       if (!userId) {
         throw new Error("User not authenticated");
       }
-      
+
       return await ctx.prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -275,11 +275,11 @@ export const userRouter = createTRPCRouter({
           role: true,
           active: true,
           organizationId: true,
-          managedLocations: true,
+          managedCampuses: true,
         },
       });
     }),
-    
+
   create: protectedProcedure
     .input(
       z.object({
@@ -287,49 +287,49 @@ export const userRouter = createTRPCRouter({
         firstName: z.string().min(1, "First name is required"),
         lastName: z.string().min(1, "Last name is required"),
         phone: z.string().optional(),
-        role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN", "BASE_USER"]), 
+        role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE", "PARENT"]),
         password: z.string().min(8, "Password must be at least 8 characters"),
         active: z.boolean().default(true),
         organizationId: z.string(),
-        managedLocations: z.array(z.string()).optional(),
+        managedCampuses: z.array(z.string()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new Error("User not authenticated");
       }
-      
+
       // Check if user has permission to create users
-      if (currentUser.role === "LOCATION_ADMIN") {
+      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
         throw new Error("Not authorized to create users");
       }
-      
+
       // Check if Super Admin is creating an Owner
       if (input.role === "OWNER" && currentUser.role !== "SUPER_ADMIN") {
         throw new Error("Only Super Admins can create Owner users");
       }
-      
-      // Check if Owner is creating an Admin or Location Admin
-      if ((input.role === "ADMIN" || input.role === "LOCATION_ADMIN") && 
-          currentUser.role !== "SUPER_ADMIN" && 
+
+      // Check if Owner is creating an Admin or Campus Representative
+      if ((input.role === "ADMIN" || input.role === "CAMPUS_REPRESENTATIVE") &&
+          currentUser.role !== "SUPER_ADMIN" &&
           currentUser.role !== "OWNER") {
         throw new Error("Not authorized to create this user role");
       }
-      
+
       // Check if email is already in use
       const existingUser = await ctx.prisma.user.findUnique({
         where: { email: input.email },
       });
-      
+
       if (existingUser) {
         throw new Error("Email is already in use");
       }
-      
+
       // Hash the password
       const hashedPassword = await bcrypt.hash(input.password, 10);
-      
+
       // Create the user
       const user = await ctx.prisma.user.create({
         data: {
@@ -343,15 +343,15 @@ export const userRouter = createTRPCRouter({
           organizationId: input.organizationId,
         },
       });
-      
-      // If user is a Location Admin, connect them to the specified locations
-      if (input.role === "LOCATION_ADMIN" && input.managedLocations && input.managedLocations.length > 0) {
+
+      // If user is a Campus Representative, connect them to the specified campuses
+      if (input.role === "CAMPUS_REPRESENTATIVE" && input.managedCampuses && input.managedCampuses.length > 0) {
         await Promise.all(
-          input.managedLocations.map(async (locationId) => {
-            await ctx.prisma.location.update({
-              where: { id: locationId },
+          input.managedCampuses.map(async (campusId) => {
+            await ctx.prisma.campus.update({
+              where: { id: campusId },
               data: {
-                admins: {
+                reps: {
                   connect: { id: user.id }
                 }
               }
@@ -359,10 +359,10 @@ export const userRouter = createTRPCRouter({
           })
         );
       }
-      
+
       return user;
     }),
-    
+
   update: protectedProcedure
     .input(
       z.object({
@@ -372,47 +372,47 @@ export const userRouter = createTRPCRouter({
           firstName: z.string().min(1, "First name is required").optional(),
           lastName: z.string().min(1, "Last name is required").optional(),
           phone: z.string().optional(),
-          role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN", "BASE_USER"]).optional(), 
+          role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE", "PARENT"]).optional(),
           password: z.string().min(8, "Password must be at least 8 characters").optional(),
           active: z.boolean().optional(),
           organizationId: z.string().optional(),
-          managedLocations: z.array(z.string()).optional(),
+          managedCampuses: z.array(z.string()).optional(),
         })
       })
     )
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new Error("User not authenticated");
       }
-      
+
       // Get the user to update
       const userToUpdate = await ctx.prisma.user.findUnique({
         where: { id: input.id },
         include: {
-          managedLocations: true,
+          managedCampuses: true,
         },
       });
-      
+
       if (!userToUpdate) {
         throw new Error("User not found");
       }
-      
+
       // Check if user has permission to update this user
-      if (currentUser.role === "LOCATION_ADMIN") {
+      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
         throw new Error("Not authorized to update users");
       }
-      
-      if (currentUser.role === "ADMIN" && userToUpdate.role !== "LOCATION_ADMIN") {
-        throw new Error("Admins can only update Location Admins");
+
+      if (currentUser.role === "ADMIN" && userToUpdate.role !== "CAMPUS_REPRESENTATIVE") {
+        throw new Error("Admins can only update Campus Representatives");
       }
-      
-      if (currentUser.role === "OWNER" && 
+
+      if (currentUser.role === "OWNER" &&
           (userToUpdate.role === "SUPER_ADMIN" || userToUpdate.role === "OWNER")) {
-        throw new Error("Owners can only update Admins and Location Admins");
+        throw new Error("Owners can only update Admins and Campus Representatives");
       }
-      
+
       // Prepare data for update
       type UpdateData = {
         email?: string;
@@ -424,47 +424,47 @@ export const userRouter = createTRPCRouter({
         active?: boolean;
         organizationId?: string;
       };
-      
-      // Only include organizationId if it is a defined string, and never include managedLocations
+
+      // Only include organizationId if it is a defined string, and never include managedCampuses
       const updateData: UpdateData = Object.fromEntries(
         Object.entries(input.data)
           .filter(([key, value]) => (
-            key !== 'managedLocations' && (key !== 'organizationId' || typeof value === 'string')
+            key !== 'managedCampuses' && (key !== 'organizationId' || typeof value === 'string')
           ))
       );
-      
+
       // Hash the password if provided
       if (updateData.password) {
         updateData.password = await bcrypt.hash(updateData.password, 10);
       }
-      
+
       // Update the user
       const updatedUser = await ctx.prisma.user.update({
         where: { id: input.id },
         data: updateData,
       });
-      
-      // Update managed locations if provided
-      if (input.data.managedLocations && userToUpdate.role === "LOCATION_ADMIN") {
-        // Get current managed locations
-        const currentLocations = userToUpdate.managedLocations.map((loc: { id: string }) => loc.id);
-        
-        // Locations to disconnect
-        const locationsToDisconnect = currentLocations.filter((id: string) => !input.data.managedLocations!.includes(id));
-        
-        // Locations to connect
-        const locationsToConnect = input.data.managedLocations.filter(
-          id => !currentLocations.includes(id)
+
+      // Update managed campuses if provided
+      if (input.data.managedCampuses && userToUpdate.role === "CAMPUS_REPRESENTATIVE") {
+        // Get current managed campuses
+        const currentCampuses = userToUpdate.managedCampuses.map((c: { id: string }) => c.id);
+
+        // Campuses to disconnect
+        const campusesToDisconnect = currentCampuses.filter((id: string) => !input.data.managedCampuses!.includes(id));
+
+        // Campuses to connect
+        const campusesToConnect = input.data.managedCampuses.filter(
+          id => !currentCampuses.includes(id)
         );
-        
-        // Disconnect locations
-        if (locationsToDisconnect.length > 0) {
+
+        // Disconnect campuses
+        if (campusesToDisconnect.length > 0) {
           await Promise.all(
-            locationsToDisconnect.map(async (locationId: string) => {
-              await ctx.prisma.location.update({
-                where: { id: locationId },
+            campusesToDisconnect.map(async (campusId: string) => {
+              await ctx.prisma.campus.update({
+                where: { id: campusId },
                 data: {
-                  admins: {
+                  reps: {
                     disconnect: { id: input.id }
                   }
                 }
@@ -472,15 +472,15 @@ export const userRouter = createTRPCRouter({
             })
           );
         }
-        
-        // Connect new locations
-        if (locationsToConnect.length > 0) {
+
+        // Connect new campuses
+        if (campusesToConnect.length > 0) {
           await Promise.all(
-            locationsToConnect.map(async (locationId) => {
-              await ctx.prisma.location.update({
-                where: { id: locationId },
+            campusesToConnect.map(async (campusId) => {
+              await ctx.prisma.campus.update({
+                where: { id: campusId },
                 data: {
-                  admins: {
+                  reps: {
                     connect: { id: input.id }
                   }
                 }
@@ -489,69 +489,69 @@ export const userRouter = createTRPCRouter({
           );
         }
       }
-      
+
       return updatedUser;
     }),
-    
+
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new Error("User not authenticated");
       }
-      
+
       // Get the user to delete
       const userToDelete = await ctx.prisma.user.findUnique({
         where: { id: input.id },
       });
-      
+
       if (!userToDelete) {
         throw new Error("User not found");
       }
-      
+
       // Check if user has permission to delete this user
-      if (currentUser.role === "LOCATION_ADMIN") {
+      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
         throw new Error("Not authorized to delete users");
       }
-      
-      if (currentUser.role === "ADMIN" && userToDelete.role !== "LOCATION_ADMIN") {
-        throw new Error("Admins can only delete Location Admins");
+
+      if (currentUser.role === "ADMIN" && userToDelete.role !== "CAMPUS_REPRESENTATIVE") {
+        throw new Error("Admins can only delete Campus Representatives");
       }
-      
-      if (currentUser.role === "OWNER" && 
+
+      if (currentUser.role === "OWNER" &&
           (userToDelete.role === "SUPER_ADMIN" || userToDelete.role === "OWNER")) {
-        throw new Error("Owners can only delete Admins and Location Admins");
+        throw new Error("Owners can only delete Admins and Campus Representatives");
       }
-      
+
       // Delete the user
       return await ctx.prisma.user.delete({
         where: { id: input.id },
       });
     }),
-    
-  getBaseUsersWithCamperCounts: protectedProcedure
+
+  getParentsWithCamperCounts: protectedProcedure
     .input(z.object({ organizationId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) {
         throw new Error("User not authenticated");
       }
-      // Only allow SUPER_ADMIN, OWNER, ADMIN to view base users
+      // Only allow SUPER_ADMIN, OWNER, ADMIN to view parents
       if (
         currentUser.role !== "SUPER_ADMIN" &&
         currentUser.role !== "OWNER" &&
         currentUser.role !== "ADMIN"
       ) {
-        throw new Error("Not authorized to view base users");
+        throw new Error("Not authorized to view parents");
       }
-      // Fetch only BASE_USERs for the Accounts tab
+      // Fetch only PARENTs for the Accounts tab
       const where = {
-        role: "BASE_USER" as UserRole,
+        role: "PARENT" as UserRole,
         ...(input.organizationId && { organizationId: input.organizationId })
       };
-      // Find all BASE_USER users
+      // Find all PARENT users
       const users = await ctx.prisma.user.findMany({
         where,
         select: {
@@ -561,16 +561,16 @@ export const userRouter = createTRPCRouter({
           lastName: true,
           createdAt: true,
           organizationId: true,
-          camperProfiles: {
+          campers: {
             select: { id: true }
           }
         },
         orderBy: { createdAt: 'desc' }
       });
-      // Map to include camper profile count
+      // Map to include camper count
       return users.map((user: any) => ({
         ...user,
-        camperProfileCount: user.camperProfiles.length
+        camperCount: user.campers.length
       }));
     }),
 });

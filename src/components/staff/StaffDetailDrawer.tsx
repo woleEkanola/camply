@@ -9,19 +9,19 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Select } from "@/components/ui/Input";
 import { SearchBar } from "@/components/ui/SearchBar";
 
-export function StaffDetailDrawer({ staffId, organizationId, yearId, onClose }: { staffId: string; organizationId: string; yearId: string; onClose: () => void }) {
+export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: { staffId: string; organizationId: string; campId: string; onClose: () => void }) {
   const utils = api.useUtils();
   const { data: profile } = api.staff.getById.useQuery({ id: staffId });
-  const { data: locations = [] } = api.location.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
-  const { data: tribes = [] } = api.tribe.listByYear.useQuery({ yearId }, { enabled: !!yearId && profile?.type === "TEACHER" });
-  const { data: departments = [] } = api.department.list.useQuery({ organizationId, yearId }, { enabled: !!organizationId && !!yearId });
+  const { data: venues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: !!campId });
+  const { data: tribes = [] } = api.tribe.listByCamp.useQuery({ campId }, { enabled: !!campId && profile?.type === "TEACHER" });
+  const { data: departments = [] } = api.department.list.useQuery({ organizationId, campId }, { enabled: !!organizationId && !!campId });
   const { data: reportsToOptions } = api.staff.listReportsToOptions.useQuery(
-    { organizationId, yearId, excludeStaffId: staffId },
-    { enabled: !!organizationId && !!yearId }
+    { organizationId, campId, excludeStaffId: staffId },
+    { enabled: !!organizationId && !!campId }
   );
   const { data: hostels = [] } = api.accommodation.listHostels.useQuery(
-    { locationId: profile?.assignedLocationId ?? "" },
-    { enabled: !!profile?.assignedLocationId && profile?.type === "TEACHER" }
+    { venueId: profile?.assignedVenueId ?? "" },
+    { enabled: !!profile?.assignedVenueId && profile?.type === "TEACHER" }
   );
 
   const [rejectReason, setRejectReason] = useState("");
@@ -38,7 +38,7 @@ export function StaffDetailDrawer({ staffId, organizationId, yearId, onClose }: 
   const reject = api.staff.reject.useMutation({ onSuccess: () => { setRejectReason(""); invalidate(); }, onError: onErr });
   const deactivate = api.staff.deactivate.useMutation({ onSuccess: invalidate, onError: onErr });
   const reactivate = api.staff.reactivate.useMutation({ onSuccess: invalidate, onError: onErr });
-  const assignCentre = api.staff.assignCentre.useMutation({ onSuccess: invalidate, onError: onErr });
+  const assignVenue = api.staff.assignVenue.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignTribe = api.staff.assignTribe.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignDepartment = api.staff.assignDepartment.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignReportsTo = api.staff.assignReportsTo.useMutation({ onSuccess: invalidate, onError: onErr });
@@ -110,10 +110,10 @@ export function StaffDetailDrawer({ staffId, organizationId, yearId, onClose }: 
   const assignmentTab = (
     <div className="space-y-4">
       <div>
-        <label className="mb-1 block text-sm font-medium text-neutral-700">Centre</label>
-        <Select value={profile.assignedLocationId ?? ""} onChange={(e) => assignCentre.mutate({ id: staffId, locationId: e.target.value || null })}>
+        <label className="mb-1 block text-sm font-medium text-neutral-700">Venue</label>
+        <Select value={profile.assignedVenueId ?? ""} onChange={(e) => assignVenue.mutate({ id: staffId, venueId: e.target.value || null })}>
           <option value="">Unassigned</option>
-          {locations.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          {venues.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
         </Select>
       </div>
 
@@ -200,7 +200,7 @@ export function StaffDetailDrawer({ staffId, organizationId, yearId, onClose }: 
           <option value="">Unassigned</option>
           {reportsToOptions?.leaders?.map((l: any) => (
             <option key={`user:${l.id}`} value={`user:${l.id}`}>
-              {`${l.firstName ?? ""} ${l.lastName ?? ""}`.trim() || l.email} ({l.role === "OWNER" ? "Camp Director" : l.role === "ADMIN" ? "Camp Administrator" : "Centre Manager"})
+              {`${l.firstName ?? ""} ${l.lastName ?? ""}`.trim() || l.email} ({l.role === "OWNER" ? "Camp Director" : l.role === "ADMIN" ? "Camp Administrator" : "Campus Representative"})
             </option>
           ))}
           {reportsToOptions?.staff?.map((s: any) => (
@@ -229,8 +229,8 @@ export function StaffDetailDrawer({ staffId, organizationId, yearId, onClose }: 
     <div className="space-y-4">
       {profile.type !== "TEACHER" ? (
         <p className="text-sm text-neutral-500">Hostel/room assignment is only available for teachers.</p>
-      ) : !profile.assignedLocationId ? (
-        <p className="text-sm text-neutral-500">Assign a centre first to pick a hostel.</p>
+      ) : !profile.assignedVenueId ? (
+        <p className="text-sm text-neutral-500">Assign a venue first to pick a hostel.</p>
       ) : (
         <>
           <div>

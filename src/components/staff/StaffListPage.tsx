@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/Badge";
 import { StaffDetailDrawer } from "@/components/staff/StaffDetailDrawer";
 import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"];
+const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
 export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const router = useRouter();
@@ -30,18 +30,18 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   }, [session, status, router]);
 
   const organizationId = (session?.user as any)?.organizationId ?? "";
-  const { data: activeYear } = api.year.getActiveYear.useQuery({ organizationId }, { enabled: !!organizationId });
-  const yearId = activeYear?.id ?? "";
+  const { data: activeYear } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
+  const campId = activeYear?.id ?? "";
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const { data: stats } = api.staff.stats.useQuery({ organizationId, yearId, type }, { enabled: !!organizationId && !!yearId });
+  const { data: stats } = api.staff.stats.useQuery({ organizationId, campId, type }, { enabled: !!organizationId && !!campId });
   const { data, isLoading } = api.staff.adminList.useQuery(
-    { organizationId, yearId, type, status: statusFilter || undefined, q: searchQuery || undefined, limit: 50 },
-    { enabled: !!organizationId && !!yearId }
+    { organizationId, campId, type, status: statusFilter || undefined, q: searchQuery || undefined, limit: 50 },
+    { enabled: !!organizationId && !!campId }
   );
   const items = data?.items ?? [];
 
@@ -77,7 +77,7 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     { header: "Phone", accessor: (row) => row.phone },
     { header: "Gender", accessor: (row) => row.gender || "—" },
     { header: "Skills", accessor: (row) => (row.skills || []).slice(0, 2).join(", ") || "—" },
-    { header: "Centre", accessor: (row) => row.assignedLocation?.name || "—" },
+    { header: "Venue", accessor: (row) => row.assignedVenue?.name || "—" },
     type === "TEACHER"
       ? { header: "Tribe", accessor: (row) => row.assignedTribe?.name || "—" }
       : { header: "Department", accessor: (row) => row.volunteerCategory || "—" },
@@ -96,7 +96,7 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <StatCard label="Assigned" value={stats?.assigned ?? 0} />
           <StatCard label="Unassigned" value={stats?.unassigned ?? 0} />
         </div>
-        <StaffLinkCard organizationId={organizationId} yearId={yearId} type={type} />
+        <StaffLinkCard organizationId={organizationId} campId={campId} type={type} />
       </div>
 
       <div className="mb-4 grid gap-3 md:grid-cols-2">
@@ -134,8 +134,8 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         onSelectionChange={setSelectedIds}
       />
 
-      {selectedId && yearId && (
-        <StaffDetailDrawer staffId={selectedId} organizationId={organizationId} yearId={yearId} onClose={() => setSelectedId(null)} />
+      {selectedId && campId && (
+        <StaffDetailDrawer staffId={selectedId} organizationId={organizationId} campId={campId} onClose={() => setSelectedId(null)} />
       )}
     </AppShell>
   );

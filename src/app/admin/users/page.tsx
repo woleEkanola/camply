@@ -40,7 +40,7 @@ export default function UsersPage() {
         (session?.user as ExtendedUser)?.role !== "SUPER_ADMIN" && 
         (session?.user as ExtendedUser)?.role !== "OWNER" && 
         (session?.user as ExtendedUser)?.role !== "ADMIN" && 
-        (session?.user as ExtendedUser)?.role !== "LOCATION_ADMIN") {
+        (session?.user as ExtendedUser)?.role !== "CAMPUS_REPRESENTATIVE") {
       router.push("/");
     }
   }, [session, status, router]);

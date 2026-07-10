@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { api } from "../../../utils/api";
-import BaseUserProfilesAccordion from "./BaseUserProfilesAccordion";
+import ParentProfilesAccordion from "./ParentProfilesAccordion";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -16,8 +16,8 @@ export enum UserRole {
   SUPER_ADMIN = "SUPER_ADMIN",
   OWNER = "OWNER",
   ADMIN = "ADMIN",
-  LOCATION_ADMIN = "LOCATION_ADMIN",
-  BASE_USER = "BASE_USER"
+  CAMPUS_REPRESENTATIVE = "CAMPUS_REPRESENTATIVE",
+  PARENT = "PARENT"
 }
 
 type User = {
@@ -29,10 +29,10 @@ type User = {
   role: UserRole;
   organizationId?: string | null;
   active?: boolean;
-  managedLocations?: { id: string; name: string }[];
+  managedCampuses?: { id: string; name: string }[];
 };
 
-type Location = {
+type Campus = {
   id: string;
   name: string;
   organizationId?: string | null;
@@ -49,30 +49,30 @@ interface UserFormData {
   password: string;
   confirmPassword: string;
   active: boolean;
-  managedLocations?: string[];
+  managedCampuses?: string[];
 }
 
 export default function UserManagement({ organizationId }: { organizationId: string }) {
   const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [campuses, setCampuses] = useState<Campus[]>([]);
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [isEditingUser, setIsEditingUser] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   
-  // Fetch BASE_USERs with camper profile counts for the Accounts tab
-  const { data: baseUsers, isLoading: loadingBaseUsers, error: baseUsersError, refetch: refetchBaseUsers } = api.user.getBaseUsersWithCamperCounts.useQuery(
+  // Fetch PARENTs with camper counts for the Accounts tab
+  const { data: parents, isLoading: loadingParents, error: parentsError, refetch: refetchParents } = api.user.getParentsWithCamperCounts.useQuery(
     { organizationId },
     { enabled: !!organizationId && !!session?.user }
   );
 
   useEffect(() => {
-    if (baseUsersError) {
-      setError(baseUsersError.message);
+    if (parentsError) {
+      setError(parentsError.message);
     }
-  }, [baseUsersError]);
+  }, [parentsError]);
 
   const emptyUserForm: UserFormData = {
     email: "",
@@ -83,7 +83,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
     password: "",
     confirmPassword: "",
     active: true,
-    managedLocations: [],
+    managedCampuses: [],
   };
 
   const [userForm, setUserForm] = useState<UserFormData>(emptyUserForm);
@@ -112,13 +112,13 @@ export default function UserManagement({ organizationId }: { organizationId: str
         ...user,
         role: user.role as UserRole,
       }));
-      const filteredUsers = normalizedUsers.filter((user) => user.role !== UserRole.OWNER && user.role !== UserRole.BASE_USER);
+      const filteredUsers = normalizedUsers.filter((user) => user.role !== UserRole.OWNER && user.role !== UserRole.PARENT);
       setUsers(filteredUsers);
     }
   }, [userData]);
 
-  // Get locations for the organization
-  const { data: locationData, error: locationsError } = api.location.getByOrganization.useQuery(
+  // Get campuses for the organization
+  const { data: campusData, error: campusesError } = api.campus.getByOrganization.useQuery(
     { organizationId },
     {
       enabled: !!organizationId && !!session?.user,
@@ -126,17 +126,17 @@ export default function UserManagement({ organizationId }: { organizationId: str
   );
 
   useEffect(() => {
-    if (locationsError) {
-      setError(locationsError.message);
+    if (campusesError) {
+      setError(campusesError.message);
     }
-  }, [locationsError]);
+  }, [campusesError]);
 
-  // Update locations state when data changes
+  // Update campuses state when data changes
   useEffect(() => {
-    if (locationData) {
-      setLocations(locationData);
+    if (campusData) {
+      setCampuses(campusData);
     }
-  }, [locationData]);
+  }, [campusData]);
 
   // Mutations
   const createUserMutation = api.user.create.useMutation({
@@ -146,7 +146,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       setUserForm(emptyUserForm);
       setIsAddingUser(false);
       void refetchUsers();
-      void refetchBaseUsers();
+      void refetchParents();
     },
     onError: (err) => {
       setError(err.message);
@@ -162,7 +162,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       setIsEditingUser(false);
       setCurrentUserId(null);
       void refetchUsers();
-      void refetchBaseUsers();
+      void refetchParents();
     },
     onError: (err) => {
       setError(err.message);
@@ -174,7 +174,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       setSuccess("User deleted successfully");
       setError("");
       void refetchUsers();
-      void refetchBaseUsers();
+      void refetchParents();
     },
     onError: (err) => {
       setError(err.message);
@@ -199,23 +199,23 @@ export default function UserManagement({ organizationId }: { organizationId: str
     }
   };
 
-  // Handle location checkbox changes
-  const handleLocationChange = (locationId: string, checked: boolean) => {
+  // Handle campus checkbox changes
+  const handleCampusChange = (campusId: string, checked: boolean) => {
     setUserForm((prev) => {
-      const currentLocations = prev.managedLocations || [];
-      
-      if (checked && !currentLocations.includes(locationId)) {
+      const currentCampuses = prev.managedCampuses || [];
+
+      if (checked && !currentCampuses.includes(campusId)) {
         return {
           ...prev,
-          managedLocations: [...currentLocations, locationId],
+          managedCampuses: [...currentCampuses, campusId],
         };
-      } else if (!checked && currentLocations.includes(locationId)) {
+      } else if (!checked && currentCampuses.includes(campusId)) {
         return {
           ...prev,
-          managedLocations: currentLocations.filter(id => id !== locationId),
+          managedCampuses: currentCampuses.filter(id => id !== campusId),
         };
       }
-      
+
       return prev;
     });
   };
@@ -250,7 +250,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       active: userForm.active,
       password: userForm.password || undefined,
       organizationId,
-      managedLocations: userForm.role === UserRole.LOCATION_ADMIN ? userForm.managedLocations : [],
+      managedCampuses: userForm.role === UserRole.CAMPUS_REPRESENTATIVE ? userForm.managedCampuses : [],
     };
 
     if (isEditingUser && currentUserId) {
@@ -281,7 +281,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       password: "",
       confirmPassword: "",
       active: user.active ?? true,
-      managedLocations: user.managedLocations?.map((loc) => loc.id) || [],
+      managedCampuses: user.managedCampuses?.map((loc) => loc.id) || [],
     });
     setCurrentUserId(user.id);
     setIsEditingUser(true);
@@ -309,14 +309,14 @@ export default function UserManagement({ organizationId }: { organizationId: str
     switch (role) {
       case UserRole.ADMIN:
         return "Admin";
-      case UserRole.LOCATION_ADMIN:
-        return "Location Admin";
+      case UserRole.CAMPUS_REPRESENTATIVE:
+        return "Campus Representative";
       case UserRole.OWNER:
         return "Owner";
       case UserRole.SUPER_ADMIN:
         return "Super Admin";
-      case UserRole.BASE_USER:
-        return "Base User";
+      case UserRole.PARENT:
+        return "Parent";
       default:
         return role;
     }
@@ -329,7 +329,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       return userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.OWNER;
     }
     if (session?.user?.role === UserRole.ADMIN) {
-      return userRole === UserRole.LOCATION_ADMIN;
+      return userRole === UserRole.CAMPUS_REPRESENTATIVE;
     }
     return false;
   };
@@ -342,7 +342,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
         return "success";
       case UserRole.ADMIN:
         return "attention";
-      case UserRole.LOCATION_ADMIN:
+      case UserRole.CAMPUS_REPRESENTATIVE:
         return "info";
       default:
         return "neutral";
@@ -363,15 +363,15 @@ export default function UserManagement({ organizationId }: { organizationId: str
       accessor: (user) => <Badge tone={getRoleTone(user.role)}>{getRoleDisplayName(user.role)}</Badge>,
     },
     {
-      header: "Managed Centres",
+      header: "Managed Campuses",
       accessor: (user) => {
-        if (user.role !== UserRole.LOCATION_ADMIN) {
-          return <span className="text-xs text-neutral-400 italic">All Centres</span>;
+        if (user.role !== UserRole.CAMPUS_REPRESENTATIVE) {
+          return <span className="text-xs text-neutral-400 italic">All Campuses</span>;
         }
-        if (user.managedLocations && user.managedLocations.length > 0) {
+        if (user.managedCampuses && user.managedCampuses.length > 0) {
           return (
             <div className="flex flex-wrap gap-1">
-              {user.managedLocations.map((loc) => (
+              {user.managedCampuses.map((loc) => (
                 <Badge key={loc.id} tone="neutral">
                   {loc.name}
                 </Badge>
@@ -428,13 +428,13 @@ export default function UserManagement({ organizationId }: { organizationId: str
   const parentContent = (
     <Card>
       <CardHeader>
-        <CardTitle>Parents & Teens (BASE_USERs)</CardTitle>
+        <CardTitle>Parents & Teens</CardTitle>
       </CardHeader>
       <CardBody>
-        {loadingBaseUsers ? (
+        {loadingParents ? (
           <div className="p-8 text-center text-sm text-neutral-500">Loading accounts...</div>
         ) : (
-          <BaseUserProfilesAccordion users={baseUsers || []} />
+          <ParentProfilesAccordion users={parents || []} />
         )}
       </CardBody>
     </Card>
@@ -525,7 +525,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
               {(session?.user?.role === UserRole.SUPER_ADMIN || session?.user?.role === UserRole.OWNER) && (
                 <option value={UserRole.ADMIN}>Admin</option>
               )}
-              <option value={UserRole.LOCATION_ADMIN}>Location Admin</option>
+              <option value={UserRole.CAMPUS_REPRESENTATIVE}>Campus Representative</option>
             </Select>
             <Select
               label="Status"
@@ -571,22 +571,22 @@ export default function UserManagement({ organizationId }: { organizationId: str
             )}
           </div>
 
-          {/* Location selection for Location Admins */}
-          {userForm.role === UserRole.LOCATION_ADMIN && locations.length > 0 && (
+          {/* Campus selection for Campus Representatives */}
+          {userForm.role === UserRole.CAMPUS_REPRESENTATIVE && campuses.length > 0 && (
             <div className="border-t border-neutral-100 pt-3">
               <span className="block text-sm font-medium text-neutral-700 mb-2">
-                Managed Centres
+                Managed Campuses
               </span>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1 border border-neutral-200 rounded-md">
-                {locations.map((location) => (
-                  <label key={location.id} className="flex items-center gap-2 text-sm text-neutral-700 p-1 hover:bg-neutral-50 rounded cursor-pointer">
+                {campuses.map((campus) => (
+                  <label key={campus.id} className="flex items-center gap-2 text-sm text-neutral-700 p-1 hover:bg-neutral-50 rounded cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={userForm.managedLocations?.includes(location.id) || false}
-                      onChange={(e) => handleLocationChange(location.id, e.target.checked)}
+                      checked={userForm.managedCampuses?.includes(campus.id) || false}
+                      onChange={(e) => handleCampusChange(campus.id, e.target.checked)}
                       className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
                     />
-                    {location.name}
+                    {campus.name}
                   </label>
                 ))}
               </div>

@@ -17,7 +17,7 @@ async function main() {
   // Create a Super Admin user if it doesn't exist
   const superAdminEmail = "superadmin@camply.com";
   const hashedPassword = await bcrypt.hash("password123", 10);
-  
+
   await prisma.user.upsert({
     where: { email: superAdminEmail },
     update: {}, // No updates if exists
@@ -30,25 +30,26 @@ async function main() {
       active: true,
     },
   });
-  
+
   // Create an Owner user for testing
   const ownerEmail = "owner@camply.com";
   const ownerPassword = await bcrypt.hash("password123", 10);
-  
-  // Create organization without activeYearId
+
+  // Create organization without activeCampId
   const organization = await prisma.organization.create({
     data: {
       name: "Demo Organization",
     },
   });
-  
-  // Create a default year for the organization
+
+  // Create a default camp for the organization
   const currentYear = new Date().getFullYear();
-  
-  const year = await prisma.year.create({
+
+  const camp = await prisma.camp.create({
     data: {
       name: `${currentYear}`,
       slug: slugify(`${currentYear}`),
+      year: currentYear,
       startDate: new Date(currentYear, 0, 1), // January 1st of current year
       endDate: new Date(currentYear, 11, 31), // December 31st of current year
       active: true,
@@ -70,15 +71,15 @@ async function main() {
       orgCode: "DEMO",
     },
   });
-  
-  // Update organization with the active year
+
+  // Update organization with the active camp
   await prisma.organization.update({
     where: { id: organization.id },
     data: {
-      activeYearId: year.id,
+      activeCampId: camp.id,
     },
   });
-  
+
   await prisma.user.upsert({
     where: { email: ownerEmail },
     update: {}, // No updates if exists
@@ -92,11 +93,11 @@ async function main() {
       organizationId: organization.id,
     },
   });
-  
+
   // Create an Admin user for testing
   const adminEmail = "admin@camply.com";
   const adminPassword = await bcrypt.hash("password123", 10);
-  
+
   await prisma.user.upsert({
     where: { email: adminEmail },
     update: {}, // No updates if exists
@@ -110,17 +111,17 @@ async function main() {
       organizationId: organization.id,
     },
   });
-  
-  // Create a Location Admin user for testing
-  const locationAdminEmail = "locationadmin@camply.com";
-  const locationAdminPassword = await bcrypt.hash("password123", 10);
-  
-  // Create a location
 
-  const location = await prisma.location.create({
+  // Create a Campus Representative user for testing
+  const campusRepEmail = "campusrep@camply.com";
+  const campusRepPassword = await bcrypt.hash("password123", 10);
+
+  // Create a campus (permanent church branch)
+
+  const campus = await prisma.campus.create({
     data: {
-      name: "Demo Location",
-      slug: slugify("Demo Location"),
+      name: "Demo Campus",
+      slug: slugify("Demo Campus"),
       address: "123 Main St",
       city: "Demo City",
       state: "DS",
@@ -128,7 +129,20 @@ async function main() {
       country: "Demo Country",
       organizationId: organization.id,
       code: "DEM",
-      contactEmail: "location@camply.com",
+      email: "campus@camply.com",
+      phone: "+1-555-0100",
+      active: true,
+    },
+  });
+
+  // Create a venue (physical camp site for this camp)
+  const venue = await prisma.venue.create({
+    data: {
+      name: "Demo Venue",
+      address: "123 Main St",
+      campId: camp.id,
+      code: "DEM",
+      contactEmail: "venue@camply.com",
       contactPhone: "+1-555-0100",
       quota: 250,
       visible: true,
@@ -139,7 +153,7 @@ async function main() {
   await prisma.documentRequirement.createMany({
     data: [
       {
-        yearId: year.id,
+        campId: camp.id,
         name: "Birth Certificate",
         description: "A clear photo or scan of the camper's birth certificate.",
         required: true,
@@ -147,7 +161,7 @@ async function main() {
         sortOrder: 0,
       },
       {
-        yearId: year.id,
+        campId: camp.id,
         name: "Parent Consent Form",
         description: "Signed consent form for this camp.",
         required: true,
@@ -156,55 +170,56 @@ async function main() {
       },
     ],
   });
-  
-  const locationAdmin = await prisma.user.create({
+
+  const campusRep = await prisma.user.create({
     data: {
-      email: locationAdminEmail,
-      password: locationAdminPassword,
-      role: "LOCATION_ADMIN",
-      firstName: "Location",
-      lastName: "Admin",
+      email: campusRepEmail,
+      password: campusRepPassword,
+      role: "CAMPUS_REPRESENTATIVE",
+      firstName: "Campus",
+      lastName: "Representative",
       active: true,
       organizationId: organization.id,
     },
   });
-  
-  // Connect the location admin to the location
-  await prisma.location.update({
-    where: { id: location.id },
+
+  // Connect the campus representative to the campus
+  await prisma.campus.update({
+    where: { id: campus.id },
     data: {
-      admins: {
-        connect: { id: locationAdmin.id }
+      reps: {
+        connect: { id: campusRep.id }
       }
     }
   });
-  
-  // Create a sample camper profile
-  const camperProfile = await prisma.camperProfile.create({
+
+  // Create a sample camper
+  const camper = await prisma.camper.create({
     data: {
       name: "Demo Camper",
       firstName: "Demo",
       lastName: "Camper",
       dateOfBirth: new Date(currentYear - 12, 5, 1),
       gender: "MALE",
-      userId: locationAdmin.id, // Assign to location admin for testing
+      userId: campusRep.id, // Assign to campus rep for testing
       organizationId: organization.id,
-      locationId: location.id,
+      homeCampusId: campus.id,
       active: true,
     },
   });
-  
+
   // Create a sample registration
   await prisma.registration.create({
     data: {
-      camperProfileId: camperProfile.id,
-      yearId: year.id,
-      locationId: location.id,
+      camperId: camper.id,
+      campId: camp.id,
+      campusId: campus.id,
+      venueId: venue.id,
       status: "PENDING",
       notes: "Sample registration for testing",
     },
   });
-  
+
   // Approved teacher (for testing teacher dashboard/attendance)
   const teacherEmail = "teacher@camply.com";
   const teacherPassword = await bcrypt.hash("password123", 10);
@@ -223,7 +238,7 @@ async function main() {
     data: {
       userId: teacherUser.id,
       organizationId: organization.id,
-      yearId: year.id,
+      campId: camp.id,
       type: "TEACHER",
       status: "APPROVED",
       firstName: "Demo",
@@ -231,7 +246,7 @@ async function main() {
       phone: "+1-555-0200",
       email: teacherEmail,
       skills: ["Teaching", "Counseling"],
-      assignedLocationId: location.id,
+      assignedVenueId: venue.id,
       approvedAt: new Date(),
     },
   });
@@ -254,7 +269,7 @@ async function main() {
     data: {
       userId: volunteerUser.id,
       organizationId: organization.id,
-      yearId: year.id,
+      campId: camp.id,
       type: "VOLUNTEER",
       status: "APPROVED",
       firstName: "Demo",
@@ -263,12 +278,12 @@ async function main() {
       email: volunteerEmail,
       volunteerCategory: "Medical",
       skills: ["Medical"],
-      assignedLocationId: location.id,
+      assignedVenueId: venue.id,
       approvedAt: new Date(),
     },
   });
 
-  console.log("Seed completed: Users, organization, year, registration, teacher, and volunteer created");
+  console.log("Seed completed: Users, organization, campus, camp, venue, registration, teacher, and volunteer created");
 }
 
 main()

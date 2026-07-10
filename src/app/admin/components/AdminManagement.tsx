@@ -7,12 +7,12 @@ import { PencilIcon, TrashIcon, PlusIcon, XMarkIcon } from "@heroicons/react/24/
 
 // PermissionType is not exported from @prisma/client after the downgrade. Use the local enum defined in AccessControl.tsx or define it here if needed.
 export enum PermissionType {
-  CREATE_LOCATION = "CREATE_LOCATION",
-  READ_LOCATION = "READ_LOCATION",
-  UPDATE_LOCATION = "UPDATE_LOCATION",
-  DELETE_LOCATION = "DELETE_LOCATION",
+  CREATE_CAMPUS = "CREATE_CAMPUS",
+  READ_CAMPUS = "READ_CAMPUS",
+  UPDATE_CAMPUS = "UPDATE_CAMPUS",
+  DELETE_CAMPUS = "DELETE_CAMPUS",
   MANAGE_ADMINS = "MANAGE_ADMINS",
-  MANAGE_LOCATION_ADMINS = "MANAGE_LOCATION_ADMINS",
+  MANAGE_CAMPUS_REPS = "MANAGE_CAMPUS_REPS",
   VIEW_ANALYTICS = "VIEW_ANALYTICS"
 }
 
@@ -32,10 +32,10 @@ const emptyAdminForm: AdminFormData = {
 
 // Available permissions with labels
 const availablePermissions = [
-  { type: PermissionType.CREATE_LOCATION, label: "Create Locations" },
-  { type: PermissionType.READ_LOCATION, label: "View Locations" },
-  { type: PermissionType.UPDATE_LOCATION, label: "Edit Locations" },
-  { type: PermissionType.DELETE_LOCATION, label: "Delete Locations" },
+  { type: PermissionType.CREATE_CAMPUS, label: "Create Campuses" },
+  { type: PermissionType.READ_CAMPUS, label: "View Campuses" },
+  { type: PermissionType.UPDATE_CAMPUS, label: "Edit Campuses" },
+  { type: PermissionType.DELETE_CAMPUS, label: "Delete Campuses" },
   { type: PermissionType.MANAGE_ADMINS, label: "Manage Admin Users" },
 ];
 

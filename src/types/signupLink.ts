@@ -1,18 +1,18 @@
-// Types for Signup Link structure used in admin/locations
+// Types for Signup Link structure used in admin/campuses
 
 export interface SignupLink {
   id: string;
   token: string;
-  locationId: string;
-  yearId: string;
+  campusId: string;
+  campId: string;
   active: boolean;
-  location: {
+  campus: {
     id: string;
     name: string;
     slug: string;
     organizationId: string;
   };
-  year: {
+  camp: {
     id: string;
     name: string;
     slug: string;

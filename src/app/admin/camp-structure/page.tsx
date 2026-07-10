@@ -14,7 +14,7 @@ import { LeadershipTreeTab } from "@/components/orgStructure/LeadershipTreeTab";
 import { TribeGrid } from "@/components/orgStructure/TribeGrid";
 import { CampStructureSearch } from "@/components/orgStructure/CampStructureSearch";
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"];
+const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
 export default function CampStructurePage() {
   const router = useRouter();
@@ -27,24 +27,24 @@ export default function CampStructurePage() {
   }, [session, status, router]);
 
   const organizationId = (session?.user as any)?.organizationId ?? "";
-  const { data: activeYear } = api.year.getActiveYear.useQuery({ organizationId }, { enabled: !!organizationId });
-  const yearId = activeYear?.id ?? "";
+  const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
+  const campId = activeCamp?.id ?? "";
 
   return (
     <AppShell area="admin">
-      <PageHeader title="Camp Structure" description={activeYear ? `For ${activeYear.name}` : undefined} />
+      <PageHeader title="Camp Structure" description={activeCamp ? `For ${activeCamp.name}` : undefined} />
 
-      {!yearId ? (
-        <EmptyState title="No active camp" description="Set an active camp year before managing camp structure." />
+      {!campId ? (
+        <EmptyState title="No active camp" description="Set an active camp before managing camp structure." />
       ) : (
         <>
-        <CampStructureSearch organizationId={organizationId} yearId={yearId} />
+        <CampStructureSearch organizationId={organizationId} campId={campId} />
         <Tabs
           tabs={[
-            { label: "Leadership", content: <LeadershipTreeTab organizationId={organizationId} yearId={yearId} /> },
-            { label: "Departments", content: <DepartmentManager organizationId={organizationId} yearId={yearId} /> },
-            { label: "Tribes", content: <TribeGrid organizationId={organizationId} yearId={yearId} /> },
-            { label: "Accommodation", content: <AccommodationManager organizationId={organizationId} /> },
+            { label: "Leadership", content: <LeadershipTreeTab organizationId={organizationId} campId={campId} /> },
+            { label: "Departments", content: <DepartmentManager organizationId={organizationId} campId={campId} /> },
+            { label: "Tribes", content: <TribeGrid organizationId={organizationId} campId={campId} /> },
+            { label: "Accommodation", content: <AccommodationManager organizationId={organizationId} campId={campId} /> },
           ]}
         />
         </>

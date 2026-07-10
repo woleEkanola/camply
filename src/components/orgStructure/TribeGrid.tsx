@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TribeDashboardPanel } from "@/components/orgStructure/TribeDashboardPanel";
 
-export function TribeGrid({ organizationId, yearId }: { organizationId: string; yearId: string }) {
-  const { data: tribes = [], isLoading } = api.orgStructure.getTribeStructure.useQuery({ organizationId, yearId }, { enabled: !!organizationId && !!yearId });
+export function TribeGrid({ organizationId, campId }: { organizationId: string; campId: string }) {
+  const { data: tribes = [], isLoading } = api.orgStructure.getTribeStructure.useQuery({ organizationId, campId }, { enabled: !!organizationId && !!campId });
   const [selected, setSelected] = useState<any | null>(null);
 
   if (isLoading) return <p className="text-sm text-neutral-500">Loading…</p>;

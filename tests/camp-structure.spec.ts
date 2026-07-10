@@ -9,19 +9,23 @@ test.describe("Camp Structure", () => {
 
   const managerEmail = `e2e-cs-manager-${Date.now()}@camply.test`;
   const reportEmail = `e2e-cs-report-${Date.now()}@camply.test`;
+  const camperParentEmail = `e2e-cs-camper-${Date.now()}@camply.test`;
   let managerId: string;
   let reportId: string;
   let departmentId: string;
+  let venueId: string;
   let hostelId: string;
   let roomId: string;
   let bedId: string;
   let registrationId: string;
+  let camperId: string;
+  let camperParentUserId: string;
 
   test.beforeAll(async () => {
-    const { organizationId, yearId, locationId } = await getFixtureOrgContext();
+    const { organizationId, campId, campusId } = await getFixtureOrgContext();
 
     const dept = await prisma.department.create({
-      data: { organizationId, yearId, name: "E2E Structure Department", responsibilities: ["Do the thing", "Do the other thing"] },
+      data: { organizationId, campId, name: "E2E Structure Department", responsibilities: ["Do the thing", "Do the other thing"] },
     });
     departmentId = dept.id;
 
@@ -30,7 +34,7 @@ test.describe("Camp Structure", () => {
     });
     const manager = await prisma.staffProfile.create({
       data: {
-        userId: managerUser.id, organizationId, yearId, type: "TEACHER", status: "APPROVED",
+        userId: managerUser.id, organizationId, campId, type: "TEACHER", status: "APPROVED",
         firstName: "CS", lastName: "ManagerE2E", phone: "+1-555-0500", email: managerEmail,
         departmentId, isDepartmentHead: true, approvedAt: new Date(),
       },
@@ -42,14 +46,16 @@ test.describe("Camp Structure", () => {
     });
     const report = await prisma.staffProfile.create({
       data: {
-        userId: reportUser.id, organizationId, yearId, type: "TEACHER", status: "APPROVED",
+        userId: reportUser.id, organizationId, campId, type: "TEACHER", status: "APPROVED",
         firstName: "CS", lastName: "ReportE2E", phone: "+1-555-0600", email: reportEmail,
         reportsToId: manager.id, approvedAt: new Date(),
       },
     });
     reportId = report.id;
 
-    const hostel = await prisma.hostel.create({ data: { organizationId, locationId, name: "E2E Hostel" } });
+    const venue = await prisma.venue.create({ data: { campId, name: `E2E Venue ${Date.now()}` } });
+    venueId = venue.id;
+    const hostel = await prisma.hostel.create({ data: { organizationId, venueId, name: "E2E Hostel" } });
     hostelId = hostel.id;
     const room = await prisma.room.create({ data: { hostelId, name: "E2E Room" } });
     roomId = room.id;
@@ -57,13 +63,15 @@ test.describe("Camp Structure", () => {
     bedId = bed.id;
 
     const camperUser = await prisma.user.create({
-      data: { email: `e2e-cs-camper-${Date.now()}@camply.test`, password: "placeholder-not-used-for-login", role: "BASE_USER", organizationId, locationId },
+      data: { email: camperParentEmail, password: "placeholder-not-used-for-login", role: "PARENT", organizationId, homeCampusId: campusId },
     });
-    const camper = await prisma.camperProfile.create({
-      data: { name: "E2E Structure Camper", userId: camperUser.id, organizationId, locationId },
+    camperParentUserId = camperUser.id;
+    const camper = await prisma.camper.create({
+      data: { name: "E2E Structure Camper", userId: camperUser.id, organizationId, homeCampusId: campusId },
     });
+    camperId = camper.id;
     const registration = await prisma.registration.create({
-      data: { camperProfileId: camper.id, yearId, locationId, status: "APPROVED", registrationNumber: `E2E-CS-${Date.now()}` },
+      data: { camperId: camper.id, campId, campusId, venueId, status: "APPROVED", registrationNumber: `E2E-CS-${Date.now()}` },
     });
     registrationId = registration.id;
   });
@@ -73,6 +81,9 @@ test.describe("Camp Structure", () => {
     await prisma.room.deleteMany({ where: { id: roomId } });
     await prisma.hostel.deleteMany({ where: { id: hostelId } });
     await prisma.registration.deleteMany({ where: { id: registrationId } });
+    await prisma.camper.deleteMany({ where: { id: camperId } });
+    await prisma.user.deleteMany({ where: { id: camperParentUserId } });
+    await prisma.venue.deleteMany({ where: { id: venueId } });
     await prisma.department.deleteMany({ where: { id: departmentId } });
     await deleteStaffByEmail(managerEmail);
     await deleteStaffByEmail(reportEmail);
@@ -121,13 +132,13 @@ test.describe("Camp Structure", () => {
   });
 
   test("admin can assign a camper down to bed level from the Accommodation tab", async ({ page }) => {
-    const { locationName } = await getFixtureOrgContext();
+    const venue = await prisma.venue.findUniqueOrThrow({ where: { id: venueId } });
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/camp-structure");
     await page.getByRole("tab", { name: "Accommodation" }).click();
 
-    await page.locator("select").first().selectOption({ label: locationName });
+    await page.locator("select").first().selectOption({ label: venue.name });
     await expect(page.getByText("E2E Hostel")).toBeVisible({ timeout: 10000 });
 
     await page.getByText("E2E Bed 1").click();

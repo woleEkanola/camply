@@ -13,15 +13,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const registration = await prisma.registration.findUnique({
     where: { id },
-    include: { camperProfile: true },
+    include: { camper: true },
   });
   if (!registration || !registration.qrToken) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const currentUser = session.user as any;
-  const isOwner = registration.camperProfile.userId === currentUser.id;
-  const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes(currentUser.role);
+  const isOwner = registration.camper.userId === currentUser.id;
+  const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"].includes(currentUser.role);
   if (!isOwner && !isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

@@ -22,7 +22,7 @@ function TeacherAttendanceContent({ profile, organizationId }: { profile: any; o
   const tribeId = profile.assignedTribeId;
   const utils = api.useUtils();
   const { data: sessions = [] } = api.attendance.listSessions.useQuery(
-    { organizationId, yearId: profile.yearId, tribeId: tribeId ?? undefined },
+    { organizationId, campId: profile.campId, tribeId: tribeId ?? undefined },
     { enabled: !!organizationId }
   );
   const { data: roster = [] } = api.attendance.rosterForTribe.useQuery({ tribeId: tribeId ?? "" }, { enabled: !!tribeId });
@@ -52,7 +52,7 @@ function TeacherAttendanceContent({ profile, organizationId }: { profile: any; o
             <Button
               disabled={!sessionName}
               loading={createSession.isPending}
-              onClick={() => createSession.mutate({ yearId: profile.yearId, organizationId, name: sessionName, date: new Date(), tribeId })}
+              onClick={() => createSession.mutate({ campId: profile.campId, organizationId, name: sessionName, date: new Date(), tribeId })}
             >
               Create
             </Button>
@@ -90,7 +90,7 @@ function TeacherAttendanceContent({ profile, organizationId }: { profile: any; o
             <div className="space-y-2">
               {roster.map((r: any) => (
                 <div key={r.id} className="flex items-center justify-between border-b border-neutral-100 py-2">
-                  <span className="text-sm text-neutral-900">{r.camperProfile.name}</span>
+                  <span className="text-sm text-neutral-900">{r.camper.name}</span>
                   <div className="flex gap-1">
                     {STATUSES.map((st) => (
                       <button

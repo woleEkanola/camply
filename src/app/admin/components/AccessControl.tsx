@@ -7,14 +7,14 @@ import { api } from "../../../utils/api";
 // UserRole and PermissionType are not exported from @prisma/client after the downgrade.
 // Define them as local enums to allow both type and runtime value usage.
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
 export enum PermissionType {
-  CREATE_LOCATION = "CREATE_LOCATION",
-  READ_LOCATION = "READ_LOCATION",
-  UPDATE_LOCATION = "UPDATE_LOCATION",
-  DELETE_LOCATION = "DELETE_LOCATION",
+  CREATE_CAMPUS = "CREATE_CAMPUS",
+  READ_CAMPUS = "READ_CAMPUS",
+  UPDATE_CAMPUS = "UPDATE_CAMPUS",
+  DELETE_CAMPUS = "DELETE_CAMPUS",
   MANAGE_ADMINS = "MANAGE_ADMINS",
-  MANAGE_LOCATION_ADMINS = "MANAGE_LOCATION_ADMINS",
+  MANAGE_CAMPUS_REPS = "MANAGE_CAMPUS_REPS",
   VIEW_ANALYTICS = "VIEW_ANALYTICS"
 }
 
@@ -146,9 +146,9 @@ export default function AccessControl({ organizationId }: { organizationId: stri
         return allPermissions.filter(p => 
           p !== PermissionType.MANAGE_ADMINS
         );
-      case "LOCATION_ADMIN":
+      case "CAMPUS_REPRESENTATIVE":
         return allPermissions.filter(p => 
-          p === PermissionType.READ_LOCATION || 
+          p === PermissionType.READ_CAMPUS || 
           p === PermissionType.VIEW_ANALYTICS
         );
       default:
@@ -169,8 +169,8 @@ export default function AccessControl({ organizationId }: { organizationId: stri
     switch (role) {
       case "ADMIN":
         return "Admin";
-      case "LOCATION_ADMIN":
-        return "Location Admin";
+      case "CAMPUS_REPRESENTATIVE":
+        return "Campus Representative";
       case "OWNER":
         return "Owner";
       case "SUPER_ADMIN":
@@ -187,7 +187,7 @@ export default function AccessControl({ organizationId }: { organizationId: stri
       return userRole !== "SUPER_ADMIN" && userRole !== "OWNER";
     }
     if (session?.user?.role === "ADMIN") {
-      return userRole === "LOCATION_ADMIN";
+      return userRole === "CAMPUS_REPRESENTATIVE";
     }
     return false;
   };
@@ -254,37 +254,55 @@ export default function AccessControl({ organizationId }: { organizationId: stri
                 </p>
               </div>
               
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                {selectedUser && users.find(u => u.id === selectedUser)?.role && 
-                  getAvailablePermissions(users.find(u => u.id === selectedUser)?.role).map((permission) => (
-                    <div key={permission} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id={`permission-${permission}`}
-                        checked={permissionForm.permissions.includes(permission)}
-                        onChange={(e) => handlePermissionChange(permission, e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <label
-                        htmlFor={`permission-${permission}`}
-                        className="ml-2 text-sm text-gray-700"
-                      >
-                        {getPermissionDisplayName(permission)}
-                      </label>
+              {(() => {
+                const selectedRole = users.find(u => u.id === selectedUser)?.role as UserRole | undefined;
+                const availablePermissions = selectedRole ? getAvailablePermissions(selectedRole) : [];
+
+                if (availablePermissions.length === 0) {
+                  return (
+                    <div className="mb-4 rounded-md bg-gray-50 p-4 text-sm text-gray-500">
+                      {getRoleDisplayName(selectedRole ?? "")} accounts don&apos;t have configurable permissions here —
+                      this panel manages the granular {" "}
+                      <span className="font-medium">{Object.values(PermissionType).map(getPermissionDisplayName).join(", ")}</span>{" "}
+                      permissions available to Admin and Campus Representative accounts only.
                     </div>
-                  ))
+                  );
                 }
-              </div>
-              
-              <div className="mt-6 flex justify-end">
-                <button
-                  type="submit"
-                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                  disabled={updatePermissionsMutation.isPending}
-                >
-                  {updatePermissionsMutation.isPending ? "Saving..." : "Save Permissions"}
-                </button>
-              </div>
+
+                return (
+                  <>
+                    <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {availablePermissions.map((permission) => (
+                        <div key={permission} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id={`permission-${permission}`}
+                            checked={permissionForm.permissions.includes(permission)}
+                            onChange={(e) => handlePermissionChange(permission, e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <label
+                            htmlFor={`permission-${permission}`}
+                            className="ml-2 text-sm text-gray-700"
+                          >
+                            {getPermissionDisplayName(permission)}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        type="submit"
+                        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                        disabled={updatePermissionsMutation.isPending}
+                      >
+                        {updatePermissionsMutation.isPending ? "Saving..." : "Save Permissions"}
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </form>
           ) : (
             <div className="flex h-64 items-center justify-center">

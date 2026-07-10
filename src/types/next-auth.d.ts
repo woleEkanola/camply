@@ -1,7 +1,7 @@
 import { DefaultSession } from "next-auth";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER" | "TEACHER" | "VOLUNTEER";
+export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT" | "TEACHER" | "VOLUNTEER";
 
 declare module "next-auth" {
   /**

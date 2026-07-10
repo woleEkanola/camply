@@ -2,7 +2,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 export interface AcceptanceLetterParams {
   campName: string;
-  centreName: string;
+  campusName: string;
   camperName: string;
   registrationNumber: string;
   reportingDate?: string;
@@ -38,7 +38,7 @@ export async function generateAcceptanceLetterPdf(params: AcceptanceLetterParams
   y -= 10;
   drawLine(`Camper: ${params.camperName}`, { bold: true });
   drawLine(`Registration Number: ${params.registrationNumber}`);
-  drawLine(`Centre: ${params.centreName}`);
+  drawLine(`Campus: ${params.campusName}`);
   if (params.reportingDate) drawLine(`Reporting Date: ${params.reportingDate}`);
   y -= 10;
 

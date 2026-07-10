@@ -9,13 +9,12 @@ import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
 
-export function AccommodationManager({ organizationId }: { organizationId: string }) {
-  const { data: locations = [] } = api.location.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
-  const { data: activeYear } = api.year.getActiveYear.useQuery({ organizationId }, { enabled: !!organizationId });
-  const [locationId, setLocationId] = useState("");
+export function AccommodationManager({ organizationId, campId }: { organizationId: string; campId: string }) {
+  const { data: venues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: !!campId });
+  const [venueId, setVenueId] = useState("");
 
   const utils = api.useUtils();
-  const { data: hostels = [], isLoading } = api.accommodation.listHostels.useQuery({ locationId }, { enabled: !!locationId });
+  const { data: hostels = [], isLoading } = api.accommodation.listHostels.useQuery({ venueId }, { enabled: !!venueId });
 
   const [hostelDialogOpen, setHostelDialogOpen] = useState(false);
   const [hostelName, setHostelName] = useState("");
@@ -31,7 +30,7 @@ export function AccommodationManager({ organizationId }: { organizationId: strin
   const [assignBed, setAssignBed] = useState<{ id: string; label: string } | null>(null);
   const [camperQuery, setCamperQuery] = useState("");
 
-  const invalidate = () => utils.accommodation.listHostels.invalidate({ locationId });
+  const invalidate = () => utils.accommodation.listHostels.invalidate({ venueId });
   const createHostel = api.accommodation.createHostel.useMutation({
     onSuccess: () => { setHostelDialogOpen(false); setHostelName(""); setHostelGender(""); invalidate(); },
   });
@@ -49,26 +48,26 @@ export function AccommodationManager({ organizationId }: { organizationId: strin
   const unassignCamperFromBed = api.accommodation.unassignCamperFromBed.useMutation({ onSuccess: invalidate });
 
   const { data: camperResults } = api.registration.adminList.useQuery(
-    { organizationId, yearId: activeYear?.id ?? "", locationId, status: "APPROVED", q: camperQuery, limit: 10 },
-    { enabled: !!assignBed && !!activeYear?.id && camperQuery.length > 1 }
+    { organizationId, campId, status: "APPROVED", q: camperQuery, limit: 10 },
+    { enabled: !!assignBed && !!campId && camperQuery.length > 1 }
   );
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-neutral-900">Accommodation</h2>
-        {locationId && <Button size="sm" onClick={() => setHostelDialogOpen(true)}>Add Hostel</Button>}
+        {venueId && <Button size="sm" onClick={() => setHostelDialogOpen(true)}>Add Hostel</Button>}
       </div>
 
       <div className="mb-4 max-w-xs">
-        <Select label="Centre" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-          <option value="">Select a centre</option>
-          {locations.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        <Select label="Venue" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
+          <option value="">Select a venue</option>
+          {venues.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
         </Select>
       </div>
 
-      {!locationId ? (
-        <p className="text-sm text-neutral-500">Select a centre to manage its hostels.</p>
+      {!venueId ? (
+        <p className="text-sm text-neutral-500">Select a venue to manage its hostels.</p>
       ) : isLoading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : hostels.length === 0 ? (
@@ -104,7 +103,7 @@ export function AccommodationManager({ organizationId }: { organizationId: strin
                             <button
                               key={b.id}
                               onClick={() => (b.status === "OCCUPIED" ? unassignCamperFromBed.mutate({ registrationId: b.registrationId }) : setAssignBed({ id: b.id, label: b.label }))}
-                              title={b.status === "OCCUPIED" ? `${b.registration?.camperProfile?.name ?? "Occupied"} — click to unassign` : "Click to assign a camper"}
+                              title={b.status === "OCCUPIED" ? `${b.registration?.camper?.name ?? "Occupied"} — click to unassign` : "Click to assign a camper"}
                             >
                               <Badge tone={b.status === "OCCUPIED" ? "success" : b.status === "MAINTENANCE" ? "warning" : "neutral"}>
                                 {b.label}
@@ -139,7 +138,7 @@ export function AccommodationManager({ organizationId }: { organizationId: strin
             className="w-full"
             disabled={!hostelName}
             loading={createHostel.isPending}
-            onClick={() => createHostel.mutate({ organizationId, locationId, name: hostelName, gender: hostelGender || undefined })}
+            onClick={() => createHostel.mutate({ organizationId, venueId, name: hostelName, gender: hostelGender || undefined })}
           >
             Create
           </Button>
@@ -185,7 +184,7 @@ export function AccommodationManager({ organizationId }: { organizationId: strin
                 onClick={() => assignCamperToBed.mutate({ registrationId: r.id, bedId: assignBed!.id })}
                 className="block w-full rounded-md border border-neutral-200 px-3 py-2 text-left text-sm hover:border-accent-300 hover:bg-accent-50"
               >
-                <div className="font-medium text-neutral-900">{r.camperProfile?.name}</div>
+                <div className="font-medium text-neutral-900">{r.camper?.name}</div>
                 <div className="text-xs text-neutral-500">{r.registrationNumber}</div>
               </button>
             ))}

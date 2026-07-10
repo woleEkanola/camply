@@ -2,13 +2,13 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"];
+const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
 export const incidentRouter = createTRPCRouter({
   create: protectedProcedure
     .input(z.object({
       organizationId: z.string(),
-      yearId: z.string(),
+      campId: z.string(),
       registrationId: z.string().optional(),
       severity: z.enum(["LOW", "MEDIUM", "HIGH"]),
       title: z.string(),
@@ -34,15 +34,15 @@ export const incidentRouter = createTRPCRouter({
     }),
 
   adminList: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string().optional(), status: z.string().optional() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional(), status: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser || !ADMIN_ROLES.includes(currentUser.role) || currentUser.organizationId !== input.organizationId) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
       return ctx.prisma.incidentReport.findMany({
-        where: { organizationId: input.organizationId, ...(input.yearId && { yearId: input.yearId }), ...(input.status && { status: input.status }) },
-        include: { registration: { include: { camperProfile: true } } },
+        where: { organizationId: input.organizationId, ...(input.campId && { campId: input.campId }), ...(input.status && { status: input.status }) },
+        include: { registration: { include: { camper: true } } },
         orderBy: { createdAt: "desc" },
       });
     }),

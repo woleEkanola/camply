@@ -1,20 +1,8 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
 import { sendStaffApprovedEmail, sendStaffRejectedEmail } from "../../email/sendStaffEmails";
-
-const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
-
-async function assertAdminOrLocationAdmin(ctx: { prisma: any; session: any }, organizationId: string, locationId?: string | null) {
-  const currentUser = ctx.session?.user;
-  if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (ADMIN_ROLES.includes(currentUser.role) && currentUser.organizationId === organizationId) return currentUser;
-  if (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === organizationId && locationId) {
-    const managed = await ctx.prisma.location.findFirst({ where: { id: locationId, admins: { some: { id: currentUser.id } } } });
-    if (managed) return currentUser;
-  }
-  throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage staff for this organization" });
-}
 
 async function requireStaffProfile(ctx: { prisma: any; userId: string }) {
   const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId } });
@@ -28,7 +16,7 @@ export const staffRouter = createTRPCRouter({
     return ctx.prisma.staffProfile.findFirst({
       where: { userId: ctx.userId },
       include: {
-        assignedLocation: true,
+        assignedVenue: true,
         assignedTribe: true,
         department: true,
         reportsTo: { include: { user: true } },
@@ -36,7 +24,7 @@ export const staffRouter = createTRPCRouter({
         directReports: { include: { user: true } },
         assignedHostel: true,
         assignedRoom: true,
-        camperAssignments: { include: { registration: { include: { camperProfile: true, tribe: true, room: true } } } },
+        camperAssignments: { include: { registration: { include: { camper: true, tribe: true, room: true } } } },
         fieldValues: { include: { field: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -45,15 +33,15 @@ export const staffRouter = createTRPCRouter({
 
   // ─── Admin: list / stats ───────────────────────────────────────────────
   stats: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string(), type: z.enum(["TEACHER", "VOLUNTEER"]) }))
+    .input(z.object({ organizationId: z.string(), campId: z.string(), type: z.enum(["TEACHER", "VOLUNTEER"]) }))
     .query(async ({ ctx, input }) => {
-      await assertAdminOrLocationAdmin(ctx, input.organizationId);
-      const where = { organizationId: input.organizationId, yearId: input.yearId, type: input.type };
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
+      const where = { organizationId: input.organizationId, campId: input.campId, type: input.type };
       const [total, pending, approved, assigned] = await Promise.all([
         ctx.prisma.staffProfile.count({ where }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "PENDING" } }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED" } }),
-        ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED", assignedLocationId: { not: null } } }),
+        ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED", assignedVenueId: { not: null } } }),
       ]);
       return { total, pending, approved, assigned, unassigned: Math.max(approved - assigned, 0) };
     }),
@@ -61,23 +49,23 @@ export const staffRouter = createTRPCRouter({
   adminList: protectedProcedure
     .input(z.object({
       organizationId: z.string(),
-      yearId: z.string(),
+      campId: z.string(),
       type: z.enum(["TEACHER", "VOLUNTEER"]),
       status: z.string().optional(),
-      locationId: z.string().optional(),
+      venueId: z.string().optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
       limit: z.number().min(1).max(100).default(25),
     }))
     .query(async ({ ctx, input }) => {
-      await assertAdminOrLocationAdmin(ctx, input.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
 
       const where: Record<string, unknown> = {
         organizationId: input.organizationId,
-        yearId: input.yearId,
+        campId: input.campId,
         type: input.type,
         ...(input.status && { status: input.status }),
-        ...(input.locationId && { assignedLocationId: input.locationId }),
+        ...(input.venueId && { assignedVenueId: input.venueId }),
         ...(input.q && {
           OR: [
             { firstName: { contains: input.q, mode: "insensitive" } },
@@ -90,7 +78,7 @@ export const staffRouter = createTRPCRouter({
 
       const items = await ctx.prisma.staffProfile.findMany({
         where,
-        include: { assignedLocation: true, assignedTribe: true },
+        include: { assignedVenue: true, assignedTribe: true },
         orderBy: { createdAt: "desc" },
         take: input.limit + 1,
         ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
@@ -110,9 +98,9 @@ export const staffRouter = createTRPCRouter({
       const profile = await ctx.prisma.staffProfile.findUnique({
         where: { id: input.id },
         include: {
-          assignedLocation: true,
+          assignedVenue: true,
           assignedTribe: true,
-          preferredLocation: true,
+          preferredCampus: true,
           preferredTribe: true,
           department: true,
           reportsTo: { include: { user: true } },
@@ -121,11 +109,11 @@ export const staffRouter = createTRPCRouter({
           assignedHostel: true,
           assignedRoom: true,
           fieldValues: { include: { field: true } },
-          camperAssignments: { include: { registration: { include: { camperProfile: true, tribe: true, room: true } } } },
+          camperAssignments: { include: { registration: { include: { camper: true, tribe: true, room: true } } } },
         },
       });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId, profile.assignedLocationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       return profile;
     }),
 
@@ -135,7 +123,7 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId, profile.assignedLocationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
 
       const updated = await ctx.prisma.staffProfile.update({
         where: { id: input.id },
@@ -154,9 +142,9 @@ export const staffRouter = createTRPCRouter({
 
       // Best-effort welcome email — never blocks approval if it fails.
       try {
-        const year = await ctx.prisma.year.findUnique({ where: { id: profile.yearId } });
+        const camp = await ctx.prisma.camp.findUnique({ where: { id: profile.campId } });
         const dashboardUrl = `${process.env.NEXTAUTH_URL ?? ""}${profile.type === "TEACHER" ? "/teacher" : "/volunteer"}`;
-        await sendStaffApprovedEmail({ to: profile.email, name: profile.firstName, campName: year?.name ?? "camp", type: profile.type, dashboardUrl });
+        await sendStaffApprovedEmail({ to: profile.email, name: profile.firstName, campName: camp?.name ?? "camp", type: profile.type, dashboardUrl });
       } catch (e) {
         console.error("[staff.approve] Failed to send welcome email", e);
       }
@@ -169,7 +157,7 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId, profile.assignedLocationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
 
       const updated = await ctx.prisma.staffProfile.update({
         where: { id: input.id },
@@ -187,8 +175,8 @@ export const staffRouter = createTRPCRouter({
       });
 
       try {
-        const year = await ctx.prisma.year.findUnique({ where: { id: profile.yearId } });
-        await sendStaffRejectedEmail({ to: profile.email, name: profile.firstName, campName: year?.name ?? "camp", type: profile.type, reason: input.reason });
+        const camp = await ctx.prisma.camp.findUnique({ where: { id: profile.campId } });
+        await sendStaffRejectedEmail({ to: profile.email, name: profile.firstName, campName: camp?.name ?? "camp", type: profile.type, reason: input.reason });
       } catch (e) {
         console.error("[staff.reject] Failed to send rejection email", e);
       }
@@ -201,7 +189,7 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId, profile.assignedLocationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { status: "DEACTIVATED", deactivatedAt: new Date() } });
     }),
 
@@ -210,7 +198,7 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId, profile.assignedLocationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { status: "APPROVED", deactivatedAt: null } });
     }),
 
@@ -220,7 +208,7 @@ export const staffRouter = createTRPCRouter({
       for (const id of input.ids) {
         const profile = await ctx.prisma.staffProfile.findUnique({ where: { id } });
         if (!profile) continue;
-        await assertAdminOrLocationAdmin(ctx, profile.organizationId, profile.assignedLocationId);
+        await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       }
       await ctx.prisma.staffProfile.updateMany({
         where: { id: { in: input.ids } },
@@ -235,7 +223,7 @@ export const staffRouter = createTRPCRouter({
       for (const id of input.ids) {
         const profile = await ctx.prisma.staffProfile.findUnique({ where: { id } });
         if (!profile) continue;
-        await assertAdminOrLocationAdmin(ctx, profile.organizationId, profile.assignedLocationId);
+        await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       }
       await ctx.prisma.staffProfile.updateMany({
         where: { id: { in: input.ids } },
@@ -245,13 +233,13 @@ export const staffRouter = createTRPCRouter({
     }),
 
   // ─── Admin: assignment ──────────────────────────────────────────────────
-  assignCentre: protectedProcedure
-    .input(z.object({ id: z.string(), locationId: z.string().nullable() }))
+  assignVenue: protectedProcedure
+    .input(z.object({ id: z.string(), venueId: z.string().nullable() }))
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
-      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedLocationId: input.locationId } });
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedVenueId: input.venueId } });
     }),
 
   assignTribe: protectedProcedure
@@ -260,7 +248,7 @@ export const staffRouter = createTRPCRouter({
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
       if (profile.type !== "TEACHER") throw new TRPCError({ code: "BAD_REQUEST", message: "Only teachers can be assigned a tribe" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedTribeId: input.tribeId } });
     }),
 
@@ -269,7 +257,7 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       if (input.departmentId) {
         const dept = await ctx.prisma.department.findUnique({ where: { id: input.departmentId } });
         if (!dept || dept.organizationId !== profile.organizationId) {
@@ -284,7 +272,7 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { teams: input.teams } });
     }),
 
@@ -294,7 +282,7 @@ export const staffRouter = createTRPCRouter({
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
       if (profile.type !== "TEACHER") throw new TRPCError({ code: "BAD_REQUEST", message: "Only teachers can be assigned campers" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
 
       await ctx.prisma.$transaction([
         ctx.prisma.teacherCamperAssignment.deleteMany({ where: { staffProfileId: input.id } }),
@@ -316,7 +304,7 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
 
       if (input.reportsToId) {
         if (input.reportsToId === input.id) {
@@ -347,7 +335,7 @@ export const staffRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
 
       if (profile.departmentId) {
         const head = await ctx.prisma.staffProfile.findFirst({
@@ -355,12 +343,10 @@ export const staffRouter = createTRPCRouter({
         });
         if (head) return { reportsToId: head.id, reportsToUserId: null };
       }
-      if (profile.assignedLocationId) {
-        const centreAdmin = await ctx.prisma.user.findFirst({
-          where: { role: "LOCATION_ADMIN", managedLocations: { some: { id: profile.assignedLocationId } } },
-        });
-        if (centreAdmin) return { reportsToId: null, reportsToUserId: centreAdmin.id };
-      }
+      // Campus Representatives don't manage camp operations (per PRD), so a
+      // staff member's Venue assignment no longer implies a natural "reports
+      // to" candidate the way the old Location Admin lookup did — fall
+      // through to department head / owner instead.
       const owner = await ctx.prisma.user.findFirst({ where: { organizationId: profile.organizationId, role: "OWNER" } });
       if (owner) return { reportsToId: null, reportsToUserId: owner.id };
       return { reportsToId: null, reportsToUserId: null };
@@ -372,7 +358,7 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       const data: Record<string, boolean> = {};
       if (input.isDepartmentHead !== undefined) data.isDepartmentHead = input.isDepartmentHead;
       if (input.isAssistantHead !== undefined) data.isAssistantHead = input.isAssistantHead;
@@ -385,7 +371,7 @@ export const staffRouter = createTRPCRouter({
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
       if (profile.type !== "TEACHER") throw new TRPCError({ code: "BAD_REQUEST", message: "Only teachers can be camp monitors" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       const data: Record<string, boolean> = {};
       if (input.isCampMonitor !== undefined) data.isCampMonitor = input.isCampMonitor;
       if (input.isAssistantMonitor !== undefined) data.isAssistantMonitor = input.isAssistantMonitor;
@@ -399,7 +385,7 @@ export const staffRouter = createTRPCRouter({
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
       if (profile.type !== "TEACHER") throw new TRPCError({ code: "BAD_REQUEST", message: "Only teachers can be assigned a hostel" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedHostelId: input.hostelId } });
     }),
 
@@ -409,40 +395,8 @@ export const staffRouter = createTRPCRouter({
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
       if (profile.type !== "TEACHER") throw new TRPCError({ code: "BAD_REQUEST", message: "Only teachers can be assigned a room" });
-      await assertAdminOrLocationAdmin(ctx, profile.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedRoomId: input.roomId } });
-    }),
-
-  // ─── Staff custom questions (org-defined, per audience) ────────────────
-  listFields: protectedProcedure
-    .input(z.object({ organizationId: z.string(), audience: z.enum(["TEACHER", "VOLUNTEER"]) }))
-    .query(async ({ ctx, input }) => {
-      return ctx.prisma.staffField.findMany({ where: { organizationId: input.organizationId, audience: input.audience }, orderBy: { sortOrder: "asc" } });
-    }),
-
-  createField: protectedProcedure
-    .input(z.object({
-      organizationId: z.string(),
-      audience: z.enum(["TEACHER", "VOLUNTEER"]),
-      name: z.string(),
-      label: z.string(),
-      type: z.enum(["TEXT", "LONG_TEXT", "NUMBER", "DATE", "BOOLEAN", "CHECKBOX", "SELECT", "MULTI_SELECT", "RADIO", "FILE"]),
-      options: z.string().optional(),
-      required: z.boolean().default(false),
-      sortOrder: z.number().default(0),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      await assertAdminOrLocationAdmin(ctx, input.organizationId);
-      return ctx.prisma.staffField.create({ data: input });
-    }),
-
-  deleteField: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const field = await ctx.prisma.staffField.findUnique({ where: { id: input.id } });
-      if (!field) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertAdminOrLocationAdmin(ctx, field.organizationId);
-      return ctx.prisma.staffField.delete({ where: { id: input.id } });
     }),
 
   // ─── Narrow operational camper lookup for staff (no admin data leakage) ─
@@ -456,18 +410,18 @@ export const staffRouter = createTRPCRouter({
       await requireStaffProfile(ctx);
 
       const where: Record<string, unknown> = input.qrToken
-        ? { qrToken: input.qrToken, location: { organizationId: input.organizationId } }
+        ? { qrToken: input.qrToken, campus: { organizationId: input.organizationId } }
         : {
-            location: { organizationId: input.organizationId },
+            campus: { organizationId: input.organizationId },
             OR: [
               { registrationNumber: { contains: input.query ?? "", mode: "insensitive" } },
-              { camperProfile: { name: { contains: input.query ?? "", mode: "insensitive" } } },
+              { camper: { name: { contains: input.query ?? "", mode: "insensitive" } } },
             ],
           };
 
       const results = await ctx.prisma.registration.findMany({
         where,
-        include: { camperProfile: true, location: true, tribe: true },
+        include: { camper: true, campus: true, tribe: true },
         take: 10,
       });
 
@@ -475,27 +429,27 @@ export const staffRouter = createTRPCRouter({
         registrationId: r.id,
         registrationNumber: r.registrationNumber,
         status: r.status,
-        name: r.camperProfile.name,
-        photoUrl: r.camperProfile.photoUrl,
+        name: r.camper.name,
+        photoUrl: r.camper.photoUrl,
         tribeName: r.tribe?.name ?? null,
-        centreName: r.location?.name ?? null,
-        allergies: r.camperProfile.allergies,
-        medicalConditions: r.camperProfile.medicalConditions,
-        dietaryRestrictions: r.camperProfile.dietaryRestrictions,
+        centreName: r.campus?.name ?? null,
+        allergies: r.camper.allergies,
+        medicalConditions: r.camper.medicalConditions,
+        dietaryRestrictions: r.camper.dietaryRestrictions,
         checkedInAt: r.checkedInAt,
       }));
     }),
 
   // ─── Camp Structure: candidates for the "Reports To" picker ────────────
   listReportsToOptions: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string(), excludeStaffId: z.string().optional() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string(), excludeStaffId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      await assertAdminOrLocationAdmin(ctx, input.organizationId);
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
       const [staff, leaders] = await Promise.all([
         ctx.prisma.staffProfile.findMany({
           where: {
             organizationId: input.organizationId,
-            yearId: input.yearId,
+            campId: input.campId,
             status: "APPROVED",
             ...(input.excludeStaffId && { id: { not: input.excludeStaffId } }),
           },
@@ -503,7 +457,7 @@ export const staffRouter = createTRPCRouter({
           orderBy: { firstName: "asc" },
         }),
         ctx.prisma.user.findMany({
-          where: { organizationId: input.organizationId, role: { in: ["OWNER", "ADMIN", "LOCATION_ADMIN"] }, active: true },
+          where: { organizationId: input.organizationId, role: { in: ["OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"] }, active: true },
           select: { id: true, firstName: true, lastName: true, email: true, role: true },
           orderBy: { firstName: "asc" },
         }),

@@ -18,14 +18,15 @@ import {
   CakeIcon,
   Squares2X2Icon,
   MapIcon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 
 export type Role =
   | "SUPER_ADMIN"
   | "OWNER"
   | "ADMIN"
-  | "LOCATION_ADMIN"
-  | "BASE_USER"
+  | "CAMPUS_REPRESENTATIVE"
+  | "PARENT"
   | "TEACHER"
   | "VOLUNTEER";
 
@@ -43,10 +44,13 @@ export interface NavGroup {
 }
 
 /**
- * Navigation grouped by workflow (Dashboard / Registration / Camp
- * Operations / People / Communication / Settings) rather than by entity —
- * replaces the old flat 8-item list in ModernDashboardLayout's
+ * Navigation grouped by workflow (Dashboard / Registration / Organization /
+ * Camp Operations / People / Communication / Settings) rather than by
+ * entity — replaces the old flat 8-item list in ModernDashboardLayout's
  * getMenuItems(). Role gates below reproduce that function's exact logic.
+ * Campuses (permanent church branches) and Camps (temporary events) are
+ * modeled as independent siblings per the domain refactor — see
+ * "Camply Domain Model Refactor.md".
  */
 const ADMIN_GROUPS: NavGroup[] = [
   {
@@ -60,45 +64,51 @@ const ADMIN_GROUPS: NavGroup[] = [
         name: "Registrations",
         href: "/admin/registrations",
         icon: ClipboardDocumentListIcon,
-        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"],
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
       {
         name: "Check-in",
         href: "/admin/check-in",
         icon: QrCodeIcon,
-        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"],
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
+    ],
+  },
+  {
+    name: "Organization",
+    items: [
+      { name: "Campuses", href: "/admin/campuses", icon: MapPinIcon },
+      { name: "Camps", href: "/admin/camps", icon: CalendarIcon, roles: ["SUPER_ADMIN", "OWNER"] },
     ],
   },
   {
     name: "Camp Operations",
     items: [
-      { name: "Camps", href: "/admin/years", icon: CalendarIcon, roles: ["SUPER_ADMIN", "OWNER"] },
-      { name: "Centres", href: "/admin/locations", icon: MapPinIcon },
+      { name: "Venues", href: "/admin/venues", icon: BuildingOffice2Icon, roles: ["SUPER_ADMIN", "OWNER", "ADMIN"] },
     ],
   },
   {
     name: "People",
     items: [
       { name: "Users", href: "/admin/users", icon: UsersIcon },
-      { name: "Camper Profiles", href: "/admin/campers", icon: UserGroupIcon },
+      { name: "Campers", href: "/admin/campers", icon: UserGroupIcon },
       {
         name: "Teachers",
         href: "/admin/teachers",
         icon: AcademicCapIcon,
-        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"],
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
       {
         name: "Volunteers",
         href: "/admin/volunteers",
         icon: HandRaisedIcon,
-        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"],
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
       {
         name: "Camp Structure",
         href: "/admin/camp-structure",
         icon: Squares2X2Icon,
-        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"],
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
     ],
   },
@@ -133,17 +143,17 @@ const ADMIN_GROUPS: NavGroup[] = [
   },
 ];
 
-const BASE_USER_GROUPS: NavGroup[] = [
+const PARENT_GROUPS: NavGroup[] = [
   { name: "Dashboard", items: [{ name: "Dashboard", href: "/dashboard", icon: HomeIcon }] },
 ];
 
-const LOCATION_ADMIN_GROUPS: NavGroup[] = [
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/location-admin-dashboard", icon: HomeIcon }] },
+const CAMPUS_REP_GROUPS: NavGroup[] = [
+  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }] },
   {
     name: "Registration",
     items: [
-      { name: "Registrations", href: "/location-admin-dashboard/registrations", icon: ClipboardDocumentListIcon },
-      { name: "Camper Profiles", href: "/location-admin-dashboard/campers-profile", icon: UserGroupIcon },
+      { name: "Registrations", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon },
+      { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
     ],
   },
 ];
@@ -196,19 +206,19 @@ function filterGroups(groups: NavGroup[], role: Role): NavGroup[] {
 }
 
 /** Returns the grouped nav for the shell the given role actually lands in.
- * `/admin/*` is shared by SUPER_ADMIN/OWNER/ADMIN/LOCATION_ADMIN today. */
+ * `/admin/*` is shared by SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE today. */
 export function getNavGroups(
   role: Role | undefined,
-  area: "admin" | "dashboard" | "location-admin" | "super-admin" | "teacher" | "volunteer"
+  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer"
 ): NavGroup[] {
   if (!role) return [];
   switch (area) {
     case "admin":
       return filterGroups(ADMIN_GROUPS, role);
     case "dashboard":
-      return BASE_USER_GROUPS;
-    case "location-admin":
-      return LOCATION_ADMIN_GROUPS;
+      return PARENT_GROUPS;
+    case "campus-rep":
+      return CAMPUS_REP_GROUPS;
     case "super-admin":
       return SUPER_ADMIN_GROUPS;
     case "teacher":

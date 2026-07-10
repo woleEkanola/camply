@@ -5,6 +5,7 @@ import * as engine from "../../registration/engine";
 import { RegistrationValidationError } from "../../registration/validation";
 import { IllegalTransitionError } from "../../registration/stateMachine";
 import { runSideEffectsNow } from "../../registration/effects";
+import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
 
 function toTRPCError(error: unknown): TRPCError {
   if (error instanceof RegistrationValidationError) {
@@ -22,25 +23,12 @@ function toTRPCError(error: unknown): TRPCError {
   return new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Unknown error" });
 }
 
-async function assertAdminOrLocationAdmin(
-  ctx: { prisma: any; session: any },
-  locationId: string
-) {
-  const currentUser = ctx.session?.user;
-  if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
-  if (isAdmin) return currentUser;
-  if (currentUser.role === "LOCATION_ADMIN") {
-    const managed = await ctx.prisma.location.findFirst({
-      where: { id: locationId, admins: { some: { id: currentUser.id } } },
-    });
-    if (managed) return currentUser;
-  }
-  throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage this registration" });
-}
-
 // Check-in duty is also delegated to Registration-department volunteers, on top of admin roles.
-async function assertCanCheckIn(ctx: { prisma: any; session: any; userId: string }, locationId: string) {
+async function assertCanCheckIn(
+  ctx: { prisma: any; session: any; userId: string },
+  organizationId: string,
+  campusId: string
+) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (currentUser.role === "VOLUNTEER") {
@@ -50,7 +38,7 @@ async function assertCanCheckIn(ctx: { prisma: any; session: any; userId: string
     if (profile) return currentUser;
     throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to check in campers" });
   }
-  return assertAdminOrLocationAdmin(ctx, locationId);
+  return assertOrgAdminOrCampusRep(ctx, organizationId, campusId);
 }
 
 // RegistrationStatus is not exported from @prisma/client after downgrade. Define locally to match schema.
@@ -58,9 +46,9 @@ export type RegistrationStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLE
 
 // Schema for registration data validation
 const registrationSchema = z.object({
-  camperProfileId: z.string(),
-  yearId: z.string(),
-  locationId: z.string(),
+  camperId: z.string(),
+  campId: z.string(),
+  campusId: z.string(),
   status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).default("PENDING"),
   notes: z.string().optional(),
 });
@@ -74,59 +62,59 @@ const registrationUpdateSchema = z.object({
 });
 
 export const registrationRouter = createTRPCRouter({
-  // Get all registrations for an organization and year
+  // Get all registrations for an organization and camp
   getByOrganizationAndYear: protectedProcedure
-    .input(z.object({ 
+    .input(z.object({
       organizationId: z.string(),
-      yearId: z.string().optional() // If not provided, use active year
+      campId: z.string().optional() // If not provided, use active camp
     }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
+
       // Check if user has permission to view registrations in this organization
-      const hasPermission = 
-        currentUser.role === "SUPER_ADMIN" || 
-        currentUser.role === "OWNER" || 
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === input.organizationId);
-      
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" && currentUser.organizationId === input.organizationId);
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to view registrations for this organization" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to view registrations for this organization"
         });
       }
-      
-      // Get the year ID to filter by
-      let yearId = input.yearId;
-      
-      // If no year ID provided, use the active year
-      if (!yearId) {
+
+      // Get the camp ID to filter by
+      let campId = input.campId;
+
+      // If no camp ID provided, use the active camp
+      if (!campId) {
         const organization = await ctx.prisma.organization.findUnique({
           where: { id: input.organizationId },
-          select: { activeYearId: true }
+          select: { activeCampId: true }
         });
-        
-        if (!organization || !organization.activeYearId) {
-          throw new TRPCError({ 
-            code: "BAD_REQUEST", 
-            message: "No active year set for this organization" 
+
+        if (!organization || !organization.activeCampId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "No active camp set for this organization"
           });
         }
-        
-        yearId = organization.activeYearId;
+
+        campId = organization.activeCampId;
       }
-      
-      // For location admins, only show registrations for their managed locations
-      if (currentUser.role === "LOCATION_ADMIN") {
-        const managedLocationIds = await ctx.prisma.location.findMany({
+
+      // For campus reps, only show registrations for their managed campuses
+      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
+        const managedCampuses = await ctx.prisma.campus.findMany({
           where: {
             organizationId: input.organizationId,
-            admins: {
+            reps: {
               some: {
                 id: currentUser.id
               }
@@ -134,19 +122,19 @@ export const registrationRouter = createTRPCRouter({
           },
           select: { id: true }
         });
-        
-        const locationIds = managedLocationIds.map((profile: { id: string }) => profile.id);
-        
+
+        const campusIds = managedCampuses.map((c: { id: string }) => c.id);
+
         return await ctx.prisma.registration.findMany({
-          where: { 
-            yearId,
-            location: {
+          where: {
+            campId,
+            campus: {
               organizationId: input.organizationId,
-              id: { in: locationIds }
+              id: { in: campusIds }
             }
           },
           include: {
-            camperProfile: {
+            camper: {
               include: {
                 user: {
                   select: {
@@ -163,23 +151,23 @@ export const registrationRouter = createTRPCRouter({
                 }
               }
             },
-            location: true,
-            year: true
+            campus: true,
+            camp: true
           },
           orderBy: { createdAt: "desc" }
         });
       }
-      
-      // For other roles, show all registrations for the organization and year
+
+      // For other roles, show all registrations for the organization and camp
       return await ctx.prisma.registration.findMany({
-        where: { 
-          yearId,
-          location: {
+        where: {
+          campId,
+          campus: {
             organizationId: input.organizationId
           }
         },
         include: {
-          camperProfile: {
+          camper: {
             include: {
               user: {
                 select: {
@@ -196,57 +184,57 @@ export const registrationRouter = createTRPCRouter({
               }
             }
           },
-          location: true,
-          year: true
+          campus: true,
+          camp: true
         },
         orderBy: { createdAt: "desc" }
       });
     }),
-    
-  // Get registrations for a specific camper profile
-  getByCamperProfile: protectedProcedure
-    .input(z.object({ 
-      camperProfileId: z.string(),
-      yearId: z.string().optional() // If not provided, get all years
+
+  // Get registrations for a specific camper
+  getByCamper: protectedProcedure
+    .input(z.object({
+      camperId: z.string(),
+      campId: z.string().optional() // If not provided, get all camps
     }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
-      // Get the camper profile to check permissions
-      const profile = await ctx.prisma.camperProfile.findUnique({
-        where: { id: input.camperProfileId },
+
+      // Get the camper to check permissions
+      const profile = await ctx.prisma.camper.findUnique({
+        where: { id: input.camperId },
         include: { user: true }
       });
-      
+
       if (!profile) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Camper profile not found" });
       }
-      
+
       // Check if user has permission to view these registrations
-      const hasPermission = 
+      const hasPermission =
         currentUser.id === profile.userId || // User owns the profile
-        currentUser.role === "SUPER_ADMIN" || 
-        currentUser.role === "OWNER" || 
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === profile.organizationId);
-      
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" && currentUser.organizationId === profile.organizationId);
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to view registrations for this profile" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to view registrations for this profile"
         });
       }
-      
-      // For location admins, only show registrations for their managed locations
-      if (currentUser.role === "LOCATION_ADMIN") {
-        const managedLocationIds = await ctx.prisma.location.findMany({
+
+      // For campus reps, only show registrations for their managed campuses
+      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
+        const managedCampuses = await ctx.prisma.campus.findMany({
           where: {
             organizationId: profile.organizationId,
-            admins: {
+            reps: {
               some: {
                 id: currentUser.id
               }
@@ -254,51 +242,51 @@ export const registrationRouter = createTRPCRouter({
           },
           select: { id: true }
         });
-        
-        const locationIds = managedLocationIds.map((profile: { id: string }) => profile.id);
-        
+
+        const campusIds = managedCampuses.map((c: { id: string }) => c.id);
+
         return await ctx.prisma.registration.findMany({
-          where: { 
-            camperProfileId: input.camperProfileId,
-            ...(input.yearId && { yearId: input.yearId }),
-            locationId: { in: locationIds }
+          where: {
+            camperId: input.camperId,
+            ...(input.campId && { campId: input.campId }),
+            campusId: { in: campusIds }
           },
           include: {
-            location: true,
-            year: true
+            campus: true,
+            camp: true
           },
           orderBy: { createdAt: "desc" }
         });
       }
-      
+
       // For other roles, show all registrations for the profile
       return await ctx.prisma.registration.findMany({
-        where: { 
-          camperProfileId: input.camperProfileId,
-          ...(input.yearId && { yearId: input.yearId })
+        where: {
+          camperId: input.camperId,
+          ...(input.campId && { campId: input.campId })
         },
         include: {
-          location: true,
-          year: true
+          campus: true,
+          camp: true
         },
         orderBy: { createdAt: "desc" }
       });
     }),
-    
+
   // Get a single registration by ID
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
+
       const registration = await ctx.prisma.registration.findUnique({
         where: { id: input.id },
         include: {
-          camperProfile: {
+          camper: {
             include: {
               user: true,
               fieldValues: {
@@ -308,8 +296,9 @@ export const registrationRouter = createTRPCRouter({
               }
             }
           },
-          location: true,
-          year: true,
+          campus: true,
+          camp: true,
+          venue: true,
           tribe: true
         }
       });
@@ -320,167 +309,150 @@ export const registrationRouter = createTRPCRouter({
 
       // Check if user has permission to view this registration
       const hasPermission =
-        currentUser.id === registration.camperProfile.userId || // User owns the profile
+        currentUser.id === registration.camper.userId || // User owns the profile
         currentUser.role === "SUPER_ADMIN" ||
         currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" &&
-         await ctx.prisma.location.findFirst({
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+         await ctx.prisma.campus.findFirst({
            where: {
-             id: registration.locationId,
-             admins: {
+             id: registration.campusId,
+             reps: {
                some: {
                  id: currentUser.id
                }
              }
            }
          }));
-      
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to view this registration" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to view this registration"
         });
       }
-      
+
       return registration;
     }),
-    
+
   // Get registrations for the current user (for dashboard)
   getByUserId: protectedProcedure
     .query(async ({ ctx }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
-      // Get all camper profiles for the user
-      const camperProfiles = await ctx.prisma.camperProfile.findMany({
+
+      // Get all campers for the user
+      const campers = await ctx.prisma.camper.findMany({
         where: { userId: currentUser.id },
         select: { id: true }
       });
-      
+
       // Get all registrations for those profiles
       return await ctx.prisma.registration.findMany({
         where: {
-          camperProfileId: {
-            in: camperProfiles.map((profile: { id: string }) => profile.id)
+          camperId: {
+            in: campers.map((profile: { id: string }) => profile.id)
           }
         },
         include: {
-          camperProfile: true,
-          year: true,
-          location: true
+          camper: true,
+          camp: true,
+          campus: true
         },
         orderBy: { createdAt: "desc" }
       });
     }),
-    
+
   // Create a new registration
   create: protectedProcedure
     .input(registrationSchema)
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
-      // Get the camper profile to check permissions
-      const profile = await ctx.prisma.camperProfile.findUnique({
-        where: { id: input.camperProfileId },
+
+      // Get the camper to check permissions
+      const profile = await ctx.prisma.camper.findUnique({
+        where: { id: input.camperId },
         include: { user: true }
       });
-      
+
       if (!profile) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Camper profile not found" });
       }
-      
+
       // Check if user has permission to create registrations for this profile
-      const hasPermission = 
+      const hasPermission =
         currentUser.id === profile.userId || // User owns the profile
-        currentUser.role === "SUPER_ADMIN" || 
-        currentUser.role === "OWNER" || 
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" && currentUser.organizationId === profile.organizationId);
-      
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" && currentUser.organizationId === profile.organizationId);
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to create registrations for this profile" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to create registrations for this profile"
         });
       }
-      
-      // For location admins, check if the location is one they manage
-      if (currentUser.role === "LOCATION_ADMIN") {
-        const canManageLocation = await ctx.prisma.location.findFirst({
-          where: {
-            id: input.locationId,
-            admins: {
-              some: {
-                id: currentUser.id
-              }
-            }
-          }
-        });
-        
-        if (!canManageLocation) {
-          throw new TRPCError({ 
-            code: "FORBIDDEN", 
-            message: "Not authorized to create registrations for this location" 
-          });
-        }
+
+      // For campus reps, check if the campus is one they manage
+      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
+        await assertOrgAdminOrCampusRep(ctx, profile.organizationId, input.campusId);
       }
-      
-      // Check if the year is active (for non-owners)
+
+      // Check if the camp is active (for non-owners)
       if (currentUser.role !== "SUPER_ADMIN" && currentUser.role !== "OWNER") {
         const organization = await ctx.prisma.organization.findUnique({
           where: { id: profile.organizationId },
-          select: { activeYearId: true }
+          select: { activeCampId: true }
         });
-        
-        if (!organization || organization.activeYearId !== input.yearId) {
-          throw new TRPCError({ 
-            code: "FORBIDDEN", 
-            message: "Can only create registrations for the active year" 
+
+        if (!organization || organization.activeCampId !== input.campId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Can only create registrations for the active camp"
           });
         }
       }
-      
-      // Check if a registration already exists for this profile, year, and location
+
+      // Check if a registration already exists for this profile and camp
       const existingRegistration = await ctx.prisma.registration.findFirst({
         where: {
-          camperProfileId: input.camperProfileId,
-          yearId: input.yearId,
-          locationId: input.locationId
+          camperId: input.camperId,
+          campId: input.campId,
         }
       });
-      
+
       if (existingRegistration) {
-        throw new TRPCError({ 
-          code: "BAD_REQUEST", 
-          message: "A registration already exists for this profile, year, and location" 
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A registration already exists for this profile and camp"
         });
       }
-      
+
       // Create the registration
       return await ctx.prisma.registration.create({
         data: input,
         include: {
-          camperProfile: true,
-          location: true,
-          year: true
+          camper: true,
+          campus: true,
+          camp: true
         }
       });
     }),
-    
+
   // Create a registration during signup (public procedure)
   createDuringSignup: publicProcedure
     .input(z.object({
-      camperProfileId: z.string(),
-      yearId: z.string(),
-      locationId: z.string(),
+      camperId: z.string(),
+      campId: z.string(),
+      campusId: z.string(),
       status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).default("PENDING"),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -488,18 +460,18 @@ export const registrationRouter = createTRPCRouter({
         // Create the registration
         const registration = await ctx.prisma.registration.create({
           data: {
-            camperProfile: { connect: { id: input.camperProfileId } },
-            year: { connect: { id: input.yearId } },
-            location: { connect: { id: input.locationId } },
+            camper: { connect: { id: input.camperId } },
+            camp: { connect: { id: input.campId } },
+            campus: { connect: { id: input.campusId } },
             status: input.status
           },
           include: {
-            camperProfile: true,
-            location: true,
-            year: true
+            camper: true,
+            campus: true,
+            camp: true
           }
         });
-        
+
         return registration;
       } catch (error) {
         if (error instanceof Error) {
@@ -514,7 +486,7 @@ export const registrationRouter = createTRPCRouter({
         });
       }
     }),
-    
+
   // Update a registration
   update: protectedProcedure
     .input(z.object({
@@ -523,81 +495,81 @@ export const registrationRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
+
       // Get the registration to update
       const registration = await ctx.prisma.registration.findUnique({
         where: { id: input.id },
         include: {
-          camperProfile: {
+          camper: {
             include: { user: true }
           },
-          location: true
+          campus: true
         }
       });
-      
+
       if (!registration) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Registration not found" });
       }
-      
+
       // Check if user has permission to update this registration
-      const isOwner = currentUser.id === registration.camperProfile.userId;
-      const isAdmin = 
-        currentUser.role === "SUPER_ADMIN" || 
-        currentUser.role === "OWNER" || 
+      const isOwner = currentUser.id === registration.camper.userId;
+      const isAdmin =
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN";
-      
-      const isLocationAdmin = currentUser.role === "LOCATION_ADMIN" && 
-        await ctx.prisma.location.findFirst({
+
+      const isCampusRep = currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+        await ctx.prisma.campus.findFirst({
           where: {
-            id: registration.locationId,
-            admins: {
+            id: registration.campusId,
+            reps: {
               some: {
                 id: currentUser.id
               }
             }
           }
         });
-      
+
       // Regular users can only update notes, admins can update everything
-      if (!isOwner && !isAdmin && !isLocationAdmin) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to update this registration" 
+      if (!isOwner && !isAdmin && !isCampusRep) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to update this registration"
         });
       }
-      
+
       // Regular users can only update notes
-      if (isOwner && !isAdmin && !isLocationAdmin) {
+      if (isOwner && !isAdmin && !isCampusRep) {
         const allowedFields = ['notes'];
         const attemptedFields = Object.keys(input.data);
-        
+
         const hasDisallowedFields = attemptedFields.some(field => !allowedFields.includes(field));
-        
+
         if (hasDisallowedFields) {
-          throw new TRPCError({ 
-            code: "FORBIDDEN", 
-            message: "You can only update notes for your own registrations" 
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You can only update notes for your own registrations"
           });
         }
       }
-      
+
       // Update the registration
       return await ctx.prisma.registration.update({
         where: { id: input.id },
         data: input.data,
         include: {
-          camperProfile: true,
-          location: true,
-          year: true
+          camper: true,
+          campus: true,
+          camp: true
         }
       });
     }),
-    
-  // PATCH: update registration fields (admin/location admin only)
+
+  // PATCH: update registration fields (admin/campus rep only)
   updateFields: protectedProcedure
     .input(z.object({ id: z.string(), data: registrationUpdateSchema }))
     .mutation(async ({ ctx, input }) => {
@@ -605,10 +577,10 @@ export const registrationRouter = createTRPCRouter({
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      // Only admins or location admins can update these fields
+      // Only admins or campus reps can update these fields
       const registration = await ctx.prisma.registration.findUnique({
         where: { id: input.id },
-        include: { location: true, camperProfile: true },
+        include: { campus: true, camper: true },
       });
       if (!registration) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Registration not found" });
@@ -617,18 +589,18 @@ export const registrationRouter = createTRPCRouter({
         currentUser.role === "SUPER_ADMIN" ||
         currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" &&
-          await ctx.prisma.location.findFirst({
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+          await ctx.prisma.campus.findFirst({
             where: {
-              id: registration.locationId,
-              admins: { some: { id: currentUser.id } },
+              id: registration.campusId,
+              reps: { some: { id: currentUser.id } },
             },
           })) ||
-        (currentUser.role === "BASE_USER" &&
-          registration.camperProfileId &&
-          (await ctx.prisma.camperProfile.findFirst({
+        (currentUser.role === "PARENT" &&
+          registration.camperId &&
+          (await ctx.prisma.camper.findFirst({
             where: {
-              id: registration.camperProfileId,
+              id: registration.camperId,
               userId: currentUser.id,
             },
           })));
@@ -638,10 +610,10 @@ export const registrationRouter = createTRPCRouter({
       return await ctx.prisma.registration.update({
         where: { id: input.id },
         data: input.data,
-        include: { camperProfile: true, location: true, year: true },
+        include: { camper: true, campus: true, camp: true },
       });
     }),
-    
+
   // Update registration status
   updateStatus: protectedProcedure
     .input(z.object({
@@ -650,106 +622,106 @@ export const registrationRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
+
       // Get the registration to update
       const registration = await ctx.prisma.registration.findUnique({
         where: { id: input.id },
-        include: { location: true }
+        include: { campus: true }
       });
-      
+
       if (!registration) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Registration not found" });
       }
-      
+
       // Check if user has permission to update status
-      const hasPermission = 
-        currentUser.role === "SUPER_ADMIN" || 
-        currentUser.role === "OWNER" || 
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" && 
-         await ctx.prisma.location.findFirst({
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+         await ctx.prisma.campus.findFirst({
            where: {
-             id: registration.locationId,
-             admins: {
+             id: registration.campusId,
+             reps: {
                some: {
                  id: currentUser.id
                }
              }
            }
          }));
-      
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to update registration status" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to update registration status"
         });
       }
-      
+
       // Update the registration status
       return await ctx.prisma.registration.update({
         where: { id: input.id },
         data: { status: input.status },
         include: {
-          camperProfile: true,
-          location: true,
-          year: true
+          camper: true,
+          campus: true,
+          camp: true
         }
       });
     }),
-    
+
   // Delete a registration
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      
+
       if (!currentUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
-      
+
       // Get the registration to delete
       const registration = await ctx.prisma.registration.findUnique({
         where: { id: input.id },
         include: {
-          camperProfile: {
+          camper: {
             include: { user: true }
           }
         }
       });
-      
+
       if (!registration) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Registration not found" });
       }
-      
+
       // Check if user has permission to delete this registration
-      const hasPermission = 
-        currentUser.id === registration.camperProfile.userId || // User owns the profile
-        currentUser.role === "SUPER_ADMIN" || 
-        currentUser.role === "OWNER" || 
+      const hasPermission =
+        currentUser.id === registration.camper.userId || // User owns the profile
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "LOCATION_ADMIN" && 
-         await ctx.prisma.location.findFirst({
+        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+         await ctx.prisma.campus.findFirst({
            where: {
-             id: registration.locationId,
-             admins: {
+             id: registration.campusId,
+             reps: {
                some: {
                  id: currentUser.id
                }
              }
            }
          }));
-      
+
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Not authorized to delete this registration" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to delete this registration"
         });
       }
-      
+
       // Delete the registration
       return await ctx.prisma.registration.delete({
         where: { id: input.id }
@@ -761,11 +733,11 @@ export const registrationRouter = createTRPCRouter({
   // validation, audit logging, and capacity checks are centralized.
 
   createDraft: protectedProcedure
-    .input(z.object({ camperProfileId: z.string(), yearId: z.string(), locationId: z.string() }))
+    .input(z.object({ camperId: z.string(), campId: z.string(), campusId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const profile = await ctx.prisma.camperProfile.findUnique({ where: { id: input.camperProfileId } });
+      const profile = await ctx.prisma.camper.findUnique({ where: { id: input.camperId } });
       if (!profile || profile.userId !== currentUser.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to register this camper" });
       }
@@ -807,9 +779,9 @@ export const registrationRouter = createTRPCRouter({
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       const registration = await ctx.prisma.registration.findUnique({
         where: { id: input.registrationId },
-        include: { camperProfile: true },
+        include: { camper: true },
       });
-      if (!registration || registration.camperProfile.userId !== currentUser.id) {
+      if (!registration || registration.camper.userId !== currentUser.id) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
       try {
@@ -824,8 +796,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.approveRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
       } catch (error) {
@@ -838,8 +813,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.rejectRegistration({ registrationId: input.registrationId, actorId: currentUser.id, reason: input.reason });
       } catch (error) {
@@ -852,8 +830,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.requestCorrection({ registrationId: input.registrationId, actorId: currentUser.id, message: input.message });
       } catch (error) {
@@ -866,8 +847,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.waitlistRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
       } catch (error) {
@@ -880,8 +864,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.assignReviewer({ registrationId: input.registrationId, actorId: currentUser.id, reviewerId: input.reviewerId });
       } catch (error) {
@@ -894,8 +881,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.addInternalNote({ registrationId: input.registrationId, actorId: currentUser.id, text: input.text });
       } catch (error) {
@@ -903,15 +893,18 @@ export const registrationRouter = createTRPCRouter({
       }
     }),
 
-  transferCentre: protectedProcedure
-    .input(z.object({ registrationId: z.string(), newLocationId: z.string() }))
+  transferVenue: protectedProcedure
+    .input(z.object({ registrationId: z.string(), newVenueId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
-        return await engine.transferCentre({ registrationId: input.registrationId, actorId: currentUser.id, newLocationId: input.newLocationId });
+        return await engine.transferVenue({ registrationId: input.registrationId, actorId: currentUser.id, newVenueId: input.newVenueId });
       } catch (error) {
         throw toTRPCError(error);
       }
@@ -922,8 +915,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.archiveRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
       } catch (error) {
@@ -936,8 +932,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertCanCheckIn(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertCanCheckIn(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.checkInRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
       } catch (error) {
@@ -950,8 +949,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertCanCheckIn(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertCanCheckIn(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.checkOutRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
       } catch (error) {
@@ -964,8 +966,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await engine.regenerateQr({ registrationId: input.registrationId, actorId: currentUser.id });
       } catch (error) {
@@ -979,20 +984,33 @@ export const registrationRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      if (!["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes(currentUser.role)) {
+      // Bonus fix: this procedure was previously unscoped for CAMPUS_REPRESENTATIVE
+      // (any role-list membership, no per-campus re-check). Org admins pass
+      // straight through; campus reps are scoped to their managed campuses below.
+      if (!["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"].includes(currentUser.role)) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
       const include = {
-        camperProfile: { include: { user: true } },
-        location: true,
-        year: true,
+        camper: { include: { user: true } },
+        campus: true,
+        camp: true,
+        venue: true,
         tribe: true,
       } as const;
 
+      let campusFilter: Record<string, unknown> = { organizationId: input.organizationId };
+      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
+        const managed = await ctx.prisma.campus.findMany({
+          where: { organizationId: input.organizationId, reps: { some: { id: currentUser.id } } },
+          select: { id: true },
+        });
+        campusFilter = { organizationId: input.organizationId, id: { in: managed.map((c: { id: string }) => c.id) } };
+      }
+
       if (input.qrToken) {
         const registration = await ctx.prisma.registration.findFirst({
-          where: { qrToken: input.qrToken, location: { organizationId: input.organizationId } },
+          where: { qrToken: input.qrToken, campus: campusFilter },
           include,
         });
         return registration ? [registration] : [];
@@ -1001,12 +1019,12 @@ export const registrationRouter = createTRPCRouter({
       if (input.query) {
         return ctx.prisma.registration.findMany({
           where: {
-            location: { organizationId: input.organizationId },
+            campus: campusFilter,
             OR: [
               { registrationNumber: { contains: input.query, mode: "insensitive" } },
-              { camperProfile: { name: { contains: input.query, mode: "insensitive" } } },
-              { camperProfile: { user: { email: { contains: input.query, mode: "insensitive" } } } },
-              { camperProfile: { user: { phone: { contains: input.query, mode: "insensitive" } } } },
+              { camper: { name: { contains: input.query, mode: "insensitive" } } },
+              { camper: { user: { email: { contains: input.query, mode: "insensitive" } } } },
+              { camper: { user: { phone: { contains: input.query, mode: "insensitive" } } } },
             ],
           },
           include,
@@ -1022,10 +1040,16 @@ export const registrationRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId }, include: { camperProfile: true } });
-      const isOwner = registration.camperProfile.userId === currentUser.id;
-      const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes(currentUser.role);
-      if (!isOwner && !isAdmin) throw new TRPCError({ code: "FORBIDDEN" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { camper: true, campus: true },
+      });
+      const isOwner = registration.camper.userId === currentUser.id;
+      if (!isOwner) {
+        // Bonus fix: this procedure was previously unscoped for CAMPUS_REPRESENTATIVE
+        // (role-list membership only, no per-campus re-check).
+        await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      }
       return ctx.prisma.auditLog.findMany({
         where: { registrationId: input.registrationId },
         orderBy: { createdAt: "asc" },
@@ -1037,8 +1061,11 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       if (registration.status !== "APPROVED" && registration.status !== "CHECKED_IN") {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Only approved registrations have an acceptance email to resend." });
       }
@@ -1050,8 +1077,8 @@ export const registrationRouter = createTRPCRouter({
   adminList: protectedProcedure
     .input(z.object({
       organizationId: z.string(),
-      yearId: z.string().optional(),
-      locationId: z.string().optional(),
+      campId: z.string().optional(),
+      campusId: z.string().optional(),
       status: z.string().optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
@@ -1062,36 +1089,36 @@ export const registrationRouter = createTRPCRouter({
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
       const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
-      let locationFilter: Record<string, unknown> = { organizationId: input.organizationId };
+      let campusFilter: Record<string, unknown> = { organizationId: input.organizationId };
 
       if (!isAdmin) {
-        if (currentUser.role !== "LOCATION_ADMIN") throw new TRPCError({ code: "FORBIDDEN" });
-        const managed = await ctx.prisma.location.findMany({
-          where: { organizationId: input.organizationId, admins: { some: { id: currentUser.id } } },
+        if (currentUser.role !== "CAMPUS_REPRESENTATIVE") throw new TRPCError({ code: "FORBIDDEN" });
+        const managed = await ctx.prisma.campus.findMany({
+          where: { organizationId: input.organizationId, reps: { some: { id: currentUser.id } } },
           select: { id: true },
         });
-        locationFilter = { organizationId: input.organizationId, id: { in: managed.map((l: { id: string }) => l.id) } };
+        campusFilter = { organizationId: input.organizationId, id: { in: managed.map((c: { id: string }) => c.id) } };
       }
 
       const where: Record<string, unknown> = {
-        location: locationFilter,
-        ...(input.yearId && { yearId: input.yearId }),
-        ...(input.locationId && { locationId: input.locationId }),
+        campus: campusFilter,
+        ...(input.campId && { campId: input.campId }),
+        ...(input.campusId && { campusId: input.campusId }),
         ...(input.status && { status: input.status }),
         ...(input.q && {
           OR: [
             { registrationNumber: { contains: input.q, mode: "insensitive" } },
-            { camperProfile: { name: { contains: input.q, mode: "insensitive" } } },
-            { camperProfile: { user: { email: { contains: input.q, mode: "insensitive" } } } },
-            { camperProfile: { user: { firstName: { contains: input.q, mode: "insensitive" } } } },
-            { camperProfile: { user: { lastName: { contains: input.q, mode: "insensitive" } } } },
+            { camper: { name: { contains: input.q, mode: "insensitive" } } },
+            { camper: { user: { email: { contains: input.q, mode: "insensitive" } } } },
+            { camper: { user: { firstName: { contains: input.q, mode: "insensitive" } } } },
+            { camper: { user: { lastName: { contains: input.q, mode: "insensitive" } } } },
           ],
         }),
       };
 
       const items = await ctx.prisma.registration.findMany({
         where,
-        include: { camperProfile: { include: { user: true } }, location: true, year: true },
+        include: { camper: { include: { user: true } }, campus: true, camp: true },
         orderBy: { createdAt: "desc" },
         take: input.limit + 1,
         ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),

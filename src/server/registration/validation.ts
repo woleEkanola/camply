@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { validateFormFields } from "./validateFormFields";
 
 type TxClient = PrismaClient | Prisma.TransactionClient;
 
@@ -40,11 +41,11 @@ export async function validateSubmission(
   const registration = await tx.registration.findUnique({
     where: { id: params.registrationId },
     include: {
-      camperProfile: {
+      camper: {
         include: { fieldValues: { include: { field: true } }, documents: true },
       },
-      year: { include: { documentRequirements: true } },
-      location: true,
+      camp: { include: { documentRequirements: true } },
+      campus: true,
       documents: true,
     },
   });
@@ -53,63 +54,66 @@ export async function validateSubmission(
     return [{ step: "registration", code: "NOT_FOUND", message: "Registration not found." }];
   }
 
-  const { camperProfile, year, location } = registration;
+  const { camper, camp, campus } = registration;
 
   // Step 1: Camp
-  if (year.status !== "OPEN") {
+  if (camp.status !== "OPEN") {
     failures.push({ step: "camp", code: "CAMP_NOT_OPEN", message: "Registration is not currently open for this camp." });
   } else {
     const now = new Date();
-    if (year.registrationOpensAt && now < year.registrationOpensAt) {
+    if (camp.registrationOpensAt && now < camp.registrationOpensAt) {
       failures.push({ step: "camp", code: "REGISTRATION_NOT_OPEN_YET", message: "Registration has not opened yet." });
     }
-    if (year.registrationClosesAt && now > year.registrationClosesAt) {
+    if (camp.registrationClosesAt && now > camp.registrationClosesAt) {
       failures.push({ step: "camp", code: "REGISTRATION_CLOSED", message: "Registration has closed." });
     }
   }
 
   // Step 2: Parent
-  if (params.parentUserId && camperProfile.userId !== params.parentUserId) {
+  if (params.parentUserId && camper.userId !== params.parentUserId) {
     failures.push({ step: "parent", code: "NOT_OWNER", message: "You do not have permission to submit this registration." });
   }
 
-  // Step 3: Camper profile completeness
-  if (!camperProfile.firstName || !camperProfile.lastName) {
-    failures.push({ step: "camper", code: "INCOMPLETE_PROFILE", message: "Camper's first and last name are required." });
+  // Step 3: Camper profile completeness — driven by admin-configured FormFields
+  // (system fields like name/dateOfBirth/gender bind to real columns; custom
+  // fields bind to fieldValues), rather than a hardcoded field list.
+  const submittedValues: Record<string, unknown> = { ...camper };
+  for (const fv of camper.fieldValues) {
+    submittedValues[fv.fieldId] = fv.value;
   }
-  if (!camperProfile.dateOfBirth) {
-    failures.push({ step: "camper", code: "MISSING_DOB", message: "Camper's date of birth is required." });
+  const fieldFailures = await validateFormFields(tx, camper.organizationId, "CAMPER", submittedValues);
+  for (const f of fieldFailures) {
+    failures.push({ step: "custom_fields", code: "MISSING_FIELD", message: `"${f.label}" is required.` });
   }
 
   // Step 4: Age validation (computed at cutoff date, not today)
-  if (camperProfile.dateOfBirth && (year.minAge != null || year.maxAge != null)) {
-    const cutoff = year.ageCutoffDate ?? year.startDate;
-    const age = calculateAge(camperProfile.dateOfBirth, cutoff);
-    if (year.minAge != null && age < year.minAge) {
-      failures.push({ step: "age", code: "TOO_YOUNG", message: `Camper does not meet the minimum age requirement of ${year.minAge}.` });
+  if (camper.dateOfBirth && (camp.minAge != null || camp.maxAge != null)) {
+    const cutoff = camp.ageCutoffDate ?? camp.startDate;
+    const age = calculateAge(camper.dateOfBirth, cutoff);
+    if (camp.minAge != null && age < camp.minAge) {
+      failures.push({ step: "age", code: "TOO_YOUNG", message: `Camper does not meet the minimum age requirement of ${camp.minAge}.` });
     }
-    if (year.maxAge != null && age > year.maxAge) {
-      failures.push({ step: "age", code: "TOO_OLD", message: `Camper exceeds the maximum age requirement of ${year.maxAge}.` });
+    if (camp.maxAge != null && age > camp.maxAge) {
+      failures.push({ step: "age", code: "TOO_OLD", message: `Camper exceeds the maximum age requirement of ${camp.maxAge}.` });
     }
   }
 
-  // Step 5: Centre validation
-  if (!location.visible || !location.signupOpen) {
-    failures.push({ step: "centre", code: "CENTRE_CLOSED", message: "This centre is not currently accepting registrations." });
-  } else if (location.quota > 0) {
-    const approvedCount = await tx.registration.count({
-      where: { locationId: location.id, status: "APPROVED" },
-    });
-    if (approvedCount >= location.quota && location.fullBehavior === "CLOSE") {
-      failures.push({ step: "centre", code: "CENTRE_FULL", message: "This centre has reached capacity." });
-    }
+  // Step 5: Campus gate validation. Only boolean gates are checked here -
+  // capacity (quota/fullBehavior) is deliberately NOT checked at submission
+  // time. Under the new domain model, capacity is a Venue concept, and Venue
+  // isn't assigned to a registration until approval/allocation time (a Campus
+  // signup link being "full" is no longer a submission-time concept). See
+  // engine.ts's approveRegistrationInTx/transferVenue for the Venue-scoped
+  // capacity check that replaces this.
+  if (!campus.active || !campus.signupOpen) {
+    failures.push({ step: "campus", code: "CAMPUS_CLOSED", message: "This campus is not currently accepting registrations." });
   }
 
   // Step 6: Duplicate detection (also enforced by a DB unique constraint)
   const duplicate = await tx.registration.findFirst({
     where: {
-      camperProfileId: camperProfile.id,
-      yearId: year.id,
+      camperId: camper.id,
+      campId: camp.id,
       id: { not: registration.id },
       status: { notIn: ["CANCELLED", "REJECTED", "ARCHIVED"] },
     },
@@ -118,21 +122,12 @@ export async function validateSubmission(
     failures.push({ step: "duplicate", code: "DUPLICATE_REGISTRATION", message: "This camper already has a registration for this camp." });
   }
 
-  // Step 7: Custom fields
-  const orgFields = await tx.profileField.findMany({ where: { organizationId: camperProfile.organizationId } });
-  const valuesByFieldId = new Map(camperProfile.fieldValues.map((v) => [v.fieldId, v.value]));
-  for (const field of orgFields) {
-    if (field.required && !valuesByFieldId.get(field.id)) {
-      failures.push({ step: "custom_fields", code: "MISSING_FIELD", message: `"${field.label}" is required.` });
-    }
-  }
-
   // Step 8: Document validation
-  for (const req of year.documentRequirements) {
+  for (const req of camp.documentRequirements) {
     if (!req.required) continue;
     const hasDoc =
       req.scope === "CAMPER"
-        ? camperProfile.documents.some((d) => d.requirementId === req.id && d.status !== "REJECTED")
+        ? camper.documents.some((d) => d.requirementId === req.id && d.status !== "REJECTED")
         : registration.documents.some((d) => d.requirementId === req.id && d.status !== "REJECTED");
     if (!hasDoc) {
       failures.push({ step: "documents", code: "MISSING_DOCUMENT", message: `"${req.name}" is required.` });

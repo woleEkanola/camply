@@ -8,8 +8,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { OrgTree } from "@/components/orgStructure/OrgTree";
 import { StaffDetailDrawer } from "@/components/staff/StaffDetailDrawer";
 
-export function LeadershipTreeTab({ organizationId, yearId }: { organizationId: string; yearId: string }) {
-  const { data: tree = [], isLoading } = api.orgStructure.getLeadershipTree.useQuery({ organizationId, yearId }, { enabled: !!organizationId && !!yearId });
+export function LeadershipTreeTab({ organizationId, campId }: { organizationId: string; campId: string }) {
+  const { data: tree = [], isLoading } = api.orgStructure.getLeadershipTree.useQuery({ organizationId, campId }, { enabled: !!organizationId && !!campId });
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
@@ -27,7 +27,7 @@ export function LeadershipTreeTab({ organizationId, yearId }: { organizationId: 
       </Card>
 
       {selectedId && (
-        <StaffDetailDrawer staffId={selectedId} organizationId={organizationId} yearId={yearId} onClose={() => setSelectedId(null)} />
+        <StaffDetailDrawer staffId={selectedId} organizationId={organizationId} campId={campId} onClose={() => setSelectedId(null)} />
       )}
     </div>
   );

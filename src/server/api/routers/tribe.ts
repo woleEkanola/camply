@@ -2,17 +2,13 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import * as tribeEngine from "../../tribe/engine";
+import { assertOrgAdmin, assertOrgAdminOrCampusRep } from "../trpc/scoping";
 
-async function assertCanManageYear(ctx: { prisma: any; session: any }, yearId: string) {
-  const currentUser = ctx.session?.user;
-  if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  const year = await ctx.prisma.year.findUnique({ where: { id: yearId } });
-  if (!year) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
-  const hasPermission =
-    currentUser.role === "SUPER_ADMIN" ||
-    ((currentUser.role === "OWNER" || currentUser.role === "ADMIN") && currentUser.organizationId === year.organizationId);
-  if (!hasPermission) throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage tribes for this camp" });
-  return year;
+async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
+  const camp = await ctx.prisma.camp.findUnique({ where: { id: campId } });
+  if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+  await assertOrgAdmin(ctx, camp.organizationId);
+  return camp;
 }
 
 function toTRPCError(error: unknown): TRPCError {
@@ -25,13 +21,13 @@ function toTRPCError(error: unknown): TRPCError {
 }
 
 export const tribeRouter = createTRPCRouter({
-  listByYear: protectedProcedure
-    .input(z.object({ yearId: z.string() }))
+  listByCamp: protectedProcedure
+    .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       const tribes = await ctx.prisma.tribe.findMany({
-        where: { yearId: input.yearId },
+        where: { campId: input.campId },
         include: { _count: { select: { registrations: true } } },
         orderBy: { name: "asc" },
       });
@@ -40,14 +36,14 @@ export const tribeRouter = createTRPCRouter({
 
   create: protectedProcedure
     .input(z.object({
-      yearId: z.string(),
+      campId: z.string(),
       name: z.string().min(1),
       color: z.string().optional(),
       description: z.string().optional(),
       maxCapacity: z.number().int().min(1).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await assertCanManageYear(ctx, input.yearId);
+      await assertCanManageCamp(ctx, input.campId);
       return ctx.prisma.tribe.create({ data: input });
     }),
 
@@ -64,7 +60,7 @@ export const tribeRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.id } });
-      await assertCanManageYear(ctx, tribe.yearId);
+      await assertCanManageCamp(ctx, tribe.campId);
       return ctx.prisma.tribe.update({ where: { id: input.id }, data: input.data });
     }),
 
@@ -72,7 +68,7 @@ export const tribeRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.id } });
-      await assertCanManageYear(ctx, tribe.yearId);
+      await assertCanManageCamp(ctx, tribe.campId);
       const inUse = await ctx.prisma.registration.count({ where: { tribeId: input.id } });
       if (inUse > 0) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot delete a tribe with assigned campers. Reassign them first." });
@@ -83,25 +79,29 @@ export const tribeRouter = createTRPCRouter({
   // Allocation configuration for a camp (PRD Part 4A §5-8)
   updateAllocationConfig: protectedProcedure
     .input(z.object({
-      yearId: z.string(),
+      campId: z.string(),
       tribeAllocationEnabled: z.boolean().optional(),
       tribeAllocationMode: z.enum(["MANUAL", "AUTOMATIC", "HYBRID"]).optional(),
       tribeAllocationRules: z.array(z.object({ criterion: z.string(), enabled: z.boolean() })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await assertCanManageYear(ctx, input.yearId);
-      const { yearId, ...data } = input;
-      return ctx.prisma.year.update({ where: { id: yearId }, data });
+      await assertCanManageCamp(ctx, input.campId);
+      const { campId, ...data } = input;
+      return ctx.prisma.camp.update({ where: { id: campId }, data });
     }),
 
+  // Campus Rep scoping: a rep may only suggest/assign/clear tribe assignment
+  // on registrations belonging to their own assigned campus (re-verified
+  // against the DB, not the LOCATION_ADMIN role alone - this was previously
+  // a real cross-campus authorization gap).
   suggest: protectedProcedure
     .input(z.object({ registrationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session?.user;
-      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      if (!["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes(currentUser.role)) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       return tribeEngine.suggestTribe(ctx.prisma, input.registrationId);
     }),
 
@@ -110,9 +110,11 @@ export const tribeRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      if (!["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes(currentUser.role)) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
         return await tribeEngine.assignTribe({ registrationId: input.registrationId, tribeId: input.tribeId, actorId: currentUser.id });
       } catch (error) {
@@ -125,18 +127,20 @@ export const tribeRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      if (!["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes(currentUser.role)) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       return tribeEngine.clearTribeAssignment({ registrationId: input.registrationId, actorId: currentUser.id });
     }),
 
   bulkAutoAssign: protectedProcedure
-    .input(z.object({ yearId: z.string() }))
+    .input(z.object({ campId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
-      await assertCanManageYear(ctx, input.yearId);
-      return tribeEngine.bulkAutoAssignTribes({ yearId: input.yearId, actorId: currentUser!.id });
+      await assertCanManageCamp(ctx, input.campId);
+      return tribeEngine.bulkAutoAssignTribes({ campId: input.campId, actorId: currentUser!.id });
     }),
 
   // Camp Structure: competition points
@@ -145,7 +149,7 @@ export const tribeRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.tribeId } });
-      await assertCanManageYear(ctx, tribe.yearId);
+      await assertCanManageCamp(ctx, tribe.campId);
       const [updated] = await ctx.prisma.$transaction([
         ctx.prisma.tribe.update({ where: { id: input.tribeId }, data: { points: { increment: input.delta } } }),
         ctx.prisma.tribePointsLog.create({

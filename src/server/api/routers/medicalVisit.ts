@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"];
+const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
 async function assertMedicalStaffOrAdmin(ctx: { prisma: any; session: any; userId: string }, organizationId: string) {
   const currentUser = ctx.session?.user;
@@ -19,7 +19,7 @@ export const medicalVisitRouter = createTRPCRouter({
   create: protectedProcedure
     .input(z.object({
       organizationId: z.string(),
-      yearId: z.string(),
+      campId: z.string(),
       registrationId: z.string(),
       complaint: z.string(),
       treatment: z.string().optional(),
@@ -37,12 +37,12 @@ export const medicalVisitRouter = createTRPCRouter({
     }),
 
   recent: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertMedicalStaffOrAdmin(ctx, input.organizationId);
       return ctx.prisma.medicalVisit.findMany({
-        where: { organizationId: input.organizationId, yearId: input.yearId },
-        include: { registration: { include: { camperProfile: true } } },
+        where: { organizationId: input.organizationId, campId: input.campId },
+        include: { registration: { include: { camper: true } } },
         orderBy: { visitedAt: "desc" },
         take: 50,
       });

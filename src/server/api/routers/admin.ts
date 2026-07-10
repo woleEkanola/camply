@@ -6,12 +6,12 @@ import bcrypt from "bcryptjs";
 
 // PermissionType is not exported from @prisma/client after downgrade. Define as local enum to match schema.
 export enum PermissionType {
-  CREATE_LOCATION = "CREATE_LOCATION",
-  READ_LOCATION = "READ_LOCATION",
-  UPDATE_LOCATION = "UPDATE_LOCATION",
-  DELETE_LOCATION = "DELETE_LOCATION",
+  CREATE_CAMPUS = "CREATE_CAMPUS",
+  READ_CAMPUS = "READ_CAMPUS",
+  UPDATE_CAMPUS = "UPDATE_CAMPUS",
+  DELETE_CAMPUS = "DELETE_CAMPUS",
   MANAGE_ADMINS = "MANAGE_ADMINS",
-  MANAGE_LOCATION_ADMINS = "MANAGE_LOCATION_ADMINS",
+  MANAGE_CAMPUS_REPS = "MANAGE_CAMPUS_REPS",
   VIEW_ANALYTICS = "VIEW_ANALYTICS"
 }
 
@@ -21,12 +21,12 @@ const adminUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   organizationId: z.string(),
   permissions: z.array(z.enum([
-    PermissionType.CREATE_LOCATION,
-    PermissionType.READ_LOCATION,
-    PermissionType.UPDATE_LOCATION,
-    PermissionType.DELETE_LOCATION,
+    PermissionType.CREATE_CAMPUS,
+    PermissionType.READ_CAMPUS,
+    PermissionType.UPDATE_CAMPUS,
+    PermissionType.DELETE_CAMPUS,
     PermissionType.MANAGE_ADMINS,
-    PermissionType.MANAGE_LOCATION_ADMINS,
+    PermissionType.MANAGE_CAMPUS_REPS,
     PermissionType.VIEW_ANALYTICS
   ])),
 });
@@ -150,12 +150,12 @@ export const adminRouter = createTRPCRouter({
     .input(z.object({
       adminId: z.string(),
       permissions: z.array(z.enum([
-        PermissionType.CREATE_LOCATION,
-        PermissionType.READ_LOCATION,
-        PermissionType.UPDATE_LOCATION,
-        PermissionType.DELETE_LOCATION,
+        PermissionType.CREATE_CAMPUS,
+        PermissionType.READ_CAMPUS,
+        PermissionType.UPDATE_CAMPUS,
+        PermissionType.DELETE_CAMPUS,
         PermissionType.MANAGE_ADMINS,
-        PermissionType.MANAGE_LOCATION_ADMINS,
+        PermissionType.MANAGE_CAMPUS_REPS,
         PermissionType.VIEW_ANALYTICS
       ])),
     }))

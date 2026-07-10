@@ -28,10 +28,10 @@ export async function qrDataUrlForToken(token: string): Promise<string> {
 async function runEffect(registrationId: string, type: SideEffectType) {
   const registration = await prisma.registration.findUniqueOrThrow({
     where: { id: registrationId },
-    include: { camperProfile: { include: { user: true } }, year: true, location: true, tribe: true },
+    include: { camper: { include: { user: true } }, camp: true, campus: true, tribe: true },
   });
-  const parentEmail = registration.camperProfile.user.email;
-  const camperName = registration.camperProfile.name;
+  const parentEmail = registration.camper.user.email;
+  const camperName = registration.camper.name;
   const viewUrl = `${APP_URL}/dashboard/register/${registration.id}`;
 
   switch (type) {
@@ -43,24 +43,24 @@ async function runEffect(registrationId: string, type: SideEffectType) {
       await sendAcceptanceEmail({
         to: parentEmail,
         camperName,
-        campName: registration.year.name,
-        centreName: registration.location.name,
+        campName: registration.camp.name,
+        centreName: registration.campus.name,
         registrationNumber: registration.registrationNumber,
-        reportingDate: registration.year.arrivalDate?.toDateString(),
+        reportingDate: registration.camp.arrivalDate?.toDateString(),
         qrDataUrl,
         viewUrl,
-        remindersHtml: registration.year.remindersHtml,
+        remindersHtml: registration.camp.remindersHtml,
         tribeName: registration.tribe?.name,
         tribeColor: registration.tribe?.color,
       });
       await prisma.notification.create({
         data: {
-          organizationId: registration.camperProfile.organizationId,
-          userId: registration.camperProfile.userId,
+          organizationId: registration.camper.organizationId,
+          userId: registration.camper.userId,
           registrationId: registration.id,
           channel: "IN_APP",
           title: "Registration Approved",
-          body: `${camperName}'s registration for ${registration.year.name} has been approved.`,
+          body: `${camperName}'s registration for ${registration.camp.name} has been approved.`,
         },
       });
       break;
@@ -69,17 +69,17 @@ async function runEffect(registrationId: string, type: SideEffectType) {
       await sendRejectionEmail({
         to: parentEmail,
         camperName,
-        campName: registration.year.name,
+        campName: registration.camp.name,
         reason: registration.rejectionReason ?? "No reason provided.",
       });
       await prisma.notification.create({
         data: {
-          organizationId: registration.camperProfile.organizationId,
-          userId: registration.camperProfile.userId,
+          organizationId: registration.camper.organizationId,
+          userId: registration.camper.userId,
           registrationId: registration.id,
           channel: "IN_APP",
           title: "Registration Not Approved",
-          body: `${camperName}'s registration for ${registration.year.name} was not approved.`,
+          body: `${camperName}'s registration for ${registration.camp.name} was not approved.`,
         },
       });
       break;
@@ -88,14 +88,14 @@ async function runEffect(registrationId: string, type: SideEffectType) {
       await sendCorrectionEmail({
         to: parentEmail,
         camperName,
-        campName: registration.year.name,
+        campName: registration.camp.name,
         message: registration.correctionRequest ?? "Please review your registration.",
         viewUrl,
       });
       await prisma.notification.create({
         data: {
-          organizationId: registration.camperProfile.organizationId,
-          userId: registration.camperProfile.userId,
+          organizationId: registration.camper.organizationId,
+          userId: registration.camper.userId,
           registrationId: registration.id,
           channel: "IN_APP",
           title: "Action Needed",
@@ -105,15 +105,15 @@ async function runEffect(registrationId: string, type: SideEffectType) {
       break;
     }
     case "REGISTRATION_WAITLISTED": {
-      await sendWaitlistEmail({ to: parentEmail, camperName, campName: registration.year.name });
+      await sendWaitlistEmail({ to: parentEmail, camperName, campName: registration.camp.name });
       await prisma.notification.create({
         data: {
-          organizationId: registration.camperProfile.organizationId,
-          userId: registration.camperProfile.userId,
+          organizationId: registration.camper.organizationId,
+          userId: registration.camper.userId,
           registrationId: registration.id,
           channel: "IN_APP",
           title: "Waitlisted",
-          body: `${camperName} is on the waitlist for ${registration.year.name}.`,
+          body: `${camperName} is on the waitlist for ${registration.camp.name}.`,
         },
       });
       break;

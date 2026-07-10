@@ -6,15 +6,15 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 
-export function StaffLinkCard({ organizationId, yearId, type }: { organizationId: string; yearId: string; type: "TEACHER" | "VOLUNTEER" }) {
+export function StaffLinkCard({ organizationId, campId, type }: { organizationId: string; campId: string; type: "TEACHER" | "VOLUNTEER" }) {
   const utils = api.useUtils();
-  const { data } = api.staffSignupLink.getByYear.useQuery({ organizationId, yearId }, { enabled: !!organizationId && !!yearId });
+  const { data } = api.staffSignupLink.getByCamp.useQuery({ organizationId, campId }, { enabled: !!organizationId && !!campId });
   const [copied, setCopied] = useState(false);
 
   const entry = data?.find((d) => d.type === type);
   const link = entry?.link;
 
-  const invalidate = () => utils.staffSignupLink.getByYear.invalidate({ organizationId, yearId });
+  const invalidate = () => utils.staffSignupLink.getByCamp.invalidate({ organizationId, campId });
   const generate = api.staffSignupLink.generate.useMutation({ onSuccess: invalidate });
   const regenerate = api.staffSignupLink.regenerate.useMutation({ onSuccess: invalidate });
   const deactivate = api.staffSignupLink.deactivate.useMutation({ onSuccess: invalidate });
@@ -48,7 +48,7 @@ export function StaffLinkCard({ organizationId, yearId, type }: { organizationId
         </div>
 
         {!link ? (
-          <Button size="sm" loading={generate.isPending} onClick={() => generate.mutate({ organizationId, yearId, type })}>
+          <Button size="sm" loading={generate.isPending} onClick={() => generate.mutate({ organizationId, campId, type })}>
             Generate Link
           </Button>
         ) : (

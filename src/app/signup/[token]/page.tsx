@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "../../../utils/api";
+import { api } from "../../../utils/trpc";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
+import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
+import type { FormFieldDTO } from "@/components/forms/types";
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
 import Link from "next/link";
 import React from "react";
 import { useQuery } from '@tanstack/react-query';
@@ -72,12 +74,7 @@ function SignupForm({ token }: { token: string }) {
   const [step, setStep] = useState<'email' | 'otp' | 'profile'>('email');
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
-  const [name, setName] = useState("");
-  const [dob, setDob] = useState("");
-  const [gender, setGender] = useState("");
-  const [dynamicFields, setDynamicFields] = useState<any[]>([]);
-  const [dynamicValues, setDynamicValues] = useState<{ [key: string]: any }>({});
-  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [values, setValues] = useState<Record<string, unknown>>({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -91,29 +88,16 @@ function SignupForm({ token }: { token: string }) {
 
   const createDraft = api.registration.createDraft.useMutation();
 
-  // Fetch organizationId after OTP verified
-  useEffect(() => {
-    if (step === 'profile' && !organizationId && signupLinkData) {
-      // Get organizationId from validated token data
-      const orgId = signupLinkData.organizationId;
-      setOrganizationId(orgId);
-    }
-  }, [step, organizationId, signupLinkData]);
+  const organizationId = signupLinkData?.organizationId ?? "";
+  const { data: fields = [] } = api.formField.list.useQuery(
+    { organizationId, audience: "CAMPER" },
+    { enabled: !!organizationId && step === 'profile' }
+  );
+  const visibleFields = fields.filter((f: FormFieldDTO) => f.visible);
 
-  // Fetch dynamic profile fields
-  useEffect(() => {
-    if (organizationId) {
-      (async () => {
-        try {
-          const res = await fetch('/api/trpc/profileField.getByOrganization?input=' + encodeURIComponent(JSON.stringify({ organizationId })));
-          const json = await res.json();
-          setDynamicFields(json?.result?.data || []);
-        } catch (e) {
-          setError('Could not fetch profile fields.');
-        }
-      })();
-    }
-  }, [organizationId]);
+  function setValue(key: string, value: unknown) {
+    setValues((v) => ({ ...v, [key]: value }));
+  }
 
   if (isSignupLinkLoading) {
     return (
@@ -311,8 +295,8 @@ function SignupForm({ token }: { token: string }) {
                     body: JSON.stringify({ 
                       email, 
                       organizationId: signupLinkData?.organizationId,
-                      locationId: signupLinkData?.locationId,
-                      yearId: signupLinkData?.yearId
+                      campusId: signupLinkData?.campusId,
+                      campId: signupLinkData?.campId
                     }),
                   });
                   const data = await res.json();
@@ -405,8 +389,8 @@ function SignupForm({ token }: { token: string }) {
                     body: JSON.stringify({ 
                       email, 
                       organizationId: signupLinkData?.organizationId,
-                      locationId: signupLinkData?.locationId,
-                      yearId: signupLinkData?.yearId
+                      campusId: signupLinkData?.campusId,
+                      campId: signupLinkData?.campId
                     }),
                   });
                   const data = await res.json();
@@ -502,25 +486,27 @@ function SignupForm({ token }: { token: string }) {
                   setIsLoading(false);
                   return;
                 }
-                // Proceed to profile step
+                // Sign in with OTP to establish a session, then proceed to
+                // the profile step — do NOT redirect to /dashboard here.
+                // (This used to race: signIn+router.push('/dashboard') ran
+                // unconditionally right after setStep('profile'), often
+                // navigating away before the profile step ever rendered.)
+                const signInResult = await signIn("credentials", {
+                  redirect: false,
+                  email,
+                  otp,
+                });
+                if (!signInResult?.ok) {
+                  setError("Failed to sign in after OTP verification.");
+                  setIsLoading(false);
+                  return;
+                }
                 setStep('profile');
+                setIsLoading(false);
               } catch (err) {
                 setError('Network error. Please try again.');
                 setIsLoading(false);
               }
-              // Sign in with OTP for session
-              console.log("Signing in with:", { email, otp });
-              const signInResult = await signIn("credentials", {
-                redirect: false,
-                email,
-                otp,
-              });
-              if (signInResult?.ok) {
-                router.push('/dashboard');
-              } else {
-                setError("Failed to sign in after OTP verification.");
-              }
-              setIsLoading(false);
             }}>
               <div className="mb-5">
                 <input 
@@ -589,16 +575,21 @@ function SignupForm({ token }: { token: string }) {
               e.preventDefault();
               setIsLoading(true);
               setError("");
-              // Build dynamic field values array
-              const fieldValues = dynamicFields.map(field => ({
-                fieldId: field.id,
-                value: dynamicValues[field.id] || ""
-              }));
+              // Split the generic values map back into the signup route's
+              // named fields (name/dob/gender) plus fieldValues for CUSTOM fields.
+              const fieldValues: { fieldId: string; value: string }[] = [];
+              for (const f of fields as FormFieldDTO[]) {
+                if (f.source !== "CUSTOM") continue;
+                const v = values[f.id];
+                if (v !== undefined && v !== null && v !== "") {
+                  fieldValues.push({ fieldId: f.id, value: Array.isArray(v) ? JSON.stringify(v) : String(v) });
+                }
+              }
               const payload = {
                 email,
-                name,
-                dob,
-                gender,
+                name: String(values["name"] ?? ""),
+                dob: String(values["dateOfBirth"] ?? ""),
+                gender: String(values["gender"] ?? ""),
                 token,
                 fieldValues
               };
@@ -614,13 +605,13 @@ function SignupForm({ token }: { token: string }) {
                 return;
               }
 
-              // Create a draft registration for this camper against the camp/centre
+              // Create a draft registration for this camper against the camp/campus
               // encoded in the signup link, then send the parent to finish it.
               try {
                 const draft = await createDraft.mutateAsync({
-                  camperProfileId: data.camperProfileId,
-                  yearId: signupLinkData!.yearId,
-                  locationId: signupLinkData!.locationId,
+                  camperId: data.camperId,
+                  campId: signupLinkData!.campId,
+                  campusId: signupLinkData!.campusId,
                 });
                 setSuccess('Profile created! Continuing to registration...');
                 setIsLoading(false);
@@ -631,60 +622,9 @@ function SignupForm({ token }: { token: string }) {
               }
             }}>
               <div className="mb-4">
-                <input 
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm" 
-                  type="text" 
-                  placeholder="Full Name"
-                  value={name} 
-                  onChange={e => setName(e.target.value)} 
-                  required 
-                />
+                <DynamicFieldGroup fields={visibleFields} values={values} onChange={setValue} />
               </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1 ml-2">Date of Birth</label>
-                <input 
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm" 
-                  type="date" 
-                  value={dob} 
-                  onChange={e => setDob(e.target.value)} 
-                  required 
-                />
-              </div>
-              <div className="mb-4">
-                <select 
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm" 
-                  value={gender} 
-                  onChange={e => setGender(e.target.value)} 
-                  required
-                >
-                  <option value="">Select Gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              
-              {dynamicFields.length > 0 && (
-                <div className="mt-6 mb-4">
-                  <h3 className="text-lg font-medium text-gray-800 mb-3">Additional Information</h3>
-                  <div className="space-y-4">
-                    {dynamicFields.map(field => (
-                      <div key={field.id}>
-                        <label className="block text-sm font-medium text-gray-700 mb-1 ml-2">{field.name}</label>
-                        <input
-                          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
-                          type="text"
-                          placeholder={field.name}
-                          value={dynamicValues[field.id] || ""}
-                          onChange={e => setDynamicValues(v => ({ ...v, [field.id]: e.target.value }))}
-                          required={field.required}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
+
               <button 
                 className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 mt-4" 
                 type="submit" 

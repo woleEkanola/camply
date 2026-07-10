@@ -32,7 +32,7 @@ export default function TeacherCampersPage() {
           return (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {assignments.map((a: any) => {
-                const camper = a.registration.camperProfile;
+                const camper = a.registration.camper;
                 const hasAlert = camper.allergies || camper.medicalConditions;
                 const camperAge = age(camper.dateOfBirth);
                 return (

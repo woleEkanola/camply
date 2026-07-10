@@ -24,12 +24,12 @@ function VolunteerMedicalContent({ profile, organizationId }: { profile: any; or
   );
 
   const utils = api.useUtils();
-  const { data: recent = [] } = api.medicalVisit.recent.useQuery({ organizationId, yearId: profile.yearId }, { enabled: !!organizationId });
+  const { data: recent = [] } = api.medicalVisit.recent.useQuery({ organizationId, campId: profile.campId }, { enabled: !!organizationId });
   const createVisit = api.medicalVisit.create.useMutation({
     onSuccess: () => {
       setComplaint("");
       setTreatment("");
-      utils.medicalVisit.recent.invalidate({ organizationId, yearId: profile.yearId });
+      utils.medicalVisit.recent.invalidate({ organizationId, campId: profile.campId });
     },
   });
 
@@ -71,7 +71,7 @@ function VolunteerMedicalContent({ profile, organizationId }: { profile: any; or
               <Button
                 disabled={!complaint}
                 loading={createVisit.isPending}
-                onClick={() => createVisit.mutate({ organizationId, yearId: profile.yearId, registrationId: selectedRegistrationId, complaint, treatment })}
+                onClick={() => createVisit.mutate({ organizationId, campId: profile.campId, registrationId: selectedRegistrationId, complaint, treatment })}
               >
                 Log Visit
               </Button>
@@ -86,7 +86,7 @@ function VolunteerMedicalContent({ profile, organizationId }: { profile: any; or
           <div className="space-y-2 text-sm">
             {recent.map((v: any) => (
               <div key={v.id} className="border-b border-neutral-100 py-2">
-                <div className="font-medium text-neutral-900">{v.registration.camperProfile.name}</div>
+                <div className="font-medium text-neutral-900">{v.registration.camper.name}</div>
                 <div className="text-neutral-500">{v.complaint} — {new Date(v.visitedAt).toLocaleString()}</div>
               </div>
             ))}

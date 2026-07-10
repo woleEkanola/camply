@@ -10,9 +10,9 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
 import { DepartmentDetailPanel } from "@/components/orgStructure/DepartmentDetailPanel";
 
-export function DepartmentManager({ organizationId, yearId }: { organizationId: string; yearId: string }) {
+export function DepartmentManager({ organizationId, campId }: { organizationId: string; campId: string }) {
   const utils = api.useUtils();
-  const { data: departments = [], isLoading } = api.orgStructure.getDepartmentStructure.useQuery({ organizationId, yearId }, { enabled: !!organizationId && !!yearId });
+  const { data: departments = [], isLoading } = api.orgStructure.getDepartmentStructure.useQuery({ organizationId, campId }, { enabled: !!organizationId && !!campId });
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
@@ -22,8 +22,8 @@ export function DepartmentManager({ organizationId, yearId }: { organizationId: 
   const [responsibilitiesText, setResponsibilitiesText] = useState("");
 
   const invalidate = () => {
-    utils.orgStructure.getDepartmentStructure.invalidate({ organizationId, yearId });
-    utils.department.list.invalidate({ organizationId, yearId });
+    utils.orgStructure.getDepartmentStructure.invalidate({ organizationId, campId });
+    utils.department.list.invalidate({ organizationId, campId });
   };
   const create = api.department.create.useMutation({ onSuccess: () => { setCreateOpen(false); setName(""); setDescription(""); invalidate(); } });
   const remove = api.department.delete.useMutation({ onSuccess: invalidate });
@@ -80,7 +80,7 @@ export function DepartmentManager({ organizationId, yearId }: { organizationId: 
             className="w-full"
             disabled={!name}
             loading={create.isPending}
-            onClick={() => create.mutate({ organizationId, yearId, name, description: description || undefined })}
+            onClick={() => create.mutate({ organizationId, campId, name, description: description || undefined })}
           >
             Create
           </Button>

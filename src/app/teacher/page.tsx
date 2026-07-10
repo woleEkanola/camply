@@ -13,7 +13,7 @@ import { StaffGate } from "@/components/staff/StaffGate";
 function TeacherDashboardContent({ profile, organizationId }: { profile: any; organizationId: string }) {
   const router = useRouter();
   const { data: summary } = api.attendance.todaySummary.useQuery(
-    { organizationId, yearId: profile.yearId },
+    { organizationId, campId: profile.campId },
     { enabled: !!organizationId }
   );
   const { data: notifications = [] } = api.notification.listMine.useQuery(undefined, { enabled: true });
@@ -21,7 +21,7 @@ function TeacherDashboardContent({ profile, organizationId }: { profile: any; or
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card><CardBody><div className="text-xs text-neutral-500">My Centre</div><div className="mt-1 font-medium text-neutral-900">{profile.assignedLocation?.name ?? "Unassigned"}</div></CardBody></Card>
+        <Card><CardBody><div className="text-xs text-neutral-500">My Venue</div><div className="mt-1 font-medium text-neutral-900">{profile.assignedVenue?.name ?? "Unassigned"}</div></CardBody></Card>
         <Card><CardBody><div className="text-xs text-neutral-500">My Tribe</div><div className="mt-1 font-medium text-neutral-900">{profile.assignedTribe?.name ?? "Unassigned"}</div></CardBody></Card>
         <StatCard label="Today's Attendance" value={summary?.total ?? 0} insight={summary ? `${summary.present} present` : undefined} />
         <StatCard label="Assigned Campers" value={profile.camperAssignments?.length ?? 0} />

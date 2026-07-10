@@ -26,7 +26,7 @@ export default function CheckInPage() {
   const { data: session, status } = useSession({ required: true, onUnauthenticated: () => router.push("/login") });
 
   useEffect(() => {
-    if (status === "authenticated" && !["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes((session?.user as ExtendedUser)?.role ?? "")) {
+    if (status === "authenticated" && !["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"].includes((session?.user as ExtendedUser)?.role ?? "")) {
       router.push("/admin");
     }
   }, [session, status, router]);
@@ -113,13 +113,13 @@ export default function CheckInPage() {
 
         {(results ?? []).map((registration: any) => {
           const outcome = outcomeFor(registration);
-          const hasMedicalAlert = registration.camperProfile?.allergies || registration.camperProfile?.medicalConditions;
+          const hasMedicalAlert = registration.camper?.allergies || registration.camper?.medicalConditions;
           return (
             <Card key={registration.id}>
               <CardBody className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-lg font-semibold text-neutral-900">{registration.camperProfile?.name}</div>
+                    <div className="text-lg font-semibold text-neutral-900">{registration.camper?.name}</div>
                     <div className="text-sm text-neutral-500">{registration.registrationNumber}</div>
                   </div>
                   <Badge tone={outcome.tone}>{outcome.label}</Badge>
@@ -127,7 +127,7 @@ export default function CheckInPage() {
 
                 {hasMedicalAlert && (
                   <div className="rounded-lg border border-danger-300 bg-danger-50 p-3 font-medium text-danger-800">
-                    ⚠ Medical Alert: {registration.camperProfile.allergies} {registration.camperProfile.medicalConditions}
+                    ⚠ Medical Alert: {registration.camper.allergies} {registration.camper.medicalConditions}
                   </div>
                 )}
 
@@ -135,8 +135,8 @@ export default function CheckInPage() {
                   <div><span className="font-medium text-neutral-700">Camp:</span> {registration.year?.name}</div>
                   <div><span className="font-medium text-neutral-700">Centre:</span> {registration.location?.name}</div>
                   {registration.tribe && <div><span className="font-medium text-neutral-700">Tribe:</span> {registration.tribe.name}</div>}
-                  <div><span className="font-medium text-neutral-700">Gender:</span> {registration.camperProfile?.gender || "—"}</div>
-                  <div><span className="font-medium text-neutral-700">DOB:</span> {registration.camperProfile?.dateOfBirth ? new Date(registration.camperProfile.dateOfBirth).toLocaleDateString() : "—"}</div>
+                  <div><span className="font-medium text-neutral-700">Gender:</span> {registration.camper?.gender || "—"}</div>
+                  <div><span className="font-medium text-neutral-700">DOB:</span> {registration.camper?.dateOfBirth ? new Date(registration.camper.dateOfBirth).toLocaleDateString() : "—"}</div>
                 </div>
 
                 {registration.checkedInAt && (

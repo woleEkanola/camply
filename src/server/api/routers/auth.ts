@@ -5,7 +5,7 @@ import { prisma } from "../../db";
 import bcrypt from "bcryptjs";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
 
 export const authRouter = createTRPCRouter({
   login: publicProcedure
@@ -41,7 +41,7 @@ export const authRouter = createTRPCRouter({
       password: z.string().min(8),
       firstName: z.string(),
       lastName: z.string(),
-      role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"]),
+      role: z.enum(["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"]),
       organizationId: z.string()
     }))
     .mutation(async ({ ctx, input }) => {

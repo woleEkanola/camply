@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 
 // UserRole and ProfileFieldType do not exist as types or enums in the generated Prisma client after the downgrade.
 // If you need these enums for UI logic, define them locally to match your schema.
-export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN";
+export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
 export type ProfileFieldType = "TEXT" | "NUMBER" | "DATE" | "BOOLEAN" | "SELECT" | "MULTI_SELECT" | "FILE";
 
 interface ExtendedUser {
@@ -40,7 +40,7 @@ export default function CampersPage() {
         (session?.user as ExtendedUser)?.role !== "SUPER_ADMIN" && 
         (session?.user as ExtendedUser)?.role !== "OWNER" && 
         (session?.user as ExtendedUser)?.role !== "ADMIN" && 
-        (session?.user as ExtendedUser)?.role !== "LOCATION_ADMIN") {
+        (session?.user as ExtendedUser)?.role !== "CAMPUS_REPRESENTATIVE") {
       router.push("/");
     }
   }, [session, status, router]);
@@ -50,7 +50,7 @@ export default function CampersPage() {
   return (
     <AppShell area="admin">
       <div className="mx-auto">
-        <PageHeader title="Camper Profiles" />
+        <PageHeader title="Campers" />
 
         {error && (
           <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">

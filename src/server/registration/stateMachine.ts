@@ -7,12 +7,12 @@ import type { RegistrationStatus } from "@prisma/client";
  */
 const TRANSITIONS: Record<RegistrationStatus, RegistrationStatus[]> = {
   DRAFT: ["SUBMITTED"],
-  SUBMITTED: ["PENDING", "APPROVED"], // APPROVED only when year.approvalMode === "AUTO"
+  SUBMITTED: ["PENDING", "APPROVED"], // APPROVED only when camp.approvalMode === "AUTO"
   PENDING: ["APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CANCELLED"],
   REQUIRES_ACTION: ["PENDING"],
   WAITLISTED: ["APPROVED", "REJECTED", "CANCELLED"],
   APPROVED: ["CANCELLED", "CHECKED_IN", "ARCHIVED"],
-  REJECTED: ["PENDING", "ARCHIVED"], // resubmission only if year.allowResubmission
+  REJECTED: ["PENDING", "ARCHIVED"], // resubmission only if camp.allowResubmission
   CANCELLED: ["ARCHIVED"],
   CHECKED_IN: ["COMPLETED", "ARCHIVED"],
   COMPLETED: ["ARCHIVED"],

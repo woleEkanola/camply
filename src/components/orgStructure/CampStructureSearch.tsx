@@ -8,11 +8,11 @@ import { StaffDetailDrawer } from "@/components/staff/StaffDetailDrawer";
 
 const KIND_LABEL: Record<string, string> = { staff: "Person", department: "Department", tribe: "Tribe", hostel: "Hostel" };
 
-export function CampStructureSearch({ organizationId, yearId }: { organizationId: string; yearId: string }) {
+export function CampStructureSearch({ organizationId, campId }: { organizationId: string; campId: string }) {
   const [query, setQuery] = useState("");
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const { data: results = [] } = api.orgStructure.search.useQuery(
-    { organizationId, yearId, query },
+    { organizationId, campId, query },
     { enabled: query.length > 1 }
   );
 
@@ -46,7 +46,7 @@ export function CampStructureSearch({ organizationId, yearId }: { organizationId
       )}
 
       {selectedStaffId && (
-        <StaffDetailDrawer staffId={selectedStaffId} organizationId={organizationId} yearId={yearId} onClose={() => setSelectedStaffId(null)} />
+        <StaffDetailDrawer staffId={selectedStaffId} organizationId={organizationId} campId={campId} onClose={() => setSelectedStaffId(null)} />
       )}
     </div>
   );

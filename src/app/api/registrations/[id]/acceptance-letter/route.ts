@@ -14,15 +14,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const registration = await prisma.registration.findUnique({
     where: { id },
-    include: { camperProfile: true, year: true, location: true },
+    include: { camper: true, camp: true, campus: true },
   });
   if (!registration) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const currentUser = session.user as any;
-  const isOwner = registration.camperProfile.userId === currentUser.id;
-  const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes(currentUser.role);
+  const isOwner = registration.camper.userId === currentUser.id;
+  const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"].includes(currentUser.role);
   if (!isOwner && !isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -33,13 +33,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const qrDataUrl = await qrDataUrlForToken(registration.qrToken);
   const pdfBytes = await generateAcceptanceLetterPdf({
-    campName: registration.year.name,
-    centreName: registration.location.name,
-    camperName: registration.camperProfile.name,
+    campName: registration.camp.name,
+    campusName: registration.campus.name,
+    camperName: registration.camper.name,
     registrationNumber: registration.registrationNumber,
-    reportingDate: registration.year.arrivalDate?.toDateString(),
+    reportingDate: registration.camp.arrivalDate?.toDateString(),
     qrDataUrl,
-    instructionsHtml: registration.year.remindersHtml,
+    instructionsHtml: registration.camp.remindersHtml,
   });
 
   return new NextResponse(pdfBytes, {

@@ -52,8 +52,9 @@ export const notificationRouter = createTRPCRouter({
       organizationId: z.string(),
       title: z.string().min(1),
       body: z.string().min(1),
-      yearId: z.string().optional(),
-      locationId: z.string().optional(),
+      campId: z.string().optional(),
+      campusId: z.string().optional(),
+      venueId: z.string().optional(),
       status: z.string().optional(),
       audience: z.enum(["PARENTS", "TEACHERS", "VOLUNTEERS", "ALL"]).default("PARENTS"),
     }))
@@ -67,20 +68,22 @@ export const notificationRouter = createTRPCRouter({
       let userIds: string[] = [];
 
       if (input.audience === "PARENTS" || input.audience === "ALL") {
+        // Registration notifications target Campus (parents identify with their church branch).
         const registrations = await ctx.prisma.registration.findMany({
           where: {
-            location: { organizationId: input.organizationId },
-            ...(input.yearId && { yearId: input.yearId }),
-            ...(input.locationId && { locationId: input.locationId }),
+            campus: { organizationId: input.organizationId },
+            ...(input.campId && { campId: input.campId }),
+            ...(input.campusId && { campusId: input.campusId }),
             ...(input.status && { status: input.status as any }),
           },
-          select: { camperProfileId: true, camperProfile: { select: { userId: true } } },
-          distinct: ["camperProfileId"],
+          select: { camperId: true, camper: { select: { userId: true } } },
+          distinct: ["camperId"],
         });
-        userIds.push(...registrations.map((r: { camperProfile: { userId: string } }) => r.camperProfile.userId));
+        userIds.push(...registrations.map((r: { camper: { userId: string } }) => r.camper.userId));
       }
 
       if (input.audience === "TEACHERS" || input.audience === "VOLUNTEERS" || input.audience === "ALL") {
+        // Operational/staff notifications target Venue (staff operate at the physical camp site).
         const staffTypes: ("TEACHER" | "VOLUNTEER")[] =
           input.audience === "TEACHERS" ? ["TEACHER"] : input.audience === "VOLUNTEERS" ? ["VOLUNTEER"] : ["TEACHER", "VOLUNTEER"];
         const staffProfiles = await ctx.prisma.staffProfile.findMany({
@@ -88,8 +91,8 @@ export const notificationRouter = createTRPCRouter({
             organizationId: input.organizationId,
             type: { in: staffTypes },
             status: "APPROVED",
-            ...(input.yearId && { yearId: input.yearId }),
-            ...(input.locationId && { assignedLocationId: input.locationId }),
+            ...(input.campId && { campId: input.campId }),
+            ...(input.venueId && { assignedVenueId: input.venueId }),
           },
           select: { userId: true },
         });

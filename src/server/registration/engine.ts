@@ -23,17 +23,18 @@ function generateQrToken(): string {
 }
 
 /**
- * Assigns the next sequential registration number for a year+location pair
+ * Assigns the next sequential registration number for a camp+campus pair
  * using a row-level lock on the counter so concurrent approvals can never
- * collide or skip (PRD Part 4 §6-7).
+ * collide or skip (PRD Part 4 §6-7). The registration number identifies
+ * which campus a camper is from - it never encodes the Venue.
  */
 async function nextRegistrationNumber(
   tx: Prisma.TransactionClient,
-  params: { orgCode: string | null; yearName: string; locationCode: string | null; yearId: string; locationId: string }
+  params: { orgCode: string | null; campName: string; campusCode: string | null; campId: string; campusId: string }
 ): Promise<string> {
   const counter = await tx.registrationCounter.upsert({
-    where: { yearId_locationId: { yearId: params.yearId, locationId: params.locationId } },
-    create: { yearId: params.yearId, locationId: params.locationId, value: 0 },
+    where: { campId_campusId: { campId: params.campId, campusId: params.campusId } },
+    create: { campId: params.campId, campusId: params.campusId, value: 0 },
     update: {},
   });
 
@@ -44,34 +45,42 @@ async function nextRegistrationNumber(
   const seq = updated[0]?.value ?? counter.value + 1;
 
   const org = params.orgCode ?? "ORG";
-  const loc = params.locationCode ?? "GEN";
+  const campus = params.campusCode ?? "GEN";
   const seqStr = String(seq).padStart(5, "0");
-  return `${org}-${params.yearName}-${loc}-${seqStr}`;
+  return `${org}-${params.campName}-${campus}-${seqStr}`;
 }
 
-/** Creates (or returns the existing) draft registration for a camper+year+location. */
+/**
+ * Creates (or returns the existing) draft registration for a camper+camp+campus.
+ * Venue is intentionally NOT accepted here - parents pick a Campus at signup;
+ * Venue assignment happens later, at approval/allocation time.
+ */
 export async function createDraft(params: {
-  camperProfileId: string;
-  yearId: string;
-  locationId: string;
+  camperId: string;
+  campId: string;
+  campusId: string;
   actorId: string;
 }) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.registration.findUnique({
-      where: { camperProfileId_yearId: { camperProfileId: params.camperProfileId, yearId: params.yearId } },
+      where: { camperId_campId: { camperId: params.camperId, campId: params.campId } },
     });
     if (existing) return existing;
 
     const registration = await tx.registration.create({
       data: {
-        camperProfileId: params.camperProfileId,
-        yearId: params.yearId,
-        locationId: params.locationId,
+        camperId: params.camperId,
+        campId: params.campId,
+        campusId: params.campusId,
         status: "DRAFT",
       },
     });
 
-    const camper = await tx.camperProfile.findUniqueOrThrow({ where: { id: params.camperProfileId } });
+    const camper = await tx.camper.findUniqueOrThrow({ where: { id: params.camperId } });
+    await tx.camper.update({
+      where: { id: params.camperId },
+      data: { homeCampusId: params.campusId },
+    });
     await logEvent(tx, {
       organizationId: camper.organizationId,
       registrationId: registration.id,
@@ -89,7 +98,7 @@ export async function submitRegistration(params: { registrationId: string; actor
   const result = await prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true, year: true, location: true },
+      include: { camper: true, camp: true, campus: true },
     });
 
     assertTransition(registration.status, "SUBMITTED");
@@ -99,7 +108,7 @@ export async function submitRegistration(params: { registrationId: string; actor
       throw new RegistrationValidationError(failures);
     }
 
-    const nextStatus: RegistrationStatus = registration.year.approvalMode === "AUTO" ? "APPROVED" : "PENDING";
+    const nextStatus: RegistrationStatus = registration.camp.approvalMode === "AUTO" ? "APPROVED" : "PENDING";
 
     await tx.registration.update({
       where: { id: registration.id },
@@ -107,7 +116,7 @@ export async function submitRegistration(params: { registrationId: string; actor
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "REGISTRATION_SUBMITTED",
@@ -121,7 +130,7 @@ export async function submitRegistration(params: { registrationId: string; actor
 
     const pending = await tx.registration.update({ where: { id: registration.id }, data: { status: "PENDING" } });
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "REGISTRATION_PENDING_REVIEW",
@@ -145,21 +154,40 @@ async function approveRegistrationInTx(
   tx: Prisma.TransactionClient,
   params: { registrationId: string; actorId: string | null }
 ) {
-  const registration = await tx.registration.findUniqueOrThrow({
+  let registration = await tx.registration.findUniqueOrThrow({
     where: { id: params.registrationId },
-    include: { camperProfile: true, year: true, location: true },
+    include: { camper: true, camp: { include: { venues: true } }, campus: true, venue: true },
   });
 
   assertTransition(registration.status, "APPROVED");
 
+  // Venue assignment is deferred until approval (parents only pick a Campus at
+  // signup). Auto-assign when the Camp has exactly one Venue; otherwise the
+  // approver must assign one manually first.
+  if (!registration.venueId) {
+    if (registration.camp.venues.length === 1) {
+      const soleVenue = registration.camp.venues[0];
+      registration = await tx.registration.update({
+        where: { id: registration.id },
+        data: { venueId: soleVenue.id, venueAssignedAt: new Date() },
+        include: { camper: true, camp: { include: { venues: true } }, campus: true, venue: true },
+      });
+    } else {
+      throw new RegistrationEngineError(
+        "VENUE_NOT_ASSIGNED",
+        "Assign a venue before approving this registration."
+      );
+    }
+  }
+
   // Re-check capacity under lock to prevent overbooking on concurrent approvals.
-  if (registration.location.quota > 0) {
-    await tx.$queryRaw`SELECT id FROM "Location" WHERE id = ${registration.location.id} FOR UPDATE`;
+  if (registration.venue && registration.venue.quota > 0) {
+    await tx.$queryRaw`SELECT id FROM "Venue" WHERE id = ${registration.venue.id} FOR UPDATE`;
     const approvedCount = await tx.registration.count({
-      where: { locationId: registration.location.id, status: "APPROVED" },
+      where: { venueId: registration.venue.id, status: "APPROVED" },
     });
-    if (approvedCount >= registration.location.quota) {
-      if (registration.location.fullBehavior === "PENDING_OK") {
+    if (approvedCount >= registration.venue.quota) {
+      if (registration.venue.fullBehavior === "PENDING_OK") {
         // allow over-capacity approval if explicitly configured
       } else {
         const waitlisted = await tx.registration.update({
@@ -167,7 +195,7 @@ async function approveRegistrationInTx(
           data: { status: "WAITLISTED" },
         });
         await logEvent(tx, {
-          organizationId: registration.camperProfile.organizationId,
+          organizationId: registration.camper.organizationId,
           registrationId: registration.id,
           actorId: params.actorId,
           action: "REGISTRATION_WAITLISTED",
@@ -180,11 +208,11 @@ async function approveRegistrationInTx(
   }
 
   const registrationNumber = await nextRegistrationNumber(tx, {
-    orgCode: registration.year.orgCode,
-    yearName: registration.year.name,
-    locationCode: registration.location.code,
-    yearId: registration.year.id,
-    locationId: registration.location.id,
+    orgCode: registration.camp.orgCode,
+    campName: registration.camp.name,
+    campusCode: registration.campus.code,
+    campId: registration.camp.id,
+    campusId: registration.campus.id,
   });
   const qrToken = generateQrToken();
 
@@ -199,7 +227,7 @@ async function approveRegistrationInTx(
   });
 
   await logEvent(tx, {
-    organizationId: registration.camperProfile.organizationId,
+    organizationId: registration.camper.organizationId,
     registrationId: registration.id,
     actorId: params.actorId,
     action: "REGISTRATION_APPROVED",
@@ -225,7 +253,7 @@ export async function rejectRegistration(params: { registrationId: string; actor
   const updated = await prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
     assertTransition(registration.status, "REJECTED");
 
@@ -235,7 +263,7 @@ export async function rejectRegistration(params: { registrationId: string; actor
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "REGISTRATION_REJECTED",
@@ -254,7 +282,7 @@ export async function waitlistRegistration(params: { registrationId: string; act
   const updated = await prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
     assertTransition(registration.status, "WAITLISTED");
 
@@ -264,7 +292,7 @@ export async function waitlistRegistration(params: { registrationId: string; act
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "REGISTRATION_WAITLISTED",
@@ -283,7 +311,7 @@ export async function assignReviewer(params: { registrationId: string; actorId: 
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
 
     const updated = await tx.registration.update({
@@ -292,7 +320,7 @@ export async function assignReviewer(params: { registrationId: string; actorId: 
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "REVIEWER_ASSIGNED",
@@ -308,7 +336,7 @@ export async function addInternalNote(params: { registrationId: string; actorId:
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
 
     const existingNotes = Array.isArray(registration.internalNotes) ? registration.internalNotes : [];
@@ -319,7 +347,7 @@ export async function addInternalNote(params: { registrationId: string; actorId:
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "INTERNAL_NOTE_ADDED",
@@ -334,7 +362,7 @@ export async function requestCorrection(params: { registrationId: string; actorI
   const updated = await prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
     assertTransition(registration.status, "REQUIRES_ACTION");
 
@@ -344,7 +372,7 @@ export async function requestCorrection(params: { registrationId: string; actorI
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "CORRECTION_REQUESTED",
@@ -364,10 +392,10 @@ export async function resubmitRegistration(params: { registrationId: string; act
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true, year: true },
+      include: { camper: true, camp: true },
     });
 
-    if (registration.status === "REJECTED" && !registration.year.allowResubmission) {
+    if (registration.status === "REJECTED" && !registration.camp.allowResubmission) {
       throw new RegistrationEngineError("RESUBMISSION_NOT_ALLOWED", "This camp does not allow resubmission after rejection.");
     }
 
@@ -384,7 +412,7 @@ export async function resubmitRegistration(params: { registrationId: string; act
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "REGISTRATION_RESUBMITTED",
@@ -400,7 +428,7 @@ export async function cancelRegistration(params: { registrationId: string; actor
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
     assertTransition(registration.status, "CANCELLED");
 
@@ -410,7 +438,7 @@ export async function cancelRegistration(params: { registrationId: string; actor
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "REGISTRATION_CANCELLED",
@@ -426,14 +454,14 @@ export async function archiveRegistration(params: { registrationId: string; acto
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
     assertTransition(registration.status, "ARCHIVED");
 
     const updated = await tx.registration.update({ where: { id: registration.id }, data: { status: "ARCHIVED" } });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "REGISTRATION_ARCHIVED",
@@ -449,7 +477,7 @@ export async function checkInRegistration(params: { registrationId: string; acto
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
     assertTransition(registration.status, "CHECKED_IN");
 
@@ -459,7 +487,7 @@ export async function checkInRegistration(params: { registrationId: string; acto
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "CHECK_IN_COMPLETED",
@@ -475,7 +503,7 @@ export async function checkOutRegistration(params: { registrationId: string; act
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
     if (registration.status !== "CHECKED_IN") {
       throw new RegistrationEngineError("NOT_CHECKED_IN", "Camper is not currently checked in.");
@@ -487,7 +515,7 @@ export async function checkOutRegistration(params: { registrationId: string; act
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "CHECK_OUT_COMPLETED",
@@ -498,33 +526,33 @@ export async function checkOutRegistration(params: { registrationId: string; act
   });
 }
 
-export async function transferCentre(params: { registrationId: string; actorId: string; newLocationId: string }) {
+export async function transferVenue(params: { registrationId: string; actorId: string; newVenueId: string }) {
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
 
-    const newLocation = await tx.location.findUniqueOrThrow({ where: { id: params.newLocationId } });
-    if (newLocation.quota > 0 && registration.status === "APPROVED") {
-      const approvedCount = await tx.registration.count({ where: { locationId: newLocation.id, status: "APPROVED" } });
-      if (approvedCount >= newLocation.quota) {
-        throw new RegistrationEngineError("CENTRE_FULL", "The destination centre is at capacity.");
+    const newVenue = await tx.venue.findUniqueOrThrow({ where: { id: params.newVenueId } });
+    if (newVenue.quota > 0 && registration.status === "APPROVED") {
+      const approvedCount = await tx.registration.count({ where: { venueId: newVenue.id, status: "APPROVED" } });
+      if (approvedCount >= newVenue.quota) {
+        throw new RegistrationEngineError("VENUE_FULL", "The destination venue is at capacity.");
       }
     }
 
     const updated = await tx.registration.update({
       where: { id: registration.id },
-      data: { locationId: params.newLocationId },
+      data: { venueId: params.newVenueId, venueAssignedAt: new Date() },
     });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
-      action: "REGISTRATION_TRANSFERRED_CENTRE",
-      previousValue: { locationId: registration.locationId },
-      newValue: { locationId: params.newLocationId },
+      action: "REGISTRATION_TRANSFERRED_VENUE",
+      previousValue: { venueId: registration.venueId },
+      newValue: { venueId: params.newVenueId },
     });
 
     return updated;
@@ -535,7 +563,7 @@ export async function regenerateQr(params: { registrationId: string; actorId: st
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camperProfile: true },
+      include: { camper: true },
     });
     if (registration.status !== "APPROVED" && registration.status !== "CHECKED_IN") {
       throw new RegistrationEngineError("NOT_APPROVED", "Only approved registrations have a QR code to regenerate.");
@@ -545,7 +573,7 @@ export async function regenerateQr(params: { registrationId: string; actorId: st
     const updated = await tx.registration.update({ where: { id: registration.id }, data: { qrToken } });
 
     await logEvent(tx, {
-      organizationId: registration.camperProfile.organizationId,
+      organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "QR_REGENERATED",

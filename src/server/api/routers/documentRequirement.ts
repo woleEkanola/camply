@@ -2,25 +2,25 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 
-async function assertCanManageYear(ctx: { prisma: any; session: any }, yearId: string) {
+async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-  const year = await ctx.prisma.year.findUnique({ where: { id: yearId } });
-  if (!year) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+  const camp = await ctx.prisma.camp.findUnique({ where: { id: campId } });
+  if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
 
   const hasPermission =
     currentUser.role === "SUPER_ADMIN" ||
-    ((currentUser.role === "OWNER" || currentUser.role === "ADMIN") && currentUser.organizationId === year.organizationId);
+    ((currentUser.role === "OWNER" || currentUser.role === "ADMIN") && currentUser.organizationId === camp.organizationId);
 
   if (!hasPermission) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage document requirements for this camp" });
   }
-  return year;
+  return camp;
 }
 
 const documentRequirementSchema = z.object({
-  yearId: z.string(),
+  campId: z.string(),
   name: z.string().min(1),
   description: z.string().optional(),
   required: z.boolean().default(true),
@@ -31,13 +31,13 @@ const documentRequirementSchema = z.object({
 });
 
 export const documentRequirementRouter = createTRPCRouter({
-  listByYear: protectedProcedure
-    .input(z.object({ yearId: z.string() }))
+  listByCamp: protectedProcedure
+    .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       return ctx.prisma.documentRequirement.findMany({
-        where: { yearId: input.yearId },
+        where: { campId: input.campId },
         orderBy: { sortOrder: "asc" },
       });
     }),
@@ -45,16 +45,16 @@ export const documentRequirementRouter = createTRPCRouter({
   create: protectedProcedure
     .input(documentRequirementSchema)
     .mutation(async ({ ctx, input }) => {
-      await assertCanManageYear(ctx, input.yearId);
+      await assertCanManageCamp(ctx, input.campId);
       return ctx.prisma.documentRequirement.create({ data: input });
     }),
 
   update: protectedProcedure
-    .input(z.object({ id: z.string(), data: documentRequirementSchema.omit({ yearId: true }).partial() }))
+    .input(z.object({ id: z.string(), data: documentRequirementSchema.omit({ campId: true }).partial() }))
     .mutation(async ({ ctx, input }) => {
       const requirement = await ctx.prisma.documentRequirement.findUnique({ where: { id: input.id } });
       if (!requirement) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertCanManageYear(ctx, requirement.yearId);
+      await assertCanManageCamp(ctx, requirement.campId);
       return ctx.prisma.documentRequirement.update({ where: { id: input.id }, data: input.data });
     }),
 
@@ -63,7 +63,7 @@ export const documentRequirementRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const requirement = await ctx.prisma.documentRequirement.findUnique({ where: { id: input.id } });
       if (!requirement) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertCanManageYear(ctx, requirement.yearId);
+      await assertCanManageCamp(ctx, requirement.campId);
       return ctx.prisma.documentRequirement.delete({ where: { id: input.id } });
     }),
 });

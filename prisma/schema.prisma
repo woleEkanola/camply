@@ -13,19 +13,19 @@ enum UserRole {
   SUPER_ADMIN
   OWNER
   ADMIN
-  LOCATION_ADMIN
-  BASE_USER
+  CAMPUS_REPRESENTATIVE
+  PARENT
   TEACHER
   VOLUNTEER
 }
 
 enum PermissionType {
-  CREATE_LOCATION
-  READ_LOCATION
-  UPDATE_LOCATION
-  DELETE_LOCATION
+  CREATE_CAMPUS
+  READ_CAMPUS
+  UPDATE_CAMPUS
+  DELETE_CAMPUS
   MANAGE_ADMINS
-  MANAGE_LOCATION_ADMINS
+  MANAGE_CAMPUS_REPS
   VIEW_ANALYTICS
 }
 
@@ -40,6 +40,17 @@ enum ProfileFieldType {
   MULTI_SELECT
   RADIO
   FILE
+}
+
+enum FormFieldAudience {
+  CAMPER
+  TEACHER
+  VOLUNTEER
+}
+
+enum FormFieldSource {
+  SYSTEM
+  CUSTOM
 }
 
 enum RegistrationStatus {
@@ -63,43 +74,46 @@ enum BedStatus {
 }
 
 model User {
-  id               String          @id @default(cuid())
-  email            String          @unique
-  password         String
-  role             UserRole
-  firstName        String?
-  lastName         String?
-  phone            String?
-  active           Boolean         @default(true)
-  organization     Organization?   @relation(fields: [organizationId], references: [id])
-  organizationId   String?
-  location         Location?       @relation("UserLocation", fields: [locationId], references: [id])
-  locationId       String?
-  managedLocations Location[]      @relation("LocationAdmins")
-  permissions      Permission[]
-  camperProfiles   CamperProfile[] // User can have multiple camper profiles
-  staffProfiles    StaffProfile[]
-  reportsFromStaff StaffProfile[]  @relation("StaffReportsToUser")
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String
+  role            UserRole
+  firstName       String?
+  lastName        String?
+  phone           String?
+  active          Boolean   @default(true)
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  organizationId  String?
+  homeCampus      Campus?   @relation("UserCampus", fields: [homeCampusId], references: [id])
+  homeCampusId    String?
+  managedCampuses Campus[]  @relation("CampusReps")
+  permissions     Permission[]
+  campers         Camper[] // User can have multiple camper profiles
+  staffProfiles   StaffProfile[]
+  reportsFromStaff StaffProfile[] @relation("StaffReportsToUser")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model Organization {
   id             String          @id @default(cuid())
   name           String          @unique
   users          User[]
-  locations      Location[]
-  profileFields  ProfileField[] // Organization defines profile fields
-  camperProfiles CamperProfile[] // Organization has many camper profiles
-  years          Year[] // Organization has many years
-  activeYearId   String? // Reference to the active year
-  activeYear     Year?           @relation("ActiveYear", fields: [activeYearId], references: [id])
+  campuses       Campus[]
+  formFields     FormField[] // Organization defines registration form fields (camper/teacher/volunteer)
+  campers        Camper[] // Organization has many camper profiles
+  camps          Camp[] // Organization has many camps
+  activeCampId   String? // Reference to the active camp
+  activeCamp     Camp?           @relation("ActiveCamp", fields: [activeCampId], references: [id])
   settings       Json? // Holds admin settings such as age range, cutoff date, etc.
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
 
-model Location {
+// Campus: permanent church branch/organization structure. Identity only -
+// never holds camp-operational fields like capacity/quota. See Venue for
+// the temporary, per-Camp physical site those belong to.
+model Campus {
   id             String          @id @default(cuid())
   name           String
   slug           String          @unique
@@ -108,33 +122,64 @@ model Location {
   state          String?
   zipCode        String?
   country        String
+  pastor         String?
+  phone          String?
+  email          String?
+  active         Boolean         @default(true)
+  signupOpen     Boolean         @default(true)
+  code           String? // short code embedded in registration numbers
+
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
-  admins         User[]          @relation("LocationAdmins")
-  users          User[]          @relation("UserLocation")
-  camperProfiles CamperProfile[] // Location can have many camper profiles
-  registrations  Registration[] // Location can have many registrations
-  signupLinks    SignupLink[] // Location can have many signup links
-  quota          Int             @default(0)
-  signupOpen     Boolean         @default(true)
-
-  // Centre Configuration (PRD Part 2 §8)
-  code         String?
-  contactPhone String?
-  contactEmail String?
-  mapsUrl      String?
-  visible      Boolean @default(true)
-  fullBehavior String  @default("CLOSE") // CLOSE | PENDING_OK | REDIRECT
+  reps           User[]          @relation("CampusReps")
+  users          User[]          @relation("UserCampus")
+  campers        Camper[]
+  registrations  Registration[]
+  signupLinks    SignupLink[]
 
   registrationCounters RegistrationCounter[]
-  preferredByStaff     StaffProfile[]        @relation("PreferredStaffLocation")
-  assignedStaff        StaffProfile[]        @relation("AssignedStaffLocation")
-  hostels              Hostel[]
+  preferredByStaff     StaffProfile[]        @relation("PreferredStaffCampus")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([organizationId, name])
+}
+
+// Venue: physical camp site, scoped to exactly one Camp (not reused across
+// camps - a new Venue row is created each time, even for the same physical
+// facility). Holds all camp-operational/capacity fields that used to live
+// on Location.
+model Venue {
+  id           String   @id @default(cuid())
+  name         String
+  address      String?
+  capacity     Int?
+  contactPhone String?
+  contactEmail String?
+  gpsLat       Float?
+  gpsLng       Float?
+  mapsUrl      String?
+  notes        String?
+
+  camp   Camp   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId String
+
+  code         String?
+  quota        Int     @default(0)
+  signupOpen   Boolean @default(true)
+  visible      Boolean @default(true)
+  fullBehavior String  @default("CLOSE") // CLOSE | PENDING_OK | REDIRECT
+
+  registrations      Registration[]
+  hostels            Hostel[]
+  assignedStaff      StaffProfile[]      @relation("AssignedStaffVenue")
+  attendanceSessions AttendanceSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([campId, name])
 }
 
 model Permission {
@@ -148,28 +193,35 @@ model Permission {
   @@unique([userId, type])
 }
 
-model ProfileField {
+model FormField {
   id             String              @id @default(cuid())
-  name           String
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  audience       FormFieldAudience
+  source         FormFieldSource     @default(CUSTOM)
+  systemKey      String? // set only when source = SYSTEM; names the bound profile column
+  name           String // stable key: systemKey for SYSTEM, admin-chosen slug for CUSTOM
   label          String
   type           ProfileFieldType
   required       Boolean             @default(false)
-  options        String? // JSON string for select options
+  visible        Boolean             @default(true)
+  options        String? // JSON string for select/multi-select/radio options
   helpText       String?
   placeholder    String?
   defaultValue   String?
+  groupLabel     String? // visual section header in the wizard
   sortOrder      Int                 @default(0)
   validation     Json?
-  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId String
-  fieldValues    ProfileFieldValue[]
+  profileValues  ProfileFieldValue[]
+  staffValues    StaffFieldValue[]
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
-  @@unique([organizationId, name])
+  @@unique([organizationId, audience, name])
+  @@index([organizationId, audience, sortOrder])
 }
 
-model CamperProfile {
+model Camper {
   id            String    @id @default(cuid())
   name          String
   firstName     String?
@@ -199,8 +251,12 @@ model CamperProfile {
   userId         String
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
-  location       Location?           @relation(fields: [locationId], references: [id])
-  locationId     String?
+  // Denormalized "last known" home campus - non-authoritative convenience field.
+  // Prefer Registration.campusId for historical accuracy; this is kept in sync
+  // on every registration-affecting mutation (see registration engine) because
+  // existing UI (camper list filters, home-campus display) reads it directly.
+  homeCampus     Campus?             @relation(fields: [homeCampusId], references: [id])
+  homeCampusId   String?
   fieldValues    ProfileFieldValue[]
   registrations  Registration[] // Profile can have many registrations
   documents      Document[]
@@ -212,30 +268,35 @@ model CamperProfile {
 }
 
 model ProfileFieldValue {
-  id              String        @id @default(cuid())
-  value           String // Stored as string, converted based on field type
-  field           ProfileField  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
-  fieldId         String
-  camperProfile   CamperProfile @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
-  camperProfileId String
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id        String    @id @default(cuid())
+  value     String // Stored as string, converted based on field type
+  field     FormField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  fieldId   String
+  camper    Camper    @relation(fields: [camperId], references: [id], onDelete: Cascade)
+  camperId  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  @@unique([fieldId, camperProfileId])
+  @@unique([fieldId, camperId])
 }
 
-model Year {
+// Camp: a temporary camp event (e.g. "Teen Camp 2025"). Year is one
+// attribute of the Camp, not the entity itself - multiple Camps can occur
+// within the same calendar year.
+model Camp {
   id                   String                @id @default(cuid())
-  name                 String // e.g., "2025", "Summer 2025"
-  slug                 String // URL-friendly version of name, e.g., "summer-2025"
+  name                 String
+  slug                 String
+  year                 Int
   startDate            DateTime
   endDate              DateTime
   active               Boolean               @default(false)
   organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId       String
-  registrations        Registration[] // Year can have many registrations
-  activeForOrgs        Organization[]        @relation("ActiveYear")
-  signupLinks          SignupLink[] // Year can have many signup links
+  venues               Venue[]
+  registrations        Registration[]
+  activeForOrgs        Organization[]        @relation("ActiveCamp")
+  signupLinks          SignupLink[]
   documentRequirements DocumentRequirement[]
   registrationCounters RegistrationCounter[]
   staffSignupLinks     StaffSignupLink[]
@@ -244,11 +305,12 @@ model Year {
   incidentReports      IncidentReport[]
   medicalVisits        MedicalVisit[]
   mealDistributions    MealDistribution[]
+  departments          Department[]
 
   // Tribe Allocation (PRD Part 4A)
   tribeAllocationEnabled Boolean @default(false)
   tribeAllocationMode    String  @default("MANUAL") // MANUAL | AUTOMATIC | HYBRID
-  tribeAllocationRules   Json? // ordered array: [{ criterion: "POPULATION"|"GENDER"|"AGE"|"CENTRE"|"CHURCH"|"SCHOOL"|"SIBLINGS_TOGETHER"|"SIBLINGS_APART"|"RETURNING_CAMPER", enabled: true }]
+  tribeAllocationRules   Json? // ordered array: [{ criterion: "POPULATION"|"GENDER"|"AGE"|"CAMPUS"|"CHURCH"|"SCHOOL"|"SIBLINGS_TOGETHER"|"SIBLINGS_APART"|"RETURNING_CAMPER", enabled: true }]
   tribes                 Tribe[]
 
   // Camp Configuration (PRD Part 2)
@@ -279,17 +341,17 @@ model Year {
 }
 
 model SignupLink {
-  id         String   @id @default(cuid())
-  token      String   @unique // The unique token for the URL
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  locationId String
-  year       Year     @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId     String
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id       String @id @default(cuid())
+  token    String @unique // The unique token for the URL
+  campus   Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  campusId String
+  camp     Camp   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId   String
+  active   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@unique([locationId, yearId])
+  @@unique([campusId, campId])
 }
 
 model OTP {
@@ -303,12 +365,18 @@ model Registration {
   id              String             @id @default(cuid())
   status          RegistrationStatus @default(DRAFT)
   notes           String?
-  camperProfile   CamperProfile      @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
-  camperProfileId String
-  year            Year               @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId          String
-  location        Location           @relation(fields: [locationId], references: [id])
-  locationId      String
+  camper          Camper             @relation(fields: [camperId], references: [id], onDelete: Cascade)
+  camperId        String
+  camp            Camp               @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId          String
+  campus          Campus             @relation(fields: [campusId], references: [id])
+  campusId        String
+  // Nullable: assigned later at approval/allocation time, not at signup.
+  // Parents pick a Campus at signup; Venue assignment happens once camp
+  // operations knows where this camper is physically headed.
+  venue           Venue?             @relation(fields: [venueId], references: [id])
+  venueId         String?
+  venueAssignedAt DateTime?
   parentConsent   String? // URL to uploaded parent consent form
   published       Boolean            @default(false)
 
@@ -349,15 +417,16 @@ model Registration {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([camperProfileId, yearId])
-  @@index([locationId, status])
-  @@index([yearId, status])
+  @@unique([camperId, campId])
+  @@index([campusId, status])
+  @@index([venueId, status])
+  @@index([campId, status])
 }
 
 model DocumentRequirement {
   id              String     @id @default(cuid())
-  year            Year       @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId          String
+  camp            Camp       @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId          String
   name            String
   description     String?
   required        Boolean    @default(true)
@@ -374,8 +443,8 @@ model Document {
   id              String               @id @default(cuid())
   requirement     DocumentRequirement? @relation(fields: [requirementId], references: [id])
   requirementId   String?
-  camperProfile   CamperProfile?       @relation(fields: [camperProfileId], references: [id], onDelete: Cascade)
-  camperProfileId String?
+  camper          Camper?              @relation(fields: [camperId], references: [id], onDelete: Cascade)
+  camperId        String?
   registration    Registration?        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   registrationId  String?
   url             String
@@ -422,8 +491,8 @@ model Notification {
 
 model Tribe {
   id            String         @id @default(cuid())
-  year          Year           @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId        String
+  camp          Camp           @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId        String
   name          String
   color         String?
   logoUrl       String?
@@ -433,12 +502,13 @@ model Tribe {
   registrations Registration[]
   preferredByStaff StaffProfile[] @relation("PreferredTribe")
   assignedStaff    StaffProfile[] @relation("AssignedStaffTribe")
+  attendanceSessions AttendanceSession[]
   points        Int            @default(0)
   pointsLog     TribePointsLog[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  @@unique([yearId, name])
+  @@unique([campId, name])
 }
 
 model SideEffect {
@@ -456,14 +526,14 @@ model SideEffect {
 }
 
 model RegistrationCounter {
-  id         String   @id @default(cuid())
-  year       Year     @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId     String
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  locationId String
-  value      Int      @default(0)
+  id       String @id @default(cuid())
+  camp     Camp   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId   String
+  campus   Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  campusId String
+  value    Int    @default(0)
 
-  @@unique([yearId, locationId])
+  @@unique([campId, campusId])
 }
 
 // ─── Teacher & Volunteer (Staff) Modules ────────────────────────────────────
@@ -484,37 +554,20 @@ model StaffSignupLink {
   id             String    @id @default(cuid())
   token          String    @unique
   type           StaffType
-  year           Year      @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId         String
+  camp           Camp      @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId         String
   organizationId String
   active         Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@unique([yearId, type])
-}
-
-model StaffField {
-  id             String           @id @default(cuid())
-  organizationId String
-  audience       StaffType
-  name           String
-  label          String
-  type           ProfileFieldType
-  options        String?
-  required       Boolean          @default(false)
-  sortOrder      Int              @default(0)
-  fieldValues    StaffFieldValue[]
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-
-  @@unique([organizationId, audience, name])
+  @@unique([campId, type])
 }
 
 model StaffFieldValue {
   id             String       @id @default(cuid())
   value          String
-  field          StaffField   @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  field          FormField    @relation(fields: [fieldId], references: [id], onDelete: Cascade)
   fieldId        String
   staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
   staffProfileId String
@@ -529,8 +582,8 @@ model StaffProfile {
   user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId         String
   organizationId String
-  year           Year        @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId         String
+  camp           Camp        @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId         String
   type           StaffType
   status         StaffStatus @default(PENDING)
 
@@ -554,9 +607,9 @@ model StaffProfile {
   previousCampExperience String?
   areasOfStrength        String?
   preferredAgeGroup      String?
-  preferredLocation      Location? @relation("PreferredStaffLocation", fields: [preferredLocationId], references: [id])
-  preferredLocationId    String?
-  preferredTribe         Tribe?    @relation("PreferredTribe", fields: [preferredTribeId], references: [id])
+  preferredCampus        Campus? @relation("PreferredStaffCampus", fields: [preferredCampusId], references: [id])
+  preferredCampusId      String?
+  preferredTribe         Tribe?  @relation("PreferredTribe", fields: [preferredTribeId], references: [id])
   preferredTribeId       String?
 
   // Volunteer-specific
@@ -581,8 +634,8 @@ model StaffProfile {
   deactivatedAt  DateTime?
 
   // Assignment (post-approval)
-  assignedLocation   Location? @relation("AssignedStaffLocation", fields: [assignedLocationId], references: [id])
-  assignedLocationId String?
+  assignedVenue      Venue?    @relation("AssignedStaffVenue", fields: [assignedVenueId], references: [id])
+  assignedVenueId    String?
   assignedTribe      Tribe?    @relation("AssignedStaffTribe", fields: [assignedTribeId], references: [id])
   assignedTribeId    String?
 
@@ -613,7 +666,7 @@ model StaffProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, yearId])
+  @@unique([userId, campId])
   @@index([organizationId, type, status])
 }
 
@@ -630,9 +683,11 @@ model TeacherCamperAssignment {
 
 model AttendanceSession {
   id          String             @id @default(cuid())
-  year        Year               @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId      String
-  locationId  String?
+  camp        Camp               @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId      String
+  venue       Venue?             @relation(fields: [venueId], references: [id])
+  venueId     String?
+  tribe       Tribe?             @relation(fields: [tribeId], references: [id])
   tribeId     String?
   name        String
   date        DateTime
@@ -658,8 +713,8 @@ model AttendanceRecord {
 model IncidentReport {
   id             String        @id @default(cuid())
   organizationId String
-  year           Year          @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId         String
+  camp           Camp          @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId         String
   registration   Registration? @relation(fields: [registrationId], references: [id])
   registrationId String?
   reportedById   String
@@ -675,8 +730,8 @@ model IncidentReport {
 model MedicalVisit {
   id             String       @id @default(cuid())
   organizationId String
-  year           Year         @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId         String
+  camp           Camp         @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId         String
   registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   registrationId String
   recordedById   String
@@ -688,8 +743,8 @@ model MedicalVisit {
 
 model MealDistribution {
   id             String       @id @default(cuid())
-  year           Year         @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  yearId         String
+  camp           Camp         @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId         String
   registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   registrationId String
   meal           String // BREAKFAST | LUNCH | DINNER
@@ -705,7 +760,8 @@ model MealDistribution {
 model Department {
   id               String         @id @default(cuid())
   organizationId   String
-  yearId           String? // per-year instance, matching Tribe; null = org-wide template
+  camp             Camp?          @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId           String? // per-camp instance, matching Tribe; null = org-wide template
   name             String
   description      String?
   responsibilities String[]       @default([])
@@ -714,14 +770,14 @@ model Department {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  @@unique([organizationId, yearId, name])
+  @@unique([organizationId, campId, name])
 }
 
 model Hostel {
   id             String   @id @default(cuid())
   organizationId String
-  location       Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  locationId     String
+  venue          Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  venueId        String
   name           String // e.g. "Male Hostel A"
   gender         String? // MALE | FEMALE | MIXED
   rooms          Room[]
@@ -729,7 +785,7 @@ model Hostel {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@unique([locationId, name])
+  @@unique([venueId, name])
 }
 
 model Room {

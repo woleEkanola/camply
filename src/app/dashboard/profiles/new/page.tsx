@@ -17,43 +17,43 @@ export default function NewProfilePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   
-  // Get the location for the new profile from the current user's connected camper profile
-  const { data: userProfiles } = api.camperProfile.getByUser.useQuery(
+  // Get the campus for the new profile from the current user's connected camper
+  const { data: userProfiles } = api.camper.getByUser.useQuery(
     { userId: session?.user?.id ?? "" },
     { enabled: !!session?.user?.id }
   );
 
-  // Fetch the main user record to get locationId
+  // Fetch the main user record to get homeCampusId
   const { data: userRecord } = api.user.getById.useQuery(
     { id: session?.user?.id ?? "" },
     { enabled: !!session?.user?.id }
   );
 
-  // Use the user's main locationId from their user record
-  const userLocationId = userRecord?.locationId || "";
+  // Use the user's main homeCampusId from their user record
+  const userHomeCampusId = userRecord?.homeCampusId || "";
 
   const [formData, setFormData] = useState({
     name: "",
     dateOfBirth: "",
     gender: "",
-    locationId: userLocationId,
+    homeCampusId: userHomeCampusId,
   });
 
-  // Keep formData.locationId in sync if userLocationId changes
+  // Keep formData.homeCampusId in sync if userHomeCampusId changes
   useEffect(() => {
-    if (userLocationId && formData.locationId !== userLocationId) {
-      setFormData(prev => ({ ...prev, locationId: userLocationId }));
+    if (userHomeCampusId && formData.homeCampusId !== userHomeCampusId) {
+      setFormData(prev => ({ ...prev, homeCampusId: userHomeCampusId }));
     }
-  }, [userLocationId]);
+  }, [userHomeCampusId]);
 
-  // Redirect if not authenticated or not a BASE_USER
+  // Redirect if not authenticated or not a PARENT
   useEffect(() => {
     if (status === "loading") return;
     
     if (!session) {
       router.push("/login");
     } else if (session.user.role !== "ADMIN") {
-      // If not a base user, redirect to appropriate dashboard
+      // If not a parent, redirect to appropriate dashboard
       if (session.user.role === "SUPER_ADMIN") {
         router.push("/super-admin");
       } else if (session.user.role === "OWNER") {
@@ -63,7 +63,7 @@ export default function NewProfilePage() {
   }, [session, status, router]);
   
   // Create profile mutation (no registration will be created here)
-  const createProfileMutation = api.camperProfile.create.useMutation({
+  const createProfileMutation = api.camper.create.useMutation({
     onSuccess: (data) => {
       setSuccess("Profile created successfully!");
       setIsSubmitting(false);
@@ -132,8 +132,8 @@ export default function NewProfilePage() {
           name: formData.name,
           dateOfBirth: formData.dateOfBirth,
           gender: formData.gender,
-          // Always use user's main locationId for profile creation
-          locationId: userLocationId,
+          // Always use user's main homeCampusId for profile creation
+          homeCampusId: userHomeCampusId,
           organizationId: session.user.organizationId ?? "",
           userId: session.user.id,
         },
@@ -161,7 +161,7 @@ export default function NewProfilePage() {
   return (
     <AppShell area="dashboard">
       <div className="mx-auto max-w-2xl">
-        <PageHeader title="Create Camper Profile" />
+        <PageHeader title="Create Camper" />
         <Card>
           <CardBody>
             {error && <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">{error}</div>}

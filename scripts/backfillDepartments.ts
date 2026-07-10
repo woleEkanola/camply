@@ -42,29 +42,29 @@ async function main() {
   let unmatched = 0;
 
   for (const org of organizations) {
-    // Distinct (yearId, volunteerCategory) pairs actually present in data.
+    // Distinct (campId, volunteerCategory) pairs actually present in data.
     const profiles = await prisma.staffProfile.findMany({
       where: { organizationId: org.id },
-      select: { id: true, yearId: true, volunteerCategory: true, departmentId: true },
+      select: { id: true, campId: true, volunteerCategory: true, departmentId: true },
     });
 
-    const yearIds = Array.from(new Set(profiles.map((p) => p.yearId)));
+    const campIds = Array.from(new Set(profiles.map((p) => p.campId)));
 
-    for (const yearId of yearIds) {
+    for (const campId of campIds) {
       // Seed the default category list as Department rows for this org/year.
-      const namesForYear = new Set<string>(VOLUNTEER_CATEGORIES);
+      const namesForCamp = new Set<string>(VOLUNTEER_CATEGORIES);
       for (const p of profiles) {
-        if (p.yearId === yearId && p.volunteerCategory) {
-          namesForYear.add(p.volunteerCategory.trim());
+        if (p.campId === campId && p.volunteerCategory) {
+          namesForCamp.add(p.volunteerCategory.trim());
         }
       }
 
       const nameToDept = new Map<string, string>(); // normalized name -> Department.id
-      for (const name of namesForYear) {
+      for (const name of namesForCamp) {
         const dept = await prisma.department.upsert({
-          where: { organizationId_yearId_name: { organizationId: org.id, yearId, name } },
+          where: { organizationId_campId_name: { organizationId: org.id, campId, name } },
           update: {},
-          create: { organizationId: org.id, yearId, name },
+          create: { organizationId: org.id, campId, name },
         });
         nameToDept.set(normalize(name), dept.id);
         deptCreated++;
@@ -72,7 +72,7 @@ async function main() {
 
       // Backfill departmentId for profiles in this org/year.
       for (const p of profiles) {
-        if (p.yearId !== yearId) continue;
+        if (p.campId !== campId) continue;
         if (p.departmentId) continue; // already linked, skip (idempotent)
         if (!p.volunteerCategory) continue;
 

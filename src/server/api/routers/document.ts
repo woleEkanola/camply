@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { logEvent } from "../../audit";
+import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
 
 export const documentRouter = createTRPCRouter({
   listForRegistration: protectedProcedure
@@ -12,17 +13,19 @@ export const documentRouter = createTRPCRouter({
 
       const registration = await ctx.prisma.registration.findUniqueOrThrow({
         where: { id: input.registrationId },
-        include: { camperProfile: true },
+        include: { camper: true, campus: true },
       });
 
-      const isOwner = registration.camperProfile.userId === currentUser.id;
-      const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
-      if (!isOwner && !isAdmin && currentUser.role !== "LOCATION_ADMIN") {
-        throw new TRPCError({ code: "FORBIDDEN" });
+      const isOwner = registration.camper.userId === currentUser.id;
+      if (!isOwner) {
+        // Re-derives the campus a rep is actually scoped to, rather than
+        // trusting the LOCATION_ADMIN/CAMPUS_REPRESENTATIVE role alone
+        // (previously a real cross-campus authorization gap).
+        await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       }
 
       const [camperDocs, regDocs] = await Promise.all([
-        ctx.prisma.document.findMany({ where: { camperProfileId: registration.camperProfileId } }),
+        ctx.prisma.document.findMany({ where: { camperId: registration.camperId } }),
         ctx.prisma.document.findMany({ where: { registrationId: registration.id } }),
       ]);
       return [...camperDocs, ...regDocs];
@@ -43,9 +46,9 @@ export const documentRouter = createTRPCRouter({
 
       const registration = await ctx.prisma.registration.findUniqueOrThrow({
         where: { id: input.registrationId },
-        include: { camperProfile: true },
+        include: { camper: true },
       });
-      if (registration.camperProfile.userId !== currentUser.id) {
+      if (registration.camper.userId !== currentUser.id) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
@@ -54,7 +57,7 @@ export const documentRouter = createTRPCRouter({
       const document = await ctx.prisma.document.create({
         data: {
           requirementId: requirement.id,
-          camperProfileId: requirement.scope === "CAMPER" ? registration.camperProfileId : null,
+          camperId: requirement.scope === "CAMPER" ? registration.camperId : null,
           registrationId: requirement.scope === "REGISTRATION" ? registration.id : null,
           url: input.url,
           fileName: input.fileName,
@@ -65,7 +68,7 @@ export const documentRouter = createTRPCRouter({
       });
 
       await logEvent(ctx.prisma, {
-        organizationId: registration.camperProfile.organizationId,
+        organizationId: registration.camper.organizationId,
         registrationId: registration.id,
         actorId: currentUser.id,
         action: "DOCUMENT_UPLOADED",
@@ -94,28 +97,44 @@ export const documentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      if (!["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes(currentUser.role)) {
-        throw new TRPCError({ code: "FORBIDDEN" });
+
+      const doc = await ctx.prisma.document.findUniqueOrThrow({ where: { id: input.id } });
+
+      if (doc.registrationId) {
+        const registration = await ctx.prisma.registration.findUniqueOrThrow({
+          where: { id: doc.registrationId },
+          include: { campus: true },
+        });
+        // Re-derives the campus a rep is actually scoped to, rather than
+        // trusting the LOCATION_ADMIN/CAMPUS_REPRESENTATIVE role alone
+        // (previously a real cross-campus authorization gap).
+        await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      } else {
+        // Camper-scoped documents have no registration/campus context to
+        // scope a rep by - restrict review to org admins only.
+        if (!["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
       }
 
-      const doc = await ctx.prisma.document.update({
+      const updated = await ctx.prisma.document.update({
         where: { id: input.id },
         data: { status: input.status, rejectionReason: input.status === "REJECTED" ? input.rejectionReason : null },
       });
 
-      if (doc.registrationId) {
-        const registration = await ctx.prisma.registration.findUnique({ where: { id: doc.registrationId }, include: { camperProfile: true } });
+      if (updated.registrationId) {
+        const registration = await ctx.prisma.registration.findUnique({ where: { id: updated.registrationId }, include: { camper: true } });
         if (registration) {
           await logEvent(ctx.prisma, {
-            organizationId: registration.camperProfile.organizationId,
+            organizationId: registration.camper.organizationId,
             registrationId: registration.id,
             actorId: currentUser.id,
             action: input.status === "APPROVED" ? "DOCUMENT_APPROVED" : "DOCUMENT_REJECTED",
-            newValue: { documentId: doc.id, reason: input.rejectionReason },
+            newValue: { documentId: updated.id, reason: input.rejectionReason },
           });
         }
       }
 
-      return doc;
+      return updated;
     }),
 });

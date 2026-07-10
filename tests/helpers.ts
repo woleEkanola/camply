@@ -1,14 +1,41 @@
 import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "crypto";
 import type { Page } from "@playwright/test";
+import { ensureSystemFields } from "../src/server/registration/systemFieldRegistry";
 
 // Shared across specs — Playwright runs each test file in its own worker
 // process, so this is one connection per worker, not per test.
 export const prisma = new PrismaClient();
 
 /**
+ * `formField.list` lazily seeds an org's SYSTEM fields on first read — a
+ * wizard page load triggers this naturally, but a test that queries
+ * FormField directly via Prisma before any page has loaded can't assume
+ * those rows exist yet. Call this first when a test needs to read/mutate a
+ * known SYSTEM field (e.g. "church") without driving a browser page load.
+ */
+export async function ensureFormFields(audience: "CAMPER" | "TEACHER" | "VOLUNTEER") {
+  const { organizationId } = await getFixtureOrgContext();
+  await ensureSystemFields(prisma, organizationId, audience);
+}
+
+/** Selects "100 / page" on the shared Table component's page-size control (only rendered once there's more than one page), so newly-created rows appended at the end of a long list are actually visible. Call before opening any Dialog on the same page — the plain `select` locator isn't scoped and would otherwise also match a select inside an open dialog. */
+export async function showAllRows(page: Page) {
+  const sizeSelect = page.locator('select:has(option[value="100"])');
+  try {
+    // count() doesn't auto-wait — the table's data query may still be in
+    // flight right after a tab switch, so give the paginator time to mount
+    // before concluding there's nothing to page through.
+    await sizeSelect.waitFor({ state: "visible", timeout: 5000 });
+    await sizeSelect.selectOption("100");
+  } catch {
+    // 10 or fewer rows — no paginator rendered, nothing to do.
+  }
+}
+
+/**
  * The stable fixture organization tied to the seeded admin@camply.com /
- * owner@camply.com / locationadmin@camply.com credentials (see CLAUDE.md's
+ * owner@camply.com / campusrep@camply.com credentials (see CLAUDE.md's
  * "Test login credentials" table). NOTE: despite the name in prisma/seed.ts,
  * `npm run seed` creates an org called "Demo Organization" — but that has
  * never actually been run against this local DB; the real fixture org these
@@ -20,22 +47,55 @@ export async function getFixtureOrgContext() {
   const admin = await prisma.user.findUniqueOrThrow({ where: { email: "admin@camply.com" } });
   if (!admin.organizationId) throw new Error("admin@camply.com has no organizationId — check seed data.");
   const organization = await prisma.organization.findUniqueOrThrow({ where: { id: admin.organizationId } });
-  if (!organization.activeYearId) throw new Error("Fixture organization has no active year — check seed data.");
-  const location = await prisma.location.findFirstOrThrow({ where: { organizationId: organization.id } });
-  return { organizationId: organization.id, yearId: organization.activeYearId, locationId: location.id, locationName: location.name };
+  if (!organization.activeCampId) throw new Error("Fixture organization has no active camp — check seed data.");
+  const campus = await prisma.campus.findFirstOrThrow({ where: { organizationId: organization.id } });
+  const venue = await prisma.venue.findFirstOrThrow({ where: { campId: organization.activeCampId } });
+  return {
+    organizationId: organization.id,
+    campId: organization.activeCampId,
+    campusId: campus.id,
+    campusName: campus.name,
+    venueId: venue.id,
+    venueName: venue.name,
+  };
 }
 
-/** Idempotent — reuses an existing active link for (year, type) or creates one, mirroring staffSignupLink.generate. */
+/** Idempotent — reuses an existing active link for (camp, type) or creates one, mirroring staffSignupLink.generate. */
 export async function ensureStaffSignupLink(type: "TEACHER" | "VOLUNTEER") {
-  const { organizationId, yearId } = await getFixtureOrgContext();
-  const existing = await prisma.staffSignupLink.findUnique({ where: { yearId_type: { yearId, type } } });
+  const { organizationId, campId } = await getFixtureOrgContext();
+  const existing = await prisma.staffSignupLink.findUnique({ where: { campId_type: { campId, type } } });
   if (existing) {
     if (!existing.active) await prisma.staffSignupLink.update({ where: { id: existing.id }, data: { active: true } });
     return existing.token;
   }
   const token = randomBytes(16).toString("hex");
-  await prisma.staffSignupLink.create({ data: { token, type, yearId, organizationId, active: true } });
+  await prisma.staffSignupLink.create({ data: { token, type, campId, organizationId, active: true } });
   return token;
+}
+
+/** Idempotent — reuses an existing active SignupLink for the fixture (campus, camp) or creates one. */
+export async function ensureCamperSignupLink() {
+  const { campId, campusId } = await getFixtureOrgContext();
+  const existing = await prisma.signupLink.findUnique({ where: { campusId_campId: { campusId, campId } } });
+  if (existing) {
+    if (!existing.active) await prisma.signupLink.update({ where: { id: existing.id }, data: { active: true } });
+    return existing.token;
+  }
+  const token = randomBytes(16).toString("hex");
+  await prisma.signupLink.create({ data: { token, campusId, campId, active: true } });
+  return token;
+}
+
+/** Deletes a PARENT + any Campers by email — cleans up a test run so re-runs start fresh. */
+export async function deleteCamperByEmail(email: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return;
+  const profiles = await prisma.camper.findMany({ where: { userId: user.id } });
+  for (const profile of profiles) {
+    await prisma.registration.deleteMany({ where: { camperId: profile.id } });
+  }
+  await prisma.camper.deleteMany({ where: { userId: user.id } });
+  await prisma.user.delete({ where: { id: user.id } });
 }
 
 /** Polls the OTP table for a code — the UI triggers OTP creation via a fetch call with no visible confirmation, and no email actually arrives locally (no RESEND_API_KEY configured), so tests read the code directly from where the app persists it. */
@@ -94,17 +154,17 @@ export function fieldByLabel(page: Page, labelText: string) {
     .first();
 }
 
-/** Logs in via the password flow (SUPER_ADMIN/OWNER/ADMIN/LOCATION_ADMIN) and waits for the post-login redirect. */
+/** Logs in via the password flow (SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE) and waits for the post-login redirect. */
 export async function loginWithPassword(page: Page, email: string, password: string) {
   await page.goto("/login");
   await emailInput(page).fill(email);
   await nextButton(page).click();
   await passwordInput(page).fill(password);
   await loginButton(page).click();
-  await page.waitForURL(/\/(admin|dashboard|super-admin|location-admin-dashboard)/, { timeout: 15000 });
+  await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard)/, { timeout: 15000 });
 }
 
-/** Logs in via the OTP flow (TEACHER/VOLUNTEER/BASE_USER) using /reg-login/verify-otp, reading the code from the DB — the user must already exist (e.g. created directly via Prisma as a test fixture). */
+/** Logs in via the OTP flow (TEACHER/VOLUNTEER/PARENT) using /reg-login/verify-otp, reading the code from the DB — the user must already exist (e.g. created directly via Prisma as a test fixture). */
 export async function loginWithOtp(page: Page, email: string) {
   await page.request.post("/api/base-user/send-otp", { data: { email } });
   const code = await waitForOtp(email);

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"];
+const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
 async function assertAdminOrOwnTribe(ctx: { prisma: any; session: any; userId: string }, organizationId: string, tribeId?: string | null) {
   const currentUser = ctx.session?.user;
@@ -21,16 +21,16 @@ async function assertAdminOrOwnTribe(ctx: { prisma: any; session: any; userId: s
 
 export const attendanceRouter = createTRPCRouter({
   createSession: protectedProcedure
-    .input(z.object({ yearId: z.string(), organizationId: z.string(), name: z.string(), date: z.date(), tribeId: z.string().optional(), locationId: z.string().optional() }))
+    .input(z.object({ campId: z.string(), organizationId: z.string(), name: z.string(), date: z.date(), tribeId: z.string().optional(), venueId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       await assertAdminOrOwnTribe(ctx, input.organizationId, input.tribeId);
       return ctx.prisma.attendanceSession.create({
-        data: { yearId: input.yearId, name: input.name, date: input.date, tribeId: input.tribeId, locationId: input.locationId, createdById: ctx.userId },
+        data: { campId: input.campId, name: input.name, date: input.date, tribeId: input.tribeId, venueId: input.venueId, createdById: ctx.userId },
       });
     }),
 
   listSessions: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string(), tribeId: z.string().optional() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string(), tribeId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -41,7 +41,7 @@ export const attendanceRouter = createTRPCRouter({
         if (!tribeId) return [];
       }
       return ctx.prisma.attendanceSession.findMany({
-        where: { yearId: input.yearId, ...(tribeId && { tribeId }) },
+        where: { campId: input.campId, ...(tribeId && { tribeId }) },
         include: { records: true },
         orderBy: { date: "desc" },
       });
@@ -52,8 +52,8 @@ export const attendanceRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       return ctx.prisma.registration.findMany({
         where: { tribeId: input.tribeId, status: { in: ["APPROVED", "CHECKED_IN", "COMPLETED"] } },
-        include: { camperProfile: true },
-        orderBy: { camperProfile: { name: "asc" } },
+        include: { camper: true },
+        orderBy: { camper: { name: "asc" } },
       });
     }),
 
@@ -62,7 +62,7 @@ export const attendanceRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const session = await ctx.prisma.attendanceSession.findUnique({
         where: { id: input.id },
-        include: { records: { include: { registration: { include: { camperProfile: true } } } } },
+        include: { records: { include: { registration: { include: { camper: true } } } } },
       });
       if (!session) throw new TRPCError({ code: "NOT_FOUND" });
       return session;
@@ -96,7 +96,7 @@ export const attendanceRouter = createTRPCRouter({
     }),
 
   todaySummary: protectedProcedure
-    .input(z.object({ organizationId: z.string(), yearId: z.string() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId, organizationId: input.organizationId } });
@@ -109,7 +109,7 @@ export const attendanceRouter = createTRPCRouter({
       end.setHours(23, 59, 59, 999);
 
       const session = await ctx.prisma.attendanceSession.findFirst({
-        where: { yearId: input.yearId, tribeId, date: { gte: start, lte: end } },
+        where: { campId: input.campId, tribeId, date: { gte: start, lte: end } },
         include: { records: true },
       });
       if (!session) return { total: 0, present: 0, absent: 0, late: 0 };

@@ -41,9 +41,9 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
   const { data: registration, refetch } = api.registration.getById.useQuery({ id: registrationId });
   const { data: documents } = api.document.listForRegistration.useQuery({ registrationId });
   const { data: timeline } = api.registration.timeline.useQuery({ registrationId });
-  const { data: tribes } = api.tribe.listByYear.useQuery(
-    { yearId: registration?.yearId ?? "" },
-    { enabled: !!registration?.yearId }
+  const { data: tribes } = api.tribe.listByCamp.useQuery(
+    { campId: registration?.campId ?? "" },
+    { enabled: !!registration?.campId }
   );
   const { data: tribeSuggestion } = api.tribe.suggest.useQuery(
     { registrationId },
@@ -82,12 +82,12 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
       {actionError && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{actionError}</div>}
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <div><span className="text-neutral-500">Camp</span><div className="font-medium text-neutral-900">{registration.year?.name}</div></div>
-        <div><span className="text-neutral-500">Centre</span><div className="font-medium text-neutral-900">{registration.location?.name}</div></div>
-        <div><span className="text-neutral-500">Date of Birth</span><div className="font-medium text-neutral-900">{registration.camperProfile?.dateOfBirth ? new Date(registration.camperProfile.dateOfBirth as any).toLocaleDateString() : "—"}</div></div>
-        <div><span className="text-neutral-500">Parent Email</span><div className="font-medium text-neutral-900">{(registration.camperProfile as any)?.user?.email}</div></div>
-        <div><span className="text-neutral-500">Allergies</span><div className="font-medium text-neutral-900">{(registration.camperProfile as any)?.allergies || "None reported"}</div></div>
-        <div><span className="text-neutral-500">Medical Conditions</span><div className="font-medium text-neutral-900">{(registration.camperProfile as any)?.medicalConditions || "None reported"}</div></div>
+        <div><span className="text-neutral-500">Camp</span><div className="font-medium text-neutral-900">{registration.camp?.name}</div></div>
+        <div><span className="text-neutral-500">Campus</span><div className="font-medium text-neutral-900">{registration.campus?.name}</div></div>
+        <div><span className="text-neutral-500">Date of Birth</span><div className="font-medium text-neutral-900">{registration.camper?.dateOfBirth ? new Date(registration.camper.dateOfBirth as any).toLocaleDateString() : "—"}</div></div>
+        <div><span className="text-neutral-500">Parent Email</span><div className="font-medium text-neutral-900">{(registration.camper as any)?.user?.email}</div></div>
+        <div><span className="text-neutral-500">Allergies</span><div className="font-medium text-neutral-900">{(registration.camper as any)?.allergies || "None reported"}</div></div>
+        <div><span className="text-neutral-500">Medical Conditions</span><div className="font-medium text-neutral-900">{(registration.camper as any)?.medicalConditions || "None reported"}</div></div>
       </div>
 
       {tribes && tribes.length > 0 && (
@@ -199,7 +199,7 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
     <Drawer
       open
       onClose={onClose}
-      title={registration.camperProfile?.name}
+      title={registration.camper?.name}
       subtitle={
         <div className="flex items-center gap-2">
           <StatusBadge status={registration.status} />
@@ -221,7 +221,7 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
 export default function RegistrationsPage() {
   const router = useRouter();
   const [selectedRegistration, setSelectedRegistration] = useState<string | null>(null);
-  const [filterLocation, setFilterLocation] = useState("");
+  const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -235,7 +235,7 @@ export default function RegistrationsPage() {
   useEffect(() => {
     if (
       status === "authenticated" &&
-      !["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"].includes((session?.user as ExtendedUser)?.role ?? "")
+      !["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"].includes((session?.user as ExtendedUser)?.role ?? "")
     ) {
       router.push("/admin");
     }
@@ -243,14 +243,14 @@ export default function RegistrationsPage() {
 
   const organizationId = (session?.user as ExtendedUser)?.organizationId || "";
 
-  const { data: locations = [] } = api.location.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
-  const { data: activeYear } = api.year.getActiveYear.useQuery({ organizationId }, { enabled: !!organizationId });
+  const { data: campuses = [] } = api.campus.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
+  const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
 
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
       organizationId,
-      yearId: activeYear?.id,
-      locationId: filterLocation || undefined,
+      campId: activeCamp?.id,
+      campusId: filterCampus || undefined,
       status: filterStatus || undefined,
       q: searchQuery || undefined,
       limit: 50,
@@ -270,12 +270,12 @@ export default function RegistrationsPage() {
       header: "Camper",
       accessor: (row) => (
         <div>
-          <div className="font-medium text-neutral-900">{row.camperProfile?.name}</div>
-          <div className="text-xs text-neutral-500">{row.camperProfile?.user?.email}</div>
+          <div className="font-medium text-neutral-900">{row.camper?.name}</div>
+          <div className="text-xs text-neutral-500">{row.camper?.user?.email}</div>
         </div>
       ),
     },
-    { header: "Centre", accessor: (row) => row.location?.name },
+    { header: "Campus", accessor: (row) => row.campus?.name },
     { header: "Registration #", accessor: (row) => row.registrationNumber || "—" },
     { header: "Status", accessor: (row) => <StatusBadge status={row.status} /> },
     { header: "Updated", accessor: (row) => new Date(row.updatedAt).toLocaleDateString() },
@@ -283,7 +283,7 @@ export default function RegistrationsPage() {
 
   return (
     <AppShell area="admin">
-      <PageHeader title="Registrations" description={activeYear ? `For ${activeYear.name}` : undefined} />
+      <PageHeader title="Registrations" description={activeCamp ? `For ${activeCamp.name}` : undefined} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN"].map((s) => (
@@ -299,10 +299,10 @@ export default function RegistrationsPage() {
 
       <div className="mb-4 grid gap-3 md:grid-cols-3">
         <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-        <Select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)}>
-          <option value="">All Centres</option>
-          {locations.map((l: any) => (
-            <option key={l.id} value={l.id}>{l.name}</option>
+        <Select value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
+          <option value="">All Campuses</option>
+          {campuses.map((c: any) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </Select>
         <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
