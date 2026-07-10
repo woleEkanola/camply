@@ -210,7 +210,7 @@ async function approveRegistrationInTx(
   const registrationNumber = await nextRegistrationNumber(tx, {
     orgCode: registration.camp.orgCode,
     campName: registration.camp.name,
-    campusCode: registration.campus.code,
+    campusCode: registration.campus.campusCode,
     campId: registration.camp.id,
     campusId: registration.campus.id,
   });

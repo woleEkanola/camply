@@ -1,7 +1,7 @@
 "use client";
 
 import type { SignupLink } from "../../../types/signupLink";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
@@ -39,6 +39,8 @@ interface CampusFormData {
   pastor?: string;
   phone?: string;
   email?: string;
+  campusCode?: string;
+  displayOrder?: number;
 }
 // A Campus with its assigned reps and their names
 type CampusWithReps = {
@@ -50,6 +52,8 @@ type CampusWithReps = {
   zipCode: string | null;
   country: string;
   organizationId: string;
+  campusCode: string | null;
+  displayOrder: number;
   createdAt: Date;
   updatedAt: Date;
   reps?: { id: string; firstName?: string | null; lastName?: string | null }[];
@@ -183,6 +187,8 @@ export default function CampusesPage() {
     pastor: "",
     phone: "",
     email: "",
+    campusCode: "",
+    displayOrder: 0,
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -249,7 +255,11 @@ export default function CampusesPage() {
 
   useEffect(() => {
     if (campusesError) {
-      setError(`Error loading campuses: ${campusesError.message}`);
+      if (campusesError.message === "User not found" || campusesError.data?.code === "UNAUTHORIZED") {
+        void signOut({ callbackUrl: "/login" });
+      } else {
+        setError(`Error loading campuses: ${campusesError.message}`);
+      }
     }
   }, [campusesError]);
 
@@ -276,6 +286,8 @@ export default function CampusesPage() {
         pastor: campusData.pastor || "",
         phone: campusData.phone || "",
         email: campusData.email || "",
+        campusCode: campusData.campusCode || "",
+        displayOrder: campusData.displayOrder || 0,
       });
     }
   }, [campusData]);
@@ -460,6 +472,8 @@ export default function CampusesPage() {
       pastor: "",
       phone: "",
       email: "",
+      campusCode: "",
+      displayOrder: 0,
     });
     setError("");
   };
@@ -525,6 +539,8 @@ export default function CampusesPage() {
             pastor: campusData.pastor,
             phone: campusData.phone,
             email: campusData.email,
+            campusCode: campusData.campusCode || null,
+            displayOrder: Number(campusData.displayOrder || 0),
           },
         });
       } else {
@@ -540,6 +556,8 @@ export default function CampusesPage() {
           pastor: campusData.pastor,
           phone: campusData.phone,
           email: campusData.email,
+          campusCode: campusData.campusCode || null,
+          displayOrder: Number(campusData.displayOrder || 0),
         });
       }
     } catch (err) {
@@ -663,6 +681,8 @@ export default function CampusesPage() {
       className: "w-8",
     },
     { header: "Name", accessor: "name", searchable: true },
+    { header: "Code", accessor: (campus) => campus.campusCode || "-" },
+    { header: "Order", accessor: (campus) => campus.displayOrder?.toString() ?? "0" },
     {
       header: "Address",
       accessor: (campus) =>
@@ -783,6 +803,10 @@ export default function CampusesPage() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input label="Campus Name" id="name" name="name" value={formData.name} onChange={handleInputChange} required />
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Campus Code (e.g. ANT)" id="campusCode" name="campusCode" value={formData.campusCode ?? ""} onChange={handleInputChange} required />
+              <Input label="Display Order" type="number" id="displayOrder" name="displayOrder" value={formData.displayOrder ?? 0} onChange={handleInputChange} required />
+            </div>
             <Input label="Address" id="address" name="address" value={formData.address} onChange={handleInputChange} required />
             <Input label="City" id="city" name="city" value={formData.city} onChange={handleInputChange} required />
             <Input label="State / Province (Optional)" id="state" name="state" value={formData.state ?? ""} onChange={handleInputChange} />
