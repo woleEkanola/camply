@@ -43,3 +43,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# internal AI-assistant / planning docs — not needed for the app to run,
+# kept locally only
+/CLAUDE.md
+/GEMINI.md
+/Systems Rule.md
+/REGISTRATION_BUILD_PLAN.md
+/Camply Domain Model Refactor.md
+/Camply Registration System.md
