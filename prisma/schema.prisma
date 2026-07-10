@@ -127,7 +127,8 @@ model Campus {
   email          String?
   active         Boolean         @default(true)
   signupOpen     Boolean         @default(true)
-  code           String? // short code embedded in registration numbers
+  campusCode     String? // short code embedded in registration numbers
+  displayOrder   Int             @default(0) // order in dropdowns/lists
 
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String

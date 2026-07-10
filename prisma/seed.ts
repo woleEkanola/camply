@@ -128,7 +128,7 @@ async function main() {
       zipCode: "12345",
       country: "Demo Country",
       organizationId: organization.id,
-      code: "DEM",
+      campusCode: "DEM",
       email: "campus@camply.com",
       phone: "+1-555-0100",
       active: true,

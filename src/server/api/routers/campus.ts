@@ -19,7 +19,8 @@ const campusSchema = z.object({
   email: z.string().nullable().optional(),
   active: z.boolean().optional(),
   signupOpen: z.boolean().optional(),
-  code: z.string().nullable().optional(),
+  campusCode: z.string().nullable().optional(),
+  displayOrder: z.number().int().optional(),
   organizationId: z.string(),
 });
 
@@ -62,7 +63,10 @@ export const campusRouter = createTRPCRouter({
 
       return prisma.campus.findMany({
         where: { organizationId: input.organizationId },
-        orderBy: { name: "asc" },
+        orderBy: [
+          { displayOrder: "asc" },
+          { name: "asc" },
+        ],
         include: { reps: true },
       });
     }),
@@ -175,7 +179,10 @@ export const campusRouter = createTRPCRouter({
 
       return ctx.prisma.campus.findMany({
         where: organizationId ? { organizationId } : undefined,
-        orderBy: { name: "asc" },
+        orderBy: [
+          { displayOrder: "asc" },
+          { name: "asc" },
+        ],
         include: { organization: true },
       });
     }),
