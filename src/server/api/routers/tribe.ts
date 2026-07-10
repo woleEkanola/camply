@@ -138,4 +138,28 @@ export const tribeRouter = createTRPCRouter({
       await assertCanManageYear(ctx, input.yearId);
       return tribeEngine.bulkAutoAssignTribes({ yearId: input.yearId, actorId: currentUser!.id });
     }),
+
+  // Camp Structure: competition points
+  updatePoints: protectedProcedure
+    .input(z.object({ tribeId: z.string(), delta: z.number().int(), reason: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.tribeId } });
+      await assertCanManageYear(ctx, tribe.yearId);
+      const [updated] = await ctx.prisma.$transaction([
+        ctx.prisma.tribe.update({ where: { id: input.tribeId }, data: { points: { increment: input.delta } } }),
+        ctx.prisma.tribePointsLog.create({
+          data: { tribeId: input.tribeId, delta: input.delta, reason: input.reason, actorId: currentUser!.id },
+        }),
+      ]);
+      return updated;
+    }),
+
+  pointsHistory: protectedProcedure
+    .input(z.object({ tribeId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      return ctx.prisma.tribePointsLog.findMany({ where: { tribeId: input.tribeId }, orderBy: { createdAt: "desc" }, take: 20 });
+    }),
 });

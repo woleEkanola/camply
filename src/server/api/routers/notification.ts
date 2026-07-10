@@ -55,6 +55,7 @@ export const notificationRouter = createTRPCRouter({
       yearId: z.string().optional(),
       locationId: z.string().optional(),
       status: z.string().optional(),
+      audience: z.enum(["PARENTS", "TEACHERS", "VOLUNTEERS", "ALL"]).default("PARENTS"),
     }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
@@ -63,18 +64,39 @@ export const notificationRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
-      const registrations = await ctx.prisma.registration.findMany({
-        where: {
-          location: { organizationId: input.organizationId },
-          ...(input.yearId && { yearId: input.yearId }),
-          ...(input.locationId && { locationId: input.locationId }),
-          ...(input.status && { status: input.status as any }),
-        },
-        select: { camperProfileId: true, camperProfile: { select: { userId: true } } },
-        distinct: ["camperProfileId"],
-      });
+      let userIds: string[] = [];
 
-      const userIds = Array.from(new Set(registrations.map((r) => r.camperProfile.userId)));
+      if (input.audience === "PARENTS" || input.audience === "ALL") {
+        const registrations = await ctx.prisma.registration.findMany({
+          where: {
+            location: { organizationId: input.organizationId },
+            ...(input.yearId && { yearId: input.yearId }),
+            ...(input.locationId && { locationId: input.locationId }),
+            ...(input.status && { status: input.status as any }),
+          },
+          select: { camperProfileId: true, camperProfile: { select: { userId: true } } },
+          distinct: ["camperProfileId"],
+        });
+        userIds.push(...registrations.map((r: { camperProfile: { userId: string } }) => r.camperProfile.userId));
+      }
+
+      if (input.audience === "TEACHERS" || input.audience === "VOLUNTEERS" || input.audience === "ALL") {
+        const staffTypes: ("TEACHER" | "VOLUNTEER")[] =
+          input.audience === "TEACHERS" ? ["TEACHER"] : input.audience === "VOLUNTEERS" ? ["VOLUNTEER"] : ["TEACHER", "VOLUNTEER"];
+        const staffProfiles = await ctx.prisma.staffProfile.findMany({
+          where: {
+            organizationId: input.organizationId,
+            type: { in: staffTypes },
+            status: "APPROVED",
+            ...(input.yearId && { yearId: input.yearId }),
+            ...(input.locationId && { assignedLocationId: input.locationId }),
+          },
+          select: { userId: true },
+        });
+        userIds.push(...staffProfiles.map((s: { userId: string }) => s.userId));
+      }
+
+      userIds = Array.from(new Set(userIds));
 
       await ctx.prisma.notification.createMany({
         data: userIds.map((userId) => ({

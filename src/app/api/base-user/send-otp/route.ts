@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     // Check if user exists with this email — respond identically either way
     // so the endpoint can't be used to probe for registered emails.
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.role !== "BASE_USER") {
+    if (!user || !["BASE_USER", "TEACHER", "VOLUNTEER"].includes(user.role)) {
       return NextResponse.json(GENERIC_OK, { status: 200 });
     }
 

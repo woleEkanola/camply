@@ -39,6 +39,20 @@ async function assertAdminOrLocationAdmin(
   throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage this registration" });
 }
 
+// Check-in duty is also delegated to Registration-department volunteers, on top of admin roles.
+async function assertCanCheckIn(ctx: { prisma: any; session: any; userId: string }, locationId: string) {
+  const currentUser = ctx.session?.user;
+  if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+  if (currentUser.role === "VOLUNTEER") {
+    const profile = await ctx.prisma.staffProfile.findFirst({
+      where: { userId: ctx.userId, status: "APPROVED", volunteerCategory: "Registration" },
+    });
+    if (profile) return currentUser;
+    throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to check in campers" });
+  }
+  return assertAdminOrLocationAdmin(ctx, locationId);
+}
+
 // RegistrationStatus is not exported from @prisma/client after downgrade. Define locally to match schema.
 export type RegistrationStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 
@@ -923,7 +937,7 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      await assertCanCheckIn(ctx, registration.locationId);
       try {
         return await engine.checkInRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
       } catch (error) {
@@ -937,7 +951,7 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       const registration = await ctx.prisma.registration.findUniqueOrThrow({ where: { id: input.registrationId } });
-      await assertAdminOrLocationAdmin(ctx, registration.locationId);
+      await assertCanCheckIn(ctx, registration.locationId);
       try {
         return await engine.checkOutRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
       } catch (error) {

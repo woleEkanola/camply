@@ -8,7 +8,7 @@ import { EmptyState } from "./EmptyState";
 import { SkeletonTable } from "./Skeleton";
 
 export interface Column<T> {
-  header: string;
+  header: React.ReactNode;
   accessor: keyof T | ((row: T) => React.ReactNode);
   sortable?: boolean;
   searchable?: boolean;
@@ -25,6 +25,10 @@ interface CommonProps<T> {
   emptyTitle?: string;
   emptyDescription?: string;
   emptyAction?: React.ReactNode;
+  /** Adds a checkbox column for bulk actions. Selection state is owned by the parent. */
+  selectable?: boolean;
+  selectedIds?: string[];
+  onSelectionChange?: (ids: string[]) => void;
 }
 
 interface LocalModeProps<T> extends CommonProps<T> {
@@ -55,7 +59,7 @@ function getCellValue<T>(row: T, column: Column<T>): React.ReactNode {
  * server-searched source (e.g. a tRPC procedure with a `q`/cursor param).
  */
 export function Table<T>(props: TableProps<T>) {
-  const { columns, data, rowKey, onRowClick, actions, isLoading, emptyTitle, emptyDescription, emptyAction } = props;
+  const { columns, data, rowKey, onRowClick, actions, isLoading, emptyTitle, emptyDescription, emptyAction, selectable, selectedIds, onSelectionChange } = props;
   const isControlled = props.mode === "controlled";
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -134,6 +138,24 @@ export function Table<T>(props: TableProps<T>) {
           <table className="min-w-full divide-y divide-neutral-200">
             <thead className="bg-neutral-50">
               <tr>
+                {selectable && (
+                  <th scope="col" className="w-10 px-4 py-2.5">
+                    <input
+                      type="checkbox"
+                      className="rounded border-neutral-300 text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                      checked={pageData.length > 0 && pageData.every((row) => selectedIds?.includes(rowKey(row)))}
+                      onChange={(e) => {
+                        const pageIds = pageData.map((row) => rowKey(row));
+                        if (e.target.checked) {
+                          onSelectionChange?.(Array.from(new Set([...(selectedIds ?? []), ...pageIds])));
+                        } else {
+                          onSelectionChange?.((selectedIds ?? []).filter((id) => !pageIds.includes(id)));
+                        }
+                      }}
+                      aria-label="Select all rows on this page"
+                    />
+                  </th>
+                )}
                 {columns.map((column, i) => (
                   <th
                     key={i}
@@ -168,6 +190,24 @@ export function Table<T>(props: TableProps<T>) {
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={cn(onRowClick && "cursor-pointer hover:bg-neutral-50")}
                 >
+                  {selectable && (
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="rounded border-neutral-300 text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                        checked={selectedIds?.includes(rowKey(row)) ?? false}
+                        onChange={(e) => {
+                          const id = rowKey(row);
+                          if (e.target.checked) {
+                            onSelectionChange?.([...(selectedIds ?? []), id]);
+                          } else {
+                            onSelectionChange?.((selectedIds ?? []).filter((existing) => existing !== id));
+                          }
+                        }}
+                        aria-label="Select row"
+                      />
+                    </td>
+                  )}
                   {columns.map((column, i) => (
                     <td key={i} className={cn("whitespace-nowrap px-4 py-3 text-sm text-neutral-700", column.className)}>
                       {getCellValue(row, column)}

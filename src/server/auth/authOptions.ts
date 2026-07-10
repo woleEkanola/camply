@@ -7,7 +7,7 @@ import { MAX_OTP_ATTEMPTS, otpEqual } from "../otp";
 import { type NextAuthOptions } from "next-auth";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER" | "TEACHER" | "VOLUNTEER";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -55,13 +55,15 @@ export const authOptions: NextAuthOptions = {
           }
           // OTP is valid, delete it (one-time use)
           await prisma.oTP.delete({ where: { email: credentials.email } });
-          // Only allow login for valid roles (including BASE_USER)
+          // Only allow login for valid roles (including BASE_USER, TEACHER, VOLUNTEER)
           if (
             user.role === "SUPER_ADMIN" ||
             user.role === "OWNER" ||
             user.role === "ADMIN" ||
             user.role === "LOCATION_ADMIN" ||
-            user.role === "BASE_USER"
+            user.role === "BASE_USER" ||
+            user.role === "TEACHER" ||
+            user.role === "VOLUNTEER"
           ) {
             return {
               id: user.id,

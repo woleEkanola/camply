@@ -10,9 +10,24 @@ import {
   QrCodeIcon,
   MegaphoneIcon,
   IdentificationIcon,
+  AcademicCapIcon,
+  HandRaisedIcon,
+  ClipboardDocumentCheckIcon,
+  ExclamationTriangleIcon,
+  HeartIcon,
+  CakeIcon,
+  Squares2X2Icon,
+  MapIcon,
 } from "@heroicons/react/24/outline";
 
-export type Role = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "LOCATION_ADMIN" | "BASE_USER";
+export type Role =
+  | "SUPER_ADMIN"
+  | "OWNER"
+  | "ADMIN"
+  | "LOCATION_ADMIN"
+  | "BASE_USER"
+  | "TEACHER"
+  | "VOLUNTEER";
 
 export interface NavItem {
   name: string;
@@ -67,6 +82,24 @@ const ADMIN_GROUPS: NavGroup[] = [
     items: [
       { name: "Users", href: "/admin/users", icon: UsersIcon },
       { name: "Camper Profiles", href: "/admin/campers", icon: UserGroupIcon },
+      {
+        name: "Teachers",
+        href: "/admin/teachers",
+        icon: AcademicCapIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"],
+      },
+      {
+        name: "Volunteers",
+        href: "/admin/volunteers",
+        icon: HandRaisedIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"],
+      },
+      {
+        name: "Camp Structure",
+        href: "/admin/camp-structure",
+        icon: Squares2X2Icon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "LOCATION_ADMIN"],
+      },
     ],
   },
   {
@@ -119,6 +152,43 @@ const SUPER_ADMIN_GROUPS: NavGroup[] = [
   { name: "Dashboard", items: [{ name: "Dashboard", href: "/super-admin", icon: HomeIcon }] },
 ];
 
+const TEACHER_GROUPS: NavGroup[] = [
+  {
+    name: "Dashboard",
+    items: [
+      { name: "Dashboard", href: "/teacher", icon: HomeIcon },
+      { name: "My Position", href: "/teacher/my-position", icon: MapIcon },
+    ],
+  },
+  {
+    name: "Operations",
+    items: [
+      { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
+      { name: "My Campers", href: "/teacher/campers", icon: UserGroupIcon },
+      { name: "Incidents", href: "/teacher/incidents", icon: ExclamationTriangleIcon },
+    ],
+  },
+];
+
+const VOLUNTEER_GROUPS: NavGroup[] = [
+  {
+    name: "Dashboard",
+    items: [
+      { name: "Dashboard", href: "/volunteer", icon: HomeIcon },
+      { name: "My Position", href: "/volunteer/my-position", icon: MapIcon },
+    ],
+  },
+  {
+    name: "Operations",
+    items: [
+      { name: "Check-in", href: "/volunteer/check-in", icon: QrCodeIcon },
+      { name: "Medical", href: "/volunteer/medical", icon: HeartIcon },
+      { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
+      { name: "Incidents", href: "/volunteer/incidents", icon: ExclamationTriangleIcon },
+    ],
+  },
+];
+
 function filterGroups(groups: NavGroup[], role: Role): NavGroup[] {
   return groups
     .map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || item.roles.includes(role)) }))
@@ -127,7 +197,10 @@ function filterGroups(groups: NavGroup[], role: Role): NavGroup[] {
 
 /** Returns the grouped nav for the shell the given role actually lands in.
  * `/admin/*` is shared by SUPER_ADMIN/OWNER/ADMIN/LOCATION_ADMIN today. */
-export function getNavGroups(role: Role | undefined, area: "admin" | "dashboard" | "location-admin" | "super-admin"): NavGroup[] {
+export function getNavGroups(
+  role: Role | undefined,
+  area: "admin" | "dashboard" | "location-admin" | "super-admin" | "teacher" | "volunteer"
+): NavGroup[] {
   if (!role) return [];
   switch (area) {
     case "admin":
@@ -138,5 +211,9 @@ export function getNavGroups(role: Role | undefined, area: "admin" | "dashboard"
       return LOCATION_ADMIN_GROUPS;
     case "super-admin":
       return SUPER_ADMIN_GROUPS;
+    case "teacher":
+      return TEACHER_GROUPS;
+    case "volunteer":
+      return VOLUNTEER_GROUPS;
   }
 }

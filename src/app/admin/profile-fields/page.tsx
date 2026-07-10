@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Table, type Column } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
+import { Tabs } from "@/components/ui/Tabs";
+import { StaffFieldsTab } from "@/components/staff/StaffFieldsTab";
 
 const FIELD_TYPES = [
   { value: "text", label: "Text" },
@@ -57,11 +59,8 @@ export default function ProfileFieldsPage() {
     return <div className="p-8 text-red-600">You do not have permission to manage profile fields.</div>;
   }
 
-  return (
-    <AppShell area="admin">
-      <div className="mx-auto max-w-2xl">
-        <PageHeader title="Profile Fields" description="Custom fields collected on every camper profile." />
-
+  const campersTab = (
+    <div>
         <Card className="mb-8">
         <CardBody>
         <form
@@ -136,6 +135,20 @@ export default function ProfileFieldsPage() {
           rowKey={(field: any) => field.id}
           isLoading={isLoading}
           emptyTitle="No custom fields yet"
+        />
+    </div>
+  );
+
+  return (
+    <AppShell area="admin">
+      <div className="mx-auto max-w-2xl">
+        <PageHeader title="Profile Fields" description="Custom fields collected during registration." />
+        <Tabs
+          tabs={[
+            { label: "Campers", content: campersTab },
+            { label: "Teachers", content: <StaffFieldsTab organizationId={organizationId} audience="TEACHER" /> },
+            { label: "Volunteers", content: <StaffFieldsTab organizationId={organizationId} audience="VOLUNTEER" /> },
+          ]}
         />
       </div>
     </AppShell>

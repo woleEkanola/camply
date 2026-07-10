@@ -33,11 +33,12 @@ export default function AnnouncementsPage() {
   const [yearId, setYearId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [audience, setAudience] = useState<"PARENTS" | "TEACHERS" | "VOLUNTEERS" | "ALL">("PARENTS");
   const [result, setResult] = useState("");
 
   const broadcast = api.notification.broadcast.useMutation({
     onSuccess: (res) => {
-      setResult(`Sent to ${res.recipientCount} parent(s).`);
+      setResult(`Sent to ${res.recipientCount} recipient(s).`);
       setTitle("");
       setBody("");
       refetchHistory();
@@ -56,6 +57,13 @@ export default function AnnouncementsPage() {
 
             <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
             <Textarea label="Message" rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
+
+            <Select label="Audience" value={audience} onChange={(e) => setAudience(e.target.value as any)}>
+              <option value="PARENTS">Parents</option>
+              <option value="TEACHERS">Teachers</option>
+              <option value="VOLUNTEERS">Volunteers</option>
+              <option value="ALL">Everyone</option>
+            </Select>
 
             <div className="grid grid-cols-3 gap-3">
               <Select label="Camp" value={yearId} onChange={(e) => setYearId(e.target.value)}>
@@ -89,6 +97,7 @@ export default function AnnouncementsPage() {
                   yearId: yearId || undefined,
                   locationId: locationId || undefined,
                   status: statusFilter || undefined,
+                  audience,
                 })
               }
             >

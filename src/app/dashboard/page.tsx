@@ -27,6 +27,10 @@ export default function UserDashboard() {
       router.push("/admin");
     } else if (session.user.role === "LOCATION_ADMIN") {
       router.push("/location-admin-dashboard");
+    } else if (session.user.role === "TEACHER") {
+      router.push("/teacher");
+    } else if (session.user.role === "VOLUNTEER") {
+      router.push("/volunteer");
     } else if (session.user.role !== undefined && session.user.role !== "BASE_USER") {
       router.push("/login");
     }

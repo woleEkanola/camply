@@ -12,7 +12,7 @@ import { getNavGroups, type Role } from "./navConfig";
 import { CommandPalette } from "./CommandPalette";
 
 export interface AppShellProps {
-  area: "admin" | "dashboard" | "location-admin" | "super-admin";
+  area: "admin" | "dashboard" | "location-admin" | "super-admin" | "teacher" | "volunteer";
   children: React.ReactNode;
 }
 
@@ -76,7 +76,7 @@ export default function AppShell({ area, children }: AppShellProps) {
               {group.items.map((item) => {
                 // Area root paths (e.g. "/admin") only match exactly — otherwise every
                 // nested page (e.g. "/admin/registrations") would also highlight "Dashboard".
-                const isAreaRoot = ["/admin", "/dashboard", "/location-admin-dashboard", "/super-admin"].includes(item.href);
+                const isAreaRoot = ["/admin", "/dashboard", "/location-admin-dashboard", "/super-admin", "/teacher", "/volunteer"].includes(item.href);
                 const active = isAreaRoot ? pathname === item.href : pathname === item.href || pathname?.startsWith(item.href + "/");
                 return (
                   <Link

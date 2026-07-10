@@ -1,0 +1,3 @@
+-- CreateEnum
+CREATE TYPE "BedStatus" AS ENUM ('AVAILABLE', 'OCCUPIED', 'MAINTENANCE');
+

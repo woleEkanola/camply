@@ -17,6 +17,8 @@ export const REGISTRATION_STATUS_TONE: Record<string, BadgeTone> = {
   CHECKED_IN: "success",
   COMPLETED: "success",
   ARCHIVED: "neutral",
+  // StaffStatus (Teacher/Volunteer profiles)
+  DEACTIVATED: "neutral",
 };
 
 export function statusLabel(status: string): string {

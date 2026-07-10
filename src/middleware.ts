@@ -8,6 +8,8 @@ const DASHBOARD_ROUTE: Record<string, string> = {
   OWNER: "/admin",
   ADMIN: "/dashboard",
   LOCATION_ADMIN: "/location-admin-dashboard",
+  TEACHER: "/teacher",
+  VOLUNTEER: "/volunteer",
 };
 
 export async function middleware(req: NextRequest) {

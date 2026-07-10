@@ -205,7 +205,70 @@ async function main() {
     },
   });
   
-  console.log("Seed completed: Users, organization, year, and registration created");
+  // Approved teacher (for testing teacher dashboard/attendance)
+  const teacherEmail = "teacher@camply.com";
+  const teacherPassword = await bcrypt.hash("password123", 10);
+  const teacherUser = await prisma.user.create({
+    data: {
+      email: teacherEmail,
+      password: teacherPassword,
+      role: "TEACHER",
+      firstName: "Demo",
+      lastName: "Teacher",
+      active: true,
+      organizationId: organization.id,
+    },
+  });
+  await prisma.staffProfile.create({
+    data: {
+      userId: teacherUser.id,
+      organizationId: organization.id,
+      yearId: year.id,
+      type: "TEACHER",
+      status: "APPROVED",
+      firstName: "Demo",
+      lastName: "Teacher",
+      phone: "+1-555-0200",
+      email: teacherEmail,
+      skills: ["Teaching", "Counseling"],
+      assignedLocationId: location.id,
+      approvedAt: new Date(),
+    },
+  });
+
+  // Approved volunteer, Medical department (for testing volunteer dashboard)
+  const volunteerEmail = "volunteer@camply.com";
+  const volunteerPassword = await bcrypt.hash("password123", 10);
+  const volunteerUser = await prisma.user.create({
+    data: {
+      email: volunteerEmail,
+      password: volunteerPassword,
+      role: "VOLUNTEER",
+      firstName: "Demo",
+      lastName: "Volunteer",
+      active: true,
+      organizationId: organization.id,
+    },
+  });
+  await prisma.staffProfile.create({
+    data: {
+      userId: volunteerUser.id,
+      organizationId: organization.id,
+      yearId: year.id,
+      type: "VOLUNTEER",
+      status: "APPROVED",
+      firstName: "Demo",
+      lastName: "Volunteer",
+      phone: "+1-555-0300",
+      email: volunteerEmail,
+      volunteerCategory: "Medical",
+      skills: ["Medical"],
+      assignedLocationId: location.id,
+      approvedAt: new Date(),
+    },
+  });
+
+  console.log("Seed completed: Users, organization, year, registration, teacher, and volunteer created");
 }
 
 main()

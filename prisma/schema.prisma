@@ -15,6 +15,8 @@ enum UserRole {
   ADMIN
   LOCATION_ADMIN
   BASE_USER
+  TEACHER
+  VOLUNTEER
 }
 
 enum PermissionType {
@@ -54,6 +56,12 @@ enum RegistrationStatus {
   ARCHIVED
 }
 
+enum BedStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+}
+
 model User {
   id               String          @id @default(cuid())
   email            String          @unique
@@ -70,6 +78,8 @@ model User {
   managedLocations Location[]      @relation("LocationAdmins")
   permissions      Permission[]
   camperProfiles   CamperProfile[] // User can have multiple camper profiles
+  staffProfiles    StaffProfile[]
+  reportsFromStaff StaffProfile[]  @relation("StaffReportsToUser")
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 }
@@ -117,6 +127,9 @@ model Location {
   fullBehavior String  @default("CLOSE") // CLOSE | PENDING_OK | REDIRECT
 
   registrationCounters RegistrationCounter[]
+  preferredByStaff     StaffProfile[]        @relation("PreferredStaffLocation")
+  assignedStaff        StaffProfile[]        @relation("AssignedStaffLocation")
+  hostels              Hostel[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -225,6 +238,12 @@ model Year {
   signupLinks          SignupLink[] // Year can have many signup links
   documentRequirements DocumentRequirement[]
   registrationCounters RegistrationCounter[]
+  staffSignupLinks     StaffSignupLink[]
+  staffProfiles        StaffProfile[]
+  attendanceSessions   AttendanceSession[]
+  incidentReports      IncidentReport[]
+  medicalVisits        MedicalVisit[]
+  mealDistributions    MealDistribution[]
 
   // Tribe Allocation (PRD Part 4A)
   tribeAllocationEnabled Boolean @default(false)
@@ -313,9 +332,19 @@ model Registration {
   tribeAssignedAt       DateTime?
   tribeAssignmentMethod String? // AUTOMATIC | MANUAL | HYBRID_OVERRIDE
 
+  // Accommodation (Camp Structure module)
+  room   Room?   @relation(fields: [roomId], references: [id])
+  roomId String?
+  bed    Bed?
+
   documents     Document[]
   auditLogs     AuditLog[]
   notifications Notification[]
+  teacherAssignments TeacherCamperAssignment[]
+  attendanceRecords  AttendanceRecord[]
+  incidentReports    IncidentReport[]
+  medicalVisits      MedicalVisit[]
+  mealDistributions  MealDistribution[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -402,6 +431,10 @@ model Tribe {
   maxCapacity   Int?
   status        String         @default("ACTIVE") // ACTIVE | INACTIVE
   registrations Registration[]
+  preferredByStaff StaffProfile[] @relation("PreferredTribe")
+  assignedStaff    StaffProfile[] @relation("AssignedStaffTribe")
+  points        Int            @default(0)
+  pointsLog     TribePointsLog[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -431,4 +464,309 @@ model RegistrationCounter {
   value      Int      @default(0)
 
   @@unique([yearId, locationId])
+}
+
+// ─── Teacher & Volunteer (Staff) Modules ────────────────────────────────────
+
+enum StaffType {
+  TEACHER
+  VOLUNTEER
+}
+
+enum StaffStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DEACTIVATED
+}
+
+model StaffSignupLink {
+  id             String    @id @default(cuid())
+  token          String    @unique
+  type           StaffType
+  year           Year      @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId         String
+  organizationId String
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([yearId, type])
+}
+
+model StaffField {
+  id             String           @id @default(cuid())
+  organizationId String
+  audience       StaffType
+  name           String
+  label          String
+  type           ProfileFieldType
+  options        String?
+  required       Boolean          @default(false)
+  sortOrder      Int              @default(0)
+  fieldValues    StaffFieldValue[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([organizationId, audience, name])
+}
+
+model StaffFieldValue {
+  id             String       @id @default(cuid())
+  value          String
+  field          StaffField   @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  fieldId        String
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  staffProfileId String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([fieldId, staffProfileId])
+}
+
+model StaffProfile {
+  id             String      @id @default(cuid())
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  organizationId String
+  year           Year        @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId         String
+  type           StaffType
+  status         StaffStatus @default(PENDING)
+
+  // Personal
+  firstName     String
+  lastName      String
+  preferredName String?
+  gender        String?
+  dateOfBirth   DateTime?
+  phone         String
+  email         String
+  photoUrl      String?
+
+  // Church
+  church           String?
+  churchDepartment String?
+  yearsServing     String?
+  workerStatus     String?
+
+  // Camp preferences
+  previousCampExperience String?
+  areasOfStrength        String?
+  preferredAgeGroup      String?
+  preferredLocation      Location? @relation("PreferredStaffLocation", fields: [preferredLocationId], references: [id])
+  preferredLocationId    String?
+  preferredTribe         Tribe?    @relation("PreferredTribe", fields: [preferredTribeId], references: [id])
+  preferredTribeId       String?
+
+  // Volunteer-specific
+  volunteerCategory String?
+  teams             String[]
+
+  // Shared
+  skills                     String[]
+  availability               String?
+  emergencyContactName       String?
+  emergencyContactPhone      String?
+  emergencyContactRelationship String?
+  medicalConditions          String?
+  allergies                  String?
+
+  // Review
+  submittedAt    DateTime  @default(now())
+  approvedAt     DateTime?
+  rejectedAt     DateTime?
+  rejectionReason String?
+  reviewerId     String?
+  deactivatedAt  DateTime?
+
+  // Assignment (post-approval)
+  assignedLocation   Location? @relation("AssignedStaffLocation", fields: [assignedLocationId], references: [id])
+  assignedLocationId String?
+  assignedTribe      Tribe?    @relation("AssignedStaffTribe", fields: [assignedTribeId], references: [id])
+  assignedTribeId    String?
+
+  // Camp Structure: department & position flags
+  department        Department? @relation(fields: [departmentId], references: [id])
+  departmentId      String?
+  isDepartmentHead  Boolean     @default(false)
+  isAssistantHead   Boolean     @default(false)
+  isCampMonitor     Boolean     @default(false)
+  isAssistantMonitor Boolean    @default(false)
+
+  // Camp Structure: reporting hierarchy (exactly one of these two is set, enforced in the router)
+  reportsTo        StaffProfile?  @relation("ReportsTo", fields: [reportsToId], references: [id])
+  reportsToId      String?
+  directReports    StaffProfile[] @relation("ReportsTo")
+  reportsToUser    User?          @relation("StaffReportsToUser", fields: [reportsToUserId], references: [id])
+  reportsToUserId  String?
+
+  // Camp Structure: teacher accommodation assignment
+  assignedHostel   Hostel? @relation("AssignedStaffHostel", fields: [assignedHostelId], references: [id])
+  assignedHostelId String?
+  assignedRoom     Room?   @relation("AssignedStaffRoom", fields: [assignedRoomId], references: [id])
+  assignedRoomId   String?
+
+  fieldValues      StaffFieldValue[]
+  camperAssignments TeacherCamperAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, yearId])
+  @@index([organizationId, type, status])
+}
+
+model TeacherCamperAssignment {
+  id             String       @id @default(cuid())
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  staffProfileId String
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId String
+  createdAt      DateTime     @default(now())
+
+  @@unique([staffProfileId, registrationId])
+}
+
+model AttendanceSession {
+  id          String             @id @default(cuid())
+  year        Year               @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId      String
+  locationId  String?
+  tribeId     String?
+  name        String
+  date        DateTime
+  createdById String
+  records     AttendanceRecord[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model AttendanceRecord {
+  id             String            @id @default(cuid())
+  session        AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId      String
+  registration   Registration      @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId String
+  status         String // PRESENT | ABSENT | LATE
+  recordedById   String
+  recordedAt     DateTime          @default(now())
+
+  @@unique([sessionId, registrationId])
+}
+
+model IncidentReport {
+  id             String        @id @default(cuid())
+  organizationId String
+  year           Year          @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId         String
+  registration   Registration? @relation(fields: [registrationId], references: [id])
+  registrationId String?
+  reportedById   String
+  severity       String // LOW | MEDIUM | HIGH
+  title          String
+  description    String
+  status         String        @default("OPEN") // OPEN | RESOLVED
+  createdAt      DateTime      @default(now())
+  resolvedAt     DateTime?
+  resolvedById   String?
+}
+
+model MedicalVisit {
+  id             String       @id @default(cuid())
+  organizationId String
+  year           Year         @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId         String
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId String
+  recordedById   String
+  complaint      String
+  treatment      String?
+  notes          String?
+  visitedAt      DateTime     @default(now())
+}
+
+model MealDistribution {
+  id             String       @id @default(cuid())
+  year           Year         @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  yearId         String
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId String
+  meal           String // BREAKFAST | LUNCH | DINNER
+  date           DateTime     @db.Date
+  servedById     String
+  servedAt       DateTime     @default(now())
+
+  @@unique([registrationId, meal, date])
+}
+
+// ─── Camp Structure & Organogram ────────────────────────────────────────────
+
+model Department {
+  id               String         @id @default(cuid())
+  organizationId   String
+  yearId           String? // per-year instance, matching Tribe; null = org-wide template
+  name             String
+  description      String?
+  responsibilities String[]       @default([])
+  status           String         @default("ACTIVE") // ACTIVE | INACTIVE
+  staff            StaffProfile[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([organizationId, yearId, name])
+}
+
+model Hostel {
+  id             String   @id @default(cuid())
+  organizationId String
+  location       Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId     String
+  name           String // e.g. "Male Hostel A"
+  gender         String? // MALE | FEMALE | MIXED
+  rooms          Room[]
+  staffAssigned  StaffProfile[] @relation("AssignedStaffHostel")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([locationId, name])
+}
+
+model Room {
+  id            String         @id @default(cuid())
+  hostel        Hostel         @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  hostelId      String
+  name          String // e.g. "Room 12"
+  capacity      Int?
+  beds          Bed[]
+  registrations Registration[]
+  staffAssigned StaffProfile[] @relation("AssignedStaffRoom")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([hostelId, name])
+}
+
+model Bed {
+  id             String        @id @default(cuid())
+  room           Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId         String
+  label          String // e.g. "Bed 1"
+  status         BedStatus     @default(AVAILABLE)
+  registration   Registration? @relation(fields: [registrationId], references: [id])
+  registrationId String?       @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([roomId, label])
+}
+
+model TribePointsLog {
+  id        String   @id @default(cuid())
+  tribe     Tribe    @relation(fields: [tribeId], references: [id], onDelete: Cascade)
+  tribeId   String
+  delta     Int
+  reason    String?
+  actorId   String
+  createdAt DateTime @default(now())
 }

@@ -23,7 +23,7 @@ interface PaletteResult {
  * that currently supports server-side search (see plan Step 3: only wire
  * up search that actually exists, don't fabricate new backend search).
  */
-export function CommandPalette({ area }: { area: "admin" | "dashboard" | "location-admin" | "super-admin" }) {
+export function CommandPalette({ area }: { area: "admin" | "dashboard" | "location-admin" | "super-admin" | "teacher" | "volunteer" }) {
   const router = useRouter();
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);

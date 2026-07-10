@@ -15,6 +15,15 @@ import { documentRequirementRouter } from "./routers/documentRequirement";
 import { documentRouter } from "./routers/document";
 import { notificationRouter } from "./routers/notification";
 import { tribeRouter } from "./routers/tribe";
+import { staffSignupLinkRouter } from "./routers/staffSignupLink";
+import { staffRouter } from "./routers/staff";
+import { attendanceRouter } from "./routers/attendance";
+import { incidentRouter } from "./routers/incident";
+import { medicalVisitRouter } from "./routers/medicalVisit";
+import { mealRouter } from "./routers/meal";
+import { departmentRouter } from "./routers/department";
+import { accommodationRouter } from "./routers/accommodation";
+import { orgStructureRouter } from "./routers/orgStructure";
 
 /**
  * This is the primary router for your server.
@@ -38,6 +47,15 @@ export const appRouter = createTRPCRouter({
   document: documentRouter,
   notification: notificationRouter,
   tribe: tribeRouter,
+  staffSignupLink: staffSignupLinkRouter,
+  staff: staffRouter,
+  attendance: attendanceRouter,
+  incident: incidentRouter,
+  medicalVisit: medicalVisitRouter,
+  meal: mealRouter,
+  department: departmentRouter,
+  accommodation: accommodationRouter,
+  orgStructure: orgStructureRouter,
   // booking: bookingRouter, // removed because booking router file was deleted
   // eventType: eventTypeRouter, // removed because eventType router file was deleted
   // schedule: scheduleRouter, // removed because schedule router file was deleted
