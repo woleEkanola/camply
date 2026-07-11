@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
 
 const CRITERIA: { key: string; label: string }[] = [
   { key: "SIBLINGS_TOGETHER", label: "Keep Siblings Together" },
@@ -39,6 +40,8 @@ export default function TribesConfigPage() {
   );
   const [newTribe, setNewTribe] = useState({ name: "", color: "#E67E22", maxCapacity: "" });
   const [bulkResult, setBulkResult] = useState("");
+  const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!camp) return;
@@ -61,7 +64,16 @@ export default function TribesConfigPage() {
     },
   });
   const updateTribe = api.tribe.update.useMutation({ onSuccess: () => refetchTribes() });
-  const deleteTribe = api.tribe.delete.useMutation({ onSuccess: () => refetchTribes() });
+  const deleteTribe = api.tribe.delete.useMutation({
+    onSuccess: () => {
+      setDeleteTarget(null);
+      refetchTribes();
+    },
+    onError: (err) => {
+      setError(`Error deleting tribe: ${err.message}`);
+      setDeleteTarget(null);
+    },
+  });
   const bulkAssign = api.tribe.bulkAutoAssign.useMutation({
     onSuccess: (results) => {
       const ok = results.filter((r) => r.tribeId).length;
@@ -74,6 +86,13 @@ export default function TribesConfigPage() {
     <AppShell area="admin">
       <div className="mx-auto max-w-4xl space-y-6">
         <PageHeader title={`Tribes: ${camp?.name ?? ""}`} />
+
+        {error && (
+          <div className="rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+            <span>{error}</span>
+            <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
+          </div>
+        )}
 
         <Card>
           <CardHeader><CardTitle>Allocation Settings</CardTitle></CardHeader>
@@ -143,7 +162,7 @@ export default function TribesConfigPage() {
                     >
                       {tribe.status === "ACTIVE" ? "Deactivate" : "Activate"}
                     </button>
-                    <button className="text-danger-600 hover:underline" onClick={() => deleteTribe.mutate({ id: tribe.id })}>Delete</button>
+                    <button className="text-danger-600 hover:underline" onClick={() => setDeleteTarget({ id: tribe.id, name: tribe.name })}>Delete</button>
                   </div>
                 </div>
               ))}
@@ -185,6 +204,22 @@ export default function TribesConfigPage() {
           </CardBody>
         </Card>
       </div>
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
+        <p className="text-sm text-neutral-500">
+          Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? This action cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteTribe.isPending}
+            onClick={() => deleteTarget && deleteTribe.mutate({ id: deleteTarget.id })}
+          >
+            Delete
+          </Button>
+        </div>
+      </Dialog>
     </AppShell>
   );
 }

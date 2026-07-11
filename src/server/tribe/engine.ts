@@ -64,8 +64,8 @@ export async function suggestTribe(tx: TxClient, registrationId: string): Promis
   });
 
   const tribes = await tx.tribe.findMany({
-    where: { campId: registration.campId, status: "ACTIVE" },
-    include: { registrations: { select: { id: true, camper: true, campusId: true } } },
+    where: { campId: registration.campId, status: "ACTIVE", deletedAt: null },
+    include: { registrations: { where: { deletedAt: null }, select: { id: true, camper: true, campusId: true } } },
   });
   if (tribes.length === 0) return null;
 
@@ -86,6 +86,7 @@ export async function suggestTribe(tx: TxClient, registrationId: string): Promis
           tribeId: { not: null },
           camper: { userId: registration.camper.userId },
           id: { not: registration.id },
+          deletedAt: null,
         },
         select: { tribeId: true },
       })
@@ -293,7 +294,7 @@ export async function clearTribeAssignment(params: { registrationId: string; act
 /** Bulk-assigns tribes for every un-tribed approved registration in a camp using automatic suggestion. */
 export async function bulkAutoAssignTribes(params: { campId: string; actorId: string }) {
   const registrations = await prisma.registration.findMany({
-    where: { campId: params.campId, status: { in: ["APPROVED", "CHECKED_IN"] }, tribeId: null },
+    where: { campId: params.campId, status: { in: ["APPROVED", "CHECKED_IN"] }, tribeId: null, deletedAt: null },
     select: { id: true },
   });
 

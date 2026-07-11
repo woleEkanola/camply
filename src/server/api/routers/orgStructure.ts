@@ -125,7 +125,7 @@ export const orgStructureRouter = createTRPCRouter({
       assertOrgAccess(currentUser, input.organizationId);
 
       const departments = await ctx.prisma.department.findMany({
-        where: { organizationId: input.organizationId, campId: input.campId, status: "ACTIVE" },
+        where: { organizationId: input.organizationId, campId: input.campId, status: "ACTIVE", deletedAt: null },
         include: {
           staff: { where: { status: "APPROVED" }, include: { user: true } },
         },

@@ -25,8 +25,8 @@ export const documentRouter = createTRPCRouter({
       }
 
       const [camperDocs, regDocs] = await Promise.all([
-        ctx.prisma.document.findMany({ where: { camperId: registration.camperId } }),
-        ctx.prisma.document.findMany({ where: { registrationId: registration.id } }),
+        ctx.prisma.document.findMany({ where: { camperId: registration.camperId, deletedAt: null } }),
+        ctx.prisma.document.findMany({ where: { registrationId: registration.id, deletedAt: null } }),
       ]);
       return [...camperDocs, ...regDocs];
     }),
@@ -85,10 +85,11 @@ export const documentRouter = createTRPCRouter({
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
       const doc = await ctx.prisma.document.findUniqueOrThrow({ where: { id: input.id } });
+      if (doc.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       if (doc.uploadedById !== currentUser.id && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
-      return ctx.prisma.document.delete({ where: { id: input.id } });
+      return ctx.prisma.document.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 
   // Admin document review (PRD Part 5 §8, Part 9 §12)

@@ -61,11 +61,10 @@ async function main() {
 
       const nameToDept = new Map<string, string>(); // normalized name -> Department.id
       for (const name of namesForCamp) {
-        const dept = await prisma.department.upsert({
-          where: { organizationId_campId_name: { organizationId: org.id, campId, name } },
-          update: {},
-          create: { organizationId: org.id, campId, name },
+        const existingDept = await prisma.department.findFirst({
+          where: { organizationId: org.id, campId, name, deletedAt: null },
         });
+        const dept = existingDept ?? (await prisma.department.create({ data: { organizationId: org.id, campId, name } }));
         nameToDept.set(normalize(name), dept.id);
         deptCreated++;
       }

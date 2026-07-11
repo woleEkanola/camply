@@ -3,6 +3,7 @@ import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
+import { softDeleteUser } from "../../trash/userCascade";
 
 // PermissionType is not exported from @prisma/client after downgrade. Define as local enum to match schema.
 export enum PermissionType {
@@ -124,9 +125,10 @@ export const adminRouter = createTRPCRouter({
 
       // Get all admin users for the organization
       const adminUsers = await prisma.user.findMany({
-        where: { 
+        where: {
           organizationId: input.organizationId,
           role: "ADMIN",
+          deletedAt: null,
         },
         include: {
           permissions: true,
@@ -231,7 +233,7 @@ export const adminRouter = createTRPCRouter({
         where: { id: input.adminId },
       });
 
-      if (!adminUser || adminUser.role !== "ADMIN") {
+      if (!adminUser || adminUser.role !== "ADMIN" || adminUser.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Admin user not found" });
       }
 
@@ -246,20 +248,19 @@ export const adminRouter = createTRPCRouter({
       }
 
       // Check if user is SUPER_ADMIN or an OWNER of the organization
-      const hasPermission = 
-        user.role === "SUPER_ADMIN" || 
+      const hasPermission =
+        user.role === "SUPER_ADMIN" ||
         (user.role === "OWNER" && user.organizationId === adminUser.organizationId);
 
       if (!hasPermission) {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "You don't have permission to delete this admin user" 
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You don't have permission to delete this admin user"
         });
       }
 
-      // Delete the admin user (permissions will be cascade deleted)
-      return prisma.user.delete({
-        where: { id: input.adminId },
-      });
+      // Delete the admin user (soft delete — recoverable from Trash for 60 days;
+      // cascades to their Campers/Registrations and StaffProfiles, same as user.delete)
+      return softDeleteUser(input.adminId);
     }),
 });

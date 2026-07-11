@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/trpc";
 import bcrypt from "bcryptjs";
+import { softDeleteUser } from "../../trash/userCascade";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT";
@@ -8,6 +9,7 @@ type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "P
 export const userRouter = createTRPCRouter({
   getAll: protectedProcedure.query(async ({ ctx }) => {
     return await ctx.prisma.user.findMany({
+      where: { deletedAt: null },
       omit: { password: true },
     });
   }),
@@ -15,8 +17,8 @@ export const userRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      return await ctx.prisma.user.findUnique({
-        where: { id: input.id },
+      return await ctx.prisma.user.findFirst({
+        where: { id: input.id, deletedAt: null },
         omit: { password: true },
         include: {
           managedCampuses: true,
@@ -54,7 +56,8 @@ export const userRouter = createTRPCRouter({
           console.log("User is SUPER_ADMIN, fetching all users");
           const users = await ctx.prisma.user.findMany({
             where: {
-              organizationId: input.organizationId
+              organizationId: input.organizationId,
+              deletedAt: null,
             },
             include: {
               managedCampuses: true,
@@ -74,6 +77,7 @@ export const userRouter = createTRPCRouter({
             where: {
               organizationId: input.organizationId,
               role: { not: "SUPER_ADMIN" },
+              deletedAt: null,
             },
             include: {
               managedCampuses: true,
@@ -93,6 +97,7 @@ export const userRouter = createTRPCRouter({
             where: {
               organizationId: input.organizationId,
               role: "CAMPUS_REPRESENTATIVE",
+              deletedAt: null,
             },
             include: {
               managedCampuses: true,
@@ -110,6 +115,7 @@ export const userRouter = createTRPCRouter({
         const users = await ctx.prisma.user.findMany({
           where: {
             organizationId: input.organizationId,
+            deletedAt: null,
           },
           include: {
             managedCampuses: true,
@@ -150,6 +156,7 @@ export const userRouter = createTRPCRouter({
         where: {
           organizationId: input.organizationId,
           role: "CAMPUS_REPRESENTATIVE",
+          deletedAt: null,
         },
         include: {
           managedCampuses: true,
@@ -186,14 +193,14 @@ export const userRouter = createTRPCRouter({
         where: { id: input.userId },
       });
 
-      if (!userToUpdate) {
+      if (!userToUpdate || userToUpdate.deletedAt) {
         throw new Error("User not found");
       }
 
-      // Check if user is a campus rep
-      if (userToUpdate.role !== "CAMPUS_REPRESENTATIVE") {
-        throw new Error("Only campus representatives can be assigned to campuses");
-      }
+      // Any active user can be granted Campus Rep capability for a specific
+      // campus, independent of their primary role (e.g. a Teacher can also
+      // be a Campus Rep) — capability comes from the Campus.reps relation,
+      // not from role === "CAMPUS_REPRESENTATIVE".
 
       // Assign the campus to the rep
       await ctx.prisma.campus.update({
@@ -234,13 +241,8 @@ export const userRouter = createTRPCRouter({
         where: { id: input.userId },
       });
 
-      if (!userToUpdate) {
+      if (!userToUpdate || userToUpdate.deletedAt) {
         throw new Error("User not found");
-      }
-
-      // Check if user is a campus rep
-      if (userToUpdate.role !== "CAMPUS_REPRESENTATIVE") {
-        throw new Error("Only campus representatives can be removed from campuses");
       }
 
       // Remove the campus from the rep
@@ -395,7 +397,7 @@ export const userRouter = createTRPCRouter({
         },
       });
 
-      if (!userToUpdate) {
+      if (!userToUpdate || userToUpdate.deletedAt) {
         throw new Error("User not found");
       }
 
@@ -507,7 +509,7 @@ export const userRouter = createTRPCRouter({
         where: { id: input.id },
       });
 
-      if (!userToDelete) {
+      if (!userToDelete || userToDelete.deletedAt) {
         throw new Error("User not found");
       }
 
@@ -525,10 +527,9 @@ export const userRouter = createTRPCRouter({
         throw new Error("Owners can only delete Admins and Campus Representatives");
       }
 
-      // Delete the user
-      return await ctx.prisma.user.delete({
-        where: { id: input.id },
-      });
+      // Delete the user (soft delete — recoverable from Trash for 60 days;
+      // cascades to their Campers/Registrations and StaffProfiles)
+      return await softDeleteUser(input.id);
     }),
 
   getParentsWithCamperCounts: protectedProcedure
@@ -549,6 +550,7 @@ export const userRouter = createTRPCRouter({
       // Fetch only PARENTs for the Accounts tab
       const where = {
         role: "PARENT" as UserRole,
+        deletedAt: null,
         ...(input.organizationId && { organizationId: input.organizationId })
       };
       // Find all PARENT users

@@ -31,11 +31,10 @@ test.describe("Admin: staff approval and assignment", () => {
     // A department fixture — this org has no seeded departments by default,
     // and department assignment is worth covering independently of whatever
     // an admin happened to create by hand.
-    const dept = await prisma.department.upsert({
-      where: { organizationId_campId_name: { organizationId, campId, name: "E2E Test Department" } },
-      update: {},
-      create: { organizationId, campId, name: "E2E Test Department" },
+    const existingDept = await prisma.department.findFirst({
+      where: { organizationId, campId, name: "E2E Test Department", deletedAt: null },
     });
+    const dept = existingDept ?? (await prisma.department.create({ data: { organizationId, campId, name: "E2E Test Department" } }));
     departmentId = dept.id;
 
     // A venue fixture — the Assignment tab's "Centre" field assigns a Venue

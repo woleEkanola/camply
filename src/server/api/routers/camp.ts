@@ -37,7 +37,7 @@ export const campRouter = createTRPCRouter({
         currentUser.role === "SUPER_ADMIN" ||
         currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "CAMPUS_REPRESENTATIVE" && currentUser.organizationId === input.organizationId);
+        ((currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -60,7 +60,8 @@ export const campRouter = createTRPCRouter({
         return await ctx.prisma.camp.findMany({
           where: {
             id: organization.activeCampId,
-            organizationId: input.organizationId
+            organizationId: input.organizationId,
+            deletedAt: null,
           },
           orderBy: { startDate: "desc" }
         });
@@ -68,7 +69,7 @@ export const campRouter = createTRPCRouter({
 
       // For owners and super admins, return all camps
       return await ctx.prisma.camp.findMany({
-        where: { organizationId: input.organizationId },
+        where: { organizationId: input.organizationId, deletedAt: null },
         orderBy: { startDate: "desc" }
       });
     }),
@@ -109,7 +110,7 @@ export const campRouter = createTRPCRouter({
         where: { id: input.id }
       });
 
-      if (!camp) {
+      if (!camp || camp.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
       }
 
@@ -118,7 +119,7 @@ export const campRouter = createTRPCRouter({
         currentUser.role === "SUPER_ADMIN" ||
         currentUser.role === "OWNER" ||
         (currentUser.organizationId === camp.organizationId &&
-         (currentUser.role === "ADMIN" || currentUser.role === "CAMPUS_REPRESENTATIVE"));
+         (currentUser.role === "ADMIN" || (currentUser.managedCampuses?.length ?? 0) > 0));
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -171,7 +172,8 @@ export const campRouter = createTRPCRouter({
       const existingCamp = await ctx.prisma.camp.findFirst({
         where: {
           name: input.name,
-          organizationId: input.organizationId
+          organizationId: input.organizationId,
+          deletedAt: null,
         }
       });
 
@@ -228,7 +230,7 @@ export const campRouter = createTRPCRouter({
         where: { id: input.id }
       });
 
-      if (!camp) {
+      if (!camp || camp.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
       }
 
@@ -250,7 +252,8 @@ export const campRouter = createTRPCRouter({
           where: {
             name: input.data.name,
             organizationId: camp.organizationId,
-            id: { not: input.id }
+            id: { not: input.id },
+            deletedAt: null,
           }
         });
 
@@ -322,7 +325,8 @@ export const campRouter = createTRPCRouter({
       const camp = await ctx.prisma.camp.findFirst({
         where: {
           id: input.campId,
-          organizationId: input.organizationId
+          organizationId: input.organizationId,
+          deletedAt: null,
         }
       });
 
@@ -386,7 +390,7 @@ export const campRouter = createTRPCRouter({
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
       const camp = await ctx.prisma.camp.findUnique({ where: { id: input.id } });
-      if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+      if (!camp || camp.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
 
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
@@ -420,15 +424,15 @@ export const campRouter = createTRPCRouter({
       const camp = await ctx.prisma.camp.findUnique({
         where: { id: input.id },
         include: {
-          documentRequirements: true,
+          documentRequirements: { where: { deletedAt: null } },
           signupLinks: { where: { active: true } },
         },
       });
-      if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+      if (!camp || camp.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
 
       // Correctness fix vs. the old year.ts: readiness for THIS camp must count
       // Venues scoped to this camp, not a global org-wide Location count.
-      const venueCount = await ctx.prisma.venue.count({ where: { campId: camp.id, visible: true } });
+      const venueCount = await ctx.prisma.venue.count({ where: { campId: camp.id, visible: true, deletedAt: null } });
 
       const checklist = {
         registrationDatesConfigured: !!(camp.registrationOpensAt && camp.registrationClosesAt),
@@ -444,7 +448,10 @@ export const campRouter = createTRPCRouter({
       return { checklist, ready };
     }),
 
-  // Delete a camp
+  // Delete a camp (soft delete — recoverable from Trash for 60 days; cascades to
+  // this camp's Venues (+ their Hostels/Rooms/Beds), Tribes, Departments,
+  // DocumentRequirements, and StaffProfiles. Blocked if live registrations
+  // still reference it — remove/reassign those first.)
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -457,10 +464,10 @@ export const campRouter = createTRPCRouter({
       // Get the camp to delete
       const camp = await ctx.prisma.camp.findUnique({
         where: { id: input.id },
-        include: { registrations: { take: 1 } }
+        include: { registrations: { where: { deletedAt: null }, take: 1 } }
       });
 
-      if (!camp) {
+      if (!camp || camp.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
       }
 
@@ -476,7 +483,7 @@ export const campRouter = createTRPCRouter({
         });
       }
 
-      // Check if camp is in use (has registrations)
+      // Check if camp is in use (has live registrations)
       if (camp.registrations.length > 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -500,9 +507,17 @@ export const campRouter = createTRPCRouter({
         });
       }
 
-      // Delete the camp
-      return await ctx.prisma.camp.delete({
-        where: { id: input.id }
-      });
+      const now = new Date();
+      return ctx.prisma.$transaction(async (tx) => {
+        await tx.bed.updateMany({ where: { room: { hostel: { venue: { campId: input.id } } }, deletedAt: null }, data: { deletedAt: now } });
+        await tx.room.updateMany({ where: { hostel: { venue: { campId: input.id } }, deletedAt: null }, data: { deletedAt: now } });
+        await tx.hostel.updateMany({ where: { venue: { campId: input.id }, deletedAt: null }, data: { deletedAt: now } });
+        await tx.venue.updateMany({ where: { campId: input.id, deletedAt: null }, data: { deletedAt: now } });
+        await tx.tribe.updateMany({ where: { campId: input.id, deletedAt: null }, data: { deletedAt: now } });
+        await tx.department.updateMany({ where: { campId: input.id, deletedAt: null }, data: { deletedAt: now } });
+        await tx.documentRequirement.updateMany({ where: { campId: input.id, deletedAt: null }, data: { deletedAt: now } });
+        await tx.staffProfile.updateMany({ where: { campId: input.id, deletedAt: null }, data: { deletedAt: now } });
+        return tx.camp.update({ where: { id: input.id }, data: { deletedAt: now } });
+      }, { timeout: 15000 });
     })
 });

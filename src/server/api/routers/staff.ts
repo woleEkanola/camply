@@ -14,7 +14,7 @@ export const staffRouter = createTRPCRouter({
   // ─── Self-service ──────────────────────────────────────────────────────
   getMyProfile: protectedProcedure.query(async ({ ctx }) => {
     return ctx.prisma.staffProfile.findFirst({
-      where: { userId: ctx.userId },
+      where: { userId: ctx.userId, deletedAt: null },
       include: {
         assignedVenue: true,
         assignedTribe: true,
@@ -36,7 +36,7 @@ export const staffRouter = createTRPCRouter({
     .input(z.object({ organizationId: z.string(), campId: z.string(), type: z.enum(["TEACHER", "VOLUNTEER"]) }))
     .query(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
-      const where = { organizationId: input.organizationId, campId: input.campId, type: input.type };
+      const where = { organizationId: input.organizationId, campId: input.campId, type: input.type, deletedAt: null };
       const [total, pending, approved, assigned] = await Promise.all([
         ctx.prisma.staffProfile.count({ where }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "PENDING" } }),
@@ -64,6 +64,7 @@ export const staffRouter = createTRPCRouter({
         organizationId: input.organizationId,
         campId: input.campId,
         type: input.type,
+        deletedAt: null,
         ...(input.status && { status: input.status }),
         ...(input.venueId && { assignedVenueId: input.venueId }),
         ...(input.q && {
@@ -112,9 +113,19 @@ export const staffRouter = createTRPCRouter({
           camperAssignments: { include: { registration: { include: { camper: true, tribe: true, room: true } } } },
         },
       });
-      if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!profile || profile.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       return profile;
+    }),
+
+  // Delete a staff profile (soft delete — recoverable from Trash for 60 days).
+  delete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
+      if (!profile || profile.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 
   // ─── Admin: review workflow ─────────────────────────────────────────────
@@ -451,6 +462,7 @@ export const staffRouter = createTRPCRouter({
             organizationId: input.organizationId,
             campId: input.campId,
             status: "APPROVED",
+            deletedAt: null,
             ...(input.excludeStaffId && { id: { not: input.excludeStaffId } }),
           },
           select: { id: true, firstName: true, lastName: true, type: true },

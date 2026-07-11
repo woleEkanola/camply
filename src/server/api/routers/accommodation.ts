@@ -13,8 +13,13 @@ export const accommodationRouter = createTRPCRouter({
     .input(z.object({ venueId: z.string() }))
     .query(async ({ ctx, input }) => {
       return ctx.prisma.hostel.findMany({
-        where: { venueId: input.venueId },
-        include: { rooms: { include: { beds: { include: { registration: { include: { camper: true } } } } } } },
+        where: { venueId: input.venueId, deletedAt: null },
+        include: {
+          rooms: {
+            where: { deletedAt: null },
+            include: { beds: { where: { deletedAt: null }, include: { registration: { include: { camper: true } } } } },
+          },
+        },
         orderBy: { name: "asc" },
       });
     }),
@@ -30,33 +35,52 @@ export const accommodationRouter = createTRPCRouter({
     .input(z.object({ id: z.string(), name: z.string().optional(), gender: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const hostel = await ctx.prisma.hostel.findUnique({ where: { id: input.id } });
-      if (!hostel) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, hostel.organizationId);
       const { id, ...data } = input;
       return ctx.prisma.hostel.update({ where: { id }, data });
     }),
 
+  // Delete a hostel (soft delete — recoverable from Trash for 60 days; cascades
+  // to its Rooms/Beds). Blocked if any bed under it is still occupied.
   deleteHostel: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const hostel = await ctx.prisma.hostel.findUnique({ where: { id: input.id } });
-      if (!hostel) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, hostel.organizationId);
-      return ctx.prisma.hostel.delete({ where: { id: input.id } });
+
+      const occupiedCount = await ctx.prisma.bed.count({
+        where: { room: { hostelId: input.id }, registrationId: { not: null }, deletedAt: null },
+      });
+      if (occupiedCount > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: `Cannot delete this hostel: ${occupiedCount} bed(s) are still occupied. Unassign campers first.` });
+      }
+
+      const now = new Date();
+      return ctx.prisma.$transaction(async (tx: any) => {
+        await tx.bed.updateMany({ where: { room: { hostelId: input.id }, deletedAt: null }, data: { deletedAt: now } });
+        await tx.room.updateMany({ where: { hostelId: input.id, deletedAt: null }, data: { deletedAt: now } });
+        return tx.hostel.update({ where: { id: input.id }, data: { deletedAt: now } });
+      }, { timeout: 15000 });
     }),
 
   // ─── Rooms ───────────────────────────────────────────────────────────
   listRooms: protectedProcedure
     .input(z.object({ hostelId: z.string() }))
     .query(async ({ ctx, input }) => {
-      return ctx.prisma.room.findMany({ where: { hostelId: input.hostelId }, include: { beds: true }, orderBy: { name: "asc" } });
+      return ctx.prisma.room.findMany({
+        where: { hostelId: input.hostelId, deletedAt: null },
+        include: { beds: { where: { deletedAt: null } } },
+        orderBy: { name: "asc" },
+      });
     }),
 
   createRoom: protectedProcedure
     .input(z.object({ hostelId: z.string(), name: z.string(), capacity: z.number().optional() }))
     .mutation(async ({ ctx, input }) => {
       const hostel = await ctx.prisma.hostel.findUnique({ where: { id: input.hostelId } });
-      if (!hostel) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, hostel.organizationId);
       return ctx.prisma.room.create({ data: input });
     }),
@@ -65,19 +89,33 @@ export const accommodationRouter = createTRPCRouter({
     .input(z.object({ id: z.string(), name: z.string().optional(), capacity: z.number().optional() }))
     .mutation(async ({ ctx, input }) => {
       const room = await ctx.prisma.room.findUnique({ where: { id: input.id }, include: { hostel: true } });
-      if (!room) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!room || room.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, room.hostel.organizationId);
       const { id, ...data } = input;
       return ctx.prisma.room.update({ where: { id }, data });
     }),
 
+  // Delete a room (soft delete — recoverable from Trash for 60 days; cascades
+  // to its Beds). Blocked if any bed under it is still occupied.
   deleteRoom: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const room = await ctx.prisma.room.findUnique({ where: { id: input.id }, include: { hostel: true } });
-      if (!room) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!room || room.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, room.hostel.organizationId);
-      return ctx.prisma.room.delete({ where: { id: input.id } });
+
+      const occupiedCount = await ctx.prisma.bed.count({
+        where: { roomId: input.id, registrationId: { not: null }, deletedAt: null },
+      });
+      if (occupiedCount > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: `Cannot delete this room: ${occupiedCount} bed(s) are still occupied. Unassign campers first.` });
+      }
+
+      const now = new Date();
+      return ctx.prisma.$transaction(async (tx: any) => {
+        await tx.bed.updateMany({ where: { roomId: input.id, deletedAt: null }, data: { deletedAt: now } });
+        return tx.room.update({ where: { id: input.id }, data: { deletedAt: now } });
+      }, { timeout: 15000 });
     }),
 
   // ─── Beds ────────────────────────────────────────────────────────────
@@ -85,7 +123,7 @@ export const accommodationRouter = createTRPCRouter({
     .input(z.object({ roomId: z.string() }))
     .query(async ({ ctx, input }) => {
       return ctx.prisma.bed.findMany({
-        where: { roomId: input.roomId },
+        where: { roomId: input.roomId, deletedAt: null },
         include: { registration: { include: { camper: true } } },
         orderBy: { label: "asc" },
       });
@@ -95,7 +133,7 @@ export const accommodationRouter = createTRPCRouter({
     .input(z.object({ roomId: z.string(), label: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const room = await ctx.prisma.room.findUnique({ where: { id: input.roomId }, include: { hostel: true } });
-      if (!room) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!room || room.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, room.hostel.organizationId);
       return ctx.prisma.bed.create({ data: input });
     }),
@@ -104,10 +142,24 @@ export const accommodationRouter = createTRPCRouter({
     .input(z.object({ id: z.string(), label: z.string().optional(), status: z.enum(["AVAILABLE", "OCCUPIED", "MAINTENANCE"]).optional() }))
     .mutation(async ({ ctx, input }) => {
       const bed = await ctx.prisma.bed.findUnique({ where: { id: input.id }, include: { room: { include: { hostel: true } } } });
-      if (!bed) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!bed || bed.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, bed.room.hostel.organizationId);
       const { id, ...data } = input;
       return ctx.prisma.bed.update({ where: { id }, data });
+    }),
+
+  // Delete a bed (soft delete — recoverable from Trash for 60 days).
+  // Blocked if it's currently occupied.
+  deleteBed: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const bed = await ctx.prisma.bed.findUnique({ where: { id: input.id }, include: { room: { include: { hostel: true } } } });
+      if (!bed || bed.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, bed.room.hostel.organizationId);
+      if (bed.registrationId) {
+        throw new TRPCError({ code: "CONFLICT", message: "Cannot delete this bed: it is currently occupied. Unassign the camper first." });
+      }
+      return ctx.prisma.bed.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 
   // ─── Camper housing assignment ─────────────────────────────────────────

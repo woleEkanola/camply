@@ -62,8 +62,8 @@ export async function createDraft(params: {
   actorId: string;
 }) {
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.registration.findUnique({
-      where: { camperId_campId: { camperId: params.camperId, campId: params.campId } },
+    const existing = await tx.registration.findFirst({
+      where: { camperId: params.camperId, campId: params.campId, deletedAt: null },
     });
     if (existing) return existing;
 

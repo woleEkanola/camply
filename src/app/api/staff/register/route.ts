@@ -60,8 +60,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Please verify your email with OTP first" }, { status: 400 });
     }
 
-    const existing = await prisma.staffProfile.findUnique({
-      where: { userId_campId: { userId: user.id, campId: link.campId } },
+    const existing = await prisma.staffProfile.findFirst({
+      where: { userId: user.id, campId: link.campId, deletedAt: null },
     });
     if (existing) {
       return NextResponse.json({ message: "You have already registered for this camp", staffProfileId: existing.id }, { status: 200 });

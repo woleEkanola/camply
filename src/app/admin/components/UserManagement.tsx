@@ -169,15 +169,19 @@ export default function UserManagement({ organizationId }: { organizationId: str
     }
   });
 
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+
   const deleteUserMutation = api.user.delete.useMutation({
     onSuccess: () => {
       setSuccess("User deleted successfully");
       setError("");
+      setDeleteTarget(null);
       void refetchUsers();
       void refetchParents();
     },
     onError: (err) => {
       setError(err.message);
+      setDeleteTarget(null);
     }
   });
 
@@ -289,10 +293,8 @@ export default function UserManagement({ organizationId }: { organizationId: str
   };
 
   // Handle delete user
-  const handleDeleteUser = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this user?")) {
-      deleteUserMutation.mutate({ id });
-    }
+  const handleDeleteUser = (user: User) => {
+    setDeleteTarget({ id: user.id, label: user.email });
   };
 
   // Handle cancel form
@@ -395,7 +397,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
         <button onClick={() => handleEditUser(user)} className="text-accent-700 hover:underline">
           Edit
         </button>
-        <button onClick={() => handleDeleteUser(user.id)} className="text-danger-600 hover:underline">
+        <button onClick={() => handleDeleteUser(user)} className="text-danger-600 hover:underline">
           Delete
         </button>
       </div>
@@ -605,6 +607,22 @@ export default function UserManagement({ organizationId }: { organizationId: str
             </Button>
           </div>
         </form>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
+        <p className="text-sm text-neutral-500">
+          Are you sure you want to delete &quot;{deleteTarget?.label}&quot;? This action cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteUserMutation.isPending}
+            onClick={() => deleteTarget && deleteUserMutation.mutate({ id: deleteTarget.id })}
+          >
+            Delete
+          </Button>
+        </div>
       </Dialog>
     </div>
   );

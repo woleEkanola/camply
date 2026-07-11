@@ -59,7 +59,7 @@ beforeEach(async () => {
       city: "Testville",
       country: "Testland",
       organizationId: orgId,
-      code: "TLC",
+      campusCode: "TLC",
     },
   });
   campusId = campus.id;

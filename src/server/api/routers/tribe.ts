@@ -27,8 +27,8 @@ export const tribeRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       const tribes = await ctx.prisma.tribe.findMany({
-        where: { campId: input.campId },
-        include: { _count: { select: { registrations: true } } },
+        where: { campId: input.campId, deletedAt: null },
+        include: { _count: { select: { registrations: { where: { deletedAt: null } } } } },
         orderBy: { name: "asc" },
       });
       return tribes.map((t: any) => ({ ...t, population: t._count.registrations }));
@@ -60,20 +60,24 @@ export const tribeRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.id } });
+      if (tribe.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Tribe not found" });
       await assertCanManageCamp(ctx, tribe.campId);
       return ctx.prisma.tribe.update({ where: { id: input.id }, data: input.data });
     }),
 
+  // Delete a tribe (soft delete — recoverable from Trash for 60 days).
+  // Blocked if campers are still assigned — reassign them first.
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.id } });
+      if (tribe.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Tribe not found" });
       await assertCanManageCamp(ctx, tribe.campId);
-      const inUse = await ctx.prisma.registration.count({ where: { tribeId: input.id } });
+      const inUse = await ctx.prisma.registration.count({ where: { tribeId: input.id, deletedAt: null } });
       if (inUse > 0) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot delete a tribe with assigned campers. Reassign them first." });
       }
-      return ctx.prisma.tribe.delete({ where: { id: input.id } });
+      return ctx.prisma.tribe.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 
   // Allocation configuration for a camp (PRD Part 4A §5-8)

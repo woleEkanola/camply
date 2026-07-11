@@ -74,66 +74,69 @@ enum BedStatus {
 }
 
 model User {
-  id              String    @id @default(cuid())
-  email           String    @unique
-  password        String
-  role            UserRole
-  firstName       String?
-  lastName        String?
-  phone           String?
-  active          Boolean   @default(true)
-  organization    Organization? @relation(fields: [organizationId], references: [id])
-  organizationId  String?
-  homeCampus      Campus?   @relation("UserCampus", fields: [homeCampusId], references: [id])
-  homeCampusId    String?
-  managedCampuses Campus[]  @relation("CampusReps")
-  permissions     Permission[]
-  campers         Camper[] // User can have multiple camper profiles
-  staffProfiles   StaffProfile[]
+  id               String         @id @default(cuid())
+  email            String         @unique
+  password         String
+  role             UserRole
+  firstName        String?
+  lastName         String?
+  phone            String?
+  active           Boolean        @default(true)
+  organization     Organization?  @relation(fields: [organizationId], references: [id])
+  organizationId   String?
+  homeCampus       Campus?        @relation("UserCampus", fields: [homeCampusId], references: [id])
+  homeCampusId     String?
+  managedCampuses  Campus[]       @relation("CampusReps")
+  permissions      Permission[]
+  campers          Camper[] // User can have multiple camper profiles
+  staffProfiles    StaffProfile[]
   reportsFromStaff StaffProfile[] @relation("StaffReportsToUser")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  deletedAt        DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([deletedAt])
 }
 
 model Organization {
-  id             String          @id @default(cuid())
-  name           String          @unique
-  users          User[]
-  campuses       Campus[]
-  formFields     FormField[] // Organization defines registration form fields (camper/teacher/volunteer)
-  campers        Camper[] // Organization has many camper profiles
-  camps          Camp[] // Organization has many camps
-  activeCampId   String? // Reference to the active camp
-  activeCamp     Camp?           @relation("ActiveCamp", fields: [activeCampId], references: [id])
-  settings       Json? // Holds admin settings such as age range, cutoff date, etc.
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id           String      @id @default(cuid())
+  name         String      @unique
+  users        User[]
+  campuses     Campus[]
+  formFields   FormField[] // Organization defines registration form fields (camper/teacher/volunteer)
+  campers      Camper[] // Organization has many camper profiles
+  camps        Camp[] // Organization has many camps
+  activeCampId String? // Reference to the active camp
+  activeCamp   Camp?       @relation("ActiveCamp", fields: [activeCampId], references: [id])
+  settings     Json? // Holds admin settings such as age range, cutoff date, etc.
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 }
 
 // Campus: permanent church branch/organization structure. Identity only -
 // never holds camp-operational fields like capacity/quota. See Venue for
 // the temporary, per-Camp physical site those belong to.
 model Campus {
-  id             String          @id @default(cuid())
-  name           String
-  slug           String          @unique
-  address        String
-  city           String
-  state          String?
-  zipCode        String?
-  country        String
-  pastor         String?
-  phone          String?
-  email          String?
-  active         Boolean         @default(true)
-  signupOpen     Boolean         @default(true)
-  campusCode     String? // short code embedded in registration numbers
-  displayOrder   Int             @default(0) // order in dropdowns/lists
+  id           String  @id @default(cuid())
+  name         String
+  slug         String  @unique
+  address      String
+  city         String
+  state        String?
+  zipCode      String?
+  country      String
+  pastor       String?
+  phone        String?
+  email        String?
+  active       Boolean @default(true)
+  signupOpen   Boolean @default(true)
+  campusCode   String? // short code embedded in registration numbers
+  displayOrder Int     @default(0) // order in dropdowns/lists
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
-  reps           User[]          @relation("CampusReps")
-  users          User[]          @relation("UserCampus")
+  reps           User[]         @relation("CampusReps")
+  users          User[]         @relation("UserCampus")
   campers        Camper[]
   registrations  Registration[]
   signupLinks    SignupLink[]
@@ -141,10 +144,15 @@ model Campus {
   registrationCounters RegistrationCounter[]
   preferredByStaff     StaffProfile[]        @relation("PreferredStaffCampus")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  @@unique([organizationId, name])
+  // Uniqueness on (organizationId, name) is enforced by a partial unique index
+  // (WHERE "deletedAt" IS NULL) added by hand in the migration SQL, not by
+  // Prisma's schema-level @@unique — see the soft-delete migration notes.
+  @@index([organizationId, name])
+  @@index([deletedAt])
 }
 
 // Venue: physical camp site, scoped to exactly one Camp (not reused across
@@ -152,7 +160,7 @@ model Campus {
 // facility). Holds all camp-operational/capacity fields that used to live
 // on Location.
 model Venue {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   name         String
   address      String?
   capacity     Int?
@@ -177,10 +185,13 @@ model Venue {
   assignedStaff      StaffProfile[]      @relation("AssignedStaffVenue")
   attendanceSessions AttendanceSession[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  @@unique([campId, name])
+  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  @@index([campId, name])
+  @@index([deletedAt])
 }
 
 model Permission {
@@ -215,11 +226,14 @@ model FormField {
   validation     Json?
   profileValues  ProfileFieldValue[]
   staffValues    StaffFieldValue[]
+  deletedAt      DateTime?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
-  @@unique([organizationId, audience, name])
+  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  @@index([organizationId, audience, name])
   @@index([organizationId, audience, sortOrder])
+  @@index([deletedAt])
 }
 
 model Camper {
@@ -264,8 +278,11 @@ model Camper {
   active         Boolean             @default(true)
   dobApproved    Boolean             @default(false)
   birthCert      String? // URL to uploaded birth certificate
+  deletedAt      DateTime?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
+
+  @@index([deletedAt])
 }
 
 model ProfileFieldValue {
@@ -334,21 +351,24 @@ model Camp {
   orgCode              String?
   remindersHtml        String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  @@unique([organizationId, name])
-  @@unique([organizationId, slug])
+  // Partial unique indexes (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  @@index([organizationId, name])
+  @@index([organizationId, slug])
+  @@index([deletedAt])
 }
 
 model SignupLink {
-  id       String @id @default(cuid())
-  token    String @unique // The unique token for the URL
-  campus   Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
-  campusId String
-  camp     Camp   @relation(fields: [campId], references: [id], onDelete: Cascade)
-  campId   String
-  active   Boolean  @default(true)
+  id        String   @id @default(cuid())
+  token     String   @unique // The unique token for the URL
+  campus    Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  campusId  String
+  camp      Camp     @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId    String
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -406,22 +426,26 @@ model Registration {
   roomId String?
   bed    Bed?
 
-  documents     Document[]
-  auditLogs     AuditLog[]
-  notifications Notification[]
+  documents          Document[]
+  auditLogs          AuditLog[]
+  notifications      Notification[]
   teacherAssignments TeacherCamperAssignment[]
   attendanceRecords  AttendanceRecord[]
   incidentReports    IncidentReport[]
   medicalVisits      MedicalVisit[]
   mealDistributions  MealDistribution[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  @@unique([camperId, campId])
+  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration —
+  // lets a camper re-register for the same camp after a prior registration was soft-deleted.
+  @@index([camperId, campId])
   @@index([campusId, status])
   @@index([venueId, status])
   @@index([campId, status])
+  @@index([deletedAt])
 }
 
 model DocumentRequirement {
@@ -436,8 +460,11 @@ model DocumentRequirement {
   scope           String     @default("CAMPER") // CAMPER | REGISTRATION
   sortOrder       Int        @default(0)
   documents       Document[]
+  deletedAt       DateTime?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+
+  @@index([deletedAt])
 }
 
 model Document {
@@ -455,8 +482,11 @@ model Document {
   status          String               @default("UPLOADED") // UPLOADED | APPROVED | REJECTED
   rejectionReason String?
   uploadedById    String
+  deletedAt       DateTime?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
+
+  @@index([deletedAt])
 }
 
 model AuditLog {
@@ -491,25 +521,28 @@ model Notification {
 }
 
 model Tribe {
-  id            String         @id @default(cuid())
-  camp          Camp           @relation(fields: [campId], references: [id], onDelete: Cascade)
-  campId        String
-  name          String
-  color         String?
-  logoUrl       String?
-  description   String?
-  maxCapacity   Int?
-  status        String         @default("ACTIVE") // ACTIVE | INACTIVE
-  registrations Registration[]
-  preferredByStaff StaffProfile[] @relation("PreferredTribe")
-  assignedStaff    StaffProfile[] @relation("AssignedStaffTribe")
+  id                 String              @id @default(cuid())
+  camp               Camp                @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId             String
+  name               String
+  color              String?
+  logoUrl            String?
+  description        String?
+  maxCapacity        Int?
+  status             String              @default("ACTIVE") // ACTIVE | INACTIVE
+  registrations      Registration[]
+  preferredByStaff   StaffProfile[]      @relation("PreferredTribe")
+  assignedStaff      StaffProfile[]      @relation("AssignedStaffTribe")
   attendanceSessions AttendanceSession[]
-  points        Int            @default(0)
-  pointsLog     TribePointsLog[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  points             Int                 @default(0)
+  pointsLog          TribePointsLog[]
+  deletedAt          DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
-  @@unique([campId, name])
+  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  @@index([campId, name])
+  @@index([deletedAt])
 }
 
 model SideEffect {
@@ -618,42 +651,42 @@ model StaffProfile {
   teams             String[]
 
   // Shared
-  skills                     String[]
-  availability               String?
-  emergencyContactName       String?
-  emergencyContactPhone      String?
+  skills                       String[]
+  availability                 String?
+  emergencyContactName         String?
+  emergencyContactPhone        String?
   emergencyContactRelationship String?
-  medicalConditions          String?
-  allergies                  String?
+  medicalConditions            String?
+  allergies                    String?
 
   // Review
-  submittedAt    DateTime  @default(now())
-  approvedAt     DateTime?
-  rejectedAt     DateTime?
+  submittedAt     DateTime  @default(now())
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
   rejectionReason String?
-  reviewerId     String?
-  deactivatedAt  DateTime?
+  reviewerId      String?
+  deactivatedAt   DateTime?
 
   // Assignment (post-approval)
-  assignedVenue      Venue?    @relation("AssignedStaffVenue", fields: [assignedVenueId], references: [id])
-  assignedVenueId    String?
-  assignedTribe      Tribe?    @relation("AssignedStaffTribe", fields: [assignedTribeId], references: [id])
-  assignedTribeId    String?
+  assignedVenue   Venue?  @relation("AssignedStaffVenue", fields: [assignedVenueId], references: [id])
+  assignedVenueId String?
+  assignedTribe   Tribe?  @relation("AssignedStaffTribe", fields: [assignedTribeId], references: [id])
+  assignedTribeId String?
 
   // Camp Structure: department & position flags
-  department        Department? @relation(fields: [departmentId], references: [id])
-  departmentId      String?
-  isDepartmentHead  Boolean     @default(false)
-  isAssistantHead   Boolean     @default(false)
-  isCampMonitor     Boolean     @default(false)
-  isAssistantMonitor Boolean    @default(false)
+  department         Department? @relation(fields: [departmentId], references: [id])
+  departmentId       String?
+  isDepartmentHead   Boolean     @default(false)
+  isAssistantHead    Boolean     @default(false)
+  isCampMonitor      Boolean     @default(false)
+  isAssistantMonitor Boolean     @default(false)
 
   // Camp Structure: reporting hierarchy (exactly one of these two is set, enforced in the router)
-  reportsTo        StaffProfile?  @relation("ReportsTo", fields: [reportsToId], references: [id])
-  reportsToId      String?
-  directReports    StaffProfile[] @relation("ReportsTo")
-  reportsToUser    User?          @relation("StaffReportsToUser", fields: [reportsToUserId], references: [id])
-  reportsToUserId  String?
+  reportsTo       StaffProfile?  @relation("ReportsTo", fields: [reportsToId], references: [id])
+  reportsToId     String?
+  directReports   StaffProfile[] @relation("ReportsTo")
+  reportsToUser   User?          @relation("StaffReportsToUser", fields: [reportsToUserId], references: [id])
+  reportsToUserId String?
 
   // Camp Structure: teacher accommodation assignment
   assignedHostel   Hostel? @relation("AssignedStaffHostel", fields: [assignedHostelId], references: [id])
@@ -661,14 +694,17 @@ model StaffProfile {
   assignedRoom     Room?   @relation("AssignedStaffRoom", fields: [assignedRoomId], references: [id])
   assignedRoomId   String?
 
-  fieldValues      StaffFieldValue[]
+  fieldValues       StaffFieldValue[]
   camperAssignments TeacherCamperAssignment[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  @@unique([userId, campId])
+  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  @@index([userId, campId])
   @@index([organizationId, type, status])
+  @@index([deletedAt])
 }
 
 model TeacherCamperAssignment {
@@ -768,25 +804,31 @@ model Department {
   responsibilities String[]       @default([])
   status           String         @default("ACTIVE") // ACTIVE | INACTIVE
   staff            StaffProfile[]
+  deletedAt        DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  @@unique([organizationId, campId, name])
+  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  @@index([organizationId, campId, name])
+  @@index([deletedAt])
 }
 
 model Hostel {
-  id             String   @id @default(cuid())
+  id             String         @id @default(cuid())
   organizationId String
-  venue          Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  venue          Venue          @relation(fields: [venueId], references: [id], onDelete: Cascade)
   venueId        String
   name           String // e.g. "Male Hostel A"
   gender         String? // MALE | FEMALE | MIXED
   rooms          Room[]
   staffAssigned  StaffProfile[] @relation("AssignedStaffHostel")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  @@unique([venueId, name])
+  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  @@index([venueId, name])
+  @@index([deletedAt])
 }
 
 model Room {
@@ -798,10 +840,13 @@ model Room {
   beds          Bed[]
   registrations Registration[]
   staffAssigned StaffProfile[] @relation("AssignedStaffRoom")
+  deletedAt     DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  @@unique([hostelId, name])
+  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  @@index([hostelId, name])
+  @@index([deletedAt])
 }
 
 model Bed {
@@ -812,10 +857,13 @@ model Bed {
   status         BedStatus     @default(AVAILABLE)
   registration   Registration? @relation(fields: [registrationId], references: [id])
   registrationId String?       @unique
+  deletedAt      DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  @@unique([roomId, label])
+  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  @@index([roomId, label])
+  @@index([deletedAt])
 }
 
 model TribePointsLog {

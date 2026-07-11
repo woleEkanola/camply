@@ -14,8 +14,8 @@
  * bg-warning-* etc.) compiled to nothing as a result.
  *
  * - neutral-*  : all chrome (sidebar, cards, table backgrounds, borders,
- *                muted text). Never use raw gray-*/zinc-* utilities in new
- *                components — use these so the palette stays centralized.
+ *                muted text). Never use raw gray-* or zinc-* utilities in
+ *                new components — use these so the palette stays centralized.
  * - accent-*   : the single brand color (anchored on the existing
  *                #E67E22 orange as accent-600). Primary buttons, active
  *                nav indicator, links, selection — nothing else.

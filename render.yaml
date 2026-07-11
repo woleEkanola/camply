@@ -9,6 +9,26 @@ services:
   envVars:
   - key: NODE_ENV
     value: production
+# Daily purge of Trash items soft-deleted more than 60 days ago (see
+# src/server/trash/service.ts, src/app/api/cron/purge-trash/route.ts). CRON_SECRET
+# must match the same env var configured on the `next-js` web service above, and
+# APP_URL must point at that service's deployed URL — set both manually in the
+# Render dashboard (not committed here). Existing /api/cron/effects has no
+# equivalent `type: cron` block in this file either, so however that one is
+# triggered today (Render dashboard cron job or an external pinger), replicate
+# the same mechanism for this one.
+- type: cron
+  name: purge-trash
+  runtime: node
+  plan: free
+  schedule: "0 3 * * *"
+  buildCommand: "true"
+  startCommand: curl -sf -X POST -H "x-cron-secret:$CRON_SECRET" "$APP_URL/api/cron/purge-trash"
+  envVars:
+  - key: CRON_SECRET
+    sync: false
+  - key: APP_URL
+    sync: false
 # Uncomment the following to deploy this app as a static site on render
 # - type: web
 #   name: nextjs-static

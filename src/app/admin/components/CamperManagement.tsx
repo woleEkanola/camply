@@ -204,6 +204,23 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     { header: "Created", accessor: (profile) => new Date(profile.createdAt).toLocaleDateString() },
   ];
 
+  const canManageCampers = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+
+  const actions = (profile: CamperType) =>
+    canManageCampers ? (
+      <div className="flex justify-end gap-3 text-sm">
+        <button
+          onClick={() => { setSelectedProfile(profile.id); setIsModalOpen(true); }}
+          className="text-accent-700 hover:underline"
+        >
+          Edit
+        </button>
+        <button onClick={() => openDeleteModal(profile.id)} className="text-danger-600 hover:underline">
+          Delete
+        </button>
+      </div>
+    ) : null;
+
   return (
     <div>
       {/* Edit/Add Camper Modal */}
@@ -264,6 +281,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         columns={columns}
         data={filteredProfiles}
         rowKey={(profile) => profile.id}
+        actions={actions}
         isLoading={isLoading}
         emptyTitle="No campers found"
         emptyDescription="Try adjusting your search or filters."

@@ -56,4 +56,42 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     const allCampusesForOrg = await prisma.campus.findMany({ where: { organizationId } });
     expect(allCampusesForOrg.some((c) => c.name === campusName)).toBe(true);
   });
+
+  test("deleting a campus with linked registrations soft-deletes both, recoverable from Trash", async ({ page }) => {
+    const { organizationId, campId } = await getFixtureOrgContext();
+    if (!campusId) throw new Error("campusId not set — earlier test must have failed");
+
+    const parentEmail = `e2e-campus-delete-parent-${Date.now()}@camply.test`;
+    const parent = await prisma.user.create({ data: { email: parentEmail, password: "x", role: "PARENT", organizationId } });
+    const camper = await prisma.camper.create({ data: { name: "E2E Delete-Cascade Camper", userId: parent.id, organizationId, homeCampusId: campusId } });
+    const registration = await prisma.registration.create({
+      data: { camperId: camper.id, campId, campusId, status: "APPROVED", registrationNumber: `E2E-DEL-CASCADE-${Date.now()}` },
+    });
+
+    try {
+      await loginWithPassword(page, "owner@camply.com", "password123");
+      await page.goto("/admin/campuses");
+
+      const row = page.locator("tr", { hasText: campusName });
+      await row.getByRole("button", { name: "Delete" }).click();
+      await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+
+      await expect(page.getByText("Campus deleted successfully")).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText(campusName)).not.toBeVisible();
+
+      // Soft-deleted, not gone — and the cascade must have reached the registration too.
+      await expect
+        .poll(async () => (await prisma.campus.findUniqueOrThrow({ where: { id: campusId! } })).deletedAt)
+        .not.toBeNull();
+      const reloadedRegistration = await prisma.registration.findUniqueOrThrow({ where: { id: registration.id } });
+      expect(reloadedRegistration.deletedAt).not.toBeNull();
+
+      await page.goto("/admin/trash");
+      await expect(page.getByText(campusName)).toBeVisible({ timeout: 10000 });
+    } finally {
+      await prisma.registration.deleteMany({ where: { id: registration.id } });
+      await prisma.camper.deleteMany({ where: { id: camper.id } });
+      await prisma.user.deleteMany({ where: { id: parent.id } });
+    }
+  });
 });

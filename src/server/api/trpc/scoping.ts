@@ -11,9 +11,12 @@ export async function assertOrgAdmin(ctx: { session: any }, organizationId: stri
 }
 
 /**
- * Throws unless the caller is an org admin for `organizationId`, or a
- * CAMPUS_REPRESENTATIVE whose managedCampuses includes `campusId` (re-verified
- * against the DB every call, never trusted from the JWT session claim alone).
+ * Throws unless the caller is an org admin for `organizationId`, or is a rep
+ * for `campusId` (any user can be granted campus-rep access for a specific
+ * campus via the Campus.reps relation, independent of their primary role —
+ * e.g. a TEACHER can also be a Campus Rep for their church branch — so this
+ * is a pure DB relation check, not gated on `user.role === "CAMPUS_REPRESENTATIVE"`.
+ * Always re-verified against the DB, never trusted from the JWT session claim alone.
  */
 export async function assertOrgAdminOrCampusRep(
   ctx: { prisma: any; session: any },
@@ -23,7 +26,7 @@ export async function assertOrgAdminOrCampusRep(
   const user = ctx.session?.user;
   if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (ORG_ADMIN_ROLES.includes(user.role) && user.organizationId === organizationId) return user;
-  if (user.role === "CAMPUS_REPRESENTATIVE" && user.organizationId === organizationId && campusId) {
+  if (user.organizationId === organizationId && campusId) {
     const managed = await ctx.prisma.campus.findFirst({
       where: { id: campusId, reps: { some: { id: user.id } } },
     });

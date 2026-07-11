@@ -353,9 +353,10 @@ export default function CampusesPage() {
     },
   });
 
-  // Get all campus reps (users with CAMPUS_REPRESENTATIVE role) in the org
-  const { data: adminData, refetch: refetchAdmins } = api.user.getByOrganization.useQuery(
-    { organizationId: (session?.user as ExtendedUser)?.organizationId || "", role: "CAMPUS_REPRESENTATIVE" } as any,
+  // Any active user in the org is eligible to be a Campus Rep (a Teacher or
+  // Volunteer can hold this capability alongside their primary role).
+  const { data: adminData, refetch: refetchAdmins } = api.campus.listRepCandidates.useQuery(
+    { organizationId: (session?.user as ExtendedUser)?.organizationId || "" },
     {
       enabled:
         status === "authenticated" &&
@@ -687,6 +688,8 @@ export default function CampusesPage() {
       header: "Address",
       accessor: (campus) =>
         [campus.address, campus.city, campus.state, campus.zipCode, campus.country].filter(Boolean).join(", "),
+      wrap: true,
+      className: "max-w-xs",
     },
     {
       header: "Assigned Rep",
@@ -842,9 +845,11 @@ export default function CampusesPage() {
           </p>
         )}
         <div className="mb-4 max-h-60 overflow-y-auto rounded-md border border-neutral-200 p-2">
-          <p className="mb-2 text-sm font-medium text-neutral-700">Available Reps (Role: CAMPUS_REPRESENTATIVE)</p>
+          <p className="mb-2 text-sm font-medium text-neutral-700">
+            Assign as Rep — any active user, regardless of their existing role (e.g. a Teacher can also be a Campus Rep)
+          </p>
           {availableAdmins.length === 0 ? (
-            <p className="text-sm text-neutral-500">No available reps found.</p>
+            <p className="text-sm text-neutral-500">No users found.</p>
           ) : (
             availableAdmins.map((admin) => (
               <label key={admin.id} className="flex items-center gap-2 py-1 text-sm text-neutral-700">
@@ -855,6 +860,7 @@ export default function CampusesPage() {
                   className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
                 />
                 {admin.firstName || admin.lastName ? `${admin.firstName ?? ""} ${admin.lastName ?? ""}`.trim() : admin.email}
+                {(admin as any).role && <span className="text-xs text-neutral-400">({(admin as any).role})</span>}
               </label>
             ))
           )}
