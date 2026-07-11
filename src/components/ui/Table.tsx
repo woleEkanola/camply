@@ -16,6 +16,15 @@ export interface Column<T> {
   /** Allow long content (e.g. addresses) to wrap within the column's width instead of
    * forcing the table wider and requiring horizontal scroll to see later columns. */
   wrap?: boolean;
+  /** Renders a compact filter <select> under this column's header. Table stays
+   * presentational — filter state and any resulting query params are owned by
+   * the parent, same as the "controlled" mode's toolbar-driven filters. */
+  filter?: {
+    value: string;
+    options: { value: string; label: string }[];
+    onChange: (value: string) => void;
+    placeholder?: string;
+  };
 }
 
 interface CommonProps<T> {
@@ -185,6 +194,29 @@ export function Table<T>(props: TableProps<T>) {
                 ))}
                 {actions && <th scope="col" className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-neutral-500">Actions</th>}
               </tr>
+              {columns.some((c) => c.filter) && (
+                <tr className="border-t border-neutral-100 bg-neutral-50">
+                  {selectable && <th scope="col" className="px-4 py-1.5" />}
+                  {columns.map((column, i) => (
+                    <th key={i} scope="col" className="px-4 py-1.5 font-normal">
+                      {column.filter && (
+                        <select
+                          aria-label={typeof column.header === "string" ? `Filter by ${column.header}` : undefined}
+                          className="w-full rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-neutral-600 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+                          value={column.filter.value}
+                          onChange={(e) => column.filter!.onChange(e.target.value)}
+                        >
+                          <option value="">{column.filter.placeholder ?? "All"}</option>
+                          {column.filter.options.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      )}
+                    </th>
+                  ))}
+                  {actions && <th scope="col" className="px-4 py-1.5" />}
+                </tr>
+              )}
             </thead>
             <tbody className="divide-y divide-neutral-100 bg-white">
               {pageData.map((row) => (

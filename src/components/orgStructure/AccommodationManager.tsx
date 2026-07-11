@@ -209,6 +209,177 @@ function BulkRoomDialog({
   );
 }
 
+// ─── Bulk Bed Dialog ──────────────────────────────────────────────────────────
+
+function BulkBedDialog({
+  roomId,
+  roomName,
+  onClose,
+  onSuccess,
+}: {
+  roomId: string;
+  roomName: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [mode, setMode] = useState<BulkMode>("numbered");
+
+  // Numbered mode
+  const [prefix, setPrefix] = useState("Bed");
+  const [startNum, setStartNum] = useState("1");
+  const [count, setCount] = useState("4");
+
+  // Custom mode
+  const [customText, setCustomText] = useState("");
+
+  const [error, setError] = useState("");
+
+  const createBeds = api.accommodation.createBeds.useMutation({
+    onSuccess: () => { onSuccess(); onClose(); },
+    onError: (err) => setError(err.message),
+  });
+
+  function buildBeds(): { label: string }[] | null {
+    if (mode === "numbered") {
+      const n = parseInt(count);
+      const start = parseInt(startNum);
+      if (isNaN(n) || n < 1 || n > 50) {
+        setError("Count must be between 1 and 50.");
+        return null;
+      }
+      if (isNaN(start) || start < 0) {
+        setError("Start number must be 0 or greater.");
+        return null;
+      }
+      return Array.from({ length: n }, (_, i) => ({ label: `${prefix} ${start + i}` }));
+    }
+
+    // custom
+    const labels = customText
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (labels.length === 0) {
+      setError("Enter at least one bed label.");
+      return null;
+    }
+    if (labels.length > 50) {
+      setError("Maximum 50 beds at once.");
+      return null;
+    }
+    return labels.map((label) => ({ label }));
+  }
+
+  const preview = (() => {
+    if (mode === "numbered") {
+      const n = Math.min(Math.max(parseInt(count) || 0, 0), 50);
+      const start = parseInt(startNum) || 1;
+      if (!prefix.trim() || !n) return [];
+      return Array.from({ length: Math.min(n, 5) }, (_, i) => `${prefix} ${start + i}`);
+    }
+    return customText.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean).slice(0, 5);
+  })();
+
+  const previewCount = mode === "numbered"
+    ? Math.min(Math.max(parseInt(count) || 0, 0), 50)
+    : customText.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean).length;
+
+  return (
+    <Dialog open onClose={onClose} title={`Add Beds — ${roomName}`}>
+      {/* Mode tabs */}
+      <div className="mb-5 flex gap-1 rounded-lg bg-neutral-100 p-1">
+        {(["numbered", "custom"] as BulkMode[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => { setMode(m); setError(""); }}
+            className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+              mode === m ? "bg-white shadow text-neutral-900" : "text-neutral-500 hover:text-neutral-700"
+            }`}
+          >
+            {m === "numbered" ? "🔢 Numbered Sequence" : "✏️ Custom Labels"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "numbered" ? (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-1">
+            <Input
+              label="Prefix"
+              placeholder="Bed"
+              value={prefix}
+              onChange={(e) => setPrefix(e.target.value)}
+            />
+          </div>
+          <Input
+            label="Start at"
+            type="number"
+            min="0"
+            value={startNum}
+            onChange={(e) => setStartNum(e.target.value)}
+          />
+          <Input
+            label="How many"
+            type="number"
+            min="1"
+            max="50"
+            value={count}
+            onChange={(e) => setCount(e.target.value)}
+          />
+        </div>
+      ) : (
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-neutral-700">
+            Bed labels <span className="text-neutral-400">(one per line, or comma-separated)</span>
+          </label>
+          <textarea
+            className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+            rows={6}
+            placeholder={"Bed 1\nBed 2\nBed 3\nBed 4\n\n— or —\n\nBed 1, Bed 2, Bed 3"}
+            value={customText}
+            onChange={(e) => setCustomText(e.target.value)}
+          />
+        </div>
+      )}
+
+      {/* Live preview */}
+      {preview.length > 0 && (
+        <div className="mt-4 rounded-lg bg-neutral-50 p-3">
+          <p className="mb-2 text-xs font-medium text-neutral-500 uppercase tracking-wide">
+            Preview — {previewCount} bed{previewCount !== 1 ? "s" : ""} will be created
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {preview.map((label, i) => (
+              <Badge key={i} tone="neutral">{label}</Badge>
+            ))}
+            {previewCount > 5 && (
+              <Badge tone="neutral">…+{previewCount - 5} more</Badge>
+            )}
+          </div>
+        </div>
+      )}
+
+      {error && <p className="mt-3 text-sm text-danger-600">{error}</p>}
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button
+          loading={createBeds.isPending}
+          disabled={previewCount === 0}
+          onClick={() => {
+            setError("");
+            const beds = buildBeds();
+            if (!beds) return;
+            createBeds.mutate({ roomId, beds });
+          }}
+        >
+          Create {previewCount > 0 ? previewCount : ""} Bed{previewCount !== 1 ? "s" : ""}
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
 // ─── Main AccommodationManager ────────────────────────────────────────────────
 
 export function AccommodationManager({ organizationId, campId }: { organizationId: string; campId: string }) {
@@ -228,10 +399,14 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
   const [bedDialog, setBedDialog] = useState<{ roomId: string; roomName: string } | null>(null);
   const [bedLabel, setBedLabel] = useState("");
 
+  // Bulk bed dialog
+  const [bulkBedDialog, setBulkBedDialog] = useState<{ roomId: string; roomName: string } | null>(null);
+
   const [assignBed, setAssignBed] = useState<{ id: string; label: string } | null>(null);
   const [camperQuery, setCamperQuery] = useState("");
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ type: "hostel" | "room" | "bed"; id: string; label: string } | null>(null);
+  const [autoAssignSummary, setAutoAssignSummary] = useState("");
 
   const invalidate = () => utils.accommodation.listHostels.invalidate({ venueId });
 
@@ -258,6 +433,20 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
   });
   const unassignCamperFromBed = api.accommodation.unassignCamperFromBed.useMutation({ onSuccess: invalidate });
 
+  const bulkAutoAssignBeds = api.accommodation.bulkAutoAssignBeds.useMutation({
+    onSuccess: (results) => {
+      const assigned = results.filter((r) => r.bedId).length;
+      const failed = results.length - assigned;
+      setAutoAssignSummary(
+        failed > 0
+          ? `${assigned} assigned, ${failed} could not be placed — no matching-gender bed available.`
+          : `${assigned} assigned.`
+      );
+      invalidate();
+    },
+    onError: (err) => setError(err.message),
+  });
+
   const { data: camperResults } = api.registration.adminList.useQuery(
     { organizationId, campId, status: "APPROVED", q: camperQuery, limit: 10 },
     { enabled: !!assignBed && !!campId && camperQuery.length > 1 }
@@ -268,9 +457,24 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-neutral-900">Accommodation</h2>
         {venueId && (
-          <Button size="sm" onClick={() => setHostelDialogOpen(true)}>
-            + Add Hostel
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={bulkAutoAssignBeds.isPending}
+              onClick={() => {
+                setAutoAssignSummary("");
+                if (window.confirm("Auto assign all unassigned approved campers, teachers, and volunteers to available beds at this venue?")) {
+                  bulkAutoAssignBeds.mutate({ venueId });
+                }
+              }}
+            >
+              Auto Assign Rooms & Beds
+            </Button>
+            <Button size="sm" onClick={() => setHostelDialogOpen(true)}>
+              + Add Hostel
+            </Button>
+          </div>
         )}
       </div>
 
@@ -278,6 +482,13 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
         <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">
           <span>{error}</span>
           <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
+        </div>
+      )}
+
+      {autoAssignSummary && (
+        <div className="mb-4 rounded-md bg-accent-50 p-3 text-sm text-accent-700">
+          <span>{autoAssignSummary}</span>
+          <button onClick={() => setAutoAssignSummary("")} className="ml-3 text-xs underline">Dismiss</button>
         </div>
       )}
 
@@ -382,13 +593,20 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
                             </span>
                           ))}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             size="sm"
                             variant="secondary"
                             onClick={() => setBedDialog({ roomId: r.id, roomName: r.name })}
                           >
                             Add Bed
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setBulkBedDialog({ roomId: r.id, roomName: r.name })}
+                          >
+                            + Add Beds
                           </Button>
                           <Button
                             size="sm"
@@ -435,6 +653,16 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
           hostelId={bulkRoomDialog.hostelId}
           hostelName={bulkRoomDialog.hostelName}
           onClose={() => setBulkRoomDialog(null)}
+          onSuccess={invalidate}
+        />
+      )}
+
+      {/* ── Bulk Bed Creator ── */}
+      {bulkBedDialog && (
+        <BulkBedDialog
+          roomId={bulkBedDialog.roomId}
+          roomName={bulkBedDialog.roomName}
+          onClose={() => setBulkBedDialog(null)}
           onSuccess={invalidate}
         />
       )}

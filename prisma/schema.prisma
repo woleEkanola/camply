@@ -331,6 +331,11 @@ model Camp {
   tribeAllocationRules   Json? // ordered array: [{ criterion: "POPULATION"|"GENDER"|"AGE"|"CAMPUS"|"CHURCH"|"SCHOOL"|"SIBLINGS_TOGETHER"|"SIBLINGS_APART"|"RETURNING_CAMPER", enabled: true }]
   tribes                 Tribe[]
 
+  // Bed Allocation (mirrors Tribe Allocation above) — gender-match to Hostel.gender
+  // is always a hard filter in the engine, not a toggleable rule here.
+  bedAllocationEnabled Boolean @default(false)
+  bedAllocationRules   Json? // ordered array: [{ criterion: "AGE_GROUP"|"GROUP_TOGETHER"|"CAMPUS_TOGETHER"|"POPULATION_BALANCE", enabled: true }]
+
   // Camp Configuration (PRD Part 2)
   theme                String?
   description          String?
@@ -698,11 +703,12 @@ model StaffProfile {
   reportsToUser   User?          @relation("StaffReportsToUser", fields: [reportsToUserId], references: [id])
   reportsToUserId String?
 
-  // Camp Structure: teacher accommodation assignment
+  // Camp Structure: teacher/volunteer accommodation assignment
   assignedHostel   Hostel? @relation("AssignedStaffHostel", fields: [assignedHostelId], references: [id])
   assignedHostelId String?
   assignedRoom     Room?   @relation("AssignedStaffRoom", fields: [assignedRoomId], references: [id])
   assignedRoomId   String?
+  assignedBed      Bed?    @relation("AssignedStaffBed")
 
   fieldValues       StaffFieldValue[]
   camperAssignments TeacherCamperAssignment[]
@@ -867,6 +873,10 @@ model Bed {
   status         BedStatus     @default(AVAILABLE)
   registration   Registration? @relation(fields: [registrationId], references: [id])
   registrationId String?       @unique
+  // Exclusive alternative to registrationId — a bed holds one camper OR one
+  // staff member at a time, enforced in the assignment mutations, not the DB.
+  staffProfile   StaffProfile? @relation("AssignedStaffBed", fields: [staffProfileId], references: [id])
+  staffProfileId String?       @unique
   deletedAt      DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

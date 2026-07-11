@@ -30,6 +30,13 @@ const CRITERIA: { key: string; label: string }[] = [
   { key: "POPULATION", label: "Balance by Population" },
 ];
 
+const BED_CRITERIA: { key: string; label: string }[] = [
+  { key: "AGE_GROUP", label: "Group Similar Ages Together" },
+  { key: "GROUP_TOGETHER", label: "Keep Same Tribe/Department Together" },
+  { key: "CAMPUS_TOGETHER", label: "Group by Home Campus" },
+  { key: "POPULATION_BALANCE", label: "Fill Partially-Occupied Rooms First" },
+];
+
 export default function CampConfigPage() {
   const params = useParams();
   const router = useRouter();
@@ -107,6 +114,16 @@ export default function CampConfigPage() {
     },
   });
 
+  // Bed Allocation Mutations
+  const saveBedConfig = api.tribe.updateBedAllocationConfig.useMutation({
+    onSuccess: () => {
+      utils.camp.getById.invalidate({ id });
+      setSuccess("Bed allocation settings saved.");
+      setError("");
+    },
+    onError: (e) => setError(e.message),
+  });
+
   // Camp Config Form States
   const [form, setForm] = useState({
     theme: "",
@@ -137,6 +154,12 @@ export default function CampConfigPage() {
     CRITERIA.map((c) => ({ criterion: c.key, enabled: false }))
   );
   const [newTribe, setNewTribe] = useState({ name: "", color: "#E67E22", maxCapacity: "" });
+
+  // Bed Allocation States
+  const [bedEnabled, setBedEnabled] = useState(false);
+  const [bedRules, setBedRules] = useState<{ criterion: string; enabled: boolean }[]>(
+    BED_CRITERIA.map((c) => ({ criterion: c.key, enabled: false }))
+  );
   const [bulkResult, setBulkResult] = useState("");
 
   useEffect(() => {
@@ -165,6 +188,13 @@ export default function CampConfigPage() {
     const existingRules = (camp as any).tribeAllocationRules;
     if (Array.isArray(existingRules) && existingRules.length > 0) {
       setRules(CRITERIA.map((c) => ({ criterion: c.key, enabled: !!existingRules.find((r: any) => r.criterion === c.key)?.enabled })));
+    }
+
+    // Populate bed allocation configuration
+    setBedEnabled((camp as any).bedAllocationEnabled ?? false);
+    const existingBedRules = (camp as any).bedAllocationRules;
+    if (Array.isArray(existingBedRules) && existingBedRules.length > 0) {
+      setBedRules(BED_CRITERIA.map((c) => ({ criterion: c.key, enabled: !!existingBedRules.find((r: any) => r.criterion === c.key)?.enabled })));
     }
   }, [camp]);
 
@@ -456,10 +486,64 @@ export default function CampConfigPage() {
     </div>
   );
 
+  // Tab 4: Bed Allocation
+  const tab4Content = (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader><CardTitle>Bed Allocation Settings</CardTitle></CardHeader>
+        <CardBody className="space-y-4">
+          <p className="text-sm text-neutral-500">
+            Controls the &quot;Auto Assign Rooms &amp; Beds&quot; button on the Camp Structure → Accommodation tab.
+            A hostel&apos;s gender restriction is always enforced and can&apos;t be turned off here — these criteria only
+            break ties between otherwise-eligible beds.
+          </p>
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
+            <input
+              type="checkbox"
+              checked={bedEnabled}
+              onChange={(e) => setBedEnabled(e.target.checked)}
+              className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+            />
+            Enable bed allocation for this camp
+          </label>
+
+          {bedEnabled && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-neutral-700">Allocation Criteria (priority = order below)</label>
+              <div className="space-y-1">
+                {BED_CRITERIA.map((c) => (
+                  <label key={c.key} className="flex items-center gap-2 text-sm text-neutral-700">
+                    <input
+                      type="checkbox"
+                      checked={!!bedRules.find((r) => r.criterion === c.key)?.enabled}
+                      onChange={(e) =>
+                        setBedRules((prev) => prev.map((r) => (r.criterion === c.key ? { ...r, enabled: e.target.checked } : r)))
+                      }
+                      className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                    />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Button
+            loading={saveBedConfig.isPending}
+            onClick={() => saveBedConfig.mutate({ campId: id, bedAllocationEnabled: bedEnabled, bedAllocationRules: bedRules })}
+          >
+            Save Allocation Settings
+          </Button>
+        </CardBody>
+      </Card>
+    </div>
+  );
+
   const configTabs = [
     { label: "Registration Readiness and Camp Settings", content: tab1Content },
     { label: "Required Documents", content: tab2Content },
     { label: "Manage Tribes", content: tab3Content },
+    { label: "Bed Allocation", content: tab4Content },
   ];
 
   return (

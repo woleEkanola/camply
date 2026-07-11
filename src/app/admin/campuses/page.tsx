@@ -718,7 +718,7 @@ export default function CampusesPage() {
               >
                 {copiedLinkId === campus.id ? "Copied!" : "Copy Link"}
               </button>
-              <span className="text-xs text-neutral-500">{signupLink.active ? "Active" : "Inactive"}</span>
+              <span className="text-xs text-neutral-500">Signup Link: {signupLink.active ? "Active" : "Inactive"}</span>
             </div>
           );
         }
@@ -774,10 +774,10 @@ export default function CampusesPage() {
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="text-sm text-neutral-500">{selectedCampusIds.length} selected</span>
               <Button size="sm" className="bg-success-600 text-white hover:bg-success-700" disabled={isBulkActionLoading} onClick={handleBulkEnable}>
-                {isBulkActionLoading ? "Enabling..." : "Enable Selected"}
+                {isBulkActionLoading ? "Enabling..." : "Enable Signup Link"}
               </Button>
               <Button size="sm" variant="danger" disabled={isBulkActionLoading} onClick={handleBulkDisable}>
-                {isBulkActionLoading ? "Disabling..." : "Disable Selected"}
+                {isBulkActionLoading ? "Disabling..." : "Disable Signup Link"}
               </Button>
               <button onClick={handleSelectAll} className="text-xs text-neutral-500 underline">
                 {selectAll ? "Deselect all" : "Select all"}

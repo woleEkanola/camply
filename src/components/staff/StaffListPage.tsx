@@ -20,6 +20,8 @@ import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
+// Mirrors VOLUNTEER_CATEGORIES in src/server/registration/systemFieldRegistry.ts (not exported from that server module).
+const VOLUNTEER_CATEGORIES = ["Registration", "Medical", "Kitchen", "Transport", "Security", "Media", "Logistics", "Technical", "Cleaning", "Protocol"];
 
 export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const router = useRouter();
@@ -43,6 +45,16 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [success, setSuccess] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
+  // Per-column filters
+  const [campusFilter, setCampusFilter] = useState("");
+  const [venueFilter, setVenueFilter] = useState("");
+  const [genderFilter, setGenderFilter] = useState("");
+  const [tribeFilter, setTribeFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+
+  // Bulk "Assign to Venue" action
+  const [bulkVenueId, setBulkVenueId] = useState("");
+
   // Pagination states
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allLoadedItems, setAllLoadedItems] = useState<any[]>([]);
@@ -56,13 +68,30 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   useEffect(() => {
     setCursor(undefined);
     setAllLoadedItems([]);
-  }, [searchQuery, statusFilter]);
+  }, [searchQuery, statusFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter]);
 
   const { data: stats } = api.staff.stats.useQuery({ organizationId, campId, type }, { enabled: !!organizationId && !!campId });
   const { data, isLoading } = api.staff.adminList.useQuery(
-    { organizationId, campId, type, status: statusFilter || undefined, q: searchQuery || undefined, limit: 50, cursor },
+    {
+      organizationId,
+      campId,
+      type,
+      status: statusFilter || undefined,
+      q: searchQuery || undefined,
+      campusId: campusFilter || undefined,
+      venueId: venueFilter || undefined,
+      gender: genderFilter || undefined,
+      tribeId: type === "TEACHER" ? (tribeFilter || undefined) : undefined,
+      volunteerCategory: type === "VOLUNTEER" ? (categoryFilter || undefined) : undefined,
+      limit: 50,
+      cursor,
+    },
     { enabled: !!organizationId && !!campId }
   );
+
+  const { data: filterCampuses = [] } = api.campus.getAll.useQuery({ organizationId }, { enabled: !!organizationId });
+  const { data: filterVenues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: !!campId });
+  const { data: filterTribes = [] } = api.tribe.listByCamp.useQuery({ campId }, { enabled: !!campId && type === "TEACHER" });
 
   useEffect(() => {
     if (data?.items) {
@@ -108,6 +137,16 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
 
   const autoAssignToDepartments = api.staff.autoAssignToDepartments.useMutation({
     onSuccess: () => { setSuccess("Auto assigned all teachers to departments successfully!"); invalidate(); setTimeout(() => setSuccess(""), 5000); },
+    onError: (err) => setError(err.message),
+  });
+
+  const bulkAssignVenue = api.staff.bulkAssignVenue.useMutation({
+    onSuccess: () => {
+      setSuccess("Selected profiles assigned to venue successfully!");
+      setBulkVenueId("");
+      invalidate();
+      setTimeout(() => setSuccess(""), 5000);
+    },
     onError: (err) => setError(err.message),
   });
 
@@ -166,12 +205,58 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       ),
     },
     { header: "Phone", accessor: (row) => row.phone },
-    { header: "Gender", accessor: (row) => row.gender || "—" },
+    {
+      header: "Campus",
+      accessor: (row) => row.preferredCampus?.name || "—",
+      filter: {
+        value: campusFilter,
+        onChange: setCampusFilter,
+        options: filterCampuses.map((c: any) => ({ value: c.id, label: c.name })),
+        placeholder: "All Campuses",
+      },
+    },
+    {
+      header: "Gender",
+      accessor: (row) => row.gender || "—",
+      filter: {
+        value: genderFilter,
+        onChange: setGenderFilter,
+        options: [{ value: "Male", label: "Male" }, { value: "Female", label: "Female" }],
+        placeholder: "All Genders",
+      },
+    },
     { header: "Skills", accessor: (row) => (row.skills || []).slice(0, 2).join(", ") || "—" },
-    { header: "Venue", accessor: (row) => row.assignedVenue?.name || "—" },
+    {
+      header: "Venue",
+      accessor: (row) => row.assignedVenue?.name || "—",
+      filter: {
+        value: venueFilter,
+        onChange: setVenueFilter,
+        options: filterVenues.map((v: any) => ({ value: v.id, label: v.name })),
+        placeholder: "All Venues",
+      },
+    },
     type === "TEACHER"
-      ? { header: "Tribe", accessor: (row) => row.assignedTribe?.name || "—" }
-      : { header: "Department", accessor: (row) => row.volunteerCategory || "—" },
+      ? {
+          header: "Tribe",
+          accessor: (row) => row.assignedTribe?.name || "—",
+          filter: {
+            value: tribeFilter,
+            onChange: setTribeFilter,
+            options: filterTribes.map((t: any) => ({ value: t.id, label: t.name })),
+            placeholder: "All Tribes",
+          },
+        }
+      : {
+          header: "Department",
+          accessor: (row) => row.volunteerCategory || "—",
+          filter: {
+            value: categoryFilter,
+            onChange: setCategoryFilter,
+            options: VOLUNTEER_CATEGORIES.map((c) => ({ value: c, label: c })),
+            placeholder: "All Categories",
+          },
+        },
     { header: "Status", accessor: (row) => <StatusBadge status={row.status} /> },
   ];
 
@@ -267,6 +352,23 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <Badge tone="info">{selectedIds.length} selected</Badge>
           <Button size="sm" loading={bulkApprove.isPending} onClick={() => bulkApprove.mutate({ ids: selectedIds })}>Approve</Button>
           <Button size="sm" variant="danger" loading={bulkReject.isPending} onClick={() => bulkReject.mutate({ ids: selectedIds })}>Reject</Button>
+          <Select
+            value={bulkVenueId}
+            onChange={(e) => setBulkVenueId(e.target.value)}
+            className="w-auto text-sm"
+          >
+            <option value="">Assign to venue…</option>
+            {filterVenues.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </Select>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!bulkVenueId}
+            loading={bulkAssignVenue.isPending}
+            onClick={() => bulkAssignVenue.mutate({ ids: selectedIds, venueId: bulkVenueId })}
+          >
+            Assign
+          </Button>
           <Button
             size="sm"
             variant="danger"

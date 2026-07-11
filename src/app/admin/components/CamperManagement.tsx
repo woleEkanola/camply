@@ -64,6 +64,19 @@ interface CamperManagementProps {
 
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
+const REGISTRATION_STATUSES: { value: string; label: string }[] = [
+  { value: "SUBMITTED", label: "Submitted" },
+  { value: "PENDING", label: "Pending" },
+  { value: "REQUIRES_ACTION", label: "Requires Action" },
+  { value: "APPROVED", label: "Approved" },
+  { value: "REJECTED", label: "Rejected" },
+  { value: "WAITLISTED", label: "Waitlisted" },
+  { value: "CANCELLED", label: "Cancelled" },
+  { value: "CHECKED_IN", label: "Checked In" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "ARCHIVED", label: "Archived" },
+];
+
 const CamperManagement: React.FC<CamperManagementProps> = ({
   organizationId,
   currentUser,
@@ -72,7 +85,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [campusFilter, setCampusFilter] = useState<string | "all">("all");
-  const [activeFilter, setActiveFilter] = useState<boolean | "all">("all");
+  const [statusFilter, setStatusFilter] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -92,7 +105,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   useEffect(() => {
     setCursor(undefined);
     setAllCampers([]);
-  }, [searchTerm, campusFilter, activeFilter, campId]);
+  }, [searchTerm, campusFilter, statusFilter, campId]);
 
   // Get campers
   const { data: responseData, refetch: refetchProfiles, error: profilesError, isLoading } = api.camper.adminList.useQuery(
@@ -101,7 +114,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       campId: campId || undefined,
       q: searchTerm || undefined,
       campusId: campusFilter !== "all" ? campusFilter : undefined,
-      active: activeFilter === "all" ? undefined : activeFilter,
+      status: statusFilter || undefined,
       limit: 50,
       cursor,
     },
@@ -190,16 +203,30 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         </div>
       ),
     },
-    { header: "Campus", accessor: (profile) => profile.homeCampus ? profile.homeCampus.name : "No campus" },
+    {
+      header: "Campus",
+      accessor: (profile) => profile.homeCampus ? profile.homeCampus.name : "No campus",
+      filter: {
+        value: campusFilter === "all" ? "" : campusFilter,
+        onChange: (v) => setCampusFilter(v || "all"),
+        options: (campusesData ?? []).map((c: { id: string; name: string }) => ({ value: c.id, label: c.name })),
+        placeholder: "All Campuses",
+      },
+    },
     {
       header: "Registration Status",
       accessor: (profile) => {
         const reg = (profile as any).registrations?.[0];
         if (!reg) return <Badge tone="neutral">Not Registered</Badge>;
         return <StatusBadge status={reg.status} />;
-      }
+      },
+      filter: {
+        value: statusFilter,
+        onChange: setStatusFilter,
+        options: REGISTRATION_STATUSES,
+        placeholder: "All Statuses",
+      },
     },
-    { header: "Status", accessor: (profile) => <Badge tone={profile.active ? "success" : "danger"}>{profile.active ? "Active" : "Inactive"}</Badge> },
     { header: "Created", accessor: (profile) => new Date(profile.createdAt).toLocaleDateString() },
   ];
 
@@ -253,27 +280,23 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             ))}
           </Select>
           <Select
-            containerClassName="w-40"
-            value={activeFilter === "all" ? "all" : activeFilter ? "active" : "inactive"}
-            onChange={(e) => {
-              if (e.target.value === "all") setActiveFilter("all");
-              else if (e.target.value === "active") setActiveFilter(true);
-              else setActiveFilter(false);
-            }}
+            aria-label="Registration Status"
+            containerClassName="w-48"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="">All Statuses</option>
+            {REGISTRATION_STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
           </Select>
         </div>
         <Button onClick={() => { setSelectedProfile(null); setIsModalOpen(true); }}>Add Camper</Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-1">
         <StatCard label="Total Campers" value={allCampers.length} />
-        <StatCard label="Active Campers" value={allCampers.filter((p) => p.active).length} tone="success" />
-        <StatCard label="Inactive Campers" value={allCampers.filter((p) => !p.active).length} tone="danger" />
       </div>
 
       <Table
