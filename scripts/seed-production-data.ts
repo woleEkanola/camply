@@ -13,6 +13,8 @@
  *   set -a && source .env && set +a && npx ts-node scripts/seed-production-data.ts
  */
 
+export {}; // Force module scope so this file's top-level declarations (PrismaClient, prisma, slugify, ...) don't collide with other standalone scripts like prisma/seed.ts under TypeScript's global-script type-checking.
+
 const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
