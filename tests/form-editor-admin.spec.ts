@@ -35,10 +35,10 @@ test.describe("Form Editor (admin)", () => {
       await page.getByText(updatedLabel).locator("xpath=ancestor::tr[1]").getByRole("button", { name: "Delete" }).click();
       await expect(page.getByText(updatedLabel)).not.toBeVisible({ timeout: 10000 });
 
-      const deleted = await prisma.formField.findUnique({
-        where: { organizationId_audience_name: { organizationId, audience: "VOLUNTEER", name } },
+      const deleted = await prisma.formField.findFirstOrThrow({
+        where: { organizationId, audience: "VOLUNTEER", name },
       });
-      expect(deleted).toBeNull();
+      expect(deleted.deletedAt).not.toBeNull();
     } finally {
       await prisma.formField.deleteMany({ where: { organizationId, audience: "VOLUNTEER", name } });
     }
@@ -106,8 +106,8 @@ test.describe("Form Editor (admin)", () => {
     await page.getByRole("button", { name: "Create" }).click();
     await expect(page.getByText("E2E In Use")).toBeVisible({ timeout: 10000 });
 
-    const field = await prisma.formField.findUniqueOrThrow({
-      where: { organizationId_audience_name: { organizationId, audience: "VOLUNTEER", name } },
+    const field = await prisma.formField.findFirstOrThrow({
+      where: { organizationId, audience: "VOLUNTEER", name },
     });
 
     const user = await prisma.user.create({
@@ -145,8 +145,8 @@ test.describe("Form Editor (admin)", () => {
     const churchRow = page.getByText("Church", { exact: true }).locator("xpath=ancestor::tr[1]");
     await expect(churchRow.getByRole("button", { name: "Delete" })).toHaveCount(0);
 
-    const original = await prisma.formField.findUniqueOrThrow({
-      where: { organizationId_audience_name: { organizationId, audience: "VOLUNTEER", name: "church" } },
+    const original = await prisma.formField.findFirstOrThrow({
+      where: { organizationId, audience: "VOLUNTEER", name: "church" },
     });
 
     try {
@@ -174,8 +174,8 @@ test.describe("Form Editor (admin)", () => {
     await page.getByRole("tab", { name: "Volunteers" }).click();
     await showAllRows(page);
 
-    const original = await prisma.formField.findUniqueOrThrow({
-      where: { organizationId_audience_name: { organizationId, audience: "VOLUNTEER", name: "volunteerCategory" } },
+    const original = await prisma.formField.findFirstOrThrow({
+      where: { organizationId, audience: "VOLUNTEER", name: "volunteerCategory" },
     });
 
     try {

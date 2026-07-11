@@ -62,7 +62,7 @@ export const campusRouter = createTRPCRouter({
       }
 
       return prisma.campus.findMany({
-        where: { organizationId: input.organizationId },
+        where: { organizationId: input.organizationId, deletedAt: null },
         orderBy: [
           { displayOrder: "asc" },
           { name: "asc" },
@@ -76,7 +76,7 @@ export const campusRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .query(async ({ input, ctx }) => {
       const campus = await prisma.campus.findUnique({ where: { id: input.id } });
-      if (!campus) {
+      if (!campus || campus.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
       await assertOrgAdminOrCampusRep(ctx, campus.organizationId, campus.id);
@@ -91,7 +91,7 @@ export const campusRouter = createTRPCRouter({
     }))
     .mutation(async ({ input, ctx }) => {
       const campus = await prisma.campus.findUnique({ where: { id: input.id } });
-      if (!campus) {
+      if (!campus || campus.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
       await assertOrgAdmin(ctx, campus.organizationId);
@@ -100,16 +100,25 @@ export const campusRouter = createTRPCRouter({
       return prisma.campus.update({ where: { id: input.id }, data: rest });
     }),
 
-  // Delete a campus
+  // Delete a campus (soft delete — recoverable from Trash for 60 days; cascades
+  // to this campus's Registrations, which move to Trash alongside it)
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
       const campus = await prisma.campus.findUnique({ where: { id: input.id } });
-      if (!campus) {
+      if (!campus || campus.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
       await assertOrgAdmin(ctx, campus.organizationId);
-      return prisma.campus.delete({ where: { id: input.id } });
+
+      const now = new Date();
+      return prisma.$transaction(async (tx) => {
+        await tx.registration.updateMany({
+          where: { campusId: input.id, deletedAt: null },
+          data: { deletedAt: now },
+        });
+        return tx.campus.update({ where: { id: input.id }, data: { deletedAt: now } });
+      }, { timeout: 15000 });
     }),
 
   // Get campus reps for a campus
@@ -120,11 +129,25 @@ export const campusRouter = createTRPCRouter({
         where: { id: input.campusId },
         include: { reps: true },
       });
-      if (!campus) {
+      if (!campus || campus.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
       await assertOrgAdminOrCampusRep(ctx, campus.organizationId, campus.id);
       return campus.reps;
+    }),
+
+  // Any active user in the org is eligible to be a Campus Rep — a Teacher or
+  // Volunteer can hold Campus Rep capability alongside their primary role, so
+  // this deliberately isn't narrowed to role === "CAMPUS_REPRESENTATIVE".
+  listRepCandidates: protectedProcedure
+    .input(z.object({ organizationId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      await assertOrgAdmin(ctx, input.organizationId);
+      return prisma.user.findMany({
+        where: { organizationId: input.organizationId, deletedAt: null },
+        select: { id: true, email: true, firstName: true, lastName: true, role: true },
+        orderBy: [{ firstName: "asc" }, { email: "asc" }],
+      });
     }),
 
   // Update campus reps (admin-only - reps do not reassign themselves/others)
@@ -138,7 +161,7 @@ export const campusRouter = createTRPCRouter({
         where: { id: input.campusId },
         include: { reps: true },
       });
-      if (!campus) {
+      if (!campus || campus.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
       await assertOrgAdmin(ctx, campus.organizationId);
@@ -178,7 +201,7 @@ export const campusRouter = createTRPCRouter({
       }
 
       return ctx.prisma.campus.findMany({
-        where: organizationId ? { organizationId } : undefined,
+        where: organizationId ? { organizationId, deletedAt: null } : { deletedAt: null },
         orderBy: [
           { displayOrder: "asc" },
           { name: "asc" },
@@ -192,16 +215,16 @@ export const campusRouter = createTRPCRouter({
     .input(z.object({ campusId: z.string() }))
     .query(async ({ input, ctx }) => {
       const campus = await prisma.campus.findUnique({ where: { id: input.campusId } });
-      if (!campus) {
+      if (!campus || campus.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
       await assertOrgAdminOrCampusRep(ctx, campus.organizationId, campus.id);
 
       const registrationsCount = await prisma.registration.count({
-        where: { campusId: input.campusId },
+        where: { campusId: input.campusId, deletedAt: null },
       });
       const uniqueCampers = await prisma.registration.findMany({
-        where: { campusId: input.campusId },
+        where: { campusId: input.campusId, deletedAt: null },
         select: { camperId: true },
       });
       const campersCount = new Set(uniqueCampers.map((r) => r.camperId)).size;
@@ -214,6 +237,7 @@ export const campusRouter = createTRPCRouter({
         const count = await prisma.registration.count({
           where: {
             campusId: input.campusId,
+            deletedAt: null,
             createdAt: { gte: from, lt: to },
           },
         });

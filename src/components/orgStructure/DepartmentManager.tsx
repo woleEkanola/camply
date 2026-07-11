@@ -20,13 +20,18 @@ export function DepartmentManager({ organizationId, campId }: { organizationId: 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [responsibilitiesText, setResponsibilitiesText] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [error, setError] = useState("");
 
   const invalidate = () => {
     utils.orgStructure.getDepartmentStructure.invalidate({ organizationId, campId });
     utils.department.list.invalidate({ organizationId, campId });
   };
   const create = api.department.create.useMutation({ onSuccess: () => { setCreateOpen(false); setName(""); setDescription(""); invalidate(); } });
-  const remove = api.department.delete.useMutation({ onSuccess: invalidate });
+  const remove = api.department.delete.useMutation({
+    onSuccess: () => { setDeleteTarget(null); invalidate(); },
+    onError: (err) => { setError(err.message); setDeleteTarget(null); },
+  });
   const updateResponsibilities = api.department.updateResponsibilities.useMutation({ onSuccess: () => { setEditing(null); invalidate(); } });
 
   return (
@@ -35,6 +40,13 @@ export function DepartmentManager({ organizationId, campId }: { organizationId: 
         <h2 className="text-lg font-semibold text-neutral-900">Departments</h2>
         <Button size="sm" onClick={() => setCreateOpen(true)}>Add Department</Button>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">
+          <span>{error}</span>
+          <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
@@ -64,7 +76,7 @@ export function DepartmentManager({ organizationId, campId }: { organizationId: 
                   >
                     Edit Responsibilities
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => remove.mutate({ id: d.id })}>Delete</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDeleteTarget({ id: d.id, name: d.name })}>Delete</Button>
                 </div>
               </CardBody>
             </Card>
@@ -111,6 +123,22 @@ export function DepartmentManager({ organizationId, campId }: { organizationId: 
       </Dialog>
 
       {viewing && <DepartmentDetailPanel department={viewing} onClose={() => setViewing(null)} />}
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
+        <p className="text-sm text-neutral-500">
+          Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? This action cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={remove.isPending}
+            onClick={() => deleteTarget && remove.mutate({ id: deleteTarget.id })}
+          >
+            Delete
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

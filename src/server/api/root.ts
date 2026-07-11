@@ -25,6 +25,7 @@ import { mealRouter } from "./routers/meal";
 import { departmentRouter } from "./routers/department";
 import { accommodationRouter } from "./routers/accommodation";
 import { orgStructureRouter } from "./routers/orgStructure";
+import { trashRouter } from "./routers/trash";
 
 /**
  * This is the primary router for your server.
@@ -58,6 +59,7 @@ export const appRouter = createTRPCRouter({
   department: departmentRouter,
   accommodation: accommodationRouter,
   orgStructure: orgStructureRouter,
+  trash: trashRouter,
   // booking: bookingRouter, // removed because booking router file was deleted
   // eventType: eventTypeRouter, // removed because eventType router file was deleted
   // schedule: scheduleRouter, // removed because schedule router file was deleted

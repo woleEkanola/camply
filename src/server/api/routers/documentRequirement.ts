@@ -37,7 +37,7 @@ export const documentRequirementRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       return ctx.prisma.documentRequirement.findMany({
-        where: { campId: input.campId },
+        where: { campId: input.campId, deletedAt: null },
         orderBy: { sortOrder: "asc" },
       });
     }),
@@ -53,17 +53,18 @@ export const documentRequirementRouter = createTRPCRouter({
     .input(z.object({ id: z.string(), data: documentRequirementSchema.omit({ campId: true }).partial() }))
     .mutation(async ({ ctx, input }) => {
       const requirement = await ctx.prisma.documentRequirement.findUnique({ where: { id: input.id } });
-      if (!requirement) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!requirement || requirement.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertCanManageCamp(ctx, requirement.campId);
       return ctx.prisma.documentRequirement.update({ where: { id: input.id }, data: input.data });
     }),
 
+  // Delete a document requirement (soft delete — recoverable from Trash for 60 days).
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const requirement = await ctx.prisma.documentRequirement.findUnique({ where: { id: input.id } });
-      if (!requirement) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!requirement || requirement.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertCanManageCamp(ctx, requirement.campId);
-      return ctx.prisma.documentRequirement.delete({ where: { id: input.id } });
+      return ctx.prisma.documentRequirement.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 });

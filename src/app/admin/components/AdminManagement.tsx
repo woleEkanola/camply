@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { api } from "../../../utils/api";
 import DataTable from "./DataTable";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
 import { PencilIcon, TrashIcon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 // PermissionType is not exported from @prisma/client after the downgrade. Use the local enum defined in AccessControl.tsx or define it here if needed.
@@ -103,13 +105,16 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
   });
 
   // Delete admin user mutation
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
   const deleteAdminMutation = api.admin.delete.useMutation({
     onSuccess: () => {
       setSuccess("Admin user deleted successfully");
+      setDeleteTarget(null);
       void refetchAdmins();
     },
     onError: (err) => {
       setError(err.message);
+      setDeleteTarget(null);
     }
   });
 
@@ -186,10 +191,8 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
   };
 
   // Handle delete admin
-  const handleDeleteAdmin = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this admin user?")) {
-      deleteAdminMutation.mutate({ adminId: id });
-    }
+  const handleDeleteAdmin = (admin: { id: string; email: string }) => {
+    setDeleteTarget({ id: admin.id, label: admin.email });
   };
 
   // Handle cancel form
@@ -390,7 +393,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
               <PencilIcon className="h-5 w-5" />
             </button>
             <button
-              onClick={() => handleDeleteAdmin(admin.id)}
+              onClick={() => handleDeleteAdmin(admin)}
               className="rounded p-1 text-red-600 hover:bg-red-100"
               title="Delete"
             >
@@ -399,6 +402,22 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
           </div>
         )}
       />
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
+        <p className="text-sm text-neutral-500">
+          Are you sure you want to delete &quot;{deleteTarget?.label}&quot;? This action cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteAdminMutation.isPending}
+            onClick={() => deleteTarget && deleteAdminMutation.mutate({ adminId: deleteTarget.id })}
+          >
+            Delete
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

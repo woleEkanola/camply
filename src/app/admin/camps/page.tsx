@@ -88,7 +88,7 @@ export default function CampsPage() {
   }, [campsError]);
 
   // Get active camp for the organization
-  const { data: activeCamp, error: activeCampError } = api.camp.getActiveCamp.useQuery(
+  const { data: activeCamp, error: activeCampError, refetch: refetchActiveCamp } = api.camp.getActiveCamp.useQuery(
     { organizationId },
     {
       enabled: !!organizationId,
@@ -164,6 +164,7 @@ export default function CampsPage() {
       setSelectedCamp(null);
       setIsSubmitting(false);
       void refetchCamps();
+      void refetchActiveCamp();
     },
     onError: (error) => {
       setError(`Error deleting camp: ${error.message}`);
@@ -224,6 +225,15 @@ export default function CampsPage() {
     setIsSubmitting(true);
 
     try {
+      // organizationId comes from the session, which can still be resolving on a very
+      // fast submit right after page load — bail with a clear error rather than sending
+      // an empty organizationId and hitting a raw FK constraint violation.
+      if (!organizationId) {
+        setError("Still loading your account — please try again in a moment.");
+        setIsSubmitting(false);
+        return;
+      }
+
       // Validate form data
       if (!formData.name) {
         setError("Name is required");
@@ -310,7 +320,7 @@ export default function CampsPage() {
 
   return (
     <AppShell area="admin">
-      <PageHeader title="Camps" actions={<Button onClick={openCreateModal}>Add Camp</Button>} />
+      <PageHeader title="Camps" actions={<Button onClick={openCreateModal} disabled={!organizationId}>Add Camp</Button>} />
 
       {error && (
         <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">

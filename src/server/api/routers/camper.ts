@@ -51,11 +51,10 @@ export const camperRouter = createTRPCRouter({
       }
 
       // Check if user has permission to view profiles in this organization
+      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
       const hasPermission =
-        currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
-        (currentUser.role === "CAMPUS_REPRESENTATIVE" && currentUser.organizationId === input.organizationId);
+        isOrgAdmin ||
+        ((currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -68,8 +67,10 @@ export const camperRouter = createTRPCRouter({
       const profiles = await ctx.prisma.camper.findMany({
         where: {
           organizationId: input.organizationId,
-          // If user is a campus rep, only show profiles for their managed campuses
-          ...(currentUser.role === "CAMPUS_REPRESENTATIVE" && {
+          deletedAt: null,
+          // If user is a campus rep (any role) and not also an org admin, only
+          // show profiles for their managed campuses — org admins always see all.
+          ...(!isOrgAdmin && (currentUser.managedCampuses?.length ?? 0) > 0 && {
             homeCampus: {
               reps: {
                 some: {
@@ -137,7 +138,7 @@ export const camperRouter = createTRPCRouter({
       }
 
       return await ctx.prisma.camper.findMany({
-        where: { userId: input.userId },
+        where: { userId: input.userId, deletedAt: null },
         include: {
           homeCampus: true,
           fieldValues: {
@@ -160,11 +161,12 @@ export const camperRouter = createTRPCRouter({
       }
 
       return await ctx.prisma.camper.findMany({
-        where: { userId: currentUser.id },
+        where: { userId: currentUser.id, deletedAt: null },
         include: {
           organization: true,
           homeCampus: true,
           registrations: {
+            where: { deletedAt: null },
             include: {
               camp: true,
               campus: true
@@ -196,6 +198,7 @@ export const camperRouter = createTRPCRouter({
           id: true,
           name: true,
           active: true,
+          deletedAt: true,
           dateOfBirth: true,
           birthCert:true,
           gender: true,
@@ -211,7 +214,7 @@ export const camperRouter = createTRPCRouter({
         }
       });
 
-      if (!profile) {
+      if (!profile || profile.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Camper profile not found" });
       }
 
@@ -221,8 +224,7 @@ export const camperRouter = createTRPCRouter({
         currentUser.role === "SUPER_ADMIN" ||
         currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
-         profile.homeCampusId &&
+        !!(profile.homeCampusId &&
          await ctx.prisma.campus.findFirst({
            where: {
              id: profile.homeCampusId,
@@ -392,7 +394,7 @@ export const camperRouter = createTRPCRouter({
         include: { fieldValues: true, user: true, homeCampus: true }
       });
 
-      if (!profile) {
+      if (!profile || profile.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Camper profile not found" });
       }
 
@@ -402,8 +404,7 @@ export const camperRouter = createTRPCRouter({
         currentUser.role === "SUPER_ADMIN" ||
         currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (
-          currentUser.role === "CAMPUS_REPRESENTATIVE" &&
+        !!(
           profile.homeCampusId &&
           await ctx.prisma.campus.findFirst({
             where: {
@@ -491,7 +492,7 @@ export const camperRouter = createTRPCRouter({
         include: { homeCampus: true },
       });
 
-      if (!profile) {
+      if (!profile || profile.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Profile not found" });
       }
 
@@ -499,8 +500,7 @@ export const camperRouter = createTRPCRouter({
         currentUser.role === "SUPER_ADMIN" ||
         currentUser.role === "OWNER" ||
         currentUser.role === "ADMIN" ||
-        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
-          profile.homeCampusId &&
+        !!(profile.homeCampusId &&
           (await ctx.prisma.campus.findFirst({
             where: {
               id: profile.homeCampusId,
@@ -518,7 +518,8 @@ export const camperRouter = createTRPCRouter({
       });
     }),
 
-  // Delete a camper
+  // Delete a camper (soft delete — recoverable from Trash for 60 days; cascades
+  // to this camper's Registrations, matching the previous hard-delete's cascade behavior)
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -531,10 +532,10 @@ export const camperRouter = createTRPCRouter({
       // Get the profile to delete
       const profile = await ctx.prisma.camper.findUnique({
         where: { id: input.id },
-        select: { userId: true }
+        select: { userId: true, deletedAt: true }
       });
 
-      if (!profile) {
+      if (!profile || profile.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Camper profile not found" });
       }
 
@@ -552,9 +553,10 @@ export const camperRouter = createTRPCRouter({
         });
       }
 
-      // Delete the profile (will cascade delete field values)
-      return await ctx.prisma.camper.delete({
-        where: { id: input.id }
-      });
+      const now = new Date();
+      return ctx.prisma.$transaction(async (tx) => {
+        await tx.registration.updateMany({ where: { camperId: input.id, deletedAt: null }, data: { deletedAt: now } });
+        return tx.camper.update({ where: { id: input.id }, data: { deletedAt: now } });
+      }, { timeout: 15000 });
     })
 });

@@ -149,13 +149,10 @@ export default function CampusRepRegistrationsPage() {
     // NextAuth will redirect automatically if required: true
     return null;
   }
-  if (session.user.role !== "CAMPUS_REPRESENTATIVE") {
-    return (
-      <AppShell area="campus-rep">
-        <div className="text-sm text-danger-600">You do not have permission to view this page.</div>
-      </AppShell>
-    );
-  }
+  // Campus Rep capability comes from managedCampuses (the Campus.reps
+  // relation), not from role === "CAMPUS_REPRESENTATIVE" — any role (e.g. a
+  // Teacher) can also hold it. The `managedCampuses.length === 0` check
+  // further below already covers the "not authorized" case for everyone.
   if (!organizationId) {
     return (
       <AppShell area="campus-rep">

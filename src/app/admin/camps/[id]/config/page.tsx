@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
+import { Dialog } from "@/components/ui/Dialog";
 
 function toDateInputValue(date: Date | string | null | undefined): string {
   if (!date) return "";
@@ -67,9 +68,11 @@ export default function CampConfigPage() {
   });
   const deleteRequirement = api.documentRequirement.delete.useMutation({
     onSuccess: () => {
+      setDeleteReqTarget(null);
       refetchRequirements();
       refetchReadiness();
     },
+    onError: (e) => { setError(e.message); setDeleteReqTarget(null); },
   });
   const toggleRequirement = api.documentRequirement.update.useMutation({
     onSuccess: () => refetchRequirements(),
@@ -92,7 +95,10 @@ export default function CampConfigPage() {
     },
   });
   const updateTribe = api.tribe.update.useMutation({ onSuccess: () => refetchTribes() });
-  const deleteTribe = api.tribe.delete.useMutation({ onSuccess: () => refetchTribes() });
+  const deleteTribe = api.tribe.delete.useMutation({
+    onSuccess: () => refetchTribes(),
+    onError: (e) => setError(e.message),
+  });
   const bulkAssign = api.tribe.bulkAutoAssign.useMutation({
     onSuccess: (results) => {
       const ok = results.filter((r) => r.tribeId).length;
@@ -120,6 +126,7 @@ export default function CampConfigPage() {
     orgCode: "",
   });
   const [error, setError] = useState("");
+  const [deleteReqTarget, setDeleteReqTarget] = useState<{ id: string; name: string } | null>(null);
   const [success, setSuccess] = useState("");
   const [newReq, setNewReq] = useState({ name: "", description: "", required: true, scope: "CAMPER" as "CAMPER" | "REGISTRATION" });
 
@@ -302,7 +309,7 @@ export default function CampConfigPage() {
                 <button className="text-accent-700 hover:underline" onClick={() => toggleRequirement.mutate({ id: req.id, data: { required: !req.required } })}>
                   {req.required ? "Make Optional" : "Make Required"}
                 </button>
-                <button className="text-danger-600 hover:underline" onClick={() => deleteRequirement.mutate({ id: req.id })}>Remove</button>
+                <button className="text-danger-600 hover:underline" onClick={() => setDeleteReqTarget({ id: req.id, name: req.name })}>Remove</button>
               </div>
             </div>
           ))}
@@ -468,6 +475,22 @@ export default function CampConfigPage() {
 
         <Tabs tabs={configTabs} />
       </div>
+
+      <Dialog open={!!deleteReqTarget} onClose={() => setDeleteReqTarget(null)} title="Confirm Removal" size="sm">
+        <p className="text-sm text-neutral-500">
+          Are you sure you want to remove &quot;{deleteReqTarget?.name}&quot;? This action cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteReqTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteRequirement.isPending}
+            onClick={() => deleteReqTarget && deleteRequirement.mutate({ id: deleteReqTarget.id })}
+          >
+            Remove
+          </Button>
+        </div>
+      </Dialog>
     </AppShell>
   );
 }

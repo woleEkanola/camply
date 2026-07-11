@@ -19,6 +19,7 @@ import {
   Squares2X2Icon,
   MapIcon,
   BuildingOffice2Icon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 
 export type Role =
@@ -139,6 +140,12 @@ const ADMIN_GROUPS: NavGroup[] = [
         icon: ShieldCheckIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
+      {
+        name: "Trash",
+        href: "/admin/trash",
+        icon: TrashIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
     ],
   },
 ];
@@ -206,24 +213,45 @@ function filterGroups(groups: NavGroup[], role: Role): NavGroup[] {
 }
 
 /** Returns the grouped nav for the shell the given role actually lands in.
- * `/admin/*` is shared by SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE today. */
+ * `/admin/*` is shared by SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE today.
+ *
+ * `hasCampusRepAccess` is independent of `role` — a Teacher or Volunteer can
+ * also be a Campus Rep (granted via the Campus.reps relation, not a second
+ * `role` value), in which case their existing Teacher/Volunteer nav gains the
+ * Campus Rep's Registrations/Campers items rather than needing a second
+ * dashboard/login. */
 export function getNavGroups(
   role: Role | undefined,
-  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer"
+  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer",
+  hasCampusRepAccess = false
 ): NavGroup[] {
   if (!role) return [];
+  let groups: NavGroup[];
   switch (area) {
     case "admin":
-      return filterGroups(ADMIN_GROUPS, role);
+      groups = filterGroups(ADMIN_GROUPS, role);
+      break;
     case "dashboard":
-      return PARENT_GROUPS;
+      groups = PARENT_GROUPS;
+      break;
     case "campus-rep":
-      return CAMPUS_REP_GROUPS;
+      groups = CAMPUS_REP_GROUPS;
+      break;
     case "super-admin":
-      return SUPER_ADMIN_GROUPS;
+      groups = SUPER_ADMIN_GROUPS;
+      break;
     case "teacher":
-      return TEACHER_GROUPS;
+      groups = TEACHER_GROUPS;
+      break;
     case "volunteer":
-      return VOLUNTEER_GROUPS;
+      groups = VOLUNTEER_GROUPS;
+      break;
   }
+  if (hasCampusRepAccess && (area === "teacher" || area === "volunteer")) {
+    const repRegistrationGroup = CAMPUS_REP_GROUPS.find((g) => g.name === "Registration");
+    if (repRegistrationGroup) {
+      groups = [...groups, { ...repRegistrationGroup, name: "My Campus (Rep)" }];
+    }
+  }
+  return groups;
 }

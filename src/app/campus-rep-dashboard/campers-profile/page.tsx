@@ -11,11 +11,13 @@ export default function CampusRepCampersPage() {
   if (status === "loading") {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
-  if (!session || session.user.role !== "CAMPUS_REPRESENTATIVE") {
+  const managedCampuses: string[] = session?.user.managedCampuses || [];
+  // Campus Rep capability comes from managedCampuses (the Campus.reps
+  // relation), not from role === "CAMPUS_REPRESENTATIVE" — any role (e.g. a
+  // Teacher) can also hold it.
+  if (!session || managedCampuses.length === 0) {
     return null;
   }
-
-  const managedCampuses: string[] = session.user.managedCampuses || [];
   const campusId = managedCampuses[0];
 
   return (

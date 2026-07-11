@@ -13,7 +13,7 @@ export const formFieldRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await ensureSystemFields(ctx.prisma, input.organizationId, input.audience);
       return ctx.prisma.formField.findMany({
-        where: { organizationId: input.organizationId, audience: input.audience },
+        where: { organizationId: input.organizationId, audience: input.audience, deletedAt: null },
         orderBy: { sortOrder: "asc" },
       });
     }),
@@ -34,8 +34,8 @@ export const formFieldRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
 
-      const existing = await ctx.prisma.formField.findUnique({
-        where: { organizationId_audience_name: { organizationId: input.organizationId, audience: input.audience, name: input.name } },
+      const existing = await ctx.prisma.formField.findFirst({
+        where: { organizationId: input.organizationId, audience: input.audience, name: input.name, deletedAt: null },
       });
       if (existing) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "A field with this name already exists" });
@@ -66,7 +66,7 @@ export const formFieldRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
       const field = await ctx.prisma.formField.findUnique({ where: { id } });
-      if (!field) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!field || field.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdminOrCampusRep(ctx, field.organizationId);
 
       // type/systemKey/name/source/audience/organizationId are never editable —
@@ -74,11 +74,13 @@ export const formFieldRouter = createTRPCRouter({
       return ctx.prisma.formField.update({ where: { id }, data });
     }),
 
+  // Delete a custom form field (soft delete — recoverable from Trash for 60 days).
+  // Blocked for SYSTEM fields or ones with submitted answers.
   remove: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const field = await ctx.prisma.formField.findUnique({ where: { id: input.id } });
-      if (!field) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!field || field.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdminOrCampusRep(ctx, field.organizationId);
 
       if (field.source === "SYSTEM") {
@@ -92,7 +94,7 @@ export const formFieldRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot delete a field that already has submitted answers — hide it instead." });
       }
 
-      return ctx.prisma.formField.delete({ where: { id: input.id } });
+      return ctx.prisma.formField.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 
   reorder: protectedProcedure

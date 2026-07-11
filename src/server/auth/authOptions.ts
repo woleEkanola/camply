@@ -37,7 +37,7 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         });
 
-        if (!user) {
+        if (!user || user.deletedAt) {
           return null;
         }
 
@@ -124,13 +124,15 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.role = user.role;
         token.organizationId = user.organizationId;
-        if (user.role === "CAMPUS_REPRESENTATIVE") {
-          const dbUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            include: { managedCampuses: true },
-          });
-          token.managedCampuses = dbUser?.managedCampuses?.map((c: { id: string }) => c.id) || [];
-        }
+        // Stamp managedCampuses for ANY role, not just CAMPUS_REPRESENTATIVE —
+        // a user's primary role no longer determines whether they can also
+        // hold Campus Rep capability (e.g. a TEACHER can be a rep for their
+        // own church branch while keeping their Teacher login/permissions).
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          include: { managedCampuses: true },
+        });
+        token.managedCampuses = dbUser?.managedCampuses?.map((c: { id: string }) => c.id) || [];
       }
       return token;
     },
@@ -139,9 +141,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.role = token.role;
         session.user.organizationId = token.organizationId as string;
-        if (token.role === "CAMPUS_REPRESENTATIVE") {
-          session.user.managedCampuses = token.managedCampuses || [];
-        }
+        session.user.managedCampuses = token.managedCampuses || [];
       }
       return session;
     },

@@ -26,7 +26,7 @@ export const departmentRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await assertOrgMember(ctx, input.organizationId);
       return ctx.prisma.department.findMany({
-        where: { organizationId: input.organizationId, ...(input.campId && { campId: input.campId }), status: "ACTIVE" },
+        where: { organizationId: input.organizationId, ...(input.campId && { campId: input.campId }), status: "ACTIVE", deletedAt: null },
         orderBy: { name: "asc" },
       });
     }),
@@ -44,28 +44,29 @@ export const departmentRouter = createTRPCRouter({
     .input(z.object({ id: z.string(), name: z.string().optional(), description: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
-      if (!dept) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, dept.organizationId);
       const { id, ...data } = input;
       return ctx.prisma.department.update({ where: { id }, data });
     }),
 
+  // Delete a department (soft delete — recoverable from Trash for 60 days).
+  // Staff assigned to this department keep their departmentId (no cascade);
+  // it just stops showing up in the active department list/structure views.
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
-      if (!dept) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, dept.organizationId);
-      // Soft delete: staff assigned to this department keep their departmentId (no cascade),
-      // it just stops showing up in the active department list/structure views.
-      return ctx.prisma.department.update({ where: { id: input.id }, data: { status: "INACTIVE" } });
+      return ctx.prisma.department.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 
   updateResponsibilities: protectedProcedure
     .input(z.object({ id: z.string(), responsibilities: z.array(z.string()) }))
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
-      if (!dept) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, dept.organizationId);
       return ctx.prisma.department.update({ where: { id: input.id }, data: { responsibilities: input.responsibilities } });
     }),

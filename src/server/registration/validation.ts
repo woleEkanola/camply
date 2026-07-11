@@ -116,6 +116,7 @@ export async function validateSubmission(
       campId: camp.id,
       id: { not: registration.id },
       status: { notIn: ["CANCELLED", "REJECTED", "ARCHIVED"] },
+      deletedAt: null,
     },
   });
   if (duplicate) {

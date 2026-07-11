@@ -14,6 +14,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
 import { StaffDetailDrawer } from "@/components/staff/StaffDetailDrawer";
 import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
 
@@ -37,6 +38,8 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [statusFilter, setStatusFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const { data: stats } = api.staff.stats.useQuery({ organizationId, campId, type }, { enabled: !!organizationId && !!campId });
   const { data, isLoading } = api.staff.adminList.useQuery(
@@ -53,6 +56,10 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   };
   const bulkApprove = api.staff.bulkApprove.useMutation({ onSuccess: invalidate });
   const bulkReject = api.staff.bulkReject.useMutation({ onSuccess: invalidate });
+  const deleteStaff = api.staff.delete.useMutation({
+    onSuccess: () => { setDeleteTarget(null); invalidate(); },
+    onError: (err) => { setError(err.message); setDeleteTarget(null); },
+  });
 
   const columns: Column<any>[] = [
     {
@@ -84,9 +91,25 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     { header: "Status", accessor: (row) => <StatusBadge status={row.status} /> },
   ];
 
+  const actions = (row: any) => (
+    <button
+      className="text-danger-600 hover:underline"
+      onClick={() => setDeleteTarget({ id: row.id, name: `${row.firstName} ${row.lastName}` })}
+    >
+      Delete
+    </button>
+  );
+
   return (
     <AppShell area="admin">
       <PageHeader title={type === "TEACHER" ? "Teachers" : "Volunteers"} description={activeYear ? `For ${activeYear.name}` : undefined} />
+
+      {error && (
+        <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+          <span>{error}</span>
+          <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
+        </div>
+      )}
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <div className="md:col-span-2 grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -126,6 +149,7 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         data={items}
         rowKey={(row) => row.id}
         onRowClick={(row) => setSelectedId(row.id)}
+        actions={actions}
         isLoading={isLoading}
         emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
         emptyDescription="Try adjusting search or status filters, or share the registration link above."
@@ -137,6 +161,22 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       {selectedId && campId && (
         <StaffDetailDrawer staffId={selectedId} organizationId={organizationId} campId={campId} onClose={() => setSelectedId(null)} />
       )}
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
+        <p className="text-sm text-neutral-500">
+          Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? This action cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteStaff.isPending}
+            onClick={() => deleteTarget && deleteStaff.mutate({ id: deleteTarget.id })}
+          >
+            Delete
+          </Button>
+        </div>
+      </Dialog>
     </AppShell>
   );
 }

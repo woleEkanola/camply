@@ -13,6 +13,9 @@ export interface Column<T> {
   sortable?: boolean;
   searchable?: boolean;
   className?: string;
+  /** Allow long content (e.g. addresses) to wrap within the column's width instead of
+   * forcing the table wider and requiring horizontal scroll to see later columns. */
+  wrap?: boolean;
 }
 
 interface CommonProps<T> {
@@ -209,7 +212,14 @@ export function Table<T>(props: TableProps<T>) {
                     </td>
                   )}
                   {columns.map((column, i) => (
-                    <td key={i} className={cn("whitespace-nowrap px-4 py-3 text-sm text-neutral-700", column.className)}>
+                    <td
+                      key={i}
+                      className={cn(
+                        "px-4 py-3 text-sm text-neutral-700",
+                        column.wrap ? "whitespace-normal break-words" : "whitespace-nowrap",
+                        column.className
+                      )}
+                    >
                       {getCellValue(row, column)}
                     </td>
                   ))}

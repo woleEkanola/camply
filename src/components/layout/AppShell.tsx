@@ -37,7 +37,8 @@ export default function AppShell({ area, children }: AppShellProps) {
   );
 
   const role = session?.user?.role as Role | undefined;
-  const groups = getNavGroups(role, area);
+  const managedCampuses = (session?.user as { managedCampuses?: string[] } | undefined)?.managedCampuses ?? [];
+  const groups = getNavGroups(role, area, managedCampuses.length > 0);
 
   const handleLogout = async () => {
     await signOut({ redirect: false });

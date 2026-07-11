@@ -7,8 +7,8 @@ test.describe("Form Editor changes are reflected live in the wizards", () => {
   test("hiding a system field removes it from the staff wizard", async ({ page }) => {
     const { organizationId } = await getFixtureOrgContext();
     await ensureFormFields("TEACHER");
-    const churchField = await prisma.formField.findUniqueOrThrow({
-      where: { organizationId_audience_name: { organizationId, audience: "TEACHER", name: "church" } },
+    const churchField = await prisma.formField.findFirstOrThrow({
+      where: { organizationId, audience: "TEACHER", name: "church" },
     });
 
     await prisma.formField.update({ where: { id: churchField.id }, data: { visible: false } });
@@ -113,8 +113,8 @@ test.describe("Form Editor changes are reflected live in the wizards", () => {
   test("hiding a system field removes it from the camper signup wizard", async ({ page }) => {
     const { organizationId } = await getFixtureOrgContext();
     await ensureFormFields("CAMPER");
-    const genderField = await prisma.formField.findUniqueOrThrow({
-      where: { organizationId_audience_name: { organizationId, audience: "CAMPER", name: "gender" } },
+    const genderField = await prisma.formField.findFirstOrThrow({
+      where: { organizationId, audience: "CAMPER", name: "gender" },
     });
 
     await prisma.formField.update({ where: { id: genderField.id }, data: { visible: false } });

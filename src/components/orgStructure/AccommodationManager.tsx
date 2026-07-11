@@ -29,16 +29,28 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
 
   const [assignBed, setAssignBed] = useState<{ id: string; label: string } | null>(null);
   const [camperQuery, setCamperQuery] = useState("");
+  const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ type: "hostel" | "room" | "bed"; id: string; label: string } | null>(null);
 
   const invalidate = () => utils.accommodation.listHostels.invalidate({ venueId });
   const createHostel = api.accommodation.createHostel.useMutation({
     onSuccess: () => { setHostelDialogOpen(false); setHostelName(""); setHostelGender(""); invalidate(); },
   });
-  const deleteHostel = api.accommodation.deleteHostel.useMutation({ onSuccess: invalidate });
+  const deleteHostel = api.accommodation.deleteHostel.useMutation({
+    onSuccess: () => { setDeleteTarget(null); invalidate(); },
+    onError: (err) => { setError(err.message); setDeleteTarget(null); },
+  });
   const createRoom = api.accommodation.createRoom.useMutation({
     onSuccess: () => { setRoomDialog(null); setRoomName(""); setRoomCapacity(""); invalidate(); },
   });
-  const deleteRoom = api.accommodation.deleteRoom.useMutation({ onSuccess: invalidate });
+  const deleteRoom = api.accommodation.deleteRoom.useMutation({
+    onSuccess: () => { setDeleteTarget(null); invalidate(); },
+    onError: (err) => { setError(err.message); setDeleteTarget(null); },
+  });
+  const deleteBed = api.accommodation.deleteBed.useMutation({
+    onSuccess: () => { setDeleteTarget(null); invalidate(); },
+    onError: (err) => { setError(err.message); setDeleteTarget(null); },
+  });
   const createBed = api.accommodation.createBed.useMutation({
     onSuccess: () => { setBedDialog(null); setBedLabel(""); invalidate(); },
   });
@@ -58,6 +70,13 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
         <h2 className="text-lg font-semibold text-neutral-900">Accommodation</h2>
         {venueId && <Button size="sm" onClick={() => setHostelDialogOpen(true)}>Add Hostel</Button>}
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">
+          <span>{error}</span>
+          <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
+        </div>
+      )}
 
       <div className="mb-4 max-w-xs">
         <Select label="Venue" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
@@ -84,7 +103,7 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="secondary" onClick={() => setRoomDialog({ hostelId: h.id })}>Add Room</Button>
-                    <Button size="sm" variant="ghost" onClick={() => deleteHostel.mutate({ id: h.id })}>Delete</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDeleteTarget({ type: "hostel", id: h.id, label: h.name })}>Delete</Button>
                   </div>
                 </div>
 
@@ -98,22 +117,32 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
                           <span className="text-sm font-medium text-neutral-900">{r.name}</span>
                           <span className="text-xs text-neutral-500">{r.beds.length}{r.capacity ? `/${r.capacity}` : ""} beds</span>
                         </div>
-                        <div className="mb-2 flex flex-wrap gap-1">
+                        <div className="mb-2 flex flex-wrap items-center gap-1">
                           {r.beds.map((b: any) => (
-                            <button
-                              key={b.id}
-                              onClick={() => (b.status === "OCCUPIED" ? unassignCamperFromBed.mutate({ registrationId: b.registrationId }) : setAssignBed({ id: b.id, label: b.label }))}
-                              title={b.status === "OCCUPIED" ? `${b.registration?.camper?.name ?? "Occupied"} — click to unassign` : "Click to assign a camper"}
-                            >
-                              <Badge tone={b.status === "OCCUPIED" ? "success" : b.status === "MAINTENANCE" ? "warning" : "neutral"}>
-                                {b.label}
-                              </Badge>
-                            </button>
+                            <span key={b.id} className="inline-flex items-center gap-0.5">
+                              <button
+                                onClick={() => (b.status === "OCCUPIED" ? unassignCamperFromBed.mutate({ registrationId: b.registrationId }) : setAssignBed({ id: b.id, label: b.label }))}
+                                title={b.status === "OCCUPIED" ? `${b.registration?.camper?.name ?? "Occupied"} — click to unassign` : "Click to assign a camper"}
+                              >
+                                <Badge tone={b.status === "OCCUPIED" ? "success" : b.status === "MAINTENANCE" ? "warning" : "neutral"}>
+                                  {b.label}
+                                </Badge>
+                              </button>
+                              {b.status !== "OCCUPIED" && (
+                                <button
+                                  className="text-xs text-danger-600 hover:underline"
+                                  title="Delete bed"
+                                  onClick={() => setDeleteTarget({ type: "bed", id: b.id, label: b.label })}
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </span>
                           ))}
                         </div>
                         <div className="flex gap-2">
                           <Button size="sm" variant="secondary" onClick={() => setBedDialog({ roomId: r.id, roomName: r.name })}>Add Bed</Button>
-                          <Button size="sm" variant="ghost" onClick={() => deleteRoom.mutate({ id: r.id })}>Delete Room</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setDeleteTarget({ type: "room", id: r.id, label: r.name })}>Delete Room</Button>
                         </div>
                       </div>
                     ))}
@@ -192,6 +221,27 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
               <p className="text-sm text-neutral-500">No approved campers found.</p>
             )}
           </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
+        <p className="text-sm text-neutral-500">
+          Are you sure you want to delete &quot;{deleteTarget?.label}&quot;? This action cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteHostel.isPending || deleteRoom.isPending || deleteBed.isPending}
+            onClick={() => {
+              if (!deleteTarget) return;
+              if (deleteTarget.type === "hostel") deleteHostel.mutate({ id: deleteTarget.id });
+              else if (deleteTarget.type === "room") deleteRoom.mutate({ id: deleteTarget.id });
+              else deleteBed.mutate({ id: deleteTarget.id });
+            }}
+          >
+            Delete
+          </Button>
         </div>
       </Dialog>
     </div>

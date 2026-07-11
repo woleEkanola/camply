@@ -49,7 +49,7 @@ export const venueRouter = createTRPCRouter({
       const organizationId = await getVenueOrgId(input.campId);
       await assertOrgAdmin(ctx, organizationId);
       return prisma.venue.findMany({
-        where: { campId: input.campId },
+        where: { campId: input.campId, deletedAt: null },
         orderBy: { name: "asc" },
       });
     }),
@@ -62,7 +62,7 @@ export const venueRouter = createTRPCRouter({
         where: { id: input.id },
         include: { camp: { select: { organizationId: true } } },
       });
-      if (!venue) {
+      if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
       await assertOrgAdmin(ctx, venue.camp.organizationId);
@@ -80,7 +80,7 @@ export const venueRouter = createTRPCRouter({
         where: { id: input.id },
         include: { camp: { select: { organizationId: true } } },
       });
-      if (!venue) {
+      if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
       await assertOrgAdmin(ctx, venue.camp.organizationId);
@@ -111,7 +111,7 @@ export const venueRouter = createTRPCRouter({
         where: { id: input.id },
         include: { camp: { select: { organizationId: true } } },
       });
-      if (!venue) {
+      if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
       await assertOrgAdmin(ctx, venue.camp.organizationId);
@@ -128,7 +128,9 @@ export const venueRouter = createTRPCRouter({
       return prisma.venue.update({ where: { id: input.id }, data: input.data });
     }),
 
-  // Delete a venue
+  // Delete a venue (soft delete — recoverable from Trash for 60 days; cascades
+  // to this venue's Hostels/Rooms/Beds. Blocked if live registrations are still
+  // assigned to it — reassign or cancel those first.)
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
@@ -136,11 +138,28 @@ export const venueRouter = createTRPCRouter({
         where: { id: input.id },
         include: { camp: { select: { organizationId: true } } },
       });
-      if (!venue) {
+      if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
       await assertOrgAdmin(ctx, venue.camp.organizationId);
-      return prisma.venue.delete({ where: { id: input.id } });
+
+      const registrationCount = await prisma.registration.count({
+        where: { venueId: input.id, deletedAt: null },
+      });
+      if (registrationCount > 0) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Cannot delete this venue: ${registrationCount} registration${registrationCount === 1 ? "" : "s"} are assigned to it. Reassign or remove those registrations first.`,
+        });
+      }
+
+      const now = new Date();
+      return prisma.$transaction(async (tx) => {
+        await tx.bed.updateMany({ where: { room: { hostel: { venueId: input.id } }, deletedAt: null }, data: { deletedAt: now } });
+        await tx.room.updateMany({ where: { hostel: { venueId: input.id }, deletedAt: null }, data: { deletedAt: now } });
+        await tx.hostel.updateMany({ where: { venueId: input.id, deletedAt: null }, data: { deletedAt: now } });
+        return tx.venue.update({ where: { id: input.id }, data: { deletedAt: now } });
+      }, { timeout: 15000 });
     }),
 
   // Get statistics for a venue (registrations, campers, trend)
@@ -151,16 +170,16 @@ export const venueRouter = createTRPCRouter({
         where: { id: input.venueId },
         include: { camp: { select: { organizationId: true } } },
       });
-      if (!venue) {
+      if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
       await assertOrgAdmin(ctx, venue.camp.organizationId);
 
       const registrationsCount = await prisma.registration.count({
-        where: { venueId: input.venueId },
+        where: { venueId: input.venueId, deletedAt: null },
       });
       const uniqueCampers = await prisma.registration.findMany({
-        where: { venueId: input.venueId },
+        where: { venueId: input.venueId, deletedAt: null },
         select: { camperId: true },
       });
       const campersCount = new Set(uniqueCampers.map((r) => r.camperId)).size;
@@ -173,6 +192,7 @@ export const venueRouter = createTRPCRouter({
         const count = await prisma.registration.count({
           where: {
             venueId: input.venueId,
+            deletedAt: null,
             createdAt: { gte: from, lt: to },
           },
         });

@@ -104,7 +104,10 @@ export default function CamperDetailPage() {
   if (status === "loading" || isLoading || isLoadingList) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
-  if (!session || session.user.role !== "CAMPUS_REPRESENTATIVE") {
+  // Campus Rep capability comes from managedCampuses (the Campus.reps
+  // relation), not from role === "CAMPUS_REPRESENTATIVE" — any role (e.g. a
+  // Teacher) can also hold it.
+  if (!session || (session.user.managedCampuses?.length ?? 0) === 0) {
     return null;
   }
   if (error) {
