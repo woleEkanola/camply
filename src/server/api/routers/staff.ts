@@ -3,6 +3,9 @@ import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
 import { sendStaffApprovedEmail, sendStaffRejectedEmail } from "../../email/sendStaffEmails";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+
 
 async function requireStaffProfile(ctx: { prisma: any; userId: string }) {
   const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId } });
@@ -476,4 +479,357 @@ export const staffRouter = createTRPCRouter({
       ]);
       return { staff, leaders };
     }),
+
+  bulkDelete: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()) }))
+    .mutation(async ({ ctx, input }) => {
+      for (const id of input.ids) {
+        const profile = await ctx.prisma.staffProfile.findUnique({ where: { id } });
+        if (!profile) continue;
+        await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+      }
+      const now = new Date();
+      await ctx.prisma.staffProfile.updateMany({
+        where: { id: { in: input.ids } },
+        data: { deletedAt: now },
+      });
+      return { count: input.ids.length };
+    }),
+
+  createManually: protectedProcedure
+    .input(z.object({
+      organizationId: z.string(),
+      campId: z.string(),
+      type: z.enum(["TEACHER", "VOLUNTEER"]),
+      email: z.string().email(),
+      values: z.record(z.any()),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
+      const existing = await ctx.prisma.user.findUnique({ where: { email: input.email } });
+      if (existing) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "A user with this email already exists" });
+      }
+
+      const fields = await ctx.prisma.formField.findMany({
+        where: { organizationId: input.organizationId, audience: input.type, deletedAt: null },
+      });
+
+      const systemValues: Record<string, any> = {};
+      const customFieldValues: { fieldId: string; value: string }[] = [];
+
+      for (const f of fields) {
+        const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
+        const v = input.values[key];
+        if (v === undefined || v === null) continue;
+
+        if (f.source === "SYSTEM") {
+          systemValues[f.systemKey!] = v;
+        } else {
+          customFieldValues.push({
+            fieldId: f.id,
+            value: Array.isArray(v) ? JSON.stringify(v) : String(v),
+          });
+        }
+      }
+
+      const placeholderPassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+      const firstName = systemValues.firstName || "";
+      const lastName = systemValues.lastName || "";
+      const phone = systemValues.phone || "";
+      const gender = systemValues.gender || "";
+
+      return ctx.prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email: input.email,
+            password: placeholderPassword,
+            role: input.type,
+            firstName,
+            lastName,
+            organizationId: input.organizationId,
+            homeCampusId: systemValues.preferredCampusId || undefined,
+            active: true,
+          }
+        });
+
+        const profile = await tx.staffProfile.create({
+          data: {
+            userId: user.id,
+            organizationId: input.organizationId,
+            campId: input.campId,
+            type: input.type,
+            status: "APPROVED",
+            firstName,
+            lastName,
+            gender,
+            phone,
+            email: input.email,
+            preferredCampusId: systemValues.preferredCampusId || null,
+            church: systemValues.church || null,
+            churchDepartment: systemValues.churchDepartment || null,
+            yearsServing: systemValues.yearsServing || null,
+            workerStatus: systemValues.workerStatus || null,
+            emergencyContactName: systemValues.emergencyContactName || null,
+            emergencyContactPhone: systemValues.emergencyContactPhone || null,
+            emergencyContactRelationship: systemValues.emergencyContactRelationship || null,
+            medicalConditions: systemValues.medicalConditions || null,
+            allergies: systemValues.allergies || null,
+            skills: systemValues.skills || [],
+            availability: systemValues.availability || null,
+            volunteerCategory: systemValues.volunteerCategory || null,
+            previousCampExperience: systemValues.previousCampExperience || null,
+            areasOfStrength: systemValues.areasOfStrength || null,
+            preferredAgeGroup: systemValues.preferredAgeGroup || null,
+            approvedAt: new Date(),
+            reviewerId: ctx.userId,
+          }
+        });
+
+        if (customFieldValues.length > 0) {
+          await tx.staffFieldValue.createMany({
+            data: customFieldValues.map(cf => ({
+              staffProfileId: profile.id,
+              fieldId: cf.fieldId,
+              value: cf.value,
+            }))
+          });
+        }
+
+        return profile;
+      });
+    }),
+
+  autoAssignToTribes: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
+
+      const teachers = await ctx.prisma.staffProfile.findMany({
+        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER", status: "APPROVED", deletedAt: null },
+      });
+
+      const tribes = await ctx.prisma.tribe.findMany({
+        where: { campId: input.campId, deletedAt: null },
+      });
+
+      if (tribes.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No active tribes found in this camp." });
+      }
+
+      await ctx.prisma.staffProfile.updateMany({
+        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER" },
+        data: {
+          assignedTribeId: null,
+          isCampMonitor: false,
+          isAssistantMonitor: false,
+        },
+      });
+
+      const males = teachers.filter((t: any) => t.gender?.toUpperCase() === "MALE");
+      const females = teachers.filter((t: any) => t.gender?.toUpperCase() === "FEMALE");
+      const others = teachers.filter((t: any) => t.gender?.toUpperCase() !== "MALE" && t.gender?.toUpperCase() !== "FEMALE");
+
+      const tribeMales: Record<string, typeof teachers> = {};
+      const tribeFemales: Record<string, typeof teachers> = {};
+      const tribeOthers: Record<string, typeof teachers> = {};
+
+      tribes.forEach((tr: any) => {
+        tribeMales[tr.id] = [];
+        tribeFemales[tr.id] = [];
+        tribeOthers[tr.id] = [];
+      });
+
+      males.forEach((m: any, idx: number) => {
+        const tr = tribes[idx % tribes.length];
+        tribeMales[tr.id].push(m);
+      });
+
+      females.forEach((f: any, idx: number) => {
+        const tr = tribes[idx % tribes.length];
+        tribeFemales[tr.id].push(f);
+      });
+
+      others.forEach((o: any, idx: number) => {
+        const tr = tribes[idx % tribes.length];
+        tribeOthers[tr.id].push(o);
+      });
+
+      const updates: any[] = [];
+
+      for (const tribe of tribes) {
+        const tId = tribe.id;
+
+        const mList = tribeMales[tId];
+        mList.forEach((m: any, idx: number) => {
+          updates.push(
+            ctx.prisma.staffProfile.update({
+              where: { id: m.id },
+              data: {
+                assignedTribeId: tId,
+                isCampMonitor: idx === 0,
+                isAssistantMonitor: idx === 1,
+              },
+            })
+          );
+        });
+
+        const fList = tribeFemales[tId];
+        fList.forEach((f: any, idx: number) => {
+          updates.push(
+            ctx.prisma.staffProfile.update({
+              where: { id: f.id },
+              data: {
+                assignedTribeId: tId,
+                isCampMonitor: idx === 0,
+                isAssistantMonitor: idx === 1,
+              },
+            })
+          );
+        });
+
+        const oList = tribeOthers[tId];
+        oList.forEach((o: any) => {
+          updates.push(
+            ctx.prisma.staffProfile.update({
+              where: { id: o.id },
+              data: { assignedTribeId: tId },
+            })
+          );
+        });
+      }
+
+      await ctx.prisma.$transaction(updates);
+      return { success: true, count: teachers.length };
+    }),
+
+  autoAssignToDepartments: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
+
+      const teachers = await ctx.prisma.staffProfile.findMany({
+        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER", status: "APPROVED", deletedAt: null },
+      });
+
+      const depts = await ctx.prisma.department.findMany({
+        where: { organizationId: input.organizationId, status: "ACTIVE", deletedAt: null },
+      });
+
+      if (depts.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No active departments found." });
+      }
+
+      await ctx.prisma.staffProfile.updateMany({
+        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER" },
+        data: {
+          departmentId: null,
+          isDepartmentHead: false,
+          isAssistantHead: false,
+        },
+      });
+
+      const males = teachers.filter((t: any) => t.gender?.toUpperCase() === "MALE");
+      const females = teachers.filter((t: any) => t.gender?.toUpperCase() === "FEMALE");
+      const others = teachers.filter((t: any) => t.gender?.toUpperCase() !== "MALE" && t.gender?.toUpperCase() !== "FEMALE");
+
+      const deptMales: Record<string, typeof teachers> = {};
+      const deptFemales: Record<string, typeof teachers> = {};
+      const deptOthers: Record<string, typeof teachers> = {};
+
+      depts.forEach((d: any) => {
+        deptMales[d.id] = [];
+        deptFemales[d.id] = [];
+        deptOthers[d.id] = [];
+      });
+
+      let malePtr = 0;
+      let femalePtr = 0;
+      const updates: any[] = [];
+
+      for (let i = 0; i < depts.length; i++) {
+        const dId = depts[i].id;
+        const startWithMale = i % 2 === 0;
+
+        let head: any = null;
+        let assistant: any = null;
+
+        if (startWithMale) {
+          if (malePtr < males.length) {
+            head = males[malePtr++];
+            updates.push(
+              ctx.prisma.staffProfile.update({
+                where: { id: head.id },
+                data: { departmentId: dId, isDepartmentHead: true },
+              })
+            );
+          }
+          if (femalePtr < females.length) {
+            assistant = females[femalePtr++];
+            updates.push(
+              ctx.prisma.staffProfile.update({
+                where: { id: assistant.id },
+                data: { departmentId: dId, isAssistantHead: true },
+              })
+            );
+          }
+        } else {
+          if (femalePtr < females.length) {
+            head = females[femalePtr++];
+            updates.push(
+              ctx.prisma.staffProfile.update({
+                where: { id: head.id },
+                data: { departmentId: dId, isDepartmentHead: true },
+              })
+            );
+          }
+          if (malePtr < males.length) {
+            assistant = males[malePtr++];
+            updates.push(
+              ctx.prisma.staffProfile.update({
+                where: { id: assistant.id },
+                data: { departmentId: dId, isAssistantHead: true },
+              })
+            );
+          }
+        }
+      }
+
+      const remainingMales = males.slice(malePtr);
+      const remainingFemales = females.slice(femalePtr);
+
+      remainingMales.forEach((m: any, idx: number) => {
+        const d = depts[idx % depts.length];
+        updates.push(
+          ctx.prisma.staffProfile.update({
+            where: { id: m.id },
+            data: { departmentId: d.id },
+          })
+        );
+      });
+
+      remainingFemales.forEach((f: any, idx: number) => {
+        const d = depts[idx % depts.length];
+        updates.push(
+          ctx.prisma.staffProfile.update({
+            where: { id: f.id },
+            data: { departmentId: d.id },
+          })
+        );
+      });
+
+      others.forEach((o: any, idx: number) => {
+        const d = depts[idx % depts.length];
+        updates.push(
+          ctx.prisma.staffProfile.update({
+            where: { id: o.id },
+            data: { departmentId: d.id },
+          })
+        );
+      });
+
+      await ctx.prisma.$transaction(updates);
+      return { success: true, count: teachers.length };
+    }),
 });
+

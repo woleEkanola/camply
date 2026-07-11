@@ -29,7 +29,7 @@ export const tribeRouter = createTRPCRouter({
       const tribes = await ctx.prisma.tribe.findMany({
         where: { campId: input.campId, deletedAt: null },
         include: { _count: { select: { registrations: { where: { deletedAt: null } } } } },
-        orderBy: { name: "asc" },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       });
       return tribes.map((t: any) => ({ ...t, population: t._count.registrations }));
     }),
@@ -38,9 +38,19 @@ export const tribeRouter = createTRPCRouter({
     .input(z.object({
       campId: z.string(),
       name: z.string().min(1),
+      code: z.string().max(10).optional(),
       color: z.string().optional(),
+      displayOrder: z.number().int().min(0).optional(),
       description: z.string().optional(),
+      meaning: z.string().optional(),
+      motto: z.string().optional(),
+      scripture: z.string().optional(),
+      gender: z.enum(["MALE", "FEMALE", "MIXED"]).optional(),
+      ageRange: z.string().optional(),
+      allocationStrategy: z.enum(["MANUAL", "AUTOMATIC", "INVITE_ONLY"]).optional(),
       maxCapacity: z.number().int().min(1).optional(),
+      logoUrl: z.string().optional(),
+      bannerUrl: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertCanManageCamp(ctx, input.campId);
@@ -52,9 +62,19 @@ export const tribeRouter = createTRPCRouter({
       id: z.string(),
       data: z.object({
         name: z.string().min(1).optional(),
+        code: z.string().max(10).nullable().optional(),
         color: z.string().nullable().optional(),
+        displayOrder: z.number().int().min(0).optional(),
         description: z.string().nullable().optional(),
+        meaning: z.string().nullable().optional(),
+        motto: z.string().nullable().optional(),
+        scripture: z.string().nullable().optional(),
+        gender: z.enum(["MALE", "FEMALE", "MIXED"]).nullable().optional(),
+        ageRange: z.string().nullable().optional(),
+        allocationStrategy: z.enum(["MANUAL", "AUTOMATIC", "INVITE_ONLY"]).optional(),
         maxCapacity: z.number().int().min(1).nullable().optional(),
+        logoUrl: z.string().nullable().optional(),
+        bannerUrl: z.string().nullable().optional(),
         status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
       }),
     }))

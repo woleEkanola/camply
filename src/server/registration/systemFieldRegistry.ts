@@ -75,7 +75,7 @@ const STAFF_PERSONAL = (): SystemFieldDefinition[] => [
 
 const STAFF_CHURCH = (startOrder: number): SystemFieldDefinition[] => [
   field({ systemKey: "church", label: "Church", type: "TEXT", required: false, visible: true, sortOrder: startOrder, groupLabel: "Church Information" }),
-  field({ systemKey: "churchDepartment", label: "Department", type: "TEXT", required: false, visible: true, sortOrder: startOrder + 10, groupLabel: "Church Information" }),
+  field({ systemKey: "churchDepartment", label: "Department", type: "SELECT", required: false, visible: true, sortOrder: startOrder + 10, groupLabel: "Church Information" }),
   field({ systemKey: "yearsServing", label: "Years Serving", type: "TEXT", required: false, visible: true, sortOrder: startOrder + 20, groupLabel: "Church Information" }),
   field({ systemKey: "workerStatus", label: "Worker Status", type: "TEXT", required: false, visible: true, sortOrder: startOrder + 30, groupLabel: "Church Information" }),
 ];

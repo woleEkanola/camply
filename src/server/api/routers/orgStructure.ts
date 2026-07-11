@@ -158,12 +158,12 @@ export const orgStructureRouter = createTRPCRouter({
       assertOrgAccess(currentUser, input.organizationId);
 
       const tribes = await ctx.prisma.tribe.findMany({
-        where: { campId: input.campId },
+        where: { campId: input.campId, deletedAt: null },
         include: {
-          _count: { select: { registrations: true } },
+          _count: { select: { registrations: { where: { deletedAt: null } } } },
           assignedStaff: { where: { status: "APPROVED" }, include: { user: true, assignedHostel: true } },
         },
-        orderBy: { name: "asc" },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       });
 
       return tribes.map((t: any) => {
@@ -173,8 +173,20 @@ export const orgStructureRouter = createTRPCRouter({
         return {
           id: t.id,
           name: t.name,
+          code: t.code,
           color: t.color,
+          displayOrder: t.displayOrder,
           logoUrl: t.logoUrl,
+          bannerUrl: t.bannerUrl,
+          description: t.description,
+          meaning: t.meaning,
+          motto: t.motto,
+          scripture: t.scripture,
+          gender: t.gender,
+          ageRange: t.ageRange,
+          allocationStrategy: t.allocationStrategy,
+          maxCapacity: t.maxCapacity,
+          status: t.status,
           points: t.points,
           camperCount: t._count.registrations,
           monitor: monitor ? { id: monitor.id, name: `${monitor.firstName} ${monitor.lastName}` } : null,
@@ -183,6 +195,7 @@ export const orgStructureRouter = createTRPCRouter({
         };
       });
     }),
+
 
   // ─── My Position ────────────────────────────────────────────────────────
   getMyPosition: protectedProcedure

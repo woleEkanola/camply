@@ -79,37 +79,153 @@ export default function AdminCamperViewPage() {
         {error && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
 
         <Card>
-          <CardBody className="space-y-3 text-sm">
-            <div><span className="font-medium text-neutral-700">Email:</span> {profile.user?.email}</div>
-            <div>
-              <span className="font-medium text-neutral-700">Status:</span>{" "}
-              <Badge tone={profile.active ? "success" : "neutral"}>{profile.active ? "Active" : "Inactive"}</Badge>
-            </div>
-            <div><span className="font-medium text-neutral-700">Campus:</span> {profile.homeCampus?.name || "-"}</div>
-            <div><span className="font-medium text-neutral-700">Created:</span> {profile && (profile as any).createdAt ? new Date((profile as any).createdAt).toLocaleDateString() : "-"}</div>
-
-            {customFields.length > 0 && (
+          <CardBody className="space-y-6 text-sm">
+            {/* Header Photo and Basic Info Row */}
+            <div className="flex items-center gap-4 border-b border-neutral-100 pb-4">
+              {profile.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.photoUrl} alt="" className="h-16 w-16 rounded-full object-cover border border-neutral-200" />
+              ) : (
+                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-100 text-xl font-bold text-accent-700">
+                  {(profile.firstName?.[0] || profile.name?.[0]) || ""}{(profile.lastName?.[0]) || ""}
+                </span>
+              )}
               <div>
-                <span className="font-medium text-neutral-700">Custom Fields:</span>
-                <div className="mt-2 space-y-1">
-                  {customFields.map((field: any) => (
-                    <div key={field.id}>
-                      <span className="font-medium">{field.label}:</span> {fieldValues[field.id] || "-"}
-                    </div>
-                  ))}
+                <h3 className="text-lg font-bold text-neutral-900">
+                  {profile.firstName ? `${profile.firstName} ${profile.middleName ? profile.middleName + " " : ""}${profile.lastName}` : profile.name}
+                </h3>
+                {profile.preferredName && <p className="text-xs text-neutral-500">Goes by: {profile.preferredName}</p>}
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge tone={profile.active ? "success" : "neutral"}>{profile.active ? "Active" : "Inactive"}</Badge>
+                  {profile.gender && <Badge tone="info">{profile.gender}</Badge>}
+                  {profile.dateOfBirth && (
+                    <span className="text-xs text-neutral-500">
+                      DOB: {new Date(profile.dateOfBirth).toLocaleDateString()}
+                    </span>
+                  )}
                 </div>
               </div>
-            )}
-            {birthCertUrl && (
-              <div>
-                <span className="font-medium text-neutral-700">Birth Certificate:</span>{" "}
-                <a href={birthCertUrl} target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">View File</a>
+            </div>
+
+            {/* Grid details sections */}
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Parent & Campus Information */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-neutral-900 border-b border-neutral-100 pb-1">Parent & Campus Details</h4>
+                <div>
+                  <span className="font-medium text-neutral-500">Parent Name:</span>{" "}
+                  <span className="text-neutral-900">{profile.user?.firstName} {profile.user?.lastName}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Parent Email:</span>{" "}
+                  <span className="text-neutral-900">{profile.user?.email}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Home Campus:</span>{" "}
+                  <span className="text-neutral-900">{profile.homeCampus?.name || "-"}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Profile Created:</span>{" "}
+                  <span className="text-neutral-900">
+                    {profile && (profile as any).createdAt ? new Date((profile as any).createdAt).toLocaleDateString() : "-"}
+                  </span>
+                </div>
               </div>
-            )}
-            {consentFormUrl && (
-              <div>
-                <span className="font-medium text-neutral-700">Parent Consent Form:</span>{" "}
-                <a href={consentFormUrl} target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">View File</a>
+
+              {/* Education & Church Info */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-neutral-900 border-b border-neutral-100 pb-1">Education & Church</h4>
+                <div>
+                  <span className="font-medium text-neutral-500">School:</span>{" "}
+                  <span className="text-neutral-900">{profile.school || "—"}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Current Class:</span>{" "}
+                  <span className="text-neutral-900">{profile.currentClass || "—"}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Church:</span>{" "}
+                  <span className="text-neutral-900">{profile.church || "—"}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Pastor:</span>{" "}
+                  <span className="text-neutral-900">{profile.pastor || "—"}</span>
+                </div>
+              </div>
+
+              {/* Medical & Dietary */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-neutral-900 border-b border-neutral-100 pb-1">Medical & Dietary</h4>
+                <div>
+                  <span className="font-medium text-neutral-500">Allergies:</span>{" "}
+                  <span className="text-neutral-900">{profile.allergies || "None reported"}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Medical Conditions:</span>{" "}
+                  <span className="text-neutral-900">{profile.medicalConditions || "None reported"}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Medications:</span>{" "}
+                  <span className="text-neutral-900">{profile.medications || "None reported"}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Dietary Restrictions:</span>{" "}
+                  <span className="text-neutral-900">{profile.dietaryRestrictions || "None reported"}</span>
+                </div>
+              </div>
+
+              {/* Emergency Contact */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-neutral-900 border-b border-neutral-100 pb-1">Emergency Contact</h4>
+                <div>
+                  <span className="font-medium text-neutral-500">Contact Name:</span>{" "}
+                  <span className="text-neutral-900">{profile.emergencyContactName || "—"}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Contact Phone:</span>{" "}
+                  <span className="text-neutral-900">{profile.emergencyContactPhone || "—"}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-neutral-500">Relationship:</span>{" "}
+                  <span className="text-neutral-900">{profile.relationship || "—"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom fields & Documents */}
+            {(customFields.length > 0 || birthCertUrl || consentFormUrl) && (
+              <div className="border-t border-neutral-100 pt-4 space-y-4">
+                {customFields.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-neutral-900 mb-2">Custom Fields</h4>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {customFields.map((field: any) => (
+                        <div key={field.id}>
+                          <span className="font-medium text-neutral-500">{field.label}:</span>{" "}
+                          <span className="text-neutral-900">{fieldValues[field.id] || "-"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(birthCertUrl || consentFormUrl) && (
+                  <div>
+                    <h4 className="font-semibold text-neutral-900 mb-2">Uploaded Documents</h4>
+                    <div className="flex flex-wrap gap-4">
+                      {birthCertUrl && (
+                        <a href={birthCertUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-md border border-neutral-200 px-3 py-1.5 hover:bg-neutral-50 text-accent-700 font-medium">
+                          📄 Birth Certificate
+                        </a>
+                      )}
+                      {consentFormUrl && (
+                        <a href={consentFormUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-md border border-neutral-200 px-3 py-1.5 hover:bg-neutral-50 text-accent-700 font-medium">
+                          📄 Parent Consent Form
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardBody>

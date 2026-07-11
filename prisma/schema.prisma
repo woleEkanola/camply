@@ -525,9 +525,18 @@ model Tribe {
   camp               Camp                @relation(fields: [campId], references: [id], onDelete: Cascade)
   campId             String
   name               String
-  color              String?
+  code               String?             // Short code e.g. AGP, BER, ZOE
+  color              String?             // HEX colour e.g. #E53935
+  displayOrder       Int                 @default(0) // Controls sort order throughout the app
   logoUrl            String?
+  bannerUrl          String?             // Banner image for tribe dashboard / digital pass
   description        String?
+  meaning            String?             // Short meaning or theme e.g. "Unconditional Love"
+  motto              String?             // e.g. "Love Never Fails"
+  scripture          String?             // e.g. "John 13:34"
+  gender             String?             // MALE | FEMALE | MIXED
+  ageRange           String?             // e.g. "10-12" | "All Ages"
+  allocationStrategy String              @default("MANUAL") // MANUAL | AUTOMATIC | INVITE_ONLY
   maxCapacity        Int?
   status             String              @default("ACTIVE") // ACTIVE | INACTIVE
   registrations      Registration[]
@@ -542,6 +551,7 @@ model Tribe {
 
   // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
   @@index([campId, name])
+  @@index([campId, code])
   @@index([deletedAt])
 }
 

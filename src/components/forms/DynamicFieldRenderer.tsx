@@ -11,11 +11,16 @@ interface DynamicFieldRendererProps {
   onChange: (value: unknown) => void;
   disabled?: boolean;
   /** Overrides field.options with dynamically-fetched choices (e.g. Location list for a "Centre" field). */
-  dynamicOptions?: string[];
+  dynamicOptions?: (string | { value: string; label: string })[];
 }
 
 export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamicOptions }: DynamicFieldRendererProps) {
-  const options = dynamicOptions ?? parseFieldOptions(field.options);
+  const rawOptions = dynamicOptions ?? parseFieldOptions(field.options);
+  const options = rawOptions.map((opt) =>
+    typeof opt === "object" && opt !== null && "value" in opt
+      ? (opt as { value: string; label: string })
+      : { value: String(opt), label: String(opt) }
+  );
   const fieldId = field.id;
 
   switch (field.type) {
@@ -89,15 +94,15 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
         >
           <option value="">Select…</option>
           {options.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </Select>
       );
 
     case "MULTI_SELECT": {
       const selected = Array.isArray(value) ? (value as string[]) : [];
-      const toggle = (opt: string) => {
-        onChange(selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt]);
+      const toggle = (val: string) => {
+        onChange(selected.includes(val) ? selected.filter((s) => s !== val) : [...selected, val]);
       };
       return (
         <div>
@@ -108,15 +113,15 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           <div className="flex flex-wrap gap-2">
             {options.map((opt) => (
               <button
-                key={opt}
+                key={opt.value}
                 type="button"
                 disabled={disabled}
-                onClick={() => toggle(opt)}
+                onClick={() => toggle(opt.value)}
                 className={`rounded-full border px-3 py-1.5 text-sm ${
-                  selected.includes(opt) ? "border-accent-600 bg-accent-50 text-accent-700" : "border-neutral-300 text-neutral-600"
+                  selected.includes(opt.value) ? "border-accent-600 bg-accent-50 text-accent-700" : "border-neutral-300 text-neutral-600"
                 }`}
               >
-                {opt}
+                {opt.label}
               </button>
             ))}
           </div>
@@ -134,16 +139,16 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           </label>
           <div className="space-y-1">
             {options.map((opt) => (
-              <label key={opt} className="flex items-center gap-2 text-sm text-neutral-700">
+              <label key={opt.value} className="flex items-center gap-2 text-sm text-neutral-700">
                 <input
                   type="radio"
                   name={fieldId}
                   disabled={disabled}
-                  checked={value === opt}
-                  onChange={() => onChange(opt)}
+                  checked={value === opt.value}
+                  onChange={() => onChange(opt.value)}
                   className="h-4 w-4 border-neutral-300 text-accent-600 focus:ring-accent-500"
                 />
-                {opt}
+                {opt.label}
               </label>
             ))}
           </div>

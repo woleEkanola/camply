@@ -62,14 +62,14 @@ interface CamperManagementProps {
   setSuccess: (success: string) => void;
 }
 
+import { StatusBadge } from "@/components/ui/StatusBadge";
+
 const CamperManagement: React.FC<CamperManagementProps> = ({
   organizationId,
   currentUser,
   setError,
   setSuccess,
 }) => {
-  const [campers, setCampers] = useState<CamperType[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [campusFilter, setCampusFilter] = useState<string | "all">("all");
   const [activeFilter, setActiveFilter] = useState<boolean | "all">("all");
@@ -77,19 +77,53 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
-  // Get campers
-  const { data: profilesData, refetch: refetchProfiles, error: profilesError, isSuccess } = api.camper.getByOrganization.useQuery(
+  // Pagination states
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [allCampers, setAllCampers] = useState<CamperType[]>([]);
+
+  // Get active camp to fetch registrations
+  const { data: activeYear } = api.camp.getActiveCamp.useQuery(
     { organizationId },
+    { enabled: !!organizationId }
+  );
+  const campId = activeYear?.id ?? "";
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCursor(undefined);
+    setAllCampers([]);
+  }, [searchTerm, campusFilter, activeFilter, campId]);
+
+  // Get campers
+  const { data: responseData, refetch: refetchProfiles, error: profilesError, isLoading } = api.camper.adminList.useQuery(
+    {
+      organizationId,
+      campId: campId || undefined,
+      q: searchTerm || undefined,
+      campusId: campusFilter !== "all" ? campusFilter : undefined,
+      active: activeFilter === "all" ? undefined : activeFilter,
+      limit: 50,
+      cursor,
+    },
     {
       enabled: !!organizationId,
     }
   );
 
+  // Update campers when data changes
   useEffect(() => {
-    if (isSuccess) {
-      setIsLoading(false);
+    if (responseData?.items) {
+      if (cursor === undefined) {
+        setAllCampers(responseData.items as CamperType[]);
+      } else {
+        setAllCampers((prev) => {
+          const prevIds = new Set(prev.map(item => item.id));
+          const newItems = (responseData.items as CamperType[]).filter(item => !prevIds.has(item.id));
+          return [...prev, ...newItems];
+        });
+      }
     }
-  }, [isSuccess]);
+  }, [responseData?.items, cursor]);
 
   // Get campuses for filtering
   const { data: campusesData, error: campusesError } = api.campus.getByOrganization.useQuery(
@@ -99,66 +133,23 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     }
   );
 
-  // Update campers when data changes
-  useEffect(() => {
-    if (profilesData) {
-      setCampers(profilesData as CamperType[]);
-    }
-  }, [profilesData]);
-
-  // Improved fallback: only set timeout if loading, and always clear timeout if loading finishes
-  useEffect(() => {
-    if (!organizationId) {
-      setIsLoading(false);
-      setError("No organization ID found. Please contact your administrator.");
-      return;
-    }
-    if (!isLoading) return; // Don't set timeout if not loading
-    const timeout = setTimeout(() => {
-      setIsLoading(false);
-      setError("Request timed out. Please try refreshing the page.");
-    }, 10000);
-    return () => clearTimeout(timeout);
-  }, [organizationId, isLoading, setError]);
-
   // Handle query errors
   useEffect(() => {
     if (profilesError) {
       setError(`Error loading campers: ${profilesError.message}`);
-      setIsLoading(false);
     }
     if (campusesError) {
       setError(`Error loading campuses: ${campusesError.message}`);
     }
   }, [profilesError, campusesError, setError]);
 
-  // Filter campers
-  const filteredProfiles = campers.filter((profile) => {
-    // Search term filter
-    const matchesSearch =
-      searchTerm === "" ||
-      profile.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      profile.user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (profile.user.firstName && profile.user.firstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (profile.user.lastName && profile.user.lastName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (profile.homeCampus && profile.homeCampus.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    // Campus filter
-    const matchesCampus =
-      campusFilter === "all" || profile.homeCampusId === campusFilter;
-
-    // Active filter
-    const matchesActive =
-      activeFilter === "all" || profile.active === activeFilter;
-
-    return matchesSearch && matchesCampus && matchesActive;
-  });
-
   // Delete camper
   const deleteCamperMutation = api.camper.delete.useMutation({
     onSuccess: () => {
       setSuccess("Camper profile deleted successfully");
       setIsDeleteModalOpen(false);
+      setCursor(undefined);
+      setAllCampers([]);
       void refetchProfiles();
     },
   });
@@ -200,6 +191,14 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       ),
     },
     { header: "Campus", accessor: (profile) => profile.homeCampus ? profile.homeCampus.name : "No campus" },
+    {
+      header: "Registration Status",
+      accessor: (profile) => {
+        const reg = (profile as any).registrations?.[0];
+        if (!reg) return <Badge tone="neutral">Not Registered</Badge>;
+        return <StatusBadge status={reg.status} />;
+      }
+    },
     { header: "Status", accessor: (profile) => <Badge tone={profile.active ? "success" : "danger"}>{profile.active ? "Active" : "Inactive"}</Badge> },
     { header: "Created", accessor: (profile) => new Date(profile.createdAt).toLocaleDateString() },
   ];
@@ -232,6 +231,8 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           onClose={() => setIsModalOpen(false)}
           onSuccess={() => {
             setSuccess(selectedProfile ? "Camper profile updated successfully" : "Camper profile created successfully");
+            setCursor(undefined);
+            setAllCampers([]);
             void refetchProfiles();
           }}
         />
@@ -270,21 +271,34 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
 
       {/* Stats Cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard label="Total Campers" value={campers.length} />
-        <StatCard label="Active Campers" value={campers.filter((p) => p.active).length} tone="success" />
-        <StatCard label="Inactive Campers" value={campers.filter((p) => !p.active).length} tone="danger" />
+        <StatCard label="Total Campers" value={allCampers.length} />
+        <StatCard label="Active Campers" value={allCampers.filter((p) => p.active).length} tone="success" />
+        <StatCard label="Inactive Campers" value={allCampers.filter((p) => !p.active).length} tone="danger" />
       </div>
 
       <Table
         mode="controlled"
-        toolbar={<span className="text-xs text-neutral-400">{filteredProfiles.length} camper{filteredProfiles.length === 1 ? "" : "s"}</span>}
+        toolbar={<span className="text-xs text-neutral-400">{allCampers.length} camper{allCampers.length === 1 ? "" : "s"}</span>}
         columns={columns}
-        data={filteredProfiles}
+        data={allCampers}
         rowKey={(profile) => profile.id}
         actions={actions}
-        isLoading={isLoading}
+        isLoading={isLoading && allCampers.length === 0}
         emptyTitle="No campers found"
         emptyDescription="Try adjusting your search or filters."
+        footer={
+          responseData?.nextCursor ? (
+            <div className="flex justify-center p-3 border-t border-neutral-200">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setCursor(responseData.nextCursor)}
+              >
+                Load More
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       {/* Delete Confirmation Modal */}
