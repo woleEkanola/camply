@@ -125,7 +125,7 @@ export default function TrashPage() {
     },
   });
 
-  const rows: TrashRow[] = (data as TrashRow[]) ?? [];
+  const rows: TrashRow[] = (data as unknown as TrashRow[]) ?? [];
 
   const columns: Column<TrashRow>[] = [
     { header: "Type", accessor: (row) => <Badge tone="neutral">{row.displayName}</Badge> },
