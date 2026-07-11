@@ -63,9 +63,15 @@ export const organizationRouter = createTRPCRouter({
   // Get organization settings (any admin/owner)
   getSettings: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
-    .query(async ({ input }) => {
-      // Removed unused parameter 'ctx' to fix ESLint error
-      // Only allow users in the organization
+    .query(async ({ ctx, input }) => {
+      // Only members of the organization (or a SUPER_ADMIN) may read its
+      // settings — previously any authenticated user could read any org's
+      // settings (incl. logo/theme/age config) by passing its id.
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new Error("User not authenticated");
+      if (currentUser.role !== "SUPER_ADMIN" && currentUser.organizationId !== input.organizationId) {
+        throw new Error("Not authorized to view this organization's settings");
+      }
       const org = await prisma.organization.findUnique({
         where: { id: input.organizationId },
         select: { settings: true }

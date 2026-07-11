@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/server/auth/authOptions";
 import { prisma } from "@/server/db";
 import { qrDataUrlForToken } from "@/server/registration/effects";
+import { canAccessRegistration } from "@/server/registration/access";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,16 +14,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const registration = await prisma.registration.findUnique({
     where: { id },
-    include: { camper: true },
+    include: { camper: true, campus: true },
   });
   if (!registration || !registration.qrToken) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const currentUser = session.user as any;
-  const isOwner = registration.camper.userId === currentUser.id;
-  const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"].includes(currentUser.role);
-  if (!isOwner && !isAdmin) {
+  if (!(await canAccessRegistration(currentUser, registration))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

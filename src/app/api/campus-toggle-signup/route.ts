@@ -14,19 +14,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing campusId or signupOpen" }, { status: 400 });
   }
 
-  const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(session.user.role);
-  if (!isOrgAdmin) {
-    if (session.user.role !== "CAMPUS_REPRESENTATIVE") {
+  // Load the target campus first so every authorization branch can be scoped
+  // to it — an org admin must only toggle campuses within their OWN org, not
+  // any campus id in the system (previously the admin branch skipped this).
+  const campus = await prisma.campus.findUnique({ where: { id: campusId } });
+  if (!campus || campus.deletedAt) {
+    return NextResponse.json({ error: "Campus not found" }, { status: 404 });
+  }
+
+  const isSuperAdmin = session.user.role === "SUPER_ADMIN";
+  const isOrgAdmin = ["OWNER", "ADMIN"].includes(session.user.role);
+  if (!isSuperAdmin) {
+    if (isOrgAdmin) {
+      if (campus.organizationId !== session.user.organizationId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } else if (session.user.role === "CAMPUS_REPRESENTATIVE") {
+      // Re-verify against the DB rather than trusting the JWT's managedCampuses
+      // claim alone - closes the same class of gap fixed in tribe.ts/document.ts
+      // elsewhere in this refactor.
+      const managed = await prisma.campus.findFirst({
+        where: { id: campusId, reps: { some: { id: session.user.id } } },
+      });
+      if (!managed) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } else {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    // Re-verify against the DB rather than trusting the JWT's managedCampuses
-    // claim alone - closes the same class of gap fixed in tribe.ts/document.ts
-    // elsewhere in this refactor.
-    const managed = await prisma.campus.findFirst({
-      where: { id: campusId, reps: { some: { id: session.user.id } } },
-    });
-    if (!managed) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
 

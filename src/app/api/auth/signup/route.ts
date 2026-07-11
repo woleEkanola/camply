@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/server/auth/authOptions';
 import { prisma } from '@/server/db';
 
 // Define validation schema for signup request
@@ -29,6 +31,16 @@ export async function POST(request: Request) {
     
     const { email, name, dob, gender, token, fieldValues } = result.data;
 
+    // The caller must be signed in as the very account this camper is being
+    // created under. The client always completes OTP verification + signIn
+    // before hitting this route; without this check, anyone could POST an
+    // arbitrary `email` and attach a camper (and its registration) to any
+    // other user's account by knowing only a valid signup-link token.
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email || session.user.email.toLowerCase() !== email.toLowerCase()) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+
     // Look up signup link by token to get org/campus/camp
     const signupLink = await prisma.signupLink.findUnique({
       where: { token },
@@ -43,8 +55,6 @@ export async function POST(request: Request) {
 
     // Get organizationId from signupLink.campus.organization.id
     const organizationId = signupLink.campus.organization?.id;
-    console.log('DEBUG organizationId:', organizationId);
-    console.log('DEBUG signupLink.campus:', signupLink.campus);
     if (!organizationId) {
       return NextResponse.json({ message: 'Organization not found for this signup link/campus.' }, { status: 400 });
     }
@@ -90,7 +100,6 @@ export async function POST(request: Request) {
         },
       },
     });
-    console.log('DEBUG camper created:', camper);
 
     // Optionally, update user role from PARENT to CAMPER (if you want to promote the user after first profile)
     // await prisma.user.update({

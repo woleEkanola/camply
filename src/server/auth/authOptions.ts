@@ -39,7 +39,11 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         });
 
-        if (!user || user.deletedAt) {
+        // Reject soft-deleted AND deactivated accounts. The admin Users page
+        // exposes an active/inactive toggle (user.update `active`), but that
+        // only had any effect if login actually honored it — otherwise a
+        // "deactivated" user could still authenticate normally.
+        if (!user || user.deletedAt || !user.active) {
           return null;
         }
 

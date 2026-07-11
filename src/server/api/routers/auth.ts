@@ -8,33 +8,12 @@ import bcrypt from "bcryptjs";
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
 
 export const authRouter = createTRPCRouter({
-  login: publicProcedure
-    .input(z.object({
-      email: z.string().email(),
-      password: z.string()
-    }))
-    .mutation(async ({ input }) => {
-      // Find the user
-      const user = await prisma.user.findUnique({ 
-        where: { email: input.email } 
-      });
-      
-      // Check if user exists
-      if (!user) throw new Error("Invalid credentials");
-      
-      // Verify password
-      const valid = await bcrypt.compare(input.password, user.password);
-      if (!valid) throw new Error("Invalid credentials");
-      
-      // Return minimal user info
-      return {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        organizationId: user.organizationId ?? null
-      };
-    }),
-    
+  // NOTE: there is deliberately no `login` procedure here. Authentication goes
+  // exclusively through NextAuth's CredentialsProvider (src/server/auth/
+  // authOptions.ts), which enforces rate limiting, deactivated-account checks,
+  // and one-time OTP consumption. A standalone password-checking tRPC endpoint
+  // would be an unthrottled credential oracle bypassing all of that.
+
   signup: protectedProcedure
     .input(z.object({
       email: z.string().email(),
@@ -53,6 +32,11 @@ export const authRouter = createTRPCRouter({
       }
       if (input.role === "SUPER_ADMIN" && callerRole !== "SUPER_ADMIN") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not allowed to create super admins" });
+      }
+      // A non-SUPER_ADMIN caller (i.e. an OWNER) may only create users inside
+      // their own organization — never inject accounts into another tenant.
+      if (callerRole !== "SUPER_ADMIN" && input.organizationId !== ctx.session?.user.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not allowed to create users in another organization" });
       }
       try {
         // Check if user already exists

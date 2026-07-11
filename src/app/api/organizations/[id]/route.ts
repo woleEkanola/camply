@@ -16,8 +16,15 @@ export async function GET(request: Request) {
 
     // Check authentication
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // A user may only read their OWN organization; SUPER_ADMIN may read any.
+    // Previously any authenticated user could read any organization by id.
+    const currentUser = session.user as any;
+    if (currentUser.role !== "SUPER_ADMIN" && currentUser.organizationId !== id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Fetch organization data

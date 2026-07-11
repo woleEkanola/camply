@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
+import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 
 // Define organization settings type
@@ -443,37 +443,6 @@ export const camperRouter = createTRPCRouter({
       }
 
       return profile;
-    }),
-
-  // Create a new camper during signup (public procedure)
-  createDuringSignup: publicProcedure
-    .input(z.object({
-      name: z.string().min(2, "Name must be at least 2 characters"),
-      userId: z.string(),
-      organizationId: z.string(),
-      homeCampusId: z.string(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      try {
-        // Create the camper
-        const profile = await ctx.prisma.camper.create({
-          data: {
-            name: input.name,
-            user: { connect: { id: input.userId } },
-            organization: { connect: { id: input.organizationId } },
-            homeCampus: { connect: { id: input.homeCampusId } },
-            active: true
-          }
-        });
-
-        return profile;
-      } catch (error) {
-        const err = error as Error;
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: `Error creating camper: ${err.message}`
-        });
-      }
     }),
 
   // Update a camper
