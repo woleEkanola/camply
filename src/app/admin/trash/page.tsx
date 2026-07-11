@@ -8,24 +8,23 @@ import { api } from "@/utils/api";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Table, type Column } from "@/components/ui/Table";
+import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
-import { Button } from "@/components/ui/Button";
-
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
 
 interface ExtendedUser {
   id: string;
-  role: UserRole;
-  organizationId?: string;
+  email: string;
+  role: string;
+  organizationId: string;
 }
 
 interface TrashRow {
+  id: string;
   type: string;
   displayName: string;
-  id: string;
   label: string;
-  deletedAt: string | Date;
+  deletedAt: string;
   daysRemaining: number;
 }
 

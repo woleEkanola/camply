@@ -1,24 +1,18 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
-import { assertOrgAdmin } from "../trpc/scoping";
 import { listTrash, restoreEntity, purgeEntity } from "../../trash/service";
+import { assertOrgAdmin } from "../trpc/scoping";
 
 const entityTypeSchema = z.enum([
   "campus",
   "venue",
-  "camp",
-  "camper",
   "registration",
-  "staffProfile",
-  "tribe",
-  "department",
   "hostel",
   "room",
   "bed",
-  "formField",
-  "document",
-  "documentRequirement",
-  "user",
+  "tribe",
+  "department",
+  "staffProfile"
 ]);
 
 export const trashRouter = createTRPCRouter({
