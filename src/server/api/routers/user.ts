@@ -7,9 +7,18 @@ import { softDeleteUser } from "../../trash/userCascade";
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT";
 
 export const userRouter = createTRPCRouter({
+  // Only a SUPER_ADMIN may enumerate every user across all organizations; any
+  // other caller is scoped to their own org so this can't leak accounts from
+  // other tenants (this was previously an unscoped cross-tenant read).
   getAll: protectedProcedure.query(async ({ ctx }) => {
+    const currentUser = ctx.session?.user;
+    if (!currentUser) throw new Error("User not authenticated");
+    const where =
+      currentUser.role === "SUPER_ADMIN"
+        ? { deletedAt: null }
+        : { deletedAt: null, organizationId: currentUser.organizationId };
     return await ctx.prisma.user.findMany({
-      where: { deletedAt: null },
+      where,
       omit: { password: true },
     });
   }),
@@ -17,22 +26,43 @@ export const userRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      return await ctx.prisma.user.findFirst({
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new Error("User not authenticated");
+      const target = await ctx.prisma.user.findFirst({
         where: { id: input.id, deletedAt: null },
         omit: { password: true },
-        include: {
-          managedCampuses: true,
-        },
+        include: { managedCampuses: true },
       });
+      if (!target) return null;
+      // A user may always read their own record (e.g. the parent "add camper"
+      // page reads its own homeCampusId); otherwise the caller must be a
+      // SUPER_ADMIN or an admin within the same organization. Prevents reading
+      // arbitrary users across tenants by id.
+      const isSelf = target.id === currentUser.id;
+      const isSameOrg = !!currentUser.organizationId && target.organizationId === currentUser.organizationId;
+      if (!isSelf && currentUser.role !== "SUPER_ADMIN" && !isSameOrg) {
+        throw new Error("Not authorized to view this user");
+      }
+      return target;
     }),
 
   getByEmail: protectedProcedure
     .input(z.object({ email: z.string().email() }))
     .query(async ({ ctx, input }) => {
-      return await ctx.prisma.user.findUnique({
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new Error("User not authenticated");
+      const target = await ctx.prisma.user.findUnique({
         where: { email: input.email },
         omit: { password: true },
       });
+      if (!target) return null;
+      const isSelf = target.id === currentUser.id;
+      const isSameOrg = !!currentUser.organizationId && target.organizationId === currentUser.organizationId;
+      if (!isSelf && currentUser.role !== "SUPER_ADMIN" && !isSameOrg) {
+        // Don't reveal existence of accounts in other orgs.
+        return null;
+      }
+      return target;
     }),
 
   getByOrganization: protectedProcedure
@@ -308,6 +338,13 @@ export const userRouter = createTRPCRouter({
         throw new Error("Not authorized to create users");
       }
 
+      // Non-SUPER_ADMIN callers may only create users inside their own
+      // organization — otherwise an OWNER/ADMIN could plant accounts (incl.
+      // admins) into any other tenant by passing a foreign organizationId.
+      if (currentUser.role !== "SUPER_ADMIN" && input.organizationId !== currentUser.organizationId) {
+        throw new Error("Not authorized to create users in another organization");
+      }
+
       // Check if Super Admin is creating an Owner
       if (input.role === "OWNER" && currentUser.role !== "SUPER_ADMIN") {
         throw new Error("Only Super Admins can create Owner users");
@@ -404,6 +441,17 @@ export const userRouter = createTRPCRouter({
       // Check if user has permission to update this user
       if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
         throw new Error("Not authorized to update users");
+      }
+
+      // Non-SUPER_ADMIN callers may only touch users within their own org, and
+      // may never move a user into a different org.
+      if (currentUser.role !== "SUPER_ADMIN") {
+        if (userToUpdate.organizationId !== currentUser.organizationId) {
+          throw new Error("Not authorized to update users in another organization");
+        }
+        if (input.data.organizationId && input.data.organizationId !== currentUser.organizationId) {
+          throw new Error("Not authorized to move a user to another organization");
+        }
       }
 
       if (currentUser.role === "ADMIN" && userToUpdate.role !== "CAMPUS_REPRESENTATIVE") {
@@ -518,6 +566,11 @@ export const userRouter = createTRPCRouter({
         throw new Error("Not authorized to delete users");
       }
 
+      // Non-SUPER_ADMIN callers may only delete users within their own org.
+      if (currentUser.role !== "SUPER_ADMIN" && userToDelete.organizationId !== currentUser.organizationId) {
+        throw new Error("Not authorized to delete users in another organization");
+      }
+
       if (currentUser.role === "ADMIN" && userToDelete.role !== "CAMPUS_REPRESENTATIVE") {
         throw new Error("Admins can only delete Campus Representatives");
       }
@@ -547,11 +600,21 @@ export const userRouter = createTRPCRouter({
       ) {
         throw new Error("Not authorized to view parents");
       }
+      // Non-SUPER_ADMIN callers are always scoped to their own organization —
+      // an omitted (or spoofed cross-org) organizationId must never expand the
+      // result set beyond the caller's tenant.
+      const scopedOrganizationId =
+        currentUser.role === "SUPER_ADMIN"
+          ? input.organizationId
+          : currentUser.organizationId;
+      if (currentUser.role !== "SUPER_ADMIN" && !scopedOrganizationId) {
+        throw new Error("Not authorized to view parents");
+      }
       // Fetch only PARENTs for the Accounts tab
       const where = {
         role: "PARENT" as UserRole,
         deletedAt: null,
-        ...(input.organizationId && { organizationId: input.organizationId })
+        ...(scopedOrganizationId && { organizationId: scopedOrganizationId })
       };
       // Find all PARENT users
       const users = await ctx.prisma.user.findMany({

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
+import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import * as engine from "../../registration/engine";
 import { RegistrationValidationError } from "../../registration/validation";
@@ -451,46 +451,6 @@ export const registrationRouter = createTRPCRouter({
           camp: true
         }
       });
-    }),
-
-  // Create a registration during signup (public procedure)
-  createDuringSignup: publicProcedure
-    .input(z.object({
-      camperId: z.string(),
-      campId: z.string(),
-      campusId: z.string(),
-      status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).default("PENDING"),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      try {
-        // Create the registration
-        const registration = await ctx.prisma.registration.create({
-          data: {
-            camper: { connect: { id: input.camperId } },
-            camp: { connect: { id: input.campId } },
-            campus: { connect: { id: input.campusId } },
-            status: input.status
-          },
-          include: {
-            camper: true,
-            campus: true,
-            camp: true
-          }
-        });
-
-        return registration;
-      } catch (error) {
-        if (error instanceof Error) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: `Error creating registration: ${error.message}`
-          });
-        }
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "An unknown error occurred while creating registration"
-        });
-      }
     }),
 
   // Update a registration

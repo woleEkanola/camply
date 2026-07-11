@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/server/auth/authOptions";
 import { prisma } from "@/server/db";
 import { validateFormFields } from "@/server/registration/validateFormFields";
 
@@ -46,6 +48,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid input data", errors: parsed.error.errors }, { status: 400 });
     }
     const { token, email, fieldValues, dateOfBirth, ...rest } = parsed.data;
+
+    // The caller must be signed in as the account this staff profile is being
+    // created for. The wizard completes OTP verification + signIn before
+    // hitting this route; without this check, anyone could POST an arbitrary
+    // `email` and create a teacher/volunteer profile under another user.
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email || session.user.email.toLowerCase() !== email.toLowerCase()) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
 
     const link = await prisma.staffSignupLink.findUnique({ where: { token }, include: { camp: true } });
     if (!link || !link.active) {
