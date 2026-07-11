@@ -39,25 +39,10 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
   const campId = linkData?.campId ?? "";
 
   const { data: fields = [] } = api.formField.list.useQuery(
-    { organizationId: orgId, audience: type },
+    { organizationId: orgId, audience: type, campId },
     { enabled: !!orgId }
   );
   const visibleFields = fields.filter((f: FormFieldDTO) => f.visible);
-
-  const { data: campuses = [] } = api.campus.getAll.useQuery(
-    { organizationId: orgId },
-    { enabled: !!orgId && step === "fields" }
-  );
-
-  const { data: departments = [] } = api.department.list.useQuery(
-    { organizationId: orgId, campId },
-    { enabled: !!orgId && !!campId && step === "fields" }
-  );
-
-  const dynamicOptionsByKey = {
-    preferredCampusId: campuses.map((c: any) => ({ value: c.id, label: c.name })),
-    churchDepartment: departments.map((d: any) => d.name),
-  };
 
   function setValue(key: string, value: unknown) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -242,7 +227,6 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
                   fields={visibleFields}
                   values={values}
                   onChange={setValue}
-                  dynamicOptionsByKey={dynamicOptionsByKey}
                 />
                 <Button type="submit" className="w-full" disabled={!requiredFieldsSatisfied}>Continue</Button>
               </form>
