@@ -113,25 +113,10 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
 
   // Queries for dynamic manual add fields options
   const { data: formFields = [] } = api.formField.list.useQuery(
-    { organizationId, audience: type },
+    { organizationId, audience: type, campId },
     { enabled: !!organizationId && isAddOpen }
   );
   const visibleFields = formFields.filter((f: any) => f.visible);
-
-  const { data: campuses = [] } = api.campus.getAll.useQuery(
-    { organizationId },
-    { enabled: !!organizationId && isAddOpen }
-  );
-
-  const { data: departmentsList = [] } = api.department.list.useQuery(
-    { organizationId, campId },
-    { enabled: !!organizationId && !!campId && isAddOpen }
-  );
-
-  const dynamicOptionsByKey = {
-    preferredCampusId: campuses.map((c: any) => ({ value: c.id, label: c.name })),
-    churchDepartment: departmentsList.map((d: any) => d.name),
-  };
 
   const createManually = api.staff.createManually.useMutation({
     onSuccess: () => {
@@ -356,7 +341,6 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
               fields={visibleFields}
               values={addFormValues}
               onChange={(key, val) => setAddFormValues(v => ({ ...v, [key]: val }))}
-              dynamicOptionsByKey={dynamicOptionsByKey}
             />
           </div>
 

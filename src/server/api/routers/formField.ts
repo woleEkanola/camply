@@ -7,14 +7,51 @@ import { ensureSystemFields } from "../../registration/systemFieldRegistry";
 const audienceEnum = z.enum(["CAMPER", "TEACHER", "VOLUNTEER"]);
 const typeEnum = z.enum(["TEXT", "LONG_TEXT", "NUMBER", "DATE", "BOOLEAN", "CHECKBOX", "SELECT", "MULTI_SELECT", "RADIO", "FILE"]);
 
+// systemKeys whose SELECT options come from a live DB list rather than stored config —
+// kept out of the admin Form Editor's manual Options input (see FormFieldEditor.tsx).
+const CAMPUS_SYSTEM_KEYS = new Set(["preferredCampusId", "homeCampusId"]);
+const DEPARTMENT_SYSTEM_KEY = "churchDepartment";
+
 export const formFieldRouter = createTRPCRouter({
   list: publicProcedure
-    .input(z.object({ organizationId: z.string(), audience: audienceEnum }))
+    .input(z.object({ organizationId: z.string(), audience: audienceEnum, campId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       await ensureSystemFields(ctx.prisma, input.organizationId, input.audience);
-      return ctx.prisma.formField.findMany({
+      const fields = await ctx.prisma.formField.findMany({
         where: { organizationId: input.organizationId, audience: input.audience, deletedAt: null },
         orderBy: { sortOrder: "asc" },
+      });
+
+      const needsCampuses = fields.some((f) => CAMPUS_SYSTEM_KEYS.has(f.systemKey ?? ""));
+      const needsDepartments = fields.some((f) => f.systemKey === DEPARTMENT_SYSTEM_KEY);
+      if (!needsCampuses && !needsDepartments) return fields;
+
+      const [campuses, effectiveCampId] = await Promise.all([
+        needsCampuses
+          ? ctx.prisma.campus.findMany({
+              where: { organizationId: input.organizationId, deletedAt: null },
+              orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+            })
+          : Promise.resolve(null),
+        needsDepartments && !input.campId
+          ? ctx.prisma.organization.findUnique({ where: { id: input.organizationId }, select: { activeCampId: true } }).then((o) => o?.activeCampId ?? null)
+          : Promise.resolve(input.campId ?? null),
+      ]);
+
+      const departments = needsDepartments && effectiveCampId
+        ? await ctx.prisma.department.findMany({
+            where: { organizationId: input.organizationId, campId: effectiveCampId, status: "ACTIVE", deletedAt: null },
+            orderBy: { name: "asc" },
+          })
+        : null;
+
+      const campusOptions = campuses ? JSON.stringify(campuses.map((c) => ({ value: c.id, label: c.name }))) : null;
+      const departmentOptions = departments ? JSON.stringify(departments.map((d) => d.name)) : null;
+
+      return fields.map((f) => {
+        if (CAMPUS_SYSTEM_KEYS.has(f.systemKey ?? "")) return { ...f, options: campusOptions };
+        if (f.systemKey === DEPARTMENT_SYSTEM_KEY) return { ...f, options: departmentOptions };
+        return f;
       });
     }),
 
