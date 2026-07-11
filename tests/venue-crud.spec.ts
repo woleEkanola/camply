@@ -18,7 +18,7 @@ test.describe("Admin: Venue CRUD scoped to a Camp", () => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/venues");
 
-    await page.getByRole("button", { name: "Add Venue" }).click();
+    await page.getByRole("button", { name: "Add Venue" }).first().click();
 
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Venue Name").fill(venueName);
