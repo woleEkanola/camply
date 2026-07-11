@@ -40,7 +40,7 @@ const camperUpdateSchema = z.object({
 });
 
 export const camperRouter = createTRPCRouter({
-  // Get all campers for an organization
+  // Get campers for an organization with pagination, filtering and registration status
   getByOrganization: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -103,14 +103,115 @@ export const camperRouter = createTRPCRouter({
         },
         orderBy: { createdAt: "desc" }
       });
-      // Debug log: log all fetched profiles
-      console.log("DEBUG: Fetched campers:", JSON.stringify(profiles, null, 2));
       // Add dobApproved and birthCert to each profile explicitly (they are scalar fields and always returned)
       return profiles.map((profile) => ({
         ...profile,
         dobApproved: profile.dobApproved ?? false,
         birthCert: profile.birthCert ?? null,
       }));
+    }),
+
+  adminList: protectedProcedure
+    .input(z.object({
+      organizationId: z.string(),
+      campId: z.string().optional(),
+      q: z.string().optional(),
+      campusId: z.string().optional(),
+      active: z.boolean().optional(),
+      limit: z.number().min(1).max(100).default(50),
+      cursor: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+
+      if (!currentUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+      }
+
+      // Check if user has permission to view profiles in this organization
+      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      const hasPermission =
+        isOrgAdmin ||
+        ((currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId);
+
+      if (!hasPermission) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not authorized to view campers for this organization"
+        });
+      }
+
+      const where: Record<string, any> = {
+        organizationId: input.organizationId,
+        deletedAt: null,
+        ...(input.campusId && { homeCampusId: input.campusId }),
+        ...(input.active !== undefined && { active: input.active }),
+        ...(input.q && {
+          OR: [
+            { name: { contains: input.q, mode: "insensitive" } },
+            { user: { email: { contains: input.q, mode: "insensitive" } } },
+            { user: { firstName: { contains: input.q, mode: "insensitive" } } },
+            { user: { lastName: { contains: input.q, mode: "insensitive" } } },
+          ],
+        }),
+        // Scoped views for campus reps
+        ...(!isOrgAdmin && (currentUser.managedCampuses?.length ?? 0) > 0 && {
+          homeCampus: {
+            reps: {
+              some: {
+                id: currentUser.id
+              }
+            }
+          }
+        })
+      };
+
+      const items = await ctx.prisma.camper.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            }
+          },
+          homeCampus: {
+            select: {
+              id: true,
+              name: true,
+            }
+          },
+          registrations: {
+            where: {
+              deletedAt: null,
+              ...(input.campId && { campId: input.campId }),
+            },
+            select: {
+              status: true,
+            },
+            take: 1,
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: input.limit + 1,
+        ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+      });
+
+      let nextCursor: string | undefined;
+      if (items.length > input.limit) {
+        const next = items.pop();
+        nextCursor = next?.id;
+      }
+
+      const mappedItems = items.map((profile: any) => ({
+        ...profile,
+        dobApproved: profile.dobApproved ?? false,
+        birthCert: profile.birthCert ?? null,
+      }));
+
+      return { items: mappedItems, nextCursor };
     }),
 
   // Get campers for a specific user
@@ -194,18 +295,9 @@ export const camperRouter = createTRPCRouter({
 
       const profile = await ctx.prisma.camper.findUnique({
         where: { id: input.id },
-        select: {
-          id: true,
-          name: true,
-          active: true,
-          deletedAt: true,
-          dateOfBirth: true,
-          birthCert:true,
-          gender: true,
+        include: {
           user: true,
           homeCampus: true,
-          homeCampusId: true,
-          organizationId: true,
           fieldValues: {
             include: {
               field: true

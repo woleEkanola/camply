@@ -55,7 +55,12 @@ test.describe("Admin: staff approval and assignment", () => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/teachers");
 
-    await page.getByText("Approve TargetE2E").click();
+    // Scope by the unique email, not the static display name — "Approve
+    // TargetE2E" isn't timestamp-suffixed like the email is, so a leftover
+    // row from an earlier interrupted run (afterAll never ran, e.g. a killed
+    // process) collides with this run's fixture and trips a strict-mode
+    // "resolved to 2 elements" violation.
+    await page.locator("tr", { hasText: email }).click();
     // The list table behind the drawer can also contain APPROVED rows from
     // other fixtures/orgs data, so scope status assertions to the drawer.
     const dialog = page.getByRole("dialog");

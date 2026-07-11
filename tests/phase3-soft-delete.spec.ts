@@ -70,7 +70,13 @@ test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto(`/admin/camps/${campId}/tribes`);
 
-    const row = page.locator("div", { hasText: tribe.name }).first();
+    // Same ancestor-matching trap as the department card below: plain `div` +
+    // hasText also matches the outer list wrapper (which document order lists
+    // before its child rows), so scope to the row's own distinguishing class.
+    // This admin config page renders tribes as flat rows (`rounded-md border
+    // ...`), not the `TribeGrid` Card component used elsewhere in the app —
+    // don't reuse the `.cursor-pointer` class from that other component here.
+    const row = page.locator("div.rounded-md", { hasText: tribe.name }).first();
     await row.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
 
@@ -95,7 +101,13 @@ test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", 
     await page.getByRole("tab", { name: "Departments" }).click();
     await expect(page.getByText(dept.name)).toBeVisible({ timeout: 10000 });
 
-    const card = page.locator("div", { hasText: dept.name }).first();
+    // Plain `div` + hasText matches every ancestor that contains this text,
+    // not just the department's own Card — .first() then grabs the grid
+    // wrapper (document order lists outer ancestors before their children),
+    // which holds every department's Delete button and trips a strict-mode
+    // violation once more than one department exists on the page. Scope to
+    // the Card's distinguishing class so it resolves to just this card.
+    const card = page.locator("div.cursor-pointer", { hasText: dept.name }).first();
     await card.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
 
@@ -117,8 +129,13 @@ test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", 
     await page.locator("select").first().selectOption({ label: venue.name });
     await expect(page.getByText(hostel.name)).toBeVisible({ timeout: 10000 });
 
-    const hostelCard = page.locator("div", { hasText: hostel.name }).first();
-    await hostelCard.getByRole("button", { name: "Delete", exact: true }).click();
+    // Same ancestor-matching trap as the department/tribe cards — scope to
+    // the Hostel Card's own class (its child Room cards use "rounded-md",
+    // not "rounded-lg", so this doesn't also match them). The Hostel's own
+    // Delete button still precedes its Room's Delete button in DOM order
+    // within that one card, so .first() reliably picks the hostel-level one.
+    const hostelCard = page.locator("div.rounded-lg", { hasText: hostel.name }).first();
+    await hostelCard.getByRole("button", { name: "Delete", exact: true }).first().click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
 
     await expect(page.getByText(/bed\(s\) are still occupied/i)).toBeVisible({ timeout: 10000 });
@@ -131,8 +148,8 @@ test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", 
     await page.locator("select").first().selectOption({ label: venue.name });
     await expect(page.getByText(hostel.name)).toBeVisible({ timeout: 10000 });
 
-    const hostelCard2 = page.locator("div", { hasText: hostel.name }).first();
-    await hostelCard2.getByRole("button", { name: "Delete", exact: true }).click();
+    const hostelCard2 = page.locator("div.rounded-lg", { hasText: hostel.name }).first();
+    await hostelCard2.getByRole("button", { name: "Delete", exact: true }).first().click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
 
     await expect

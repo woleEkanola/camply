@@ -8,7 +8,12 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Tests run against a single `next dev` process (not a clustered/production
+  // server) — letting Playwright default to ~half the local CPU cores as
+  // parallel workers overwhelms it under fullyParallel, producing ECONNRESET
+  // and cold-compile timeout flakes that have nothing to do with the code
+  // under test. Always run single-worker locally too, matching CI.
+  workers: 1,
   reporter: [["html", { open: "never" }], ["list"]],
   use: {
     baseURL: BASE_URL,

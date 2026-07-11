@@ -50,7 +50,7 @@ export default function AdminSettingsPage() {
       <div className="mx-auto max-w-2xl space-y-6">
         <PageHeader
           title="Settings"
-          description="Configure your church profile, branding, and registration age rules."
+          description="Configure your church profile and branding."
         />
 
         {/* Church Profile Card */}
@@ -64,21 +64,6 @@ export default function AdminSettingsPage() {
               onSaveSuccess={() => {
                 refetchSettings();
                 refetchOrg();
-              }}
-            />
-          </CardBody>
-        </Card>
-
-        {/* Age Range Card */}
-        <Card>
-          <CardBody>
-            <AgeRangeSettings
-              organizationId={organizationId}
-              initialMin={initialMin}
-              initialMax={initialMax}
-              initialCutoffDate={initialCutoffDate}
-              onSettingsSaved={() => {
-                refetchSettings();
               }}
             />
           </CardBody>

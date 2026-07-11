@@ -11,12 +11,13 @@ import { StatCard } from "@/components/ui/StatCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, type Column } from "@/components/ui/Table";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { Select } from "@/components/ui/Input";
+import { Select, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { StaffDetailDrawer } from "@/components/staff/StaffDetailDrawer";
 import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
+import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
@@ -39,14 +40,43 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
+  // Pagination states
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [allLoadedItems, setAllLoadedItems] = useState<any[]>([]);
+
+  // Manual Creation dialog states
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [addEmail, setAddEmail] = useState("");
+  const [addFormValues, setAddFormValues] = useState<Record<string, any>>({});
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCursor(undefined);
+    setAllLoadedItems([]);
+  }, [searchQuery, statusFilter]);
 
   const { data: stats } = api.staff.stats.useQuery({ organizationId, campId, type }, { enabled: !!organizationId && !!campId });
   const { data, isLoading } = api.staff.adminList.useQuery(
-    { organizationId, campId, type, status: statusFilter || undefined, q: searchQuery || undefined, limit: 50 },
+    { organizationId, campId, type, status: statusFilter || undefined, q: searchQuery || undefined, limit: 50, cursor },
     { enabled: !!organizationId && !!campId }
   );
-  const items = data?.items ?? [];
+
+  useEffect(() => {
+    if (data?.items) {
+      if (cursor === undefined) {
+        setAllLoadedItems(data.items);
+      } else {
+        setAllLoadedItems((prev) => {
+          const prevIds = new Set(prev.map(item => item.id));
+          const newItems = data.items.filter(item => !prevIds.has(item.id));
+          return [...prev, ...newItems];
+        });
+      }
+    }
+  }, [data?.items, cursor]);
 
   const utils = api.useUtils();
   const invalidate = () => {
@@ -54,11 +84,65 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     utils.staff.stats.invalidate();
     setSelectedIds([]);
   };
+
   const bulkApprove = api.staff.bulkApprove.useMutation({ onSuccess: invalidate });
   const bulkReject = api.staff.bulkReject.useMutation({ onSuccess: invalidate });
+  const bulkDelete = api.staff.bulkDelete.useMutation({
+    onSuccess: () => {
+      setSuccess("Selected staff profiles deleted successfully!");
+      invalidate();
+      setTimeout(() => setSuccess(""), 5000);
+    },
+    onError: (err) => setError(`Error deleting profiles: ${err.message}`),
+  });
+
   const deleteStaff = api.staff.delete.useMutation({
-    onSuccess: () => { setDeleteTarget(null); invalidate(); },
+    onSuccess: () => { setDeleteTarget(null); setSuccess("Staff profile deleted successfully!"); invalidate(); setTimeout(() => setSuccess(""), 5000); },
     onError: (err) => { setError(err.message); setDeleteTarget(null); },
+  });
+
+  const autoAssignToTribes = api.staff.autoAssignToTribes.useMutation({
+    onSuccess: () => { setSuccess("Auto assigned all teachers to tribes successfully!"); invalidate(); setTimeout(() => setSuccess(""), 5000); },
+    onError: (err) => setError(err.message),
+  });
+
+  const autoAssignToDepartments = api.staff.autoAssignToDepartments.useMutation({
+    onSuccess: () => { setSuccess("Auto assigned all teachers to departments successfully!"); invalidate(); setTimeout(() => setSuccess(""), 5000); },
+    onError: (err) => setError(err.message),
+  });
+
+  // Queries for dynamic manual add fields options
+  const { data: formFields = [] } = api.formField.list.useQuery(
+    { organizationId, audience: type },
+    { enabled: !!organizationId && isAddOpen }
+  );
+  const visibleFields = formFields.filter((f: any) => f.visible);
+
+  const { data: campuses = [] } = api.campus.getAll.useQuery(
+    { organizationId },
+    { enabled: !!organizationId && isAddOpen }
+  );
+
+  const { data: departmentsList = [] } = api.department.list.useQuery(
+    { organizationId, campId },
+    { enabled: !!organizationId && !!campId && isAddOpen }
+  );
+
+  const dynamicOptionsByKey = {
+    preferredCampusId: campuses.map((c: any) => ({ value: c.id, label: c.name })),
+    churchDepartment: departmentsList.map((d: any) => d.name),
+  };
+
+  const createManually = api.staff.createManually.useMutation({
+    onSuccess: () => {
+      setSuccess(`${type === "TEACHER" ? "Teacher" : "Volunteer"} manual profile created successfully!`);
+      setIsAddOpen(false);
+      setAddEmail("");
+      setAddFormValues({});
+      invalidate();
+      setTimeout(() => setSuccess(""), 5000);
+    },
+    onError: (err) => setError(err.message),
   });
 
   const columns: Column<any>[] = [
@@ -102,12 +186,57 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
 
   return (
     <AppShell area="admin">
-      <PageHeader title={type === "TEACHER" ? "Teachers" : "Volunteers"} description={activeYear ? `For ${activeYear.name}` : undefined} />
+      <PageHeader
+        title={type === "TEACHER" ? "Teachers" : "Volunteers"}
+        description={activeYear ? `For ${activeYear.name}` : undefined}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {type === "TEACHER" && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={autoAssignToTribes.isPending}
+                  onClick={() => {
+                    if (window.confirm("Auto assign all teachers to tribes based on gender & quota?")) {
+                      autoAssignToTribes.mutate({ organizationId, campId });
+                    }
+                  }}
+                >
+                  Auto Assign Tribes
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={autoAssignToDepartments.isPending}
+                  onClick={() => {
+                    if (window.confirm("Auto assign all teachers to departments with gender-mixed leaders?")) {
+                      autoAssignToDepartments.mutate({ organizationId, campId });
+                    }
+                  }}
+                >
+                  Auto Assign Depts
+                </Button>
+              </>
+            )}
+            <Button size="sm" onClick={() => setIsAddOpen(true)}>
+              + Add {type === "TEACHER" ? "Teacher" : "Volunteer"}
+            </Button>
+          </div>
+        }
+      />
 
       {error && (
         <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
           <span>{error}</span>
           <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
+        </div>
+      )}
+
+      {success && (
+        <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700">
+          <span>{success}</span>
+          <button onClick={() => setSuccess("")} className="ml-3 text-xs underline">Dismiss</button>
         </div>
       )}
 
@@ -138,24 +267,49 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <Badge tone="info">{selectedIds.length} selected</Badge>
           <Button size="sm" loading={bulkApprove.isPending} onClick={() => bulkApprove.mutate({ ids: selectedIds })}>Approve</Button>
           <Button size="sm" variant="danger" loading={bulkReject.isPending} onClick={() => bulkReject.mutate({ ids: selectedIds })}>Reject</Button>
+          <Button
+            size="sm"
+            variant="danger"
+            loading={bulkDelete.isPending}
+            onClick={() => {
+              if (window.confirm("Permanently delete selected profiles?")) {
+                bulkDelete.mutate({ ids: selectedIds });
+              }
+            }}
+          >
+            Delete
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>Clear</Button>
         </div>
       )}
 
       <Table
         mode="controlled"
-        toolbar={<span className="text-xs text-neutral-400">{items.length} {type === "TEACHER" ? "teacher" : "volunteer"}{items.length === 1 ? "" : "s"}</span>}
+        toolbar={<span className="text-xs text-neutral-400">{allLoadedItems.length} {type === "TEACHER" ? "teacher" : "volunteer"}{allLoadedItems.length === 1 ? "" : "s"}</span>}
         columns={columns}
-        data={items}
+        data={allLoadedItems}
         rowKey={(row) => row.id}
         onRowClick={(row) => setSelectedId(row.id)}
         actions={actions}
-        isLoading={isLoading}
+        isLoading={isLoading && allLoadedItems.length === 0}
         emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
         emptyDescription="Try adjusting search or status filters, or share the registration link above."
         selectable
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
+        footer={
+          data?.nextCursor ? (
+            <div className="flex justify-center p-3 border-t border-neutral-200">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setCursor(data.nextCursor)}
+              >
+                Load More
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       {selectedId && campId && (
@@ -175,6 +329,57 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           >
             Delete
           </Button>
+        </div>
+      </Dialog>
+
+      {/* Manual Addition Dialog */}
+      <Dialog
+        open={isAddOpen}
+        onClose={() => setIsAddOpen(false)}
+        title={`Add ${type === "TEACHER" ? "Teacher" : "Volunteer"} Manually`}
+        size="lg"
+      >
+        <div className="space-y-4">
+          {error && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
+
+          <Input
+            id="manual-email"
+            label="Email Address"
+            type="email"
+            required
+            value={addEmail}
+            onChange={(e) => setAddEmail(e.target.value)}
+          />
+
+          <div className="max-h-[50vh] overflow-y-auto border-t border-b border-neutral-100 py-4 my-2">
+            <DynamicFieldGroup
+              fields={visibleFields}
+              values={addFormValues}
+              onChange={(key, val) => setAddFormValues(v => ({ ...v, [key]: val }))}
+              dynamicOptionsByKey={dynamicOptionsByKey}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={() => setIsAddOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              loading={createManually.isPending}
+              disabled={!addEmail.trim() || !addFormValues.firstName?.trim() || !addFormValues.lastName?.trim()}
+              onClick={() => {
+                createManually.mutate({
+                  organizationId,
+                  campId,
+                  type,
+                  email: addEmail.trim(),
+                  values: addFormValues,
+                });
+              }}
+            >
+              Add Profile
+            </Button>
+          </div>
         </div>
       </Dialog>
     </AppShell>

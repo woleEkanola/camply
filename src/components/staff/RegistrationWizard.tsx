@@ -35,11 +35,29 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const orgId = linkData?.organizationId ?? "";
+  const campId = linkData?.campId ?? "";
+
   const { data: fields = [] } = api.formField.list.useQuery(
-    { organizationId: linkData?.organizationId ?? "", audience: type },
-    { enabled: !!linkData?.organizationId }
+    { organizationId: orgId, audience: type },
+    { enabled: !!orgId }
   );
   const visibleFields = fields.filter((f: FormFieldDTO) => f.visible);
+
+  const { data: campuses = [] } = api.campus.getAll.useQuery(
+    { organizationId: orgId },
+    { enabled: !!orgId && step === "fields" }
+  );
+
+  const { data: departments = [] } = api.department.list.useQuery(
+    { organizationId: orgId, campId },
+    { enabled: !!orgId && !!campId && step === "fields" }
+  );
+
+  const dynamicOptionsByKey = {
+    preferredCampusId: campuses.map((c: any) => ({ value: c.id, label: c.name })),
+    churchDepartment: departments.map((d: any) => d.name),
+  };
 
   function setValue(key: string, value: unknown) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -220,7 +238,12 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
                   setStep("review");
                 }}
               >
-                <DynamicFieldGroup fields={visibleFields} values={values} onChange={setValue} />
+                <DynamicFieldGroup
+                  fields={visibleFields}
+                  values={values}
+                  onChange={setValue}
+                  dynamicOptionsByKey={dynamicOptionsByKey}
+                />
                 <Button type="submit" className="w-full" disabled={!requiredFieldsSatisfied}>Continue</Button>
               </form>
             )}

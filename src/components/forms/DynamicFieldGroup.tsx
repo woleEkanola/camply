@@ -10,7 +10,7 @@ interface DynamicFieldGroupProps {
   onChange: (fieldKey: string, value: unknown) => void;
   disabled?: boolean;
   /** e.g. { campusId: ["Main Campus", "North Site"] } for fields whose options come from a live query rather than stored config. */
-  dynamicOptionsByKey?: Record<string, string[]>;
+  dynamicOptionsByKey?: Record<string, (string | { value: string; label: string })[]>;
 }
 
 /** Groups already-sorted fields into contiguous same-groupLabel runs, rendering a section header per run. */

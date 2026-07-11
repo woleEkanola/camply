@@ -85,6 +85,26 @@ export const accommodationRouter = createTRPCRouter({
       return ctx.prisma.room.create({ data: input });
     }),
 
+  // Bulk room creation — up to 50 rooms in a single transaction
+  createRooms: protectedProcedure
+    .input(z.object({
+      hostelId: z.string(),
+      rooms: z.array(z.object({
+        name: z.string().min(1),
+        capacity: z.number().int().min(1).optional(),
+      })).min(1).max(50),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const hostel = await ctx.prisma.hostel.findUnique({ where: { id: input.hostelId } });
+      if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, hostel.organizationId);
+      return ctx.prisma.$transaction(
+        input.rooms.map((room) =>
+          ctx.prisma.room.create({ data: { hostelId: input.hostelId, ...room } })
+        )
+      );
+    }),
+
   updateRoom: protectedProcedure
     .input(z.object({ id: z.string(), name: z.string().optional(), capacity: z.number().optional() }))
     .mutation(async ({ ctx, input }) => {
