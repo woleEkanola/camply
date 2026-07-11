@@ -26,15 +26,19 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      // Fire-and-forget: sends an OTP if this email belongs to a parent,
-      // and is a silent no-op otherwise. Errors here shouldn't block the
-      // password path, so they're not surfaced to the user.
-      await fetch("/api/base-user/send-otp", {
+      const res = await fetch("/api/base-user/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
-      }).catch(() => {});
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.message || "Failed to send verification code.");
+        return;
+      }
       setStep(2);
+    } catch {
+      setError("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
