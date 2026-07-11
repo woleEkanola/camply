@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { sendTestEmail } from "../../email/sendTestEmail";
 
 export const notificationRouter = createTRPCRouter({
   listMine: protectedProcedure
@@ -131,5 +132,15 @@ export const notificationRouter = createTRPCRouter({
         take: 20,
       });
       return grouped.map((g) => ({ title: g.title, body: g.body, recipientCount: g._count._all, sentAt: g._max.createdAt }));
+    }),
+
+  sendTestEmail: protectedProcedure
+    .input(z.object({ to: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.session?.user?.role !== "SUPER_ADMIN") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      await sendTestEmail(input.to);
+      return { success: true };
     }),
 });

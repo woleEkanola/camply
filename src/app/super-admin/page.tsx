@@ -22,6 +22,7 @@ export default function SuperAdminDashboard() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [orgsToDelete, setOrgsToDelete] = useState<string[]>([]);
+  const [testEmail, setTestEmail] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const router = useRouter();
@@ -78,6 +79,14 @@ export default function SuperAdminDashboard() {
       setIsEditDialogOpen(false);
       setEditingOrg(null);
       refetchOrgs();
+    },
+    onError: (error) => setError(error.message)
+  });
+
+  const sendTestMutation = api.notification.sendTestEmail.useMutation({
+    onSuccess: () => {
+      setSuccess("Test email sent successfully. Check the recipient's inbox.");
+      setTestEmail("");
     },
     onError: (error) => setError(error.message)
   });
@@ -208,7 +217,7 @@ export default function SuperAdminDashboard() {
       {error && <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">{error}</div>}
       {success && <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700">{success}</div>}
 
-      <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-3">
         <Card>
           <CardHeader><CardTitle>Create Organization</CardTitle></CardHeader>
           <CardBody>
@@ -233,6 +242,34 @@ export default function SuperAdminDashboard() {
               <Input label="Owner Password" type="password" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)} required />
               <Button type="submit" className="w-full" loading={createOwnerMutation.status === "pending"}>Create Owner</Button>
             </form>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Send Test Email</CardTitle></CardHeader>
+          <CardBody>
+            <div className="space-y-4">
+              <Input
+                label="Recipient Email"
+                type="email"
+                value={testEmail}
+                onChange={(e) => setTestEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+              />
+              <Button
+                className="w-full"
+                loading={sendTestMutation.status === "pending"}
+                onClick={() => {
+                  setError("");
+                  setSuccess("");
+                  if (!testEmail) { setError("Email is required"); return; }
+                  sendTestMutation.mutate({ to: testEmail });
+                }}
+              >
+                Send Test Email
+              </Button>
+            </div>
           </CardBody>
         </Card>
       </div>
