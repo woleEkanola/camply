@@ -26,6 +26,14 @@ const ALL_TYPES: { value: FormFieldType; label: string }[] = [
 
 const HAS_OPTIONS: FormFieldType[] = ["SELECT", "MULTI_SELECT", "RADIO"];
 
+// systemKeys whose options are populated live from the database (see formField.ts's `list`) —
+// not editable as free-text CSV.
+const DYNAMIC_OPTION_KEYS: Record<string, string> = {
+  preferredCampusId: "Automatically populated from your Campuses.",
+  homeCampusId: "Automatically populated from your Campuses.",
+  churchDepartment: "Automatically populated from your Departments.",
+};
+
 interface FormFieldEditorProps {
   organizationId: string;
   audience: FormFieldAudience;
@@ -71,7 +79,7 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
       type: field.type,
       required: field.required,
       visible: field.visible,
-      options: parseFieldOptions(field.options).join(", "),
+      options: parseFieldOptions(field.options).map((o) => (typeof o === "string" ? o : o.label)).join(", "),
       helpText: field.helpText ?? "",
       placeholder: field.placeholder ?? "",
       groupLabel: field.groupLabel ?? "",
@@ -123,6 +131,7 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
 
   const showOptionsEditor = HAS_OPTIONS.includes(form.type);
   const isSystemEdit = edit?.mode === "edit" && edit.field?.source === "SYSTEM";
+  const dynamicOptionsCaption = edit?.field?.systemKey ? DYNAMIC_OPTION_KEYS[edit.field.systemKey] : undefined;
 
   const columns: Column<FormFieldDTO>[] = [
     {
@@ -246,6 +255,8 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
               value={form.options}
               onChange={(e) => setForm((f) => ({ ...f, options: e.target.value }))}
               placeholder="e.g. Option 1, Option 2, Option 3"
+              disabled={!!dynamicOptionsCaption}
+              helpText={dynamicOptionsCaption}
             />
           )}
 
