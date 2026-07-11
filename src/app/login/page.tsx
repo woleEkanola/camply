@@ -26,20 +26,27 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
+      // Best-effort: this sends a verification code if the email belongs to a
+      // parent, and is a no-op otherwise (anti account-enumeration, so the
+      // client can't tell which case it is). It must NEVER block reaching the
+      // password step — password-login accounts (admin/owner/campus-rep) have
+      // nothing to do with OTP delivery, and the send-otp endpoint is rate-limited
+      // per email, so repeated attempts would otherwise lock those accounts out
+      // of the password field entirely. Failures are surfaced as a warning
+      // alongside the password field instead, since they only matter for OTP users.
       const res = await fetch("/api/base-user/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.message || "Failed to send verification code.");
-        return;
+        const data = await res.json().catch(() => ({}));
+        setError(data.message || "Couldn't send a verification code — if you don't have a password, try again shortly.");
       }
-      setStep(2);
     } catch {
-      setError("Network error. Please try again.");
+      setError("Couldn't send a verification code — if you don't have a password, try again shortly.");
     } finally {
+      setStep(2);
       setLoading(false);
     }
   }

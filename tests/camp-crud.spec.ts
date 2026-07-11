@@ -83,19 +83,21 @@ test.describe("Super Admin/Owner: Camp CRUD and active-camp switching", () => {
       data: { camperId: camper.id, campId, campusId, status: "APPROVED", registrationNumber: `E2E-CAMP-BLOCK-${Date.now()}` },
     });
 
-    await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/camps");
+    try {
+      await loginWithPassword(page, "owner@camply.com", "password123");
+      await page.goto("/admin/camps");
 
-    const row = page.locator("tr", { hasText: campName });
-    await row.getByRole("button", { name: "Delete" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+      const row = page.locator("tr", { hasText: campName });
+      await row.getByRole("button", { name: "Delete" }).click();
+      await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
 
-    await expect(page.getByText(/cannot delete a camp that has registrations/i)).toBeVisible({ timeout: 10000 });
-    await expect(prisma.camp.findUniqueOrThrow({ where: { id: campId } })).resolves.toMatchObject({ deletedAt: null });
-
-    await prisma.registration.deleteMany({ where: { id: registration.id } });
-    await prisma.camper.deleteMany({ where: { id: camper.id } });
-    await prisma.user.deleteMany({ where: { id: parent.id } });
+      await expect(page.getByText(/cannot delete a camp that has registrations/i)).toBeVisible({ timeout: 10000 });
+      await expect(prisma.camp.findUniqueOrThrow({ where: { id: campId } })).resolves.toMatchObject({ deletedAt: null });
+    } finally {
+      await prisma.registration.deleteMany({ where: { id: registration.id } });
+      await prisma.camper.deleteMany({ where: { id: camper.id } });
+      await prisma.user.deleteMany({ where: { id: parent.id } });
+    }
 
     // The confirmation dialog stayed open after the blocked attempt (only closes
     // on success) — just retry the same "Delete Camp" button rather than reaching
