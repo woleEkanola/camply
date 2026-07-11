@@ -13,6 +13,18 @@ async function requireStaffProfile(ctx: { prisma: any; userId: string }) {
   return profile;
 }
 
+// Mirrors approveRegistrationInTx's sole-venue auto-assign
+// (src/server/registration/engine.ts) for staff: if the camp has exactly one
+// Venue and this profile has none yet, assign it automatically on approval.
+async function autoAssignSoleVenue(ctx: { prisma: any }, profileId: string, campId: string) {
+  const venues = await ctx.prisma.venue.findMany({ where: { campId, deletedAt: null } });
+  if (venues.length !== 1) return;
+  await ctx.prisma.staffProfile.updateMany({
+    where: { id: profileId, assignedVenueId: null },
+    data: { assignedVenueId: venues[0].id },
+  });
+}
+
 export const staffRouter = createTRPCRouter({
   // ─── Self-service ──────────────────────────────────────────────────────
   getMyProfile: protectedProcedure.query(async ({ ctx }) => {
@@ -56,6 +68,11 @@ export const staffRouter = createTRPCRouter({
       type: z.enum(["TEACHER", "VOLUNTEER"]),
       status: z.string().optional(),
       venueId: z.string().optional(),
+      campusId: z.string().optional(),
+      gender: z.string().optional(),
+      tribeId: z.string().optional(),
+      departmentId: z.string().optional(),
+      volunteerCategory: z.string().optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
       limit: z.number().min(1).max(100).default(25),
@@ -70,6 +87,11 @@ export const staffRouter = createTRPCRouter({
         deletedAt: null,
         ...(input.status && { status: input.status }),
         ...(input.venueId && { assignedVenueId: input.venueId }),
+        ...(input.campusId && { preferredCampusId: input.campusId }),
+        ...(input.gender && { gender: input.gender }),
+        ...(input.tribeId && { assignedTribeId: input.tribeId }),
+        ...(input.departmentId && { departmentId: input.departmentId }),
+        ...(input.volunteerCategory && { volunteerCategory: input.volunteerCategory }),
         ...(input.q && {
           OR: [
             { firstName: { contains: input.q, mode: "insensitive" } },
@@ -82,7 +104,7 @@ export const staffRouter = createTRPCRouter({
 
       const items = await ctx.prisma.staffProfile.findMany({
         where,
-        include: { assignedVenue: true, assignedTribe: true },
+        include: { assignedVenue: true, assignedTribe: true, preferredCampus: true },
         orderBy: { createdAt: "desc" },
         take: input.limit + 1,
         ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
@@ -143,6 +165,7 @@ export const staffRouter = createTRPCRouter({
         where: { id: input.id },
         data: { status: "APPROVED", approvedAt: new Date(), reviewerId: ctx.userId },
       });
+      await autoAssignSoleVenue(ctx, profile.id, profile.campId);
 
       await ctx.prisma.notification.create({
         data: {
@@ -219,15 +242,20 @@ export const staffRouter = createTRPCRouter({
   bulkApprove: protectedProcedure
     .input(z.object({ ids: z.array(z.string()) }))
     .mutation(async ({ ctx, input }) => {
+      const profiles: { id: string; campId: string }[] = [];
       for (const id of input.ids) {
         const profile = await ctx.prisma.staffProfile.findUnique({ where: { id } });
         if (!profile) continue;
         await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+        profiles.push({ id: profile.id, campId: profile.campId });
       }
       await ctx.prisma.staffProfile.updateMany({
         where: { id: { in: input.ids } },
         data: { status: "APPROVED", approvedAt: new Date(), reviewerId: ctx.userId },
       });
+      for (const profile of profiles) {
+        await autoAssignSoleVenue(ctx, profile.id, profile.campId);
+      }
       return { count: input.ids.length };
     }),
 
@@ -254,6 +282,21 @@ export const staffRouter = createTRPCRouter({
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
       return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedVenueId: input.venueId } });
+    }),
+
+  bulkAssignVenue: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()), venueId: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      for (const id of input.ids) {
+        const profile = await ctx.prisma.staffProfile.findUnique({ where: { id } });
+        if (!profile) continue;
+        await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+      }
+      await ctx.prisma.staffProfile.updateMany({
+        where: { id: { in: input.ids } },
+        data: { assignedVenueId: input.venueId },
+      });
+      return { count: input.ids.length };
     }),
 
   assignTribe: protectedProcedure

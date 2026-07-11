@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { assertOrgAdmin } from "../trpc/scoping";
+import * as accommodationEngine from "../../accommodation/engine";
 
 // Hostel/Room/Bed management is admin-only: Campus Representatives do not
 // manage camp operations (per PRD), so there is deliberately no campus-rep
@@ -158,6 +159,25 @@ export const accommodationRouter = createTRPCRouter({
       return ctx.prisma.bed.create({ data: input });
     }),
 
+  // Bulk bed creation — up to 50 beds in a single transaction
+  createBeds: protectedProcedure
+    .input(z.object({
+      roomId: z.string(),
+      beds: z.array(z.object({
+        label: z.string().min(1),
+      })).min(1).max(50),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const room = await ctx.prisma.room.findUnique({ where: { id: input.roomId }, include: { hostel: true } });
+      if (!room || room.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, room.hostel.organizationId);
+      return ctx.prisma.$transaction(
+        input.beds.map((bed) =>
+          ctx.prisma.bed.create({ data: { roomId: input.roomId, ...bed } })
+        )
+      );
+    }),
+
   updateBed: protectedProcedure
     .input(z.object({ id: z.string(), label: z.string().optional(), status: z.enum(["AVAILABLE", "OCCUPIED", "MAINTENANCE"]).optional() }))
     .mutation(async ({ ctx, input }) => {
@@ -229,5 +249,18 @@ export const accommodationRouter = createTRPCRouter({
       if (!registration) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, registration.campus.organizationId);
       return ctx.prisma.registration.update({ where: { id: input.registrationId }, data: { roomId: input.roomId } });
+    }),
+
+  // Auto-assigns every unassigned APPROVED camper/teacher/volunteer at this
+  // venue's camp into an available bed, using the camp's bed allocation
+  // rules. Never fails the whole batch on one occupant's error.
+  bulkAutoAssignBeds: protectedProcedure
+    .input(z.object({ venueId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const venue = await ctx.prisma.venue.findUnique({ where: { id: input.venueId }, include: { camp: true } });
+      if (!venue) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, venue.camp.organizationId);
+      const currentUser = ctx.session!.user;
+      return accommodationEngine.bulkAutoAssignBeds({ venueId: input.venueId, actorId: currentUser.id });
     }),
 });

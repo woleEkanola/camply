@@ -118,6 +118,7 @@ export const camperRouter = createTRPCRouter({
       q: z.string().optional(),
       campusId: z.string().optional(),
       active: z.boolean().optional(),
+      status: z.string().optional(),
       limit: z.number().min(1).max(100).default(50),
       cursor: z.string().optional(),
     }))
@@ -146,6 +147,15 @@ export const camperRouter = createTRPCRouter({
         deletedAt: null,
         ...(input.campusId && { homeCampusId: input.campusId }),
         ...(input.active !== undefined && { active: input.active }),
+        ...(input.status && {
+          registrations: {
+            some: {
+              deletedAt: null,
+              status: input.status,
+              ...(input.campId && { campId: input.campId }),
+            },
+          },
+        }),
         ...(input.q && {
           OR: [
             { name: { contains: input.q, mode: "insensitive" } },

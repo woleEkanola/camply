@@ -114,6 +114,22 @@ export const tribeRouter = createTRPCRouter({
       return ctx.prisma.camp.update({ where: { id: campId }, data });
     }),
 
+  // Bed allocation configuration for a camp — mirrors updateAllocationConfig
+  // above exactly, for the accommodation engine's weighted rules
+  // (src/server/accommodation/engine.ts). Gender-match to Hostel.gender is
+  // always a hard filter in the engine, not a toggleable rule here.
+  updateBedAllocationConfig: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      bedAllocationEnabled: z.boolean().optional(),
+      bedAllocationRules: z.array(z.object({ criterion: z.string(), enabled: z.boolean() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertCanManageCamp(ctx, input.campId);
+      const { campId, ...data } = input;
+      return ctx.prisma.camp.update({ where: { id: campId }, data });
+    }),
+
   // Campus Rep scoping: a rep may only suggest/assign/clear tribe assignment
   // on registrations belonging to their own assigned campus (re-verified
   // against the DB, not the LOCATION_ADMIN role alone - this was previously

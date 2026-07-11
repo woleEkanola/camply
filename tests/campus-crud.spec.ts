@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows } from "./helpers";
 
 test.describe("Admin: Campus CRUD and signup link generation", () => {
   test.describe.configure({ mode: "serial" });
@@ -27,6 +27,9 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     await dialog.getByLabel("Country").fill("Testland");
     await dialog.getByRole("button", { name: "Add Campus", exact: true }).click();
 
+    // This shared fixture org has accumulated many campuses across prior e2e
+    // sessions — the newly-created row can land off the default 10-row page.
+    await showAllRows(page);
     await expect(page.getByText(campusName)).toBeVisible({ timeout: 10000 });
 
     const campus = await prisma.campus.findFirstOrThrow({ where: { name: campusName } });
@@ -46,10 +49,41 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     expect(link.campId).toBeTruthy();
   });
 
+  test("Disable/Enable Signup Link buttons revoke and restore a campus's signup link", async ({ page }) => {
+    if (!campusId) throw new Error("campusId not set — earlier test must have failed");
+
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/campuses");
+    await showAllRows(page);
+
+    // Wait for the signup links query to actually load into state before
+    // interacting — otherwise the bulk handler's `getSignupLinkForCampus`
+    // lookup can race ahead of the data and silently no-op.
+    const row = page.locator("tr", { hasText: campusName });
+    await expect(row).toContainText("Signup Link: Active", { timeout: 10000 });
+
+    await page.getByLabel(`Select campus ${campusName}`).click();
+    await expect(page.getByRole("button", { name: "Disable Signup Link" })).toBeVisible();
+    await page.getByRole("button", { name: "Disable Signup Link" }).click();
+
+    await expect
+      .poll(async () => (await prisma.signupLink.findFirstOrThrow({ where: { campusId: campusId! } })).active, { timeout: 10000 })
+      .toBe(false);
+    await expect(row).toContainText("Signup Link: Inactive");
+
+    await page.getByLabel(`Select campus ${campusName}`).click();
+    await page.getByRole("button", { name: "Enable Signup Link" }).click();
+
+    await expect
+      .poll(async () => (await prisma.signupLink.findFirstOrThrow({ where: { campusId: campusId! } })).active, { timeout: 10000 })
+      .toBe(true);
+  });
+
   test("campus list is scoped to the caller's organization", async ({ page }) => {
     const { organizationId } = await getFixtureOrgContext();
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campuses");
+    await showAllRows(page);
 
     await expect(page.getByText(campusName)).toBeVisible({ timeout: 10000 });
 
@@ -71,6 +105,7 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     try {
       await loginWithPassword(page, "owner@camply.com", "password123");
       await page.goto("/admin/campuses");
+      await showAllRows(page);
 
       const row = page.locator("tr", { hasText: campusName });
       await row.getByRole("button", { name: "Delete" }).click();
