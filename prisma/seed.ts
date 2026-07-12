@@ -1,7 +1,7 @@
 export {}; // Force module scope so this file's top-level declarations (PrismaClient, prisma, slugify, ...) don't collide with other standalone scripts like scripts/seed-production-data.ts under TypeScript's global-script type-checking.
 
-const { PrismaClient } = require("@prisma/client");
-const bcrypt = require("bcryptjs");
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
