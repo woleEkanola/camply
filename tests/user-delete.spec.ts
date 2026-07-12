@@ -37,8 +37,8 @@ test.describe("Admin: User soft-delete blocks login and lands in Trash", () => {
 
     // A soft-deleted user must not be able to log in anymore, even with the correct password.
     await page.goto("/login");
+    await page.locator('button:visible', { hasText: "Password" }).first().click();
     await emailInput(page).fill(repEmail);
-    await nextButton(page).click();
     await passwordInput(page).fill("password123");
     await loginButton(page).click();
 

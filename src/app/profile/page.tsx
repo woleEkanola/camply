@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { api } from "@/utils/api";
 import AppShell from "@/components/layout/AppShell";
@@ -10,6 +10,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { CameraIcon, PhotoIcon, KeyIcon, UserIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
+import { Dialog } from "@/components/ui/Dialog";
 
 // Helper function to crop, resize and compress client-side images
 const compressAndResizeImage = (fileOrBlob: File | Blob): Promise<Blob> => {
@@ -97,6 +98,12 @@ export default function ProfilePage() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Account Deletion states
+  const [deleteConfirmPassword, setDeleteConfirmPassword] = useState("");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleteCheckboxChecked, setIsDeleteCheckboxChecked] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   // Load backend data
   const { data: profile, refetch: refetchProfile, isLoading: isProfileLoading } = api.user.getProfile.useQuery(undefined, {
@@ -146,6 +153,43 @@ export default function ProfilePage() {
       setErrorMsg(err.message || "Failed to update staff details.");
     },
   });
+
+  const deleteSelfMutation = api.user.deleteSelf.useMutation({
+    onSuccess: () => {
+      signOut({ callbackUrl: "/login?deleted=true" });
+    },
+    onError: (err) => {
+      setErrorMsg(err.message || "Failed to delete account.");
+      setIsDeleteConfirmOpen(false);
+    },
+  });
+
+  const handleDeleteAccount = () => {
+    triggerNotification(null, null);
+    if (profile?.passwordSet) {
+      if (!deleteConfirmPassword) {
+        setErrorMsg("Please enter your password to confirm account deletion.");
+        return;
+      }
+    } else {
+      if (!isDeleteCheckboxChecked) {
+        setErrorMsg("Please check the confirmation box.");
+        return;
+      }
+      if (deleteConfirmText !== "DELETE") {
+        setErrorMsg("Please type 'DELETE' to confirm account deletion.");
+        return;
+      }
+    }
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const executeDeleteAccount = () => {
+    deleteSelfMutation.mutate({
+      password: profile?.passwordSet ? deleteConfirmPassword : undefined,
+    });
+  };
+
 
   // Initialize fields once profile loads
   useEffect(() => {
@@ -656,56 +700,116 @@ export default function ProfilePage() {
             )}
 
             {activeTab === "security" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{profile?.passwordSet ? "Change Password" : "Set Password"}</CardTitle>
-                </CardHeader>
-                <CardBody>
-                  <form onSubmit={handleSaveSecurity} className="space-y-4">
-                    {!profile?.passwordSet && (
-                      <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 p-3 text-amber-800 text-xs">
-                        🔐 You are using OTP verification. Set a password here to unlock standard username/password sign in.
-                      </div>
-                    )}
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{profile?.passwordSet ? "Change Password" : "Set Password"}</CardTitle>
+                  </CardHeader>
+                  <CardBody>
+                    <form onSubmit={handleSaveSecurity} className="space-y-4">
+                      {!profile?.passwordSet && (
+                        <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 p-3 text-amber-800 text-xs">
+                          🔐 You are using OTP verification. Set a password here to unlock standard username/password sign in.
+                        </div>
+                      )}
 
-                    {profile?.passwordSet && (
+                      {profile?.passwordSet && (
+                        <Input
+                          type="password"
+                          label="Current Password"
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          required
+                        />
+                      )}
+
                       <Input
                         type="password"
-                        label="Current Password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        label="New Password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                        helpText="Minimum length is 8 characters."
+                      />
+
+                      <Input
+                        type="password"
+                        label="Confirm New Password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
                         required
                       />
-                    )}
 
-                    <Input
-                      type="password"
-                      label="New Password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      required
-                      helpText="Minimum length is 8 characters."
-                    />
+                      <div className="flex justify-end pt-2 border-t border-neutral-100 mt-4">
+                        <Button
+                          type="submit"
+                          loading={updateProfileMutation.isPending || setPasswordMutation.isPending}
+                        >
+                          {profile?.passwordSet ? "Update Password" : "Set Password"}
+                        </Button>
+                      </div>
+                    </form>
+                  </CardBody>
+                </Card>
 
-                    <Input
-                      type="password"
-                      label="Confirm New Password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                    />
-
-                    <div className="flex justify-end pt-2 border-t border-neutral-100 mt-4">
-                      <Button
-                        type="submit"
-                        loading={updateProfileMutation.isPending || setPasswordMutation.isPending}
-                      >
-                        {profile?.passwordSet ? "Update Password" : "Set Password"}
-                      </Button>
+                {/* Danger Zone */}
+                <Card className="mt-6 border-red-200 bg-red-50/5">
+                  <CardHeader className="border-b border-red-100 bg-red-50/20">
+                    <CardTitle className="text-red-800 font-semibold flex items-center gap-2">
+                      <span>⚠️</span> Danger Zone
+                    </CardTitle>
+                  </CardHeader>
+                  <CardBody className="space-y-4">
+                    <p className="text-sm text-neutral-600 font-medium">
+                      Deleting your account is a permanent action. All your profile details, registrations, and camper profiles will be soft-deleted and placed in the trash.
+                    </p>
+                    <div className="bg-red-50 border border-red-200 rounded-md p-3 text-xs text-red-800 font-medium">
+                      Note: You will have 60 days to contact support to restore your account before the data is permanently purged.
                     </div>
-                  </form>
-                </CardBody>
-              </Card>
+                    
+                    <div className="pt-2 space-y-4">
+                      {profile?.passwordSet ? (
+                        <Input
+                          type="password"
+                          label="Enter Password to Confirm Deletion"
+                          value={deleteConfirmPassword}
+                          onChange={(e) => setDeleteConfirmPassword(e.target.value)}
+                          placeholder="Your current password"
+                        />
+                      ) : (
+                        <div className="space-y-3">
+                          <label className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isDeleteCheckboxChecked}
+                              onChange={(e) => setIsDeleteCheckboxChecked(e.target.checked)}
+                              className="mt-1 h-4 w-4 rounded border-neutral-300 text-red-600 focus:ring-red-500"
+                            />
+                            <span className="text-xs text-neutral-700 font-medium select-none">
+                              I confirm that I want to delete my account and all associated camper registrations.
+                            </span>
+                          </label>
+                          <Input
+                            label="Type 'DELETE' to confirm"
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value)}
+                            placeholder="DELETE"
+                          />
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-start">
+                        <Button
+                          variant="danger"
+                          onClick={handleDeleteAccount}
+                        >
+                          Delete Account Permanently
+                        </Button>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+              </>
             )}
 
             {activeTab === "staff" && isStaff && (
@@ -810,6 +914,40 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Delete Account Confirmation Dialog */}
+      <Dialog
+        open={isDeleteConfirmOpen}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        title="Confirm Account Deletion"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-neutral-600">
+            Are you absolutely sure you want to delete your account? This action is highly destructive and will log you out immediately.
+          </p>
+          <p className="text-xs text-red-600 font-semibold bg-red-50 p-2.5 rounded border border-red-200">
+            ⚠️ WARNING: All your registered campers, applications, and documents will be soft-deleted.
+          </p>
+          <div className="mt-5 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsDeleteConfirmOpen(false)}
+              disabled={deleteSelfMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              loading={deleteSelfMutation.isPending}
+              onClick={executeDeleteAccount}
+            >
+              Confirm Delete
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </AppShell>
   );
 }

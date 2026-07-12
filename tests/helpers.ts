@@ -214,8 +214,8 @@ export function fieldByLabel(page: Page, labelText: string) {
 /** Logs in via the password flow (SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE) and waits for the post-login redirect. */
 export async function loginWithPassword(page: Page, email: string, password: string) {
   await page.goto("/login");
+  await page.locator('button:visible', { hasText: "Password" }).first().click();
   await emailInput(page).fill(email);
-  await nextButton(page).click();
   await passwordInput(page).fill(password);
   await loginButton(page).click();
   await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard)/, { timeout: 15000 });
