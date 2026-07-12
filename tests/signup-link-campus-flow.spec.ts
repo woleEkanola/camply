@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { randomBytes } from "crypto";
 import {
   prisma,
   getFixtureOrgContext,
@@ -52,9 +53,18 @@ test.describe("Signup link -> Campus registration -> Venue auto-assignment", () 
     });
     campusId = campus.id;
 
-    const token = `${campus.slug}_${(await prisma.camp.findUniqueOrThrow({ where: { id: campId } })).slug}`;
+    // SignupLink.token in the DB is always a random hex string (see
+    // signupLink.ts's `generate` mutation) — the admin UI's "Copy Link"
+    // button builds the actual URL in {campus-slug}_{camp-slug} format, which
+    // never literally equals the stored token. Mirror that split here rather
+    // than writing the slug string directly into the token column: an earlier
+    // version of this fixture did exactly that, which made the DB token equal
+    // the URL and silently masked a real production bug where final
+    // submission (POST /api/auth/signup) didn't resolve slug-format links.
+    const token = randomBytes(16).toString("hex");
     await prisma.signupLink.create({ data: { token, campusId, campId, active: true } });
-    signupToken = token;
+    const campSlug = (await prisma.camp.findUniqueOrThrow({ where: { id: campId } })).slug;
+    signupToken = `${campus.slug}_${campSlug}`;
   });
 
   test.afterAll(async () => {

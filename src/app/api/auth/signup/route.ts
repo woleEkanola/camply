@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/server/auth/authOptions';
 import { prisma } from '@/server/db';
+import { resolveSignupLinkByToken } from '@/server/registration/resolveSignupLink';
 
 // Define validation schema for signup request
 const signupSchema = z.object({
@@ -41,11 +42,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    // Look up signup link by token to get org/campus/camp
-    const signupLink = await prisma.signupLink.findUnique({
-      where: { token },
-      include: { campus: { include: { organization: true } }, camp: true },
-    });
+    // Look up signup link by token to get org/campus/camp — handles both the
+    // raw random-hex token and the {campus-slug}_{camp-slug} format the
+    // admin UI's "Copy Link" button actually generates.
+    const signupLink = await resolveSignupLinkByToken(prisma, token);
     if (!signupLink || !signupLink.active) {
       return NextResponse.json({ message: 'Invalid or expired signup link' }, { status: 400 });
     }
