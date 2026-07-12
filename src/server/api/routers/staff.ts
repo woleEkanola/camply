@@ -46,6 +46,55 @@ export const staffRouter = createTRPCRouter({
     });
   }),
 
+  updateMyProfile: protectedProcedure
+    .input(z.object({
+      preferredName: z.string().optional().nullable(),
+      gender: z.string().optional().nullable(),
+      dateOfBirth: z.union([z.string(), z.date()]).transform(val => val ? new Date(val) : null).optional().nullable(),
+      church: z.string().optional().nullable(),
+      churchDepartment: z.string().optional().nullable(),
+      yearsServing: z.string().optional().nullable(),
+      workerStatus: z.string().optional().nullable(),
+      emergencyContactName: z.string().optional().nullable(),
+      emergencyContactPhone: z.string().optional().nullable(),
+      emergencyContactRelationship: z.string().optional().nullable(),
+      medicalConditions: z.string().optional().nullable(),
+      allergies: z.string().optional().nullable(),
+      skills: z.array(z.string()).optional(),
+      availability: z.string().optional().nullable(),
+      volunteerCategory: z.string().optional().nullable(),
+      previousCampExperience: z.string().optional().nullable(),
+      areasOfStrength: z.string().optional().nullable(),
+      preferredAgeGroup: z.string().optional().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session?.user.id;
+      if (!userId) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+      }
+
+      const profile = await ctx.prisma.staffProfile.findFirst({
+        where: { userId, deletedAt: null },
+      });
+
+      if (!profile) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Staff profile not found for this account" });
+      }
+
+      const dataToUpdate: any = {};
+      Object.entries(input).forEach(([key, value]) => {
+        if (value !== undefined) {
+          dataToUpdate[key] = value;
+        }
+      });
+
+      return await ctx.prisma.staffProfile.update({
+        where: { id: profile.id },
+        data: dataToUpdate,
+      });
+    }),
+
+
   // ─── Admin: list / stats ───────────────────────────────────────────────
   stats: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string(), type: z.enum(["TEACHER", "VOLUNTEER"]) }))
