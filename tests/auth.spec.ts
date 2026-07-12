@@ -27,10 +27,8 @@ test.describe("Authentication", () => {
 
   test("admin can log in with seeded credentials and reach /admin", async ({ page }) => {
     await page.goto("/login");
+    await page.locator('button:visible', { hasText: "Password" }).first().click();
     await emailInput(page).fill("admin@camply.com");
-    await nextButton(page).click();
-
-    await expect(passwordInput(page)).toBeVisible();
     await passwordInput(page).fill("password123");
     await loginButton(page).click();
 
@@ -39,9 +37,8 @@ test.describe("Authentication", () => {
 
   test("wrong password is rejected with an error message", async ({ page }) => {
     await page.goto("/login");
+    await page.locator('button:visible', { hasText: "Password" }).first().click();
     await emailInput(page).fill("admin@camply.com");
-    await nextButton(page).click();
-
     await passwordInput(page).fill("wrong-password");
     await loginButton(page).click();
 

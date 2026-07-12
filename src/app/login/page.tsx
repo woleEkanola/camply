@@ -11,17 +11,14 @@ const RESEND_COOLDOWN_SECONDS = 30;
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [loginType, setLoginType] = useState<"otp" | "password">("otp");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
-  // A single field for either a password (admin/owner/campus-rep) or an
-  // OTP code (parent). The send-otp endpoint intentionally responds
-  // identically whether or not the email exists/is a parent (anti account
-  // enumeration), so the client can no longer know in advance which kind of
-  // credential to expect — instead it triggers an OTP send opportunistically
-  // and tries both credential shapes on submit; NextAuth's authorize() already
-  // branches correctly on whichever field is populated.
+  
+  // States for verification code (OTP) and password
   const [authValue, setAuthValue] = useState("");
+  const [passwordValue, setPasswordValue] = useState("");
   const router = useRouter();
 
   // Resend-code cooldown, step 2.
@@ -62,13 +59,6 @@ export default function LoginPage() {
     setError("");
     setInfo("");
     setLoading(true);
-    // This sends a verification code if the email belongs to a parent, and
-    // is a no-op otherwise (anti account-enumeration, so the client can't
-    // tell which case it is). A real send failure (e.g. the email service is
-    // down or misconfigured) is a genuine error and must block progress —
-    // otherwise a user who actually needed the code has no idea it never
-    // arrived. Password-login accounts (admin/owner/campus-rep) are
-    // unaffected either way since they don't need the code to sign in.
     const result = await sendCode();
     setLoading(false);
     if (!result.ok) {
@@ -97,47 +87,63 @@ export default function LoginPage() {
   function handleBackToEmail() {
     setStep(1);
     setAuthValue("");
+    setPasswordValue("");
     setError("");
     setInfo("");
   }
 
-  async function handleAuthSubmit(e: React.FormEvent) {
+  async function handleRedirectAfterLogin() {
+    const sessionRes = await fetch("/api/auth/session");
+    const session = await sessionRes.json();
+    const role = session?.user?.role;
+
+    switch (role) {
+      case "PARENT":
+        router.push("/dashboard");
+        break;
+      case "OWNER":
+      case "ADMIN":
+        router.push("/admin");
+        break;
+      case "CAMPUS_REPRESENTATIVE":
+        router.push("/campus-rep-dashboard");
+        break;
+      case "SUPER_ADMIN":
+        router.push("/super-admin");
+        break;
+      default:
+        router.push("/");
+    }
+  }
+
+  async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      // Try password auth first (covers admin/owner/campus-rep/super-admin).
-      let authRes = await signIn("credentials", { redirect: false, email, password: authValue });
-
+      const authRes = await signIn("credentials", { redirect: false, email, password: passwordValue });
       if (authRes?.error) {
-        // Fall back to OTP auth (covers parents).
-        authRes = await signIn("credentials", { redirect: false, email, otp: authValue });
-      }
-
-      if (authRes?.error) {
-        setError("Incorrect password or verification code.");
+        setError("Incorrect email or password.");
       } else {
-        const sessionRes = await fetch("/api/auth/session");
-        const session = await sessionRes.json();
-        const role = session?.user?.role;
+        await handleRedirectAfterLogin();
+      }
+    } catch {
+      setError("Authentication failed. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-        switch (role) {
-          case "PARENT":
-            router.push("/dashboard");
-            break;
-          case "OWNER":
-          case "ADMIN":
-            router.push("/admin");
-            break;
-          case "CAMPUS_REPRESENTATIVE":
-            router.push("/campus-rep-dashboard");
-            break;
-          case "SUPER_ADMIN":
-            router.push("/super-admin");
-            break;
-          default:
-            router.push("/");
-        }
+  async function handleOtpSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const authRes = await signIn("credentials", { redirect: false, email, otp: authValue });
+      if (authRes?.error) {
+        setError("Incorrect verification code.");
+      } else {
+        await handleRedirectAfterLogin();
       }
     } catch {
       setError("Authentication failed. Try again.");
@@ -147,6 +153,10 @@ export default function LoginPage() {
   }
 
   async function handleForgotPassword() {
+    if (!email) {
+      setError("Please enter your email address first.");
+      return;
+    }
     setError("");
     setInfo("");
     setForgotLoading(true);
@@ -196,11 +206,13 @@ export default function LoginPage() {
         return;
       }
       setAuthValue("");
+      setPasswordValue("");
       setResetOtp("");
       setNewPassword("");
       setConfirmPassword("");
       setInfo("Password updated — log in with your new password.");
-      setStep(2);
+      setLoginType("password");
+      setStep(1);
     } catch {
       setError("Couldn't reach the server. Check your connection and try again.");
     } finally {
@@ -223,32 +235,74 @@ export default function LoginPage() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50"
+        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
       >
         {loading ? "Sending..." : "Next"}
       </button>
     </form>
   );
 
+  const passwordStepForm = (
+    <form onSubmit={handlePasswordSubmit}>
+      <div className="mb-4">
+        <input
+          type="email"
+          placeholder="Enter your email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+        />
+      </div>
+      <div className="mb-4">
+        <input
+          type="password"
+          placeholder="Enter Password"
+          value={passwordValue}
+          onChange={(e) => setPasswordValue(e.target.value)}
+          required
+          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
+      >
+        {loading ? "Logging in..." : "Login"}
+      </button>
+      <div className="mt-4 flex justify-end text-sm">
+        <button
+          type="button"
+          onClick={handleForgotPassword}
+          disabled={forgotLoading}
+          className="text-[#E67E22] hover:underline font-medium disabled:opacity-50 cursor-pointer"
+        >
+          {forgotLoading ? "Sending..." : "Forgot password?"}
+        </button>
+      </div>
+    </form>
+  );
+
   const authStepForm = (
-    <form onSubmit={handleAuthSubmit}>
+    <form onSubmit={handleOtpSubmit}>
       <div className="mb-5">
         <input
           type="text"
-          placeholder="Enter Password"
+          placeholder="Enter Verification Code"
           value={authValue}
           onChange={(e) => setAuthValue(e.target.value)}
           required
           className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
         />
         <p className="mt-1 ml-2 text-xs text-gray-500">
-          Enter your password, or the verification code emailed to you.
+          Enter the 6-digit verification code emailed to you.
         </p>
       </div>
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50"
+        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
       >
         {loading ? "Logging in..." : "Login"}
       </button>
@@ -256,17 +310,9 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleBackToEmail}
-          className="text-gray-500 hover:text-gray-700 hover:underline"
+          className="text-gray-500 hover:text-gray-700 hover:underline cursor-pointer"
         >
           &larr; Back
-        </button>
-        <button
-          type="button"
-          onClick={handleForgotPassword}
-          disabled={forgotLoading}
-          className="text-[#E67E22] hover:underline font-medium disabled:opacity-50"
-        >
-          {forgotLoading ? "Sending..." : "Forgot password?"}
         </button>
       </div>
       <div className="mt-2 text-center text-sm">
@@ -274,7 +320,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleResendCode}
           disabled={resending || resendCooldown > 0}
-          className="text-gray-500 hover:text-gray-700 hover:underline disabled:opacity-50 disabled:no-underline"
+          className="text-gray-500 hover:text-gray-700 hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer"
         >
           {resending ? "Resending..." : resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code to email"}
         </button>
@@ -322,15 +368,15 @@ export default function LoginPage() {
       <button
         type="submit"
         disabled={resetLoading}
-        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50"
+        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
       >
         {resetLoading ? "Updating..." : "Reset Password"}
       </button>
       <div className="mt-4 flex items-center justify-between text-sm">
         <button
           type="button"
-          onClick={() => { setStep(2); setError(""); setInfo(""); }}
-          className="text-gray-500 hover:text-gray-700 hover:underline"
+          onClick={() => { setStep(1); setLoginType("password"); setError(""); setInfo(""); }}
+          className="text-gray-500 hover:text-gray-700 hover:underline cursor-pointer"
         >
           &larr; Back
         </button>
@@ -338,7 +384,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleForgotPassword}
           disabled={forgotLoading}
-          className="text-[#E67E22] hover:underline font-medium disabled:opacity-50"
+          className="text-[#E67E22] hover:underline font-medium disabled:opacity-50 cursor-pointer"
         >
           {forgotLoading ? "Resending..." : "Resend code"}
         </button>
@@ -346,8 +392,49 @@ export default function LoginPage() {
     </form>
   );
 
-  const stepForm = step === 1 ? emailStepForm : step === 2 ? authStepForm : resetPasswordForm;
+  const stepForm = 
+    step === 1 
+      ? (loginType === "otp" ? emailStepForm : passwordStepForm) 
+      : step === 2 
+        ? authStepForm 
+        : resetPasswordForm;
+        
   const heading = step === 3 ? "Reset Password" : "Login";
+
+  const tabsHeader = step === 1 && (
+    <div className="flex border-b border-gray-200 mb-6">
+      <button
+        type="button"
+        onClick={() => {
+          setLoginType("otp");
+          setError("");
+          setInfo("");
+        }}
+        className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
+          loginType === "otp"
+            ? "border-[#E67E22] text-[#E67E22]"
+            : "border-transparent text-gray-500 hover:text-gray-900"
+        }`}
+      >
+        Email OTP
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setLoginType("password");
+          setError("");
+          setInfo("");
+        }}
+        className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
+          loginType === "password"
+            ? "border-[#E67E22] text-[#E67E22]"
+            : "border-transparent text-gray-500 hover:text-gray-900"
+        }`}
+      >
+        Password
+      </button>
+    </div>
+  );
 
   const messages = (
     <>
@@ -394,8 +481,8 @@ export default function LoginPage() {
           <div className="w-[85%] bg-white p-6 rounded-2xl shadow-lg">
             <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">{heading}</h2>
 
+            {tabsHeader}
             {messages}
-
             {stepForm}
 
             {step !== 3 && (
@@ -449,8 +536,8 @@ export default function LoginPage() {
           <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
             <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">{heading}</h2>
 
+            {tabsHeader}
             {messages}
-
             {stepForm}
 
             {step !== 3 && (

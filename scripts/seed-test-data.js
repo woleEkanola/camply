@@ -1,9 +1,16 @@
 /**
  * seed-test-data.js
  * Seeds 100 teachers, 800 camper+parent pairs, and 50 volunteers
- * into the Demo Organization / 2026 camp.
+ * into a target organization's active camp, distributed across all of
+ * that org's campuses.
  *
- * Usage: node scripts/seed-test-data.js
+ * The target org/camp/campuses are resolved at runtime from an owner's
+ * email (no hardcoded IDs), so it works against any local database.
+ *
+ * Usage:
+ *   node scripts/seed-test-data.js                       # defaults to innovativekemka@gmail.com
+ *   node scripts/seed-test-data.js owner@camply.com      # target a different owner
+ *   SEED_TARGET_EMAIL=owner@camply.com node scripts/seed-test-data.js
  *
  * Safe to re-run — skips records whose email already exists.
  */
@@ -13,9 +20,11 @@ const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
-// ── Config ────────────────────────────────────────────────────────────────────
-const ORG_ID   = 'cmrfhjb2j0001k5ecm5l1nwec';
-const CAMP_ID  = 'cmrfhjb2q0003k5ecmrkcz3r8';
+// ── Config (resolved dynamically in main() from the target owner's email) ──────
+const TARGET_EMAIL = process.argv[2] || process.env.SEED_TARGET_EMAIL || 'innovativekemka@gmail.com';
+let ORG_ID;   // resolved from the target user's organizationId
+let CAMP_ID;  // resolved from the org's activeCampId
+let CAMPUSES; // resolved from the org's non-deleted campuses (id + name)
 
 // ── Name pools ────────────────────────────────────────────────────────────────
 const FIRST_NAMES_M = [
@@ -75,19 +84,6 @@ const CHURCHES = [
   'House on the Rock', 'RCCG', 'Winners Chapel', 'MFM', 'Daystar', 'City of David',
   'Fountain of Life', 'Kingdom Life', 'Christ Embassy', 'Covenant Christian Centre',
   'Elevation Church', 'Global Impact Church', 'Living Faith', 'CAC',
-];
-
-const CAMPUSES = [
-  { id: 'cmrfhjoda0001k5m8jr8r0pvf', name: 'Iganmu Campus' },
-  { id: 'cmrfhjodj0003k5m8s9krlsxy', name: 'Yaba Campus' },
-  { id: 'cmrfhjodm0005k5m89e6l1i0z', name: 'Lekki Campus' },
-  { id: 'cmrfhjodq0007k5m8ytznx21o', name: 'Ikeja Campus' },
-  { id: 'cmrfhjodt0009k5m8a8vz69kf', name: 'Maryland Campus' },
-  { id: 'cmrfhjodw000bk5m8p4t5tygo', name: 'Victoria Island Campus' },
-  { id: 'cmrfhjoe0000dk5m8szrgztl2', name: 'Ajah Campus' },
-  { id: 'cmrfhjoe3000fk5m8hj6vg913', name: 'Sangotedo Campus' },
-  { id: 'cmrfhjoe6000hk5m8810u57hv', name: 'Ketu Ikosi Campus' },
-  { id: 'cmrfhjoe9000jk5m8ixsdv172', name: 'Anthony Campus' },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -239,12 +235,15 @@ async function loadCounters() {
   for (const r of rows) counters[r.campusId] = r.value;
 }
 
-async function nextRegNumber(campusId, campusName, orgCode) {
-  if (!counters[campusId]) counters[campusId] = 0;
-  counters[campusId]++;
-  const n = counters[campusId];
-  // Format: ORG-CAMPUS-YYYY-NNNN  e.g. DEM-IGA-2026-0001
-  const campCode = campusName.split(' ')[0].substring(0, 3).toUpperCase();
+async function nextRegNumber(campus, orgCode) {
+  if (!counters[campus.id]) counters[campus.id] = 0;
+  counters[campus.id]++;
+  const n = counters[campus.id];
+  // Format: ORG-CAMPUS-YYYY-NNNN  e.g. CCP-IGM-2026-0001.
+  // Use the campus's unique campusCode (not a name prefix) — some campus
+  // names share the same first three letters (e.g. Iganmu / Igando) and
+  // would otherwise produce duplicate registration numbers.
+  const campCode = (campus.campusCode || campus.name.split(' ')[0].substring(0, 3)).toUpperCase();
   const paddedN = String(n).padStart(4, '0');
   return `${orgCode ?? 'DEM'}-${campCode}-2026-${paddedN}`;
 }
@@ -327,7 +326,7 @@ async function seedCampers(passwordHash) {
     });
 
     // Generate registration number
-    const regNumber = await nextRegNumber(campus.id, campus.name, orgCode);
+    const regNumber = await nextRegNumber(campus, orgCode);
 
     // Create registration
     await prisma.registration.create({
@@ -357,18 +356,40 @@ async function seedCampers(passwordHash) {
 async function main() {
   console.log('═══════════════════════════════════════════════════════');
   console.log('  Camply Test Data Seeder');
-  console.log('  Org:  Demo Organization');
-  console.log('  Camp: 2026');
+  console.log(`  Target owner: ${TARGET_EMAIL}`);
   console.log('═══════════════════════════════════════════════════════');
 
-  // Verify org + camp
+  // Resolve org from the target owner, camp from the org's active camp,
+  // and campuses from the org — no hardcoded IDs.
+  const owner = await prisma.user.findUnique({ where: { email: TARGET_EMAIL } });
+  if (!owner || !owner.organizationId) {
+    console.error(`❌ No user "${TARGET_EMAIL}" with an organization found.`);
+    process.exit(1);
+  }
+  ORG_ID = owner.organizationId;
+
   const org = await prisma.organization.findUnique({ where: { id: ORG_ID } });
   if (!org) { console.error('❌ Organization not found'); process.exit(1); }
+  if (!org.activeCampId) {
+    console.error(`❌ Organization "${org.name}" has no active camp set. Set one before seeding.`);
+    process.exit(1);
+  }
+  CAMP_ID = org.activeCampId;
 
   const camp = await prisma.camp.findUnique({ where: { id: CAMP_ID } });
-  if (!camp) { console.error('❌ Camp not found'); process.exit(1); }
+  if (!camp) { console.error('❌ Active camp not found'); process.exit(1); }
 
-  console.log(`\nOrg: ${org.name} | Camp: ${camp.name}\n`);
+  CAMPUSES = await prisma.campus.findMany({
+    where: { organizationId: ORG_ID, deletedAt: null },
+    orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+    select: { id: true, name: true, campusCode: true },
+  });
+  if (CAMPUSES.length === 0) {
+    console.error(`❌ Organization "${org.name}" has no campuses to distribute people across.`);
+    process.exit(1);
+  }
+
+  console.log(`\nOrg: ${org.name} | Camp: ${camp.name} | Campuses: ${CAMPUSES.length}\n`);
 
   const passwordHash = await getHashedPassword();
   console.log('🔑 Password hash generated (TestCamply2026!)');

@@ -20,6 +20,11 @@ export const userRouter = createTRPCRouter({
     return await ctx.prisma.user.findMany({
       where,
       omit: { password: true },
+      include: {
+        organization: {
+          select: { name: true },
+        },
+      },
     });
   }),
 
@@ -424,6 +429,64 @@ export const userRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
+  deleteSelf: protectedProcedure
+    .input(
+      z.object({
+        password: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session?.user.id;
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user || user.deletedAt) {
+        throw new Error("User not found");
+      }
+
+      // Safeguard: Prevent deleting the last Super Admin
+      if (user.role === "SUPER_ADMIN") {
+        const superAdminCount = await ctx.prisma.user.count({
+          where: { role: "SUPER_ADMIN", deletedAt: null },
+        });
+        if (superAdminCount <= 1) {
+          throw new Error("You are the last Super Admin. System requires at least one active Super Admin.");
+        }
+      }
+
+      // Safeguard: Prevent deleting the sole Owner of an organization
+      if (user.role === "OWNER" && user.organizationId) {
+        const ownerCount = await ctx.prisma.user.count({
+          where: { role: "OWNER", organizationId: user.organizationId, deletedAt: null },
+        });
+        if (ownerCount <= 1) {
+          throw new Error("You are the sole Owner of this organization. Please assign another Owner before deleting your account.");
+        }
+      }
+
+      // Verify password if set
+      if (user.passwordSet) {
+        if (!input.password) {
+          throw new Error("Password is required to confirm account deletion.");
+        }
+        const isValid = await bcrypt.compare(input.password, user.password);
+        if (!isValid) {
+          throw new Error("Incorrect password.");
+        }
+      }
+
+      // Perform soft delete
+      await softDeleteUser(userId);
+
+      return { success: true };
+    }),
+
 
   create: protectedProcedure
     .input(

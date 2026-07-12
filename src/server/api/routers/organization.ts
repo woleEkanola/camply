@@ -42,6 +42,35 @@ export const organizationRouter = createTRPCRouter({
         orderBy: { name: 'asc' }
       });
     }),
+
+  getSystemMetrics: protectedProcedure
+    .query(async ({ ctx }) => {
+      // Verify user is a Super Admin
+      const user = await prisma.user.findUnique({ 
+        where: { id: ctx.userId } 
+      });
+      
+      if (!user || user.role !== "SUPER_ADMIN") {
+        throw new Error("Only Super Admins can view system metrics");
+      }
+      
+      const totalOrganizations = await prisma.organization.count();
+      const totalUsers = await prisma.user.count({ where: { deletedAt: null } });
+      const totalCampers = await prisma.camper.count({ where: { deletedAt: null } });
+      const totalRegistrations = await prisma.registration.count({ where: { deletedAt: null } });
+      const pendingRegistrations = await prisma.registration.count({ where: { status: "PENDING", deletedAt: null } });
+      const approvedRegistrations = await prisma.registration.count({ where: { status: "APPROVED", deletedAt: null } });
+      
+      return {
+        totalOrganizations,
+        totalUsers,
+        totalCampers,
+        totalRegistrations,
+        pendingRegistrations,
+        approvedRegistrations,
+      };
+    }),
+
   
   // Get basic organization info (name, for the app shell) — any authenticated
   // member of the org. Replaces the old raw fetch to /api/organizations/[id].
