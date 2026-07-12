@@ -5,6 +5,9 @@ import {
   getFixtureOrgContext,
   waitForOtp,
   deleteCamperByEmail,
+  resetSystemFieldDefaults,
+  relaxRequiredCustomFields,
+  restoreRequiredCustomFields,
 } from "./helpers";
 
 // Mirrors the login page's mobile/desktop dual-markup pattern — scope to the
@@ -33,9 +36,20 @@ test.describe("Full parent registration flow via a signup link", () => {
   let campusId: string;
   let signupToken: string;
   let registrationId: string | undefined;
+  let relaxedCustomFields: { id: string; required: boolean }[] = [];
 
   test.beforeAll(async () => {
     const { organizationId, campId } = await getFixtureOrgContext();
+
+    // Realign camper SYSTEM fields to registry defaults so accumulated Form
+    // Editor drift on the shared fixture org (e.g. a hidden "Full Name" field)
+    // doesn't break the profile-step assertions below.
+    await resetSystemFieldDefaults("CAMPER");
+
+    // This test submits the full registration, so any org-specific required
+    // CUSTOM camper field it doesn't fill would block submission. Relax them
+    // for the test window and restore in afterAll (never deletes admin data).
+    relaxedCustomFields = await relaxRequiredCustomFields("CAMPER");
 
     const campus = await prisma.campus.create({
       data: {
@@ -57,6 +71,7 @@ test.describe("Full parent registration flow via a signup link", () => {
   });
 
   test.afterAll(async () => {
+    await restoreRequiredCustomFields(relaxedCustomFields);
     if (registrationId) await prisma.registration.deleteMany({ where: { id: registrationId } });
     await deleteCamperByEmail(parentEmail);
     if (campusId) {

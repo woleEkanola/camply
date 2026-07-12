@@ -1,7 +1,15 @@
 import { test, expect } from "@playwright/test";
-import { ensureStaffSignupLink, waitForOtp, prisma, deleteStaffByEmail } from "./helpers";
+import { ensureStaffSignupLink, waitForOtp, prisma, deleteStaffByEmail, resetSystemFieldDefaults } from "./helpers";
 
 test.describe("Staff self-registration", () => {
+  // Realign the shared fixture org's SYSTEM fields to registry defaults so
+  // accumulated Form Editor drift (e.g. photoUrl left visible) doesn't split
+  // section headers and break these data-driven wizard assertions.
+  test.beforeAll(async () => {
+    await resetSystemFieldDefaults("TEACHER");
+    await resetSystemFieldDefaults("VOLUNTEER");
+  });
+
   test("teacher can self-register through the data-driven wizard and lands in Pending review", async ({ page }) => {
     const email = `e2e-teacher-${Date.now()}@camply.test`;
     try {
