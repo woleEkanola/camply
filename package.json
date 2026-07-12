@@ -32,12 +32,14 @@
     "jsonwebtoken": "^9.0.2",
     "next": "^16.2.10",
     "next-auth": "^4.24.14",
+    "papaparse": "^5.5.4",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "resend": "^6.17.1",
     "superjson": "^2.2.2",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -47,6 +49,7 @@
     "@types/bcryptjs": "^3.0.0",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^20",
+    "@types/papaparse": "^5.5.2",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
