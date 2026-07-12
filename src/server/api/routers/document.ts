@@ -84,10 +84,24 @@ export const documentRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const doc = await ctx.prisma.document.findUniqueOrThrow({ where: { id: input.id } });
+      const doc = await ctx.prisma.document.findUniqueOrThrow({
+        where: { id: input.id },
+        include: { camper: true, registration: { include: { camper: true } } },
+      });
       if (doc.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
-      if (doc.uploadedById !== currentUser.id && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)) {
-        throw new TRPCError({ code: "FORBIDDEN" });
+
+      const isUploader = doc.uploadedById === currentUser.id;
+      if (!isUploader) {
+        if (!["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        // Admins may only delete documents within their own organization —
+        // the role check alone let an admin delete any document by id across
+        // tenants.
+        const docOrgId = doc.camper?.organizationId ?? doc.registration?.camper.organizationId;
+        if (currentUser.role !== "SUPER_ADMIN" && docOrgId !== currentUser.organizationId) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
       }
       return ctx.prisma.document.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
@@ -99,7 +113,10 @@ export const documentRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const doc = await ctx.prisma.document.findUniqueOrThrow({ where: { id: input.id } });
+      const doc = await ctx.prisma.document.findUniqueOrThrow({
+        where: { id: input.id },
+        include: { camper: true },
+      });
 
       if (doc.registrationId) {
         const registration = await ctx.prisma.registration.findUniqueOrThrow({
@@ -112,8 +129,13 @@ export const documentRouter = createTRPCRouter({
         await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       } else {
         // Camper-scoped documents have no registration/campus context to
-        // scope a rep by - restrict review to org admins only.
+        // scope a rep by - restrict review to org admins, and only within the
+        // camper's own organization (the role check alone let an admin review
+        // camper documents across tenants).
         if (!["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        if (currentUser.role !== "SUPER_ADMIN" && doc.camper?.organizationId !== currentUser.organizationId) {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
       }
