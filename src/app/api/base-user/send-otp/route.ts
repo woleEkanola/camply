@@ -21,16 +21,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Email is required" }, { status: 400 });
     }
 
-    // Throttle OTP sends per email
-    if (!rateLimit(`send-otp:${email}`, 3, 15 * 60 * 1000)) {
-      return NextResponse.json({ message: "Too many requests. Try again later." }, { status: 429 });
-    }
-
     // Check if user exists with this email — respond identically either way
-    // so the endpoint can't be used to probe for registered emails.
+    // so the endpoint can't be used to probe for registered emails. Deliberately
+    // checked BEFORE the rate limit below: password-login accounts (admin/
+    // owner/campus-rep) hit this branch on every single login attempt via the
+    // /login page (it opportunistically calls this endpoint on every email
+    // step submit), so if the rate limit were checked first, enough repeated
+    // logins would exhaust it and start blocking accounts that never needed an
+    // OTP in the first place — this happened in practice across the Playwright
+    // suite's dozens of loginWithPassword() calls against the same seeded
+    // admin/owner accounts. Only real OTP-eligible sends below are throttled.
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !["PARENT", "TEACHER", "VOLUNTEER"].includes(user.role)) {
       return NextResponse.json(GENERIC_OK, { status: 200 });
+    }
+
+    // Throttle OTP sends per email
+    if (!rateLimit(`send-otp:${email}`, 3, 15 * 60 * 1000)) {
+      return NextResponse.json({ message: "Too many requests. Try again later." }, { status: 429 });
     }
 
     // Generate OTP and store it (optionally, with expiry)
