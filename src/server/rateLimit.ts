@@ -21,6 +21,16 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
   return true;
 }
 
+/**
+ * Clears the recorded attempts for `key`. Used after a *successful* login so
+ * that brute-force lockout counts only failed attempts — a legitimate user (or
+ * the E2E suite) logging in repeatedly should never trip the limiter, while N
+ * consecutive failures still lock the account out for the window.
+ */
+export function clearRateLimit(key: string): void {
+  buckets.delete(key);
+}
+
 // Periodically drop stale buckets so the map doesn't grow unboundedly.
 setInterval(() => {
   const cutoff = Date.now() - 60 * 60 * 1000;
