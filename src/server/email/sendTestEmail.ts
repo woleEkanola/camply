@@ -6,7 +6,7 @@ export async function sendTestEmail(to: string) {
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
   console.log("[TEST-EMAIL] Sending test email to", to);
   const result = await resend.emails.send({
-    from: "camply@eleto.online",
+    from: "donotreply@camply.ng",
     to,
     subject: "Test Email from Camply",
     html: `

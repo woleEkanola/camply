@@ -6,7 +6,7 @@ export async function sendStaffApprovedEmail(params: { to: string; name: string;
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
   const role = params.type === "TEACHER" ? "Teacher" : "Volunteer";
   await resend.emails.send({
-    from: "camply@eleto.online",
+    from: "donotreply@camply.ng",
     to: params.to,
     subject: `You're approved as a ${role} for ${params.campName}!`,
     html: `
@@ -23,7 +23,7 @@ export async function sendStaffRejectedEmail(params: { to: string; name: string;
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
   const role = params.type === "TEACHER" ? "Teacher" : "Volunteer";
   await resend.emails.send({
-    from: "camply@eleto.online",
+    from: "donotreply@camply.ng",
     to: params.to,
     subject: `Update on your ${role.toLowerCase()} registration for ${params.campName}`,
     html: `<p>Hi ${params.name}, your ${role.toLowerCase()} registration for <strong>${params.campName}</strong> was not approved.</p>${params.reason ? `<p>Reason: ${params.reason}</p>` : ""}`,

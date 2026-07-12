@@ -9,7 +9,7 @@ export async function sendOtpEmail(email: string, otp: string) {
   }
   console.log("[RESEND] Sending OTP email to", email);
   const result = await resend.emails.send({
-    from: 'camply@eleto.online',
+    from: 'donotreply@camply.ng',
     to: email,
     subject: 'Your OTP Code',
     text: `Your OTP code is: ${otp}`,
