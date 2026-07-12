@@ -4,6 +4,7 @@ import {
   getFixtureOrgContext,
   waitForOtp,
   deleteCamperByEmail,
+  resetSystemFieldDefaults,
 } from "./helpers";
 
 // Mirrors the login page's mobile/desktop dual-markup pattern (see auth.spec.ts) —
@@ -32,6 +33,10 @@ test.describe("Signup link -> Campus registration -> Venue auto-assignment", () 
 
   test.beforeAll(async () => {
     const { organizationId, campId } = await getFixtureOrgContext();
+
+    // Realign camper SYSTEM fields to registry defaults so accumulated Form
+    // Editor drift on the shared fixture org doesn't break the profile step.
+    await resetSystemFieldDefaults("CAMPER");
 
     const campus = await prisma.campus.create({
       data: {

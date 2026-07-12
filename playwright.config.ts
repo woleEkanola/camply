@@ -7,7 +7,11 @@ export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // One local retry (CI gets two) absorbs the connection-pool-exhaustion /
+  // cold-compile login-timeout flakes that surface deep into a long
+  // single-worker run against one `next` process — a genuine failure still
+  // fails on retry, so this doesn't mask real regressions.
+  retries: process.env.CI ? 2 : 1,
   // Tests run against a single `next dev` process (not a clustered/production
   // server) — letting Playwright default to ~half the local CPU cores as
   // parallel workers overwhelms it under fullyParallel, producing ECONNRESET

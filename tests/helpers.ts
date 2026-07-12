@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "crypto";
 import type { Page } from "@playwright/test";
-import { ensureSystemFields } from "../src/server/registration/systemFieldRegistry";
+import { ensureSystemFields, SYSTEM_FIELD_REGISTRY } from "../src/server/registration/systemFieldRegistry";
 
 // Shared across specs — Playwright runs each test file in its own worker
 // process, so this is one connection per worker, not per test.
@@ -17,6 +17,63 @@ export const prisma = new PrismaClient();
 export async function ensureFormFields(audience: "CAMPER" | "TEACHER" | "VOLUNTEER") {
   const { organizationId } = await getFixtureOrgContext();
   await ensureSystemFields(prisma, organizationId, audience);
+}
+
+/**
+ * Temporarily clears the `required` flag on the shared fixture org's visible
+ * CUSTOM FormFields for `audience`, returning a snapshot to restore afterward.
+ * The full end-to-end submit flow can't complete while an org-specific required
+ * custom field it doesn't know how to fill (e.g. an admin-added "Teens HOD
+ * name") gates submission. This is reversible and never deletes admin data —
+ * pair it with restoreRequiredCustomFields() in afterAll.
+ */
+export async function relaxRequiredCustomFields(
+  audience: "CAMPER" | "TEACHER" | "VOLUNTEER"
+): Promise<{ id: string; required: boolean }[]> {
+  const { organizationId } = await getFixtureOrgContext();
+  const fields = await prisma.formField.findMany({
+    where: { organizationId, audience, source: "CUSTOM", required: true, deletedAt: null },
+    select: { id: true, required: true },
+  });
+  if (fields.length > 0) {
+    await prisma.formField.updateMany({
+      where: { id: { in: fields.map((f) => f.id) } },
+      data: { required: false },
+    });
+  }
+  return fields;
+}
+
+/** Restores `required` flags cleared by relaxRequiredCustomFields(). */
+export async function restoreRequiredCustomFields(snapshot: { id: string; required: boolean }[]) {
+  for (const s of snapshot) {
+    await prisma.formField.updateMany({ where: { id: s.id }, data: { required: s.required } });
+  }
+}
+
+/**
+ * Realigns the shared fixture org's SYSTEM FormFields for `audience` back to
+ * the canonical defaults in systemFieldRegistry.ts (visible / required /
+ * sortOrder / groupLabel). Prior sessions' Form Editor edits accumulate on
+ * this shared org and drift these flags — e.g. a `photoUrl` left visible splits
+ * "Personal Information" into two non-contiguous section headers, or a hidden
+ * camper `name` field makes "Full Name" disappear — which breaks the data-driven
+ * wizard specs in ways that have nothing to do with the code under test. Call
+ * this in a spec's beforeAll so it renders the wizard against a known baseline.
+ * Only touches SYSTEM fields; admin-defined CUSTOM fields are left alone.
+ */
+export async function resetSystemFieldDefaults(audience: "CAMPER" | "TEACHER" | "VOLUNTEER") {
+  const { organizationId } = await getFixtureOrgContext();
+  await ensureSystemFields(prisma, organizationId, audience);
+  const defaults = SYSTEM_FIELD_REGISTRY[audience];
+  await prisma.$transaction(
+    defaults.map((f) =>
+      prisma.formField.updateMany({
+        where: { organizationId, audience, source: "SYSTEM", name: f.name },
+        data: { visible: f.visible, required: f.required, sortOrder: f.sortOrder, groupLabel: f.groupLabel },
+      })
+    )
+  );
 }
 
 /** Selects "100 / page" on the shared Table component's page-size control (only rendered once there's more than one page), so newly-created rows appended at the end of a long list are actually visible. Call before opening any Dialog on the same page — the plain `select` locator isn't scoped and would otherwise also match a select inside an open dialog. */

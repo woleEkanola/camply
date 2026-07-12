@@ -1,8 +1,16 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, ensureStaffSignupLink, ensureCamperSignupLink, waitForOtp, deleteStaffByEmail, deleteCamperByEmail, ensureFormFields } from "./helpers";
+import { prisma, getFixtureOrgContext, ensureStaffSignupLink, ensureCamperSignupLink, waitForOtp, deleteStaffByEmail, deleteCamperByEmail, ensureFormFields, resetSystemFieldDefaults } from "./helpers";
 
 test.describe("Form Editor changes are reflected live in the wizards", () => {
   test.describe.configure({ mode: "serial" });
+
+  // Realign SYSTEM fields to registry defaults so accumulated Form Editor drift
+  // on the shared fixture org (e.g. photoUrl left visible splitting section
+  // headers) doesn't break these wizard-rendering assertions.
+  test.beforeAll(async () => {
+    await resetSystemFieldDefaults("TEACHER");
+    await resetSystemFieldDefaults("CAMPER");
+  });
 
   test("hiding a system field removes it from the staff wizard", async ({ page }) => {
     const { organizationId } = await getFixtureOrgContext();

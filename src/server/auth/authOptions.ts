@@ -2,7 +2,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "../db";
 import { verifyPassword } from "../../lib/auth";
-import { rateLimit } from "../rateLimit";
+import { rateLimit, clearRateLimit } from "../rateLimit";
 import { MAX_OTP_ATTEMPTS, otpEqual } from "../otp";
 import { type NextAuthOptions } from "next-auth";
 
@@ -24,12 +24,14 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Throttle login attempts per email (in-memory, per instance). 30/15min
-        // still meaningfully rate-limits brute force (~1 attempt/30s average)
-        // while accommodating the Playwright suite's real login volume as it
-        // grows — a full run legitimately logs in as owner@camply.com more
-        // than 10 times now across auth/camp-structure/form-editor/staff specs.
-        if (!rateLimit(`login:${credentials.email}`, 30, 15 * 60 * 1000)) {
+        // Throttle login attempts per email (in-memory, per instance). The
+        // counter is cleared on every SUCCESSFUL auth below, so this bounds
+        // *consecutive failed* attempts (brute force) rather than total logins
+        // — a legitimate user (or the E2E suite) signing in repeatedly never
+        // trips it, which previously caused late-in-run login timeouts once a
+        // full Playwright run logged in as owner@camply.com more than 30 times.
+        const loginKey = `login:${credentials.email}`;
+        if (!rateLimit(loginKey, 30, 15 * 60 * 1000)) {
           return null;
         }
 
@@ -63,6 +65,8 @@ export const authOptions: NextAuthOptions = {
           }
           // OTP is valid, delete it (one-time use)
           await prisma.oTP.delete({ where: { email: credentials.email } });
+          // Successful auth — reset the failed-attempt counter for this email.
+          clearRateLimit(loginKey);
           // Only allow login for valid roles (including PARENT, TEACHER, VOLUNTEER)
           if (
             user.role === "SUPER_ADMIN" ||
@@ -96,6 +100,8 @@ export const authOptions: NextAuthOptions = {
         if (!isValid) {
           return null;
         }
+        // Successful auth — reset the failed-attempt counter for this email.
+        clearRateLimit(loginKey);
 
         // Only return user if their role is a valid UserRole (exclude PARENT)
         if (
