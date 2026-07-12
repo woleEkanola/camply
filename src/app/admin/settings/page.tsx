@@ -31,6 +31,7 @@ export default function AdminSettingsPage() {
 
   // Memoize initial values to avoid prop changes after mount
   const initialName = orgData?.name || "";
+  const initialSlug = (orgData as any)?.slug || "";
   const initialLogoUrl = useMemo(() => (typeof settings === 'object' && settings !== null && 'logoUrl' in settings ? (settings as any).logoUrl : undefined) ?? "", [settings]);
   const initialColorTheme = useMemo(() => (typeof settings === 'object' && settings !== null && 'colorTheme' in settings ? (settings as any).colorTheme : undefined) ?? "#E67E22", [settings]);
 
@@ -59,6 +60,7 @@ export default function AdminSettingsPage() {
             <OrgProfileSettings
               organizationId={organizationId}
               initialName={initialName}
+              initialSlug={initialSlug}
               initialLogoUrl={initialLogoUrl}
               initialColorTheme={initialColorTheme}
               onSaveSuccess={() => {

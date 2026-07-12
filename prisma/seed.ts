@@ -150,7 +150,6 @@ async function main() {
   const organization = await prisma.organization.create({
     data: {
       name: "Demo Organization",
-      slug: slugify("Demo Organization"),
     },
   });
 

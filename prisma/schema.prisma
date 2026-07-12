@@ -103,7 +103,7 @@ model User {
 model Organization {
   id           String      @id @default(cuid())
   name         String      @unique
-  slug         String      @unique
+  slug         String?     @unique
   users        User[]
   campuses     Campus[]
   formFields   FormField[] // Organization defines registration form fields (camper/teacher/volunteer)

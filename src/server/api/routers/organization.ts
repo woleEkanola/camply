@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
-import { generateSlug } from "../../../utils/slugs";
 
 export const organizationRouter = createTRPCRouter({
   // Create a new organization (Super Admin only)
@@ -19,9 +18,8 @@ export const organizationRouter = createTRPCRouter({
         throw new Error("Only Super Admins can create organizations");
       }
       
-      const slug = generateSlug(input.name);
       const organization = await prisma.organization.create({
-        data: { name: input.name, slug }
+        data: { name: input.name }
       });
       
       return organization;
@@ -84,7 +82,7 @@ export const organizationRouter = createTRPCRouter({
       }
       const organization = await prisma.organization.findUnique({
         where: { id: input.id },
-        select: { id: true, name: true },
+        select: { id: true, name: true, slug: true },
       });
       if (!organization) throw new Error("Organization not found");
       return organization;
@@ -122,6 +120,7 @@ export const organizationRouter = createTRPCRouter({
         colorTheme: z.string().optional(),
       }),
       name: z.string().min(2, "Church name must be at least 2 characters").optional(),
+      slug: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       // Only allow admins/owners
@@ -147,7 +146,8 @@ export const organizationRouter = createTRPCRouter({
         where: { id: input.organizationId },
         data: { 
           settings: newSettings,
-          ...(input.name ? { name: input.name } : {})
+          ...(input.name ? { name: input.name } : {}),
+          ...(input.slug !== undefined ? { slug: input.slug || null } : {}),
         },
         select: { settings: true }
       });
@@ -170,10 +170,9 @@ export const organizationRouter = createTRPCRouter({
         throw new Error("Only Super Admins can update organizations");
       }
       
-      const slug = generateSlug(input.name);
       const organization = await prisma.organization.update({
         where: { id: input.id },
-        data: { name: input.name, slug }
+        data: { name: input.name }
       });
       
       return organization;

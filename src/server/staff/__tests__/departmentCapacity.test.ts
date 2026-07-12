@@ -34,8 +34,7 @@ async function makeStaff(departmentId: string | null, status: "PENDING" | "APPRO
 }
 
 beforeEach(async () => {
-  const orgName = `Dept Cap Org ${Date.now()}-${Math.random()}`;
-  const org = await prisma.organization.create({ data: { name: orgName, slug: orgName.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '') } });
+  const org = await prisma.organization.create({ data: { name: `Dept Cap Org ${Date.now()}-${Math.random()}` } });
   orgId = org.id;
 
   const camp = await prisma.camp.create({

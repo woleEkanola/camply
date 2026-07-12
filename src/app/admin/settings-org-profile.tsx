@@ -16,17 +16,20 @@ const THEME_PRESETS = [
 export default function OrgProfileSettings({
   organizationId,
   initialName = "",
+  initialSlug = "",
   initialLogoUrl = "",
   initialColorTheme = "#E67E22",
   onSaveSuccess,
 }: {
   organizationId: string;
   initialName?: string;
+  initialSlug?: string;
   initialLogoUrl?: string;
   initialColorTheme?: string;
   onSaveSuccess?: () => void;
 }) {
   const [name, setName] = useState(initialName);
+  const [slug, setSlug] = useState(initialSlug);
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [colorTheme, setColorTheme] = useState(initialColorTheme);
   const [saving, setSaving] = useState(false);
@@ -36,6 +39,10 @@ export default function OrgProfileSettings({
   useEffect(() => {
     setName(initialName);
   }, [initialName]);
+
+  useEffect(() => {
+    setSlug(initialSlug);
+  }, [initialSlug]);
 
   useEffect(() => {
     setLogoUrl(initialLogoUrl);
@@ -57,6 +64,7 @@ export default function OrgProfileSettings({
       await updateSettings.mutateAsync({
         organizationId,
         name,
+        slug: slug || undefined,
         settings: {
           logoUrl,
           colorTheme,
@@ -91,9 +99,16 @@ export default function OrgProfileSettings({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
           <div className="md:col-span-2">
-            <Input
-              label="Logo Image URL"
-              placeholder="https://example.com/logo.png"
+        <Input
+          label="Email Sender Slug"
+          value={slug}
+          onChange={(e) => setSlug(e.target.value)}
+          helpText="Used as the sender address: your-slug@camply.ng. Leave empty to use donotreply@camply.ng."
+        />
+
+        <Input
+          label="Logo Image URL"
+          placeholder="https://example.com/logo.png"
               value={logoUrl}
               onChange={(e) => setLogoUrl(e.target.value)}
             />

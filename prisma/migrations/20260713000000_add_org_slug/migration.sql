@@ -1,4 +1,4 @@
--- Add slug column to Organization
+-- Add slug column to Organization (optional, set by org owner via UI)
 ALTER TABLE "Organization" ADD COLUMN "slug" TEXT;
 
 -- Backfill slugs for existing organizations using PostgreSQL's regex replace
@@ -9,6 +9,5 @@ SET "slug" = regexp_replace(
 )
 WHERE "slug" IS NULL;
 
--- Now make it NOT NULL and unique
-ALTER TABLE "Organization" ALTER COLUMN "slug" SET NOT NULL;
-ALTER TABLE "Organization" ADD CONSTRAINT "Organization_slug_key" UNIQUE ("slug");
+-- Partial unique index: only non-null slugs must be unique
+CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug") WHERE "slug" IS NOT NULL;

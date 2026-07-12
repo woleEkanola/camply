@@ -27,8 +27,7 @@ function departmentRow(overrides: Partial<DepartmentRowInput> = {}): DepartmentR
 }
 
 beforeEach(async () => {
-  const orgName = `Import Test Org ${Date.now()}-${Math.random()}`;
-  const org = await prisma.organization.create({ data: { name: orgName, slug: orgName.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '') } });
+  const org = await prisma.organization.create({ data: { name: `Import Test Org ${Date.now()}-${Math.random()}` } });
   orgId = org.id;
 
   const camp = await prisma.camp.create({
@@ -101,8 +100,7 @@ describe("importCampuses", () => {
 
 describe("generateCampusSlug", () => {
   it("suffixes the slug when the base slug is already taken (globally, across orgs)", async () => {
-    const otherName = `Slug Test Org ${Date.now()}-${Math.random()}`;
-    const otherOrg = await prisma.organization.create({ data: { name: otherName, slug: otherName.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '') } });
+    const otherOrg = await prisma.organization.create({ data: { name: `Slug Test Org ${Date.now()}-${Math.random()}` } });
     try {
       await prisma.campus.create({
         data: {

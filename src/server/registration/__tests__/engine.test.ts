@@ -30,8 +30,7 @@ async function makeCamper(overrides: Partial<{ dateOfBirth: Date }> = {}) {
 }
 
 beforeEach(async () => {
-  const orgName = `Test Org ${Date.now()}-${Math.random()}`;
-  const org = await prisma.organization.create({ data: { name: orgName, slug: orgName.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '') } });
+  const org = await prisma.organization.create({ data: { name: `Test Org ${Date.now()}-${Math.random()}` } });
   orgId = org.id;
 
   const camp = await prisma.camp.create({
