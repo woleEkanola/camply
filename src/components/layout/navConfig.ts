@@ -20,6 +20,7 @@ import {
   MapIcon,
   BuildingOffice2Icon,
   TrashIcon,
+  ArrowsUpDownIcon,
 } from "@heroicons/react/24/outline";
 
 export type Role =
@@ -138,6 +139,12 @@ const ADMIN_GROUPS: NavGroup[] = [
         name: "Access Control",
         href: "/admin/access-control",
         icon: ShieldCheckIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Import / Export",
+        href: "/admin/import-export",
+        icon: ArrowsUpDownIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
       {
