@@ -308,8 +308,121 @@ export const userRouter = createTRPCRouter({
           active: true,
           organizationId: true,
           managedCampuses: true,
+          passwordSet: true,
+          photoUrl: true,
         },
       });
+    }),
+
+  updateProfile: protectedProcedure
+    .input(
+      z.object({
+        firstName: z.string().min(1, "First name is required").optional(),
+        lastName: z.string().min(1, "Last name is required").optional(),
+        phone: z.string().optional().nullable(),
+        photoUrl: z.string().optional().nullable(),
+        currentPassword: z.string().optional(),
+        newPassword: z.string().min(8, "Password must be at least 8 characters").optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session?.user.id;
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const updateData: any = {};
+      if (input.firstName !== undefined) updateData.firstName = input.firstName;
+      if (input.lastName !== undefined) updateData.lastName = input.lastName;
+      if (input.phone !== undefined) updateData.phone = input.phone;
+      if (input.photoUrl !== undefined) updateData.photoUrl = input.photoUrl;
+
+      if (input.newPassword) {
+        if (user.passwordSet) {
+          if (!input.currentPassword) {
+            throw new Error("Current password is required to set a new password");
+          }
+          const isValid = await bcrypt.compare(input.currentPassword, user.password);
+          if (!isValid) {
+            throw new Error("Incorrect current password");
+          }
+        }
+        updateData.password = await bcrypt.hash(input.newPassword, 10);
+        updateData.passwordSet = true;
+      }
+
+      const updatedUser = await ctx.prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+      });
+
+      if (user.role === "TEACHER" || user.role === "VOLUNTEER") {
+        const staffProfileUpdate: any = {};
+        if (input.firstName !== undefined) staffProfileUpdate.firstName = input.firstName;
+        if (input.lastName !== undefined) staffProfileUpdate.lastName = input.lastName;
+        if (input.phone !== undefined) staffProfileUpdate.phone = input.phone || "";
+        if (input.photoUrl !== undefined) staffProfileUpdate.photoUrl = input.photoUrl;
+
+        await ctx.prisma.staffProfile.updateMany({
+          where: { userId: userId, deletedAt: null },
+          data: staffProfileUpdate,
+        });
+      }
+
+      return {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        phone: updatedUser.phone,
+        photoUrl: updatedUser.photoUrl,
+        passwordSet: updatedUser.passwordSet,
+      };
+    }),
+
+  setPassword: protectedProcedure
+    .input(
+      z.object({
+        password: z.string().min(8, "Password must be at least 8 characters"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session?.user.id;
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      if (user.passwordSet) {
+        throw new Error("Password has already been set. Use change password instead.");
+      }
+
+      const hashedPassword = await bcrypt.hash(input.password, 10);
+
+      await ctx.prisma.user.update({
+        where: { id: userId },
+        data: {
+          password: hashedPassword,
+          passwordSet: true,
+        },
+      });
+
+      return { success: true };
     }),
 
   create: protectedProcedure
