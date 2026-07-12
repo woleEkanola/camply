@@ -3,6 +3,7 @@ import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/t
 import { TRPCError } from "@trpc/server";
 import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
 import { ensureSystemFields } from "../../registration/systemFieldRegistry";
+import { getDepartmentAvailability } from "../../staff/departmentCapacity";
 
 const audienceEnum = z.enum(["CAMPER", "TEACHER", "VOLUNTEER"]);
 const typeEnum = z.enum(["TEXT", "LONG_TEXT", "NUMBER", "DATE", "BOOLEAN", "CHECKBOX", "SELECT", "MULTI_SELECT", "RADIO", "FILE"]);
@@ -10,7 +11,11 @@ const typeEnum = z.enum(["TEXT", "LONG_TEXT", "NUMBER", "DATE", "BOOLEAN", "CHEC
 // systemKeys whose SELECT options come from a live DB list rather than stored config —
 // kept out of the admin Form Editor's manual Options input (see FormFieldEditor.tsx).
 const CAMPUS_SYSTEM_KEYS = new Set(["preferredCampusId", "homeCampusId"]);
-const DEPARTMENT_SYSTEM_KEY = "churchDepartment";
+// The real camp-role picker (sets StaffProfile.departmentId directly) — NOT
+// churchDepartment, which is plain free text about the registrant's home
+// church (see systemFieldRegistry.ts's STAFF_DEPARTMENT_PICKER comment).
+const DEPARTMENT_SYSTEM_KEY = "departmentId";
+const PRIVILEGED_ROLES = new Set(["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"]);
 
 export const formFieldRouter = createTRPCRouter({
   list: publicProcedure
@@ -46,7 +51,26 @@ export const formFieldRouter = createTRPCRouter({
         : null;
 
       const campusOptions = campuses ? JSON.stringify(campuses.map((c) => ({ value: c.id, label: c.name }))) : null;
-      const departmentOptions = departments ? JSON.stringify(departments.map((d) => d.name)) : null;
+
+      let departmentOptions: string | null = null;
+      if (departments) {
+        const availability = await getDepartmentAvailability(ctx.prisma, departments.map((d) => d.id));
+        const currentUser = ctx.session?.user;
+        // Org admins/owners/campus-reps (e.g. using the manual "Add Staff"
+        // dialog) see every department — including full ones, labeled — so
+        // they can still consciously override the cap. The public self-service
+        // wizard only ever sees departments with a free slot.
+        const isPrivileged =
+          !!currentUser && PRIVILEGED_ROLES.has(currentUser.role) && currentUser.organizationId === input.organizationId;
+
+        const visible = isPrivileged ? departments : departments.filter((d) => !availability.get(d.id)?.isFull);
+        departmentOptions = JSON.stringify(
+          visible.map((d) => ({
+            value: d.id,
+            label: availability.get(d.id)?.isFull ? `${d.name} (Full)` : d.name,
+          }))
+        );
+      }
 
       return fields.map((f) => {
         if (CAMPUS_SYSTEM_KEYS.has(f.systemKey ?? "")) return { ...f, options: campusOptions };

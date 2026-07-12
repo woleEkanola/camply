@@ -19,7 +19,9 @@ export function DepartmentManager({ organizationId, campId }: { organizationId: 
   const [viewing, setViewing] = useState<any | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [maxCapacity, setMaxCapacity] = useState("");
   const [responsibilitiesText, setResponsibilitiesText] = useState("");
+  const [editCapacity, setEditCapacity] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState("");
 
@@ -27,12 +29,13 @@ export function DepartmentManager({ organizationId, campId }: { organizationId: 
     utils.orgStructure.getDepartmentStructure.invalidate({ organizationId, campId });
     utils.department.list.invalidate({ organizationId, campId });
   };
-  const create = api.department.create.useMutation({ onSuccess: () => { setCreateOpen(false); setName(""); setDescription(""); invalidate(); } });
+  const create = api.department.create.useMutation({ onSuccess: () => { setCreateOpen(false); setName(""); setDescription(""); setMaxCapacity(""); invalidate(); } });
   const remove = api.department.delete.useMutation({
     onSuccess: () => { setDeleteTarget(null); invalidate(); },
     onError: (err) => { setError(err.message); setDeleteTarget(null); },
   });
-  const updateResponsibilities = api.department.updateResponsibilities.useMutation({ onSuccess: () => { setEditing(null); invalidate(); } });
+  const updateResponsibilities = api.department.updateResponsibilities.useMutation({ onSuccess: invalidate });
+  const updateCapacity = api.department.update.useMutation({ onSuccess: () => { setEditing(null); invalidate(); } });
 
   return (
     <div>
@@ -64,6 +67,10 @@ export function DepartmentManager({ organizationId, campId }: { organizationId: 
                 <div className="mb-3 space-y-1 text-xs text-neutral-500">
                   <div>Head: <span className="text-neutral-700">{d.head?.name ?? "Unassigned"}</span></div>
                   <div>Members: <span className="text-neutral-700">{d.memberCount}</span> · Volunteers: <span className="text-neutral-700">{d.volunteerCount}</span></div>
+                  <div>
+                    Capacity: <span className="text-neutral-700">{d.signedUpCount}/{d.maxCapacity ?? "∞"}</span>
+                    {d.maxCapacity != null && d.signedUpCount >= d.maxCapacity && <Badge tone="danger" className="ml-1">Full</Badge>}
+                  </div>
                 </div>
                 <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <Button
@@ -72,9 +79,10 @@ export function DepartmentManager({ organizationId, campId }: { organizationId: 
                     onClick={() => {
                       setEditing(d);
                       setResponsibilitiesText((d.responsibilities ?? []).join("\n"));
+                      setEditCapacity(d.maxCapacity != null ? String(d.maxCapacity) : "");
                     }}
                   >
-                    Edit Responsibilities
+                    Edit
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setDeleteTarget({ id: d.id, name: d.name })}>Delete</Button>
                 </div>
@@ -88,34 +96,54 @@ export function DepartmentManager({ organizationId, campId }: { organizationId: 
         <div className="space-y-3">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
           <Textarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          <Input
+            type="number"
+            min={1}
+            label="Capacity (optional)"
+            helpText="Max staff who can sign up for this department. Leave blank for unlimited."
+            value={maxCapacity}
+            onChange={(e) => setMaxCapacity(e.target.value)}
+          />
           <Button
             className="w-full"
             disabled={!name}
             loading={create.isPending}
-            onClick={() => create.mutate({ organizationId, campId, name, description: description || undefined })}
+            onClick={() => create.mutate({ organizationId, campId, name, description: description || undefined, maxCapacity: maxCapacity ? Number(maxCapacity) : undefined })}
           >
             Create
           </Button>
         </div>
       </Dialog>
 
-      <Dialog open={!!editing} onClose={() => setEditing(null)} title={`${editing?.name ?? ""} — Responsibilities`}>
+      <Dialog open={!!editing} onClose={() => setEditing(null)} title={`${editing?.name ?? ""} — Settings`}>
         <div className="space-y-3">
+          <Input
+            type="number"
+            min={1}
+            label="Capacity (optional)"
+            helpText="Max staff who can sign up for this department. Leave blank for unlimited."
+            value={editCapacity}
+            onChange={(e) => setEditCapacity(e.target.value)}
+          />
           <Textarea
-            label="One responsibility per line"
+            label="Responsibilities — one per line"
             value={responsibilitiesText}
             onChange={(e) => setResponsibilitiesText(e.target.value)}
             rows={8}
           />
           <Button
             className="w-full"
-            loading={updateResponsibilities.isPending}
-            onClick={() =>
+            loading={updateResponsibilities.isPending || updateCapacity.isPending}
+            onClick={() => {
               updateResponsibilities.mutate({
                 id: editing.id,
                 responsibilities: responsibilitiesText.split("\n").map((r) => r.trim()).filter(Boolean),
-              })
-            }
+              });
+              updateCapacity.mutate({
+                id: editing.id,
+                maxCapacity: editCapacity ? Number(editCapacity) : null,
+              });
+            }}
           >
             Save
           </Button>
