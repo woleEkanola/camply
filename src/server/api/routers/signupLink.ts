@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { randomBytes } from "crypto";
+import { resolveSignupLinkByToken } from "../../registration/resolveSignupLink";
 
 // Schema for signup link validation
 const signupLinkSchema = z.object({
@@ -286,51 +287,11 @@ export const signupLinkRouter = createTRPCRouter({
   validateToken: publicProcedure
     .input(z.object({ token: z.string() }))
     .query(async ({ ctx, input }) => {
-      // Support both random token and {campus-slug}_{camp-slug} format
-      const slugCampMatch = input.token.match(/^([a-zA-Z0-9_-]+)_([a-zA-Z0-9_-]+)$/);
-      let signupLink = null;
-      if (slugCampMatch) {
-        const campusSlug = slugCampMatch[1];
-        const campSlug = slugCampMatch[2];
-        // Find the campus by slug
-        const campus = await ctx.prisma.campus.findUnique({
-          where: { slug: campusSlug },
-          include: { organization: true }
-        });
-        if (!campus) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
-        }
-        // Find the camp by slug and organization
-        const camp = await ctx.prisma.camp.findFirst({
-          where: { slug: campSlug, organizationId: campus.organizationId },
-        });
-        if (!camp) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found for this organization" });
-        }
-        // Find the signup link by campusId and campId
-        signupLink = await ctx.prisma.signupLink.findUnique({
-          where: {
-            campusId_campId: {
-              campusId: campus.id,
-              campId: camp.id
-            }
-          },
-          include: {
-            campus: { include: { organization: true } },
-            camp: true
-          }
-        });
-      } else {
-        // Fallback to old token lookup
-        signupLink = await ctx.prisma.signupLink.findUnique({
-          where: { token: input.token },
-          include: {
-            campus: { include: { organization: true } },
-            camp: true
-          }
-        });
-      }
-      console.log('validateToken called with token:', input.token);
+      // Handles both the raw random-hex token and the
+      // {campus-slug}_{camp-slug} format the admin UI's "Copy Link" button
+      // actually generates — shared with /api/auth/signup so the two can't
+      // drift out of sync again (see resolveSignupLink.ts's doc comment).
+      const signupLink = await resolveSignupLinkByToken(ctx.prisma, input.token);
       if (!signupLink || !signupLink.camp) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found or camp missing" });
       }
