@@ -2,9 +2,11 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "@/utils/api";
 import AppShell from "@/components/layout/AppShell";
+import { useUploadThing } from "@/utils/uploadthing-hook";
+import { compressImage, FileTooLargeError } from "@/lib/compressImage";
 
 const STATUS_COPY: Record<string, string> = {
   DRAFT: "You haven't submitted this registration yet.",
@@ -39,35 +41,42 @@ function DocumentUploader({
   });
   const deleteMutation = api.document.delete.useMutation({ onSuccess: onUploaded });
 
+  const { startUpload } = useUploadThing("uploader", {
+    onClientUploadComplete: (res) => {
+      if (res?.[0]?.ufsUrl) {
+        uploadMutation.mutate({
+          requirementId: requirement.id,
+          registrationId,
+          url: res[0].ufsUrl,
+          fileName: fileRef.current?.name || "upload",
+          fileType: fileRef.current?.type || "image/jpeg",
+          fileSize: fileRef.current?.size || 0,
+        });
+      }
+    },
+    onUploadError: (err) => {
+      setLocalError(err.message || "Upload failed");
+      setUploading(false);
+    },
+  });
+
+  const fileRef = useRef<File | null>(null);
+
   const doc = existingDocs.find((d) => d.requirementId === requirement.id && d.status !== "REJECTED");
-  const acceptedFormats = (requirement.acceptedFormats as string).split(",").map((f) => `.${f.trim()}`).join(",");
 
   const handleFile = async (file: File) => {
     setLocalError("");
-    const maxBytes = requirement.maxSizeMb * 1024 * 1024;
-    if (file.size > maxBytes) {
-      setLocalError(`File exceeds the maximum size of ${requirement.maxSizeMb} MB.`);
-      return;
-    }
     setUploading(true);
+    fileRef.current = file;
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        setLocalError(data.error || "Upload failed.");
-        return;
+      const compressed = await compressImage(file);
+      await startUpload([compressed]);
+    } catch (err) {
+      if (err instanceof FileTooLargeError) {
+        setLocalError("File exceeds maximum upload size of 3MB");
+      } else {
+        setLocalError("Upload failed");
       }
-      uploadMutation.mutate({
-        requirementId: requirement.id,
-        registrationId,
-        url: data.url,
-        fileName: file.name,
-        fileType: file.type || "application/octet-stream",
-        fileSize: file.size,
-      });
-    } finally {
       setUploading(false);
     }
   };
@@ -97,7 +106,7 @@ function DocumentUploader({
             {uploading ? "Uploading..." : "Upload"}
             <input
               type="file"
-              accept={acceptedFormats}
+              accept="image/*"
               className="hidden"
               disabled={uploading}
               onChange={(e) => {

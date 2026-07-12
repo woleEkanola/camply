@@ -11,6 +11,7 @@ import { Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { CameraIcon, PhotoIcon, KeyIcon, UserIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 import { Dialog } from "@/components/ui/Dialog";
+import { useUploadThing } from "@/utils/uploadthing-hook";
 
 // Helper function to crop, resize and compress client-side images
 const compressAndResizeImage = (fileOrBlob: File | Blob): Promise<Blob> => {
@@ -333,34 +334,27 @@ export default function ProfilePage() {
   };
 
   // Profile Image Upload / capture handlers
+  const { startUpload } = useUploadThing("uploader", {
+    onClientUploadComplete: (res) => {
+      if (res?.[0]?.ufsUrl) {
+        updateProfileMutation.mutate({ photoUrl: res[0].ufsUrl });
+      }
+    },
+    onUploadError: () => {
+      setErrorMsg("Failed to upload image.");
+    },
+  });
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     triggerNotification(null, null);
     try {
-      // Resize & compress file client-side
+      // Crop to square and compress client-side (avatar-specific)
       const compressedBlob = await compressAndResizeImage(file);
       const compressedFile = new File([compressedBlob], file.name, { type: "image/jpeg" });
-
-      const formData = new FormData();
-      formData.append("file", compressedFile);
-
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        throw new Error("Upload response not OK");
-      }
-
-      const data = await res.json();
-      
-      // Update profile picture URL in DB
-      updateProfileMutation.mutate({
-        photoUrl: data.url,
-      });
+      await startUpload([compressedFile]);
     } catch (err) {
       setErrorMsg("Failed to upload and compress image.");
     }
@@ -405,26 +399,9 @@ export default function ProfilePage() {
       canvas.toBlob(async (blob) => {
         if (blob) {
           try {
-            // Apply crop, resize and background compression
             const compressedBlob = await compressAndResizeImage(blob);
             const compressedFile = new File([compressedBlob], "captured-avatar.jpg", { type: "image/jpeg" });
-
-            const formData = new FormData();
-            formData.append("file", compressedFile);
-
-            const res = await fetch("/api/upload", {
-              method: "POST",
-              body: formData,
-            });
-
-            if (!res.ok) throw new Error("Capture upload response not OK");
-            const data = await res.json();
-
-            // Update photo in user record
-            updateProfileMutation.mutate({
-              photoUrl: data.url,
-            });
-
+            await startUpload([compressedFile]);
             stopCamera();
           } catch (err) {
             setErrorMsg("Failed to process captured image.");
