@@ -28,11 +28,12 @@ export async function qrDataUrlForToken(token: string): Promise<string> {
 async function runEffect(registrationId: string, type: SideEffectType) {
   const registration = await prisma.registration.findUniqueOrThrow({
     where: { id: registrationId },
-    include: { camper: { include: { user: true } }, camp: true, campus: true, tribe: true },
+    include: { camper: { include: { user: true } }, camp: { include: { organization: { select: { slug: true } } } }, campus: true, tribe: true },
   });
   const parentEmail = registration.camper.user.email;
   const camperName = registration.camper.name;
   const viewUrl = `${APP_URL}/dashboard/register/${registration.id}`;
+  const orgSlug = registration.camp.organization?.slug ?? undefined;
 
   switch (type) {
     case "REGISTRATION_APPROVED": {
@@ -52,6 +53,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
         remindersHtml: registration.camp.remindersHtml,
         tribeName: registration.tribe?.name,
         tribeColor: registration.tribe?.color,
+        orgSlug,
       });
       await prisma.notification.create({
         data: {
@@ -71,6 +73,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
         camperName,
         campName: registration.camp.name,
         reason: registration.rejectionReason ?? "No reason provided.",
+        orgSlug,
       });
       await prisma.notification.create({
         data: {
@@ -91,6 +94,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
         campName: registration.camp.name,
         message: registration.correctionRequest ?? "Please review your registration.",
         viewUrl,
+        orgSlug,
       });
       await prisma.notification.create({
         data: {
@@ -105,7 +109,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
       break;
     }
     case "REGISTRATION_WAITLISTED": {
-      await sendWaitlistEmail({ to: parentEmail, camperName, campName: registration.camp.name });
+      await sendWaitlistEmail({ to: parentEmail, camperName, campName: registration.camp.name, orgSlug });
       await prisma.notification.create({
         data: {
           organizationId: registration.camper.organizationId,

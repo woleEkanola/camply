@@ -147,10 +147,10 @@ async function main() {
   const ownerEmail = "owner@camply.com";
   const ownerPassword = await bcrypt.hash("password123", 10);
 
-  // Create organization without activeCampId
   const organization = await prisma.organization.create({
     data: {
       name: "Demo Organization",
+      slug: slugify("Demo Organization"),
     },
   });
 

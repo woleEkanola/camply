@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
+import { generateSlug } from "../../../utils/slugs";
 
 export const organizationRouter = createTRPCRouter({
   // Create a new organization (Super Admin only)
@@ -18,9 +19,9 @@ export const organizationRouter = createTRPCRouter({
         throw new Error("Only Super Admins can create organizations");
       }
       
-      // Create the organization
+      const slug = generateSlug(input.name);
       const organization = await prisma.organization.create({
-        data: { name: input.name }
+        data: { name: input.name, slug }
       });
       
       return organization;
@@ -169,10 +170,10 @@ export const organizationRouter = createTRPCRouter({
         throw new Error("Only Super Admins can update organizations");
       }
       
-      // Update organization name
+      const slug = generateSlug(input.name);
       const organization = await prisma.organization.update({
         where: { id: input.id },
-        data: { name: input.name }
+        data: { name: input.name, slug }
       });
       
       return organization;

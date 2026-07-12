@@ -56,9 +56,16 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
+    // Resolve org slug for the from address
+    let orgSlug: string | undefined;
+    if (user.organizationId) {
+      const org = await prisma.organization.findUnique({ where: { id: user.organizationId }, select: { slug: true } });
+      orgSlug = org?.slug ?? undefined;
+    }
+
     // Send OTP email
     try {
-      await sendOtpEmail(email, otp);
+      await sendOtpEmail(email, otp, orgSlug);
       console.log("[SEND-OTP] OTP email sent", { email });
     } catch (err) {
       console.error("[SEND-OTP] Error sending OTP email", err);

@@ -2,11 +2,12 @@ import { Resend } from "resend";
 
 let resend: Resend | null = null;
 
-export async function sendStaffApprovedEmail(params: { to: string; name: string; campName: string; type: "TEACHER" | "VOLUNTEER"; dashboardUrl: string }) {
+export async function sendStaffApprovedEmail(params: { to: string; name: string; campName: string; type: "TEACHER" | "VOLUNTEER"; dashboardUrl: string; orgSlug?: string }) {
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
   const role = params.type === "TEACHER" ? "Teacher" : "Volunteer";
+  const from = params.orgSlug ? `${params.orgSlug}@camply.ng` : 'donotreply@camply.ng';
   await resend.emails.send({
-    from: "donotreply@camply.ng",
+    from,
     to: params.to,
     subject: `You're approved as a ${role} for ${params.campName}!`,
     html: `
@@ -19,11 +20,12 @@ export async function sendStaffApprovedEmail(params: { to: string; name: string;
   });
 }
 
-export async function sendStaffRejectedEmail(params: { to: string; name: string; campName: string; type: "TEACHER" | "VOLUNTEER"; reason?: string }) {
+export async function sendStaffRejectedEmail(params: { to: string; name: string; campName: string; type: "TEACHER" | "VOLUNTEER"; reason?: string; orgSlug?: string }) {
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
   const role = params.type === "TEACHER" ? "Teacher" : "Volunteer";
+  const from = params.orgSlug ? `${params.orgSlug}@camply.ng` : 'donotreply@camply.ng';
   await resend.emails.send({
-    from: "donotreply@camply.ng",
+    from,
     to: params.to,
     subject: `Update on your ${role.toLowerCase()} registration for ${params.campName}`,
     html: `<p>Hi ${params.name}, your ${role.toLowerCase()} registration for <strong>${params.campName}</strong> was not approved.</p>${params.reason ? `<p>Reason: ${params.reason}</p>` : ""}`,

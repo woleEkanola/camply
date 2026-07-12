@@ -63,10 +63,17 @@ export async function POST(req: NextRequest) {
     create: { email, code: otp, expiresAt },
   });
 
+  // Resolve org slug for the from address
+  let orgSlug: string | undefined;
+  if (user.organizationId) {
+    const org = await prisma.organization.findUnique({ where: { id: user.organizationId }, select: { slug: true } });
+    orgSlug = org?.slug ?? undefined;
+  }
+
   // Best-effort delivery — the OTP is already persisted, so a transient email
   // failure (e.g. no RESEND_API_KEY configured) shouldn't block the flow.
   try {
-    await sendOtpEmail(email, otp);
+    await sendOtpEmail(email, otp, orgSlug);
   } catch (e) {
     console.error("[base-user/create-and-send-otp] Failed to send OTP email", e);
   }

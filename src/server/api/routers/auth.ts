@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import bcrypt from "bcryptjs";
+import { generateSlug } from "../../../utils/slugs";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -115,9 +116,9 @@ export const authRouter = createTRPCRouter({
 
       // 3. Create organization and owner in a transaction
       const result = await prisma.$transaction(async (tx) => {
-        // Create the organization
+        const slug = generateSlug(input.churchName);
         const organization = await tx.organization.create({
-          data: { name: input.churchName }
+          data: { name: input.churchName, slug }
         });
 
         // Hash the password

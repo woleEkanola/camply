@@ -2,11 +2,12 @@ import { Resend } from "resend";
 
 let resend: Resend | null = null;
 
-export async function sendTestEmail(to: string) {
+export async function sendTestEmail(to: string, orgSlug?: string) {
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
-  console.log("[TEST-EMAIL] Sending test email to", to);
+  const from = orgSlug ? `${orgSlug}@camply.ng` : 'donotreply@camply.ng';
+  console.log("[TEST-EMAIL] Sending test email to", to, "from", from);
   const result = await resend.emails.send({
-    from: "donotreply@camply.ng",
+    from,
     to,
     subject: "Test Email from Camply",
     html: `

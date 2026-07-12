@@ -31,7 +31,8 @@ async function approvedRegistrationFor(camperId: string) {
 }
 
 beforeEach(async () => {
-  const org = await prisma.organization.create({ data: { name: `Tribe Org ${Date.now()}-${Math.random()}` } });
+  const orgName = `Tribe Org ${Date.now()}-${Math.random()}`;
+  const org = await prisma.organization.create({ data: { name: orgName, slug: orgName.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '') } });
   orgId = org.id;
 
   const camp = await prisma.camp.create({
