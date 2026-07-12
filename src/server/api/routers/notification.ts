@@ -65,6 +65,12 @@ export const notificationRouter = createTRPCRouter({
       if (!["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+      // Non-SUPER_ADMIN callers may only broadcast within their own org —
+      // otherwise an admin could spam another tenant's parents/staff by
+      // passing a foreign organizationId.
+      if (currentUser.role !== "SUPER_ADMIN" && input.organizationId !== currentUser.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
 
       let userIds: string[] = [];
 
@@ -121,6 +127,10 @@ export const notificationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       if (!["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      // Non-SUPER_ADMIN callers may only read their own org's broadcast history.
+      if (currentUser.role !== "SUPER_ADMIN" && input.organizationId !== currentUser.organizationId) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
       const grouped = await ctx.prisma.notification.groupBy({
