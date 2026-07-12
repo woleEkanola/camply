@@ -112,6 +112,8 @@ model Organization {
   activeCampId String? // Reference to the active camp
   activeCamp   Camp?       @relation("ActiveCamp", fields: [activeCampId], references: [id])
   settings     Json? // Holds admin settings such as age range, cutoff date, etc.
+  registrationDeclarations RegistrationDeclaration[]
+  registrationConfig       RegistrationConfig?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 }
@@ -898,4 +900,28 @@ model TribePointsLog {
   reason    String?
   actorId   String
   createdAt DateTime @default(now())
+}
+
+model RegistrationDeclaration {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  label          String
+  required       Boolean      @default(true)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, sortOrder])
+}
+
+model RegistrationConfig {
+  id                     String       @id @default(cuid())
+  organizationId         String       @unique
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  consentFormTitle       String?
+  consentFormDescription String?
+  consentFormSampleUrl   String?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 }

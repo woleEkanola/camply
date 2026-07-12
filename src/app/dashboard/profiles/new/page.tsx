@@ -33,7 +33,9 @@ export default function NewProfilePage() {
   const userHomeCampusId = userRecord?.homeCampusId || "";
 
   const [formData, setFormData] = useState({
-    name: "",
+    firstName: "",
+    middleName: "",
+    lastName: "",
     dateOfBirth: "",
     gender: "",
     homeCampusId: userHomeCampusId,
@@ -102,8 +104,14 @@ export default function NewProfilePage() {
     setSuccess("");
     setIsSubmitting(true);
     
-    if (!formData.name) {
-      setError("Name is required");
+    if (!formData.firstName.trim()) {
+      setError("First Name is required");
+      setIsSubmitting(false);
+      return;
+    }
+    
+    if (!formData.lastName.trim()) {
+      setError("Last Name is required");
       setIsSubmitting(false);
       return;
     }
@@ -126,10 +134,17 @@ export default function NewProfilePage() {
       return;
     }
     
+    const combinedName = `${formData.firstName.trim()} ${formData.middleName.trim()} ${formData.lastName.trim()}`
+      .trim()
+      .replace(/\s+/g, ' ');
+
     try {
       createProfileMutation.mutate({
         profile: {
-          name: formData.name,
+          name: combinedName,
+          firstName: formData.firstName.trim(),
+          middleName: formData.middleName.trim() || undefined,
+          lastName: formData.lastName.trim(),
           dateOfBirth: formData.dateOfBirth,
           gender: formData.gender,
           // Always use user's main homeCampusId for profile creation
@@ -167,16 +182,20 @@ export default function NewProfilePage() {
             {error && <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">{error}</div>}
             {success && <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700">{success}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
-              <Input label="Camper Name" name="name" value={formData.name} onChange={handleInputChange} required />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Input label="First Name" name="firstName" value={formData.firstName} onChange={handleInputChange} required />
+                <Input label="Middle Name" name="middleName" value={formData.middleName} onChange={handleInputChange} />
+                <Input label="Last Name" name="lastName" value={formData.lastName} onChange={handleInputChange} required />
+              </div>
               <Input label="Date of Birth" type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleInputChange} required />
               <div>
                 <label className="mb-1 block text-sm font-medium text-neutral-700">Gender</label>
                 <div className="mt-1 flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm text-neutral-700">
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
                     <input type="radio" name="gender" value="Male" checked={formData.gender === 'Male'} onChange={handleInputChange} required />
                     Male
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-neutral-700">
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
                     <input type="radio" name="gender" value="Female" checked={formData.gender === 'Female'} onChange={handleInputChange} required />
                     Female
                   </label>

@@ -37,32 +37,31 @@ function field(def: Omit<SystemFieldDefinition, "name">): SystemFieldDefinition 
 }
 
 const CAMPER: SystemFieldDefinition[] = [
-  field({ systemKey: "name", label: "Full Name", type: "TEXT", required: true, visible: true, sortOrder: 10, groupLabel: "Camper Information" }),
-  field({ systemKey: "dateOfBirth", label: "Date of Birth", type: "DATE", required: true, visible: true, sortOrder: 20, groupLabel: "Camper Information" }),
-  field({ systemKey: "gender", label: "Gender", type: "SELECT", required: true, visible: true, sortOrder: 30, groupLabel: "Camper Information", options: GENDER_OPTIONS }),
+  field({ systemKey: "name", label: "Full Name", type: "TEXT", required: false, visible: false, sortOrder: 1, groupLabel: "Camper Information" }),
+  field({ systemKey: "firstName", label: "First Name", type: "TEXT", required: true, visible: true, sortOrder: 10, groupLabel: "Camper Information" }),
+  field({ systemKey: "middleName", label: "Middle Name", type: "TEXT", required: false, visible: true, sortOrder: 15, groupLabel: "Camper Information" }),
+  field({ systemKey: "lastName", label: "Last Name", type: "TEXT", required: true, visible: true, sortOrder: 20, groupLabel: "Camper Information" }),
+  field({ systemKey: "dateOfBirth", label: "Date of Birth", type: "DATE", required: true, visible: true, sortOrder: 30, groupLabel: "Camper Information" }),
+  field({ systemKey: "gender", label: "Gender", type: "SELECT", required: true, visible: true, sortOrder: 40, groupLabel: "Camper Information", options: GENDER_OPTIONS }),
   // The primary self-signup wizard derives homeCampusId implicitly from which
   // SignupLink (per-Campus+Camp) the parent used, not a picker — but the
   // "add another camper" dashboard flow lets a parent choose explicitly.
   // Ship hidden by default so it doesn't wrongly appear as a required field
   // in the primary signup flow, where it can't actually be submitted.
-  field({ systemKey: "homeCampusId", label: "Campus", type: "SELECT", required: false, visible: false, sortOrder: 40, groupLabel: "Camper Information" }),
-  // Exist on Camper but unused by any current UI — ship hidden so nothing regresses.
-  field({ systemKey: "firstName", label: "First Name", type: "TEXT", required: false, visible: false, sortOrder: 50, groupLabel: "Camper Information" }),
-  field({ systemKey: "middleName", label: "Middle Name", type: "TEXT", required: false, visible: false, sortOrder: 60, groupLabel: "Camper Information" }),
-  field({ systemKey: "lastName", label: "Last Name", type: "TEXT", required: false, visible: false, sortOrder: 70, groupLabel: "Camper Information" }),
+  field({ systemKey: "homeCampusId", label: "Campus", type: "SELECT", required: false, visible: false, sortOrder: 45, groupLabel: "Camper Information" }),
   field({ systemKey: "preferredName", label: "Preferred Name", type: "TEXT", required: false, visible: false, sortOrder: 80, groupLabel: "Camper Information" }),
   field({ systemKey: "photoUrl", label: "Photo", type: "FILE", required: false, visible: false, sortOrder: 90, groupLabel: "Camper Information" }),
-  field({ systemKey: "allergies", label: "Allergies", type: "LONG_TEXT", required: false, visible: false, sortOrder: 100, groupLabel: "Medical & Emergency" }),
-  field({ systemKey: "medicalConditions", label: "Medical Conditions", type: "LONG_TEXT", required: false, visible: false, sortOrder: 110, groupLabel: "Medical & Emergency" }),
-  field({ systemKey: "medications", label: "Medications", type: "LONG_TEXT", required: false, visible: false, sortOrder: 120, groupLabel: "Medical & Emergency" }),
-  field({ systemKey: "dietaryRestrictions", label: "Dietary Restrictions", type: "LONG_TEXT", required: false, visible: false, sortOrder: 130, groupLabel: "Medical & Emergency" }),
-  field({ systemKey: "emergencyContactName", label: "Emergency Contact Name", type: "TEXT", required: false, visible: false, sortOrder: 140, groupLabel: "Medical & Emergency" }),
-  field({ systemKey: "emergencyContactPhone", label: "Emergency Contact Phone", type: "TEXT", required: false, visible: false, sortOrder: 150, groupLabel: "Medical & Emergency" }),
-  field({ systemKey: "relationship", label: "Relationship", type: "TEXT", required: false, visible: false, sortOrder: 160, groupLabel: "Medical & Emergency" }),
-  field({ systemKey: "school", label: "School", type: "TEXT", required: false, visible: false, sortOrder: 170, groupLabel: "Education & Church" }),
-  field({ systemKey: "currentClass", label: "Current Class", type: "TEXT", required: false, visible: false, sortOrder: 180, groupLabel: "Education & Church" }),
-  field({ systemKey: "church", label: "Church", type: "TEXT", required: false, visible: false, sortOrder: 190, groupLabel: "Education & Church" }),
-  field({ systemKey: "pastor", label: "Pastor", type: "TEXT", required: false, visible: false, sortOrder: 200, groupLabel: "Education & Church" }),
+  field({ systemKey: "allergies", label: "Allergies", type: "LONG_TEXT", required: false, visible: true, sortOrder: 100, groupLabel: "Medical & Emergency" }),
+  field({ systemKey: "medicalConditions", label: "Medical Conditions", type: "LONG_TEXT", required: false, visible: true, sortOrder: 110, groupLabel: "Medical & Emergency" }),
+  field({ systemKey: "medications", label: "Medications", type: "LONG_TEXT", required: false, visible: true, sortOrder: 120, groupLabel: "Medical & Emergency" }),
+  field({ systemKey: "dietaryRestrictions", label: "Dietary Restrictions", type: "LONG_TEXT", required: false, visible: true, sortOrder: 130, groupLabel: "Medical & Emergency" }),
+  field({ systemKey: "emergencyContactName", label: "Emergency Contact Name", type: "TEXT", required: false, visible: true, sortOrder: 140, groupLabel: "Medical & Emergency" }),
+  field({ systemKey: "emergencyContactPhone", label: "Emergency Contact Phone", type: "TEXT", required: false, visible: true, sortOrder: 150, groupLabel: "Medical & Emergency" }),
+  field({ systemKey: "relationship", label: "Relationship", type: "TEXT", required: false, visible: true, sortOrder: 160, groupLabel: "Medical & Emergency" }),
+  field({ systemKey: "school", label: "School", type: "TEXT", required: false, visible: true, sortOrder: 170, groupLabel: "Education & Church" }),
+  field({ systemKey: "currentClass", label: "Current Class", type: "TEXT", required: false, visible: true, sortOrder: 180, groupLabel: "Education & Church" }),
+  field({ systemKey: "church", label: "Church", type: "TEXT", required: false, visible: true, sortOrder: 190, groupLabel: "Education & Church" }),
+  field({ systemKey: "pastor", label: "Pastor", type: "TEXT", required: false, visible: true, sortOrder: 200, groupLabel: "Education & Church" }),
 ];
 
 const STAFF_PERSONAL = (): SystemFieldDefinition[] => [

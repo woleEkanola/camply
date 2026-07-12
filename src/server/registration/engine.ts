@@ -145,6 +145,8 @@ export async function submitRegistration(params: { registrationId: string; actor
     await runSideEffectsNow(result.id, "REGISTRATION_APPROVED");
   } else if (result.status === "WAITLISTED") {
     await runSideEffectsNow(result.id, "REGISTRATION_WAITLISTED");
+  } else if (result.status === "PENDING") {
+    await runSideEffectsNow(result.id, "REGISTRATION_SUBMITTED");
   }
 
   return result;
@@ -389,7 +391,7 @@ export async function requestCorrection(params: { registrationId: string; actorI
 
 /** Parent resubmits after a correction request or a rejection (if allowed). */
 export async function resubmitRegistration(params: { registrationId: string; actorId: string }) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
       include: { camper: true, camp: true },
@@ -422,6 +424,9 @@ export async function resubmitRegistration(params: { registrationId: string; act
 
     return updated;
   });
+
+  await runSideEffectsNow(result.id, "REGISTRATION_SUBMITTED");
+  return result;
 }
 
 export async function cancelRegistration(params: { registrationId: string; actorId: string; reason?: string }) {

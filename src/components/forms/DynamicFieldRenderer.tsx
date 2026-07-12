@@ -12,9 +12,10 @@ interface DynamicFieldRendererProps {
   disabled?: boolean;
   /** Overrides field.options with dynamically-fetched choices (e.g. Location list for a "Centre" field). */
   dynamicOptions?: (string | { value: string; label: string })[];
+  error?: string;
 }
 
-export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamicOptions }: DynamicFieldRendererProps) {
+export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamicOptions, error }: DynamicFieldRendererProps) {
   const rawOptions = dynamicOptions ?? parseFieldOptions(field.options);
   const options = rawOptions.map((opt) =>
     typeof opt === "object" && opt !== null && "value" in opt
@@ -35,6 +36,7 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          error={error}
         />
       );
 
@@ -50,6 +52,7 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          error={error}
         />
       );
 
@@ -64,6 +67,7 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          error={error}
         />
       );
 
@@ -78,6 +82,7 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          error={error}
         />
       );
 
@@ -91,6 +96,7 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          error={error}
         >
           <option value="">Select…</option>
           {options.map((opt) => (
@@ -117,15 +123,20 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
                 type="button"
                 disabled={disabled}
                 onClick={() => toggle(opt.value)}
-                className={`rounded-full border px-3 py-1.5 text-sm ${
-                  selected.includes(opt.value) ? "border-accent-600 bg-accent-50 text-accent-700" : "border-neutral-300 text-neutral-600"
+                className={`rounded-full border px-3 py-1.5 text-sm transition-all ${
+                  selected.includes(opt.value)
+                    ? "border-accent-600 bg-accent-50 text-accent-700 font-medium"
+                    : error 
+                      ? "border-danger-300 text-neutral-600 hover:border-danger-400" 
+                      : "border-neutral-300 text-neutral-600 hover:border-neutral-400"
                 }`}
               >
                 {opt.label}
               </button>
             ))}
           </div>
-          {field.helpText && <p className="mt-1 text-xs text-neutral-500">{field.helpText}</p>}
+          {field.helpText && !error && <p className="mt-1 text-xs text-neutral-500">{field.helpText}</p>}
+          {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
         </div>
       );
     }
@@ -139,39 +150,47 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           </label>
           <div className="space-y-1">
             {options.map((opt) => (
-              <label key={opt.value} className="flex items-center gap-2 text-sm text-neutral-700">
+              <label key={opt.value} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
                 <input
                   type="radio"
                   name={fieldId}
                   disabled={disabled}
                   checked={value === opt.value}
                   onChange={() => onChange(opt.value)}
-                  className="h-4 w-4 border-neutral-300 text-accent-600 focus:ring-accent-500"
+                  className={`h-4 w-4 text-accent-600 focus:ring-accent-500 ${
+                    error ? "border-danger-300" : "border-neutral-300"
+                  }`}
                 />
                 {opt.label}
               </label>
             ))}
           </div>
-          {field.helpText && <p className="mt-1 text-xs text-neutral-500">{field.helpText}</p>}
+          {field.helpText && !error && <p className="mt-1 text-xs text-neutral-500">{field.helpText}</p>}
+          {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
         </div>
       );
 
     case "BOOLEAN": {
       const checked = value === true || value === "true" || value === "1" || value === 1;
       return (
-        <div className="flex items-center gap-2">
-          <label className="relative inline-flex cursor-pointer items-center">
-            <input
-              type="checkbox"
-              className="peer sr-only"
-              checked={checked}
-              disabled={disabled}
-              onChange={(e) => onChange(e.target.checked)}
-            />
-            <div className="h-6 w-11 rounded-full bg-neutral-200 transition peer-checked:bg-accent-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-500" />
-            <div className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
-          </label>
-          <span className="select-none text-sm text-neutral-900">{field.label}{field.required && <span className="ml-0.5 text-danger-600">*</span>}</span>
+        <div>
+          <div className="flex items-center gap-2">
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={checked}
+                disabled={disabled}
+                onChange={(e) => onChange(e.target.checked)}
+              />
+              <div className={`h-6 w-11 rounded-full bg-neutral-200 transition peer-checked:bg-accent-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-500 ${
+                error ? "border border-danger-300" : ""
+              }`} />
+              <div className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+            </label>
+            <span className="select-none text-sm text-neutral-900">{field.label}{field.required && <span className="ml-0.5 text-danger-600">*</span>}</span>
+          </div>
+          {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
         </div>
       );
     }
@@ -179,28 +198,36 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
     case "CHECKBOX": {
       const checked = value === true || value === "true";
       return (
-        <label className="flex items-center gap-2 text-sm text-neutral-700">
-          <input
-            type="checkbox"
-            checked={checked}
-            disabled={disabled}
-            onChange={(e) => onChange(e.target.checked)}
-            className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
-          />
-          {field.label}
-          {field.required && <span className="ml-0.5 text-danger-600">*</span>}
-        </label>
+        <div>
+          <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={checked}
+              disabled={disabled}
+              onChange={(e) => onChange(e.target.checked)}
+              className={`h-4 w-4 rounded text-accent-600 focus:ring-accent-500 ${
+                error ? "border-danger-300" : "border-neutral-300"
+              }`}
+            />
+            {field.label}
+            {field.required && <span className="ml-0.5 text-danger-600">*</span>}
+          </label>
+          {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
+        </div>
       );
     }
 
     case "FILE":
       return (
-        <FileUpload
-          label={field.label}
-          value={(value as string) ?? ""}
-          onChange={(url) => onChange(url)}
-          disabled={disabled}
-        />
+        <div>
+          <FileUpload
+            label={field.label}
+            value={(value as string) ?? ""}
+            onChange={(url) => onChange(url)}
+            disabled={disabled}
+          />
+          {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
+        </div>
       );
 
     default:

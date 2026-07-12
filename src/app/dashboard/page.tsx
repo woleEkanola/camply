@@ -85,8 +85,8 @@ export default function UserDashboard() {
 
   const registrationColumns: Column<any>[] = [
     { header: "Camper", accessor: (r) => r.camper.name },
-    { header: "Camp", accessor: (r) => r.year.name },
-    { header: "Centre", accessor: (r) => r.location.name },
+    { header: "Camp", accessor: (r) => r.camp.name },
+    { header: "Centre", accessor: (r) => r.campus.name },
     { header: "Status", accessor: (r) => <StatusBadge status={r.status} /> },
     {
       header: "Profile Completion",

@@ -125,6 +125,7 @@ export async function validateSubmission(
 
   // Step 8: Document validation
   for (const req of camp.documentRequirements) {
+    if (req.deletedAt) continue;
     if (!req.required) continue;
     const hasDoc =
       req.scope === "CAMPER"

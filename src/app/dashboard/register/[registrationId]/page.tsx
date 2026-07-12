@@ -2,11 +2,14 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { api } from "@/utils/api";
 import AppShell from "@/components/layout/AppShell";
-import { useUploadThing } from "@/utils/uploadthing-hook";
-import { compressImage, FileTooLargeError } from "@/lib/compressImage";
+import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
+import FileUpload from "@/components/file-upload";
+import type { FormFieldDTO } from "@/components/forms/types";
+import { Card, CardBody } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 
 const STATUS_COPY: Record<string, string> = {
   DRAFT: "You haven't submitted this registration yet.",
@@ -41,42 +44,35 @@ function DocumentUploader({
   });
   const deleteMutation = api.document.delete.useMutation({ onSuccess: onUploaded });
 
-  const { startUpload } = useUploadThing("uploader", {
-    onClientUploadComplete: (res) => {
-      if (res?.[0]?.ufsUrl) {
-        uploadMutation.mutate({
-          requirementId: requirement.id,
-          registrationId,
-          url: res[0].ufsUrl,
-          fileName: fileRef.current?.name || "upload",
-          fileType: fileRef.current?.type || "image/jpeg",
-          fileSize: fileRef.current?.size || 0,
-        });
-      }
-    },
-    onUploadError: (err) => {
-      setLocalError(err.message || "Upload failed");
-      setUploading(false);
-    },
-  });
-
-  const fileRef = useRef<File | null>(null);
-
   const doc = existingDocs.find((d) => d.requirementId === requirement.id && d.status !== "REJECTED");
+  const acceptedFormats = (requirement.acceptedFormats as string).split(",").map((f) => `.${f.trim()}`).join(",");
 
   const handleFile = async (file: File) => {
     setLocalError("");
+    const maxBytes = requirement.maxSizeMb * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setLocalError(`File exceeds the maximum size of ${requirement.maxSizeMb} MB.`);
+      return;
+    }
     setUploading(true);
-    fileRef.current = file;
     try {
-      const compressed = await compressImage(file);
-      await startUpload([compressed]);
-    } catch (err) {
-      if (err instanceof FileTooLargeError) {
-        setLocalError("File exceeds maximum upload size of 3MB");
-      } else {
-        setLocalError("Upload failed");
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        setLocalError(data.error || "Upload failed.");
+        return;
       }
+      uploadMutation.mutate({
+        requirementId: requirement.id,
+        registrationId,
+        url: data.url,
+        fileName: file.name,
+        fileType: file.type || "application/octet-stream",
+        fileSize: file.size,
+      });
+    } finally {
       setUploading(false);
     }
   };
@@ -106,7 +102,7 @@ function DocumentUploader({
             {uploading ? "Uploading..." : "Upload"}
             <input
               type="file"
-              accept="image/*"
+              accept={acceptedFormats}
               className="hidden"
               disabled={uploading}
               onChange={(e) => {
@@ -140,25 +136,94 @@ export default function RegistrationWizardPage() {
   const registrationId = typeof params.registrationId === "string" ? params.registrationId : "";
   useSession({ required: true, onUnauthenticated: () => router.push("/login") });
 
-  const [step, setStep] = useState<"documents" | "review">("documents");
+  const [step, setStep] = useState<"profile" | "documents" | "review">("profile");
+  
+  // Local state for all fields
+  const [values, setValues] = useState<Record<string, unknown>>({});
+  const [birthCertUrl, setBirthCertUrl] = useState("");
+  const [parentConsentUrl, setParentConsentUrl] = useState("");
+  
+  // Validation and API errors
+  const [profileErrors, setProfileErrors] = useState<string[]>([]);
+  const [documentErrors, setDocumentErrors] = useState<string[]>([]);
   const [submitErrors, setSubmitErrors] = useState<string[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [declared, setDeclared] = useState(false);
 
   const utils = api.useUtils();
+  
+  // Fetch registration
   const { data: registration, isLoading, refetch } = api.registration.getById.useQuery(
     { id: registrationId },
     { enabled: !!registrationId }
   );
 
+  // Fetch camp document requirements
   const { data: requirements } = api.documentRequirement.listByCamp.useQuery(
     { campId: registration?.campId ?? "" },
     { enabled: !!registration?.campId }
   );
 
+  // Fetch uploaded documents for this registration
   const { data: documents, refetch: refetchDocs } = api.document.listForRegistration.useQuery(
     { registrationId },
     { enabled: !!registrationId }
   );
+
+  // Fetch Camper Form Fields (system + custom)
+  const { data: fields = [] } = api.formField.list.useQuery(
+    { organizationId: registration?.camper?.organizationId ?? "", audience: "CAMPER" },
+    { enabled: !!registration?.camper?.organizationId }
+  );
+
+  const visibleFields = useMemo(
+    () => fields.filter((f: FormFieldDTO) => f.visible),
+    [fields]
+  );
+
+  // Sync camper & registration data to local state
+  useEffect(() => {
+    if (registration?.camper) {
+      const c = registration.camper;
+      const initial: Record<string, unknown> = {};
+      for (const f of visibleFields) {
+        const key = f.source === "SYSTEM" && f.systemKey ? f.systemKey : f.id;
+        if (f.source === "SYSTEM" && f.systemKey) {
+          const directVal = (c as Record<string, unknown>)[f.systemKey];
+          if (directVal !== undefined && directVal !== null) {
+            if (f.type === "DATE") {
+              if (directVal instanceof Date) {
+                initial[key] = directVal.toISOString().split("T")[0];
+              } else if (typeof directVal === "string") {
+                initial[key] = directVal.split("T")[0];
+              } else {
+                initial[key] = directVal;
+              }
+            } else {
+              initial[key] = directVal;
+            }
+          }
+        }
+      }
+      if (c.fieldValues) {
+        for (const fv of c.fieldValues) {
+          const key = (fv.field?.source === "SYSTEM" && fv.field?.systemKey)
+            ? fv.field.systemKey
+            : fv.fieldId;
+          initial[key] = fv.value;
+        }
+      }
+      setValues(initial);
+      setBirthCertUrl(c.birthCert ?? "");
+    }
+    if (registration) {
+      setParentConsentUrl(registration.parentConsent ?? "");
+    }
+  }, [registration, visibleFields]);
+
+  // Mutations
+  const camperUpdateMutation = api.camper.update.useMutation();
+  const registrationUpdateMutation = api.registration.updateFields.useMutation();
 
   const submitMutation = api.registration.submit.useMutation({
     onSuccess: () => {
@@ -166,7 +231,6 @@ export default function RegistrationWizardPage() {
       refetch();
     },
     onError: (e) => {
-      // RegistrationValidationError messages are joined with "; " in engine.ts
       setSubmitErrors(e.message.split("; "));
     },
   });
@@ -176,159 +240,505 @@ export default function RegistrationWizardPage() {
       setSubmitErrors([]);
       refetch();
     },
-    onError: (e) => setSubmitErrors(e.message.split("; ")),
+    onError: (e) => {
+      setSubmitErrors(e.message.split("; "));
+    },
   });
 
   if (isLoading || !registration) {
     return (
       <AppShell area="dashboard">
-        <div className="max-w-2xl mx-auto">Loading...</div>
+        <div className="max-w-2xl mx-auto flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent-600"></div>
+          <span className="ml-3 text-neutral-500 font-medium">Loading registration details...</span>
+        </div>
       </AppShell>
     );
   }
-
-  const missingRequired = (requirements ?? []).filter((req) => {
-    if (!req.required) return false;
-    return !(documents ?? []).some((d) => d.requirementId === req.id && d.status !== "REJECTED");
-  });
 
   const isEditable = registration.status === "DRAFT" || registration.status === "REQUIRES_ACTION";
 
   if (!isEditable) {
     return (
       <AppShell area="dashboard">
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-xl font-bold mb-2">Registration Status: {registration.status.replace(/_/g, " ")}</h1>
-          <p className="text-gray-600 mb-4">{STATUS_COPY[registration.status] ?? ""}</p>
-          {registration.registrationNumber && (
-            <p className="mb-2"><span className="font-medium">Registration Number:</span> {registration.registrationNumber}</p>
-          )}
-          {(registration as any).tribe && (
-            <p className="mb-2"><span className="font-medium">Tribe:</span> {(registration as any).tribe.name}</p>
-          )}
-          {registration.rejectionReason && (
-            <div className="bg-red-50 text-red-700 p-3 rounded mb-2">Reason: {registration.rejectionReason}</div>
-          )}
-          {registration.status === "APPROVED" && registration.qrToken && (
-            <div className="mt-4 space-y-3">
-              <QrPreview registrationId={registration.id} />
-              <a
-                href={`/api/registrations/${registration.id}/acceptance-letter`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-              >
-                Download Acceptance Letter
-              </a>
-            </div>
-          )}
-          <button className="mt-4 block text-blue-600 underline" onClick={() => router.push("/dashboard")}>
-            Back to Dashboard
-          </button>
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white rounded-lg shadow-sm border border-neutral-200 p-6">
+            <h1 className="text-xl font-bold mb-2 text-neutral-900">
+              Registration Status: {registration.status.replace(/_/g, " ")}
+            </h1>
+            <p className="text-neutral-600 mb-4">{STATUS_COPY[registration.status] ?? ""}</p>
+            {registration.registrationNumber && (
+              <p className="mb-2 text-sm text-neutral-700">
+                <span className="font-semibold text-neutral-900">Registration Number:</span>{" "}
+                {registration.registrationNumber}
+              </p>
+            )}
+            {registration.tribe && (
+              <p className="mb-2 text-sm text-neutral-700">
+                <span className="font-semibold text-neutral-900">Tribe:</span>{" "}
+                <span className="font-bold" style={{ color: registration.tribe.color ?? "#E67E22" }}>
+                  {registration.tribe.name}
+                </span>
+              </p>
+            )}
+            {registration.rejectionReason && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm mb-4">
+                <span className="font-semibold">Reason:</span> {registration.rejectionReason}
+              </div>
+            )}
+            {registration.status === "APPROVED" && registration.qrToken && (
+              <div className="mt-4 space-y-4">
+                <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg inline-block">
+                  <QrPreview registrationId={registration.id} />
+                </div>
+                <div>
+                  <a
+                    href={`/api/registrations/${registration.id}/acceptance-letter`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block bg-accent-600 text-white px-4 py-2 rounded-md hover:bg-accent-700 font-medium text-sm transition shadow-sm"
+                  >
+                    Download Acceptance Letter
+                  </a>
+                </div>
+              </div>
+            )}
+            <button
+              className="mt-6 inline-block text-sm font-semibold text-accent-700 hover:text-accent-800 underline transition"
+              onClick={() => router.push("/dashboard")}
+            >
+              Back to Dashboard
+            </button>
+          </div>
         </div>
-      </div>
       </AppShell>
     );
   }
 
+  // Action handlers
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileErrors([]);
+    setFieldErrors({});
+
+    const errors: string[] = [];
+    const fieldsWithErrors: Record<string, string> = {};
+
+    // Validate all visible fields
+    for (const f of visibleFields) {
+      if (f.required) {
+        const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
+        const val = values[key];
+        if (val === undefined || val === null || String(val).trim() === "" || (Array.isArray(val) && val.length === 0)) {
+          errors.push(`${f.label} is required`);
+          fieldsWithErrors[key] = "This field is required";
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      setProfileErrors(errors);
+      setFieldErrors(fieldsWithErrors);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    // Save profile updates to database
+    try {
+      const fName = String(values["firstName"] ?? "").trim();
+      const mName = String(values["middleName"] ?? "").trim();
+      const lName = String(values["lastName"] ?? "").trim();
+      const combinedName = `${fName} ${mName} ${lName}`.trim().replace(/\s+/g, ' ');
+
+      await camperUpdateMutation.mutateAsync({
+        id: registration.camperId,
+        profile: {
+          name: combinedName,
+          firstName: fName,
+          middleName: mName,
+          lastName: lName,
+          dateOfBirth: values["dateOfBirth"] ? new Date(values["dateOfBirth"] as string).toISOString() : undefined,
+          gender: String(values["gender"] ?? ""),
+        },
+        fieldValues: visibleFields.map((f) => {
+          const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
+          return {
+            fieldId: f.id,
+            value: Array.isArray(values[key]) ? JSON.stringify(values[key]) : String(values[key] ?? ""),
+          };
+        }),
+      });
+
+
+      await refetch();
+      setStep("documents");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err: any) {
+      setProfileErrors([err.message || "Failed to update camper profile information."]);
+    }
+  };
+
+  const handleDocumentsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setDocumentErrors([]);
+
+    const errors: string[] = [];
+
+    if (!birthCertUrl) {
+      errors.push("Birth Certificate document is required");
+    }
+    if (!parentConsentUrl) {
+      errors.push("Parent Consent Form document is required");
+    }
+
+    // Check dynamic requirements
+    const missingRequired = (requirements ?? []).filter((req) => {
+      if (!req.required) return false;
+      return !(documents ?? []).some((d) => d.requirementId === req.id && d.status !== "REJECTED");
+    });
+
+    for (const req of missingRequired) {
+      errors.push(`Document requirement is missing: ${req.name}`);
+    }
+
+    if (errors.length > 0) {
+      setDocumentErrors(errors);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    setStep("review");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleBirthCertUpload = async (url: string) => {
+    setBirthCertUrl(url);
+    try {
+      await camperUpdateMutation.mutateAsync({
+        id: registration.camperId,
+        profile: { birthCert: url },
+      });
+      await refetch();
+    } catch (err) {
+      alert("Failed to save Birth Certificate URL to profile.");
+    }
+  };
+
+  const handleParentConsentUpload = async (url: string) => {
+    setParentConsentUrl(url);
+    try {
+      await registrationUpdateMutation.mutateAsync({
+        id: registration.id,
+        data: { parentConsent: url },
+      });
+      await refetch();
+    } catch (err) {
+      alert("Failed to save Consent Form URL to registration.");
+    }
+  };
+
   return (
     <AppShell area="dashboard">
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <span className={step === "documents" ? "font-semibold text-blue-600" : ""}>1. Documents</span>
-        <span>→</span>
-        <span className={step === "review" ? "font-semibold text-blue-600" : ""}>2. Review & Submit</span>
-      </div>
-
-      {registration.status === "REQUIRES_ACTION" && registration.correctionRequest && (
-        <div className="bg-yellow-50 text-yellow-800 p-4 rounded-lg">
-          <div className="font-medium mb-1">Action Needed</div>
-          <div>{registration.correctionRequest}</div>
-        </div>
-      )}
-
-      {step === "documents" && (
-        <div className="bg-white rounded-lg shadow p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Upload Required Documents</h2>
-          {(requirements ?? []).map((req) => (
-            <DocumentUploader
-              key={req.id}
-              requirement={req}
-              registrationId={registrationId}
-              existingDocs={documents ?? []}
-              onUploaded={() => refetchDocs()}
-            />
-          ))}
-          {(requirements ?? []).length === 0 && <p className="text-sm text-gray-500">No documents required for this camp.</p>}
-
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Step Indicator */}
+        <div className="flex items-center justify-between text-xs font-semibold text-neutral-400 border-b pb-4">
           <button
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-            disabled={missingRequired.length > 0}
-            onClick={() => setStep("review")}
+            onClick={() => isEditable && setStep("profile")}
+            className={`flex items-center gap-1.5 transition ${
+              step === "profile" ? "text-accent-600 font-bold border-b-2 border-accent-600 pb-4 -mb-4.5" : "hover:text-neutral-600"
+            }`}
           >
-            Continue to Review
+            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 border text-xs">1</span>
+            Profile Info
           </button>
-          {missingRequired.length > 0 && (
-            <p className="text-sm text-gray-500">Upload all required documents to continue.</p>
-          )}
+          <span>→</span>
+          <button
+            onClick={() => {
+              if (step === "review") setStep("documents");
+            }}
+            disabled={step === "profile"}
+            className={`flex items-center gap-1.5 transition disabled:opacity-50 ${
+              step === "documents" ? "text-accent-600 font-bold border-b-2 border-accent-600 pb-4 -mb-4.5" : "hover:text-neutral-600"
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 border text-xs">2</span>
+            Documents
+          </button>
+          <span>→</span>
+          <span
+            className={`flex items-center gap-1.5 ${
+              step === "review" ? "text-accent-600 font-bold border-b-2 border-accent-600 pb-4 -mb-4.5" : ""
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 border text-xs">3</span>
+            Review & Submit
+          </span>
         </div>
-      )}
 
-      {step === "review" && (
-        <div className="bg-white rounded-lg shadow p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Review Your Registration</h2>
-
-          {submitErrors.length > 0 && (
-            <div className="bg-red-50 text-red-700 p-4 rounded-lg">
-              <div className="font-medium mb-1">Please fix the following before submitting:</div>
-              <ul className="list-disc list-inside">
-                {submitErrors.map((err, i) => (
-                  <li key={i}>{err}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="space-y-2 text-sm">
-            <div><span className="font-medium">Camper:</span> {registration.camper?.name}</div>
-            <div><span className="font-medium">Camp:</span> {registration.camp?.name}</div>
-            <div><span className="font-medium">Campus:</span> {registration.campus?.name}</div>
-            <div><span className="font-medium">Documents:</span> {(documents ?? []).length} uploaded</div>
+        {registration.status === "REQUIRES_ACTION" && registration.correctionRequest && (
+          <div className="bg-yellow-50 text-yellow-800 p-4 rounded-lg border border-yellow-200 text-sm">
+            <div className="font-semibold mb-1">Correction Requested by Admin</div>
+            <div>{registration.correctionRequest}</div>
           </div>
+        )}
 
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={declared} onChange={(e) => setDeclared(e.target.checked)} />
-            I confirm that the information provided is accurate.
-          </label>
+        {/* STEP 1: PROFILE INFO */}
+        {step === "profile" && (
+          <Card>
+            <CardBody>
+              <h2 className="text-lg font-bold text-neutral-900 mb-4">Step 1: Camper Profile Info</h2>
+              
+              {profileErrors.length > 0 && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                  <div className="font-semibold mb-1">Please fill in all required fields:</div>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {profileErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-          <div className="flex gap-2">
-            <button className="text-blue-600 underline" onClick={() => setStep("documents")}>
-              Back
-            </button>
-            <button
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-              disabled={!declared || submitMutation.isPending || resubmitMutation.isPending}
-              onClick={() => {
-                if (registration.status === "REQUIRES_ACTION") {
-                  resubmitMutation.mutate({ registrationId });
-                } else {
-                  submitMutation.mutate({ registrationId });
-                }
-              }}
-            >
-              {submitMutation.isPending || resubmitMutation.isPending ? "Submitting..." : "Submit Registration"}
-            </button>
-          </div>
-        </div>
-      )}
+              <form onSubmit={handleProfileSubmit} className="space-y-4">
+                <DynamicFieldGroup
+                  fields={visibleFields}
+                  values={values}
+                  onChange={(key, val) => setValues((v) => ({ ...v, [key]: val }))}
+                  errors={fieldErrors}
+                />
 
-      {(registration.status as string) !== "DRAFT" && (registration.status as string) !== "REQUIRES_ACTION" && (
-        <div className="bg-green-50 text-green-700 p-4 rounded-lg">
-          Your registration has been received successfully. You will receive an email once it has been reviewed.
-        </div>
-      )}
-    </div>
+                <div className="flex justify-end pt-4">
+                  <Button type="submit" loading={camperUpdateMutation.isPending}>
+                    Continue to Documents
+                  </Button>
+                </div>
+              </form>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* STEP 2: DOCUMENTS */}
+        {step === "documents" && (
+          <Card>
+            <CardBody>
+              <h2 className="text-lg font-bold text-neutral-900 mb-2">Step 2: Required Documents</h2>
+              <p className="text-sm text-neutral-500 mb-6">
+                Please upload the required identity and parent authorization documents below to proceed.
+              </p>
+
+              {documentErrors.length > 0 && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                  <div className="font-semibold mb-1">Documents incomplete:</div>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {documentErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <form onSubmit={handleDocumentsSubmit} className="space-y-6">
+                {/* 1. Birth Certificate Upload */}
+                <div className={`p-4 border rounded-lg transition ${
+                  !birthCertUrl ? "border-danger-200 bg-danger-25/10" : "border-neutral-200 bg-white"
+                }`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-semibold text-neutral-900">
+                        Birth Certificate <span className="text-danger-600 text-sm">*</span>
+                      </h3>
+                      <p className="text-xs text-neutral-500">Must be a clear photo or scanned PDF copy.</p>
+                    </div>
+                    {birthCertUrl && <span className="text-xs font-semibold text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded-full">✓ Uploaded</span>}
+                  </div>
+                  <FileUpload
+                    value={birthCertUrl}
+                    onChange={handleBirthCertUpload}
+                    accept="image/*,application/pdf"
+                  />
+                </div>
+
+                {/* 2. Parent Consent Form Upload */}
+                <div className={`p-4 border rounded-lg transition ${
+                  !parentConsentUrl ? "border-danger-200 bg-danger-25/10" : "border-neutral-200 bg-white"
+                }`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-semibold text-neutral-900">
+                        Parent Consent Form <span className="text-danger-600 text-sm">*</span>
+                      </h3>
+                      <p className="text-xs text-neutral-500">
+                        Please download the consent form, sign it, and upload the signed copy.
+                      </p>
+                      <a href="/sample-consent-form.pdf" download className="text-xs font-semibold text-accent-700 hover:text-accent-800 underline mt-1 inline-block">
+                        ↓ Download Sample Consent Form template
+                      </a>
+                    </div>
+                    {parentConsentUrl && <span className="text-xs font-semibold text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded-full">✓ Uploaded</span>}
+                  </div>
+                  <FileUpload
+                    value={parentConsentUrl}
+                    onChange={handleParentConsentUpload}
+                    accept="image/*,application/pdf"
+                  />
+                </div>
+
+                {/* Dynamic documents defined on Camp level */}
+                {(requirements ?? []).length > 0 && (
+                  <div className="pt-4 border-t space-y-4">
+                    <h3 className="font-semibold text-neutral-800 text-sm">Additional Camp Documents</h3>
+                    {(requirements ?? []).map((req) => (
+                      <div key={req.id} className={!documents?.some(d => d.requirementId === req.id && d.status !== "REJECTED") && req.required ? "border border-danger-200 p-2 rounded-lg" : ""}>
+                        <DocumentUploader
+                          requirement={req}
+                          registrationId={registrationId}
+                          existingDocs={documents ?? []}
+                          onUploaded={() => refetchDocs()}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-4 border-t">
+                  <Button variant="secondary" onClick={() => setStep("profile")}>
+                    Back to Profile Info
+                  </Button>
+                  <Button type="submit">
+                    Continue to Review
+                  </Button>
+                </div>
+              </form>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* STEP 3: REVIEW & SUBMIT */}
+        {step === "review" && (
+          <Card>
+            <CardBody>
+              <h2 className="text-lg font-bold text-neutral-900 mb-4">Step 3: Review & Submit</h2>
+
+              {submitErrors.length > 0 && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                  <div className="font-semibold mb-1">Please fix the following before submitting:</div>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {submitErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="space-y-6">
+                {/* 1. Profile Summary */}
+                <div className="p-4 bg-neutral-50 rounded-lg border border-neutral-200 space-y-3">
+                  <h3 className="font-semibold text-neutral-900 border-b pb-2 text-sm flex justify-between items-center">
+                    <span>Camper Profile Information</span>
+                    <button className="text-xs text-accent-700 hover:text-accent-800 underline font-normal" onClick={() => setStep("profile")}>Edit</button>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                    {visibleFields.map((f) => {
+                      const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
+                      return (
+                        <div key={f.id}>
+                          <span className="text-neutral-500">{f.label}:</span>{" "}
+                          <span className="font-semibold text-neutral-900">
+                            {String(values[key] ?? "") || "-"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Documents Summary */}
+                <div className="p-4 bg-neutral-50 rounded-lg border border-neutral-200 space-y-3">
+                  <h3 className="font-semibold text-neutral-900 border-b pb-2 text-sm flex justify-between items-center">
+                    <span>Uploaded Documents</span>
+                    <button className="text-xs text-accent-700 hover:text-accent-800 underline font-normal" onClick={() => setStep("documents")}>Edit</button>
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-neutral-500">Birth Certificate:</span>
+                      <a href={birthCertUrl} target="_blank" rel="noreferrer" className="text-accent-700 hover:text-accent-800 underline font-medium">
+                        View uploaded birth certificate
+                      </a>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-neutral-500">Parent Consent Form:</span>
+                      <a href={parentConsentUrl} target="_blank" rel="noreferrer" className="text-accent-700 hover:text-accent-800 underline font-medium">
+                        View uploaded consent form
+                      </a>
+                    </div>
+                    {(requirements ?? []).map((req) => {
+                      const doc = (documents ?? []).find((d) => d.requirementId === req.id && d.status !== "REJECTED");
+                      return (
+                        <div key={req.id} className="flex items-center justify-between">
+                          <span className="text-neutral-500">{req.name}:</span>
+                          {doc ? (
+                            <a href={doc.url} target="_blank" rel="noreferrer" className="text-accent-700 hover:text-accent-800 underline font-medium">
+                              View uploaded document
+                            </a>
+                          ) : (
+                            <span className="text-neutral-400 italic">Not uploaded</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Camp Overview */}
+                <div className="p-4 bg-neutral-50 rounded-lg border border-neutral-200 text-sm space-y-1">
+                  <div>
+                    <span className="text-neutral-500">Camp Event:</span>{" "}
+                    <span className="font-semibold text-neutral-800">{registration.camp?.name}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Campus Location:</span>{" "}
+                    <span className="font-semibold text-neutral-800">{registration.campus?.name}</span>
+                  </div>
+                </div>
+
+                {/* Declarations Checkbox */}
+                <label className="flex items-start gap-2.5 text-sm text-neutral-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={declared}
+                    onChange={(e) => setDeclared(e.target.checked)}
+                    className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 mt-0.5"
+                  />
+                  <span>
+                    I confirm that all information provided is accurate, and I agree to the terms and guidelines of the camp.
+                  </span>
+                </label>
+
+                {/* Navigation and Submit Buttons */}
+                <div className="flex justify-between pt-4 border-t">
+                  <Button variant="secondary" onClick={() => setStep("documents")}>
+                    Back to Documents
+                  </Button>
+                  <Button
+                    disabled={!declared || submitMutation.isPending || resubmitMutation.isPending}
+                    onClick={() => {
+                      if (registration.status === "REQUIRES_ACTION") {
+                        resubmitMutation.mutate({ registrationId });
+                      } else {
+                        submitMutation.mutate({ registrationId });
+                      }
+                    }}
+                  >
+                    {submitMutation.isPending || resubmitMutation.isPending
+                      ? "Submitting..."
+                      : "Submit Registration"}
+                  </Button>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        )}
+      </div>
     </AppShell>
   );
 }
