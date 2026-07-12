@@ -31,7 +31,7 @@ const HAS_OPTIONS: FormFieldType[] = ["SELECT", "MULTI_SELECT", "RADIO"];
 const DYNAMIC_OPTION_KEYS: Record<string, string> = {
   preferredCampusId: "Automatically populated from your Campuses.",
   homeCampusId: "Automatically populated from your Campuses.",
-  churchDepartment: "Automatically populated from your Departments.",
+  departmentId: "Automatically populated from your Departments — only ones with available capacity are shown to applicants.",
 };
 
 interface FormFieldEditorProps {

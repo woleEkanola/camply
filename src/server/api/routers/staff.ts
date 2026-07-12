@@ -609,6 +609,11 @@ export const staffRouter = createTRPCRouter({
             phone,
             email: input.email,
             preferredCampusId: systemValues.preferredCampusId || null,
+            // Admin manual-add deliberately does NOT enforce the department
+            // capacity cap (unlike /api/staff/register) — an admin picking a
+            // department the Form Editor's live dropdown already labeled
+            // "(Full)" is a conscious override, not a race to close.
+            departmentId: systemValues.departmentId || null,
             church: systemValues.church || null,
             churchDepartment: systemValues.churchDepartment || null,
             yearsServing: systemValues.yearsServing || null,

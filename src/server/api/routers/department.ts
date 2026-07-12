@@ -32,16 +32,33 @@ export const departmentRouter = createTRPCRouter({
     }),
 
   create: protectedProcedure
-    .input(z.object({ organizationId: z.string(), campId: z.string().optional(), name: z.string(), description: z.string().optional() }))
+    .input(z.object({
+      organizationId: z.string(),
+      campId: z.string().optional(),
+      name: z.string(),
+      description: z.string().optional(),
+      maxCapacity: z.number().int().positive().optional().nullable(),
+    }))
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdmin(ctx, input.organizationId);
       return ctx.prisma.department.create({
-        data: { organizationId: input.organizationId, campId: input.campId ?? null, name: input.name, description: input.description },
+        data: {
+          organizationId: input.organizationId,
+          campId: input.campId ?? null,
+          name: input.name,
+          description: input.description,
+          maxCapacity: input.maxCapacity ?? null,
+        },
       });
     }),
 
   update: protectedProcedure
-    .input(z.object({ id: z.string(), name: z.string().optional(), description: z.string().optional() }))
+    .input(z.object({
+      id: z.string(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      maxCapacity: z.number().int().positive().optional().nullable(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });

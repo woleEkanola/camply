@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/server/auth/authOptions";
 import { prisma } from "@/server/db";
 import { validateFormFields } from "@/server/registration/validateFormFields";
+import { assertDepartmentHasCapacity, DepartmentCapacityError } from "@/server/staff/departmentCapacity";
 
 const bodySchema = z.object({
   token: z.string().min(1),
@@ -26,6 +27,7 @@ const bodySchema = z.object({
   preferredAgeGroup: z.string().optional(),
   preferredCampusId: z.string().optional(),
   preferredTribeId: z.string().optional(),
+  departmentId: z.string().optional(),
 
   volunteerCategory: z.string().optional(),
   teams: z.array(z.string()).optional(),
@@ -90,24 +92,36 @@ export async function POST(request: Request) {
       );
     }
 
-    const profile = await prisma.staffProfile.create({
-      data: {
-        userId: user.id,
-        organizationId: link.organizationId,
-        campId: link.campId,
-        type: link.type,
-        status: "PENDING",
-        email,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-        ...rest,
-        fieldValues: {
-          create: (fieldValues || []).map((fv) => ({ value: fv.value, field: { connect: { id: fv.fieldId } } })),
+    // Transactional so the department capacity check below (row-locked
+    // re-count) and the profile creation commit atomically — otherwise two
+    // concurrent applicants could both pass the check and both land in the
+    // last slot of a capped department.
+    const profile = await prisma.$transaction(async (tx) => {
+      if (rest.departmentId) {
+        await assertDepartmentHasCapacity(tx, rest.departmentId);
+      }
+      return tx.staffProfile.create({
+        data: {
+          userId: user.id,
+          organizationId: link.organizationId,
+          campId: link.campId,
+          type: link.type,
+          status: "PENDING",
+          email,
+          dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+          ...rest,
+          fieldValues: {
+            create: (fieldValues || []).map((fv) => ({ value: fv.value, field: { connect: { id: fv.fieldId } } })),
+          },
         },
-      },
+      });
     });
 
     return NextResponse.json({ message: "Registration submitted", staffProfileId: profile.id }, { status: 201 });
   } catch (error) {
+    if (error instanceof DepartmentCapacityError) {
+      return NextResponse.json({ message: error.message }, { status: 409 });
+    }
     console.error("Staff registration error:", error);
     return NextResponse.json({ message: "Something went wrong during registration" }, { status: 500 });
   }

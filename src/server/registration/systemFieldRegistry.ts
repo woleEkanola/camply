@@ -75,10 +75,24 @@ const STAFF_PERSONAL = (): SystemFieldDefinition[] => [
 
 const STAFF_CHURCH = (startOrder: number): SystemFieldDefinition[] => [
   field({ systemKey: "church", label: "Church", type: "TEXT", required: false, visible: true, sortOrder: startOrder, groupLabel: "Church Information" }),
-  field({ systemKey: "churchDepartment", label: "Department", type: "SELECT", required: false, visible: true, sortOrder: startOrder + 10, groupLabel: "Church Information" }),
+  // Free-text self-reported department at the registrant's HOME church (e.g.
+  // "Choir", "Ushering") — unrelated to the camp's own Department model
+  // below. Deliberately plain text, not a live-populated picker: an earlier
+  // change mistakenly sourced its options from the camp Department table,
+  // which made it look like (and get used as) a department-assignment
+  // picker even though it never actually links to a Department row.
+  field({ systemKey: "churchDepartment", label: "Home Church Department", type: "TEXT", required: false, visible: true, sortOrder: startOrder + 10, groupLabel: "Church Information" }),
   field({ systemKey: "yearsServing", label: "Years Serving", type: "TEXT", required: false, visible: true, sortOrder: startOrder + 20, groupLabel: "Church Information" }),
   field({ systemKey: "workerStatus", label: "Worker Status", type: "TEXT", required: false, visible: true, sortOrder: startOrder + 30, groupLabel: "Church Information" }),
 ];
+
+// The real camp-role picker: selecting an option here sets StaffProfile's
+// actual `departmentId` FK directly (systemKey matches the Prisma column
+// name exactly, same trick as preferredCampusId/preferredTribeId below), so
+// it's what formField.ts's live population and the capacity cap
+// (src/server/staff/departmentCapacity.ts) both operate on.
+const STAFF_DEPARTMENT_PICKER = (sortOrder: number): SystemFieldDefinition =>
+  field({ systemKey: "departmentId", label: "Camp Department", type: "SELECT", required: false, visible: true, sortOrder, groupLabel: "Camp Preferences" });
 
 const STAFF_EMERGENCY = (startOrder: number): SystemFieldDefinition[] => [
   field({ systemKey: "emergencyContactName", label: "Emergency Contact Name", type: "TEXT", required: false, visible: true, sortOrder: startOrder, groupLabel: "Emergency Information" }),
@@ -99,6 +113,7 @@ const STAFF_HIDDEN = (startOrder: number): SystemFieldDefinition[] => [
 const TEACHER: SystemFieldDefinition[] = [
   ...STAFF_PERSONAL(),
   ...STAFF_CHURCH(60),
+  STAFF_DEPARTMENT_PICKER(95),
   field({ systemKey: "previousCampExperience", label: "Previous Camp Experience", type: "LONG_TEXT", required: false, visible: true, sortOrder: 100, groupLabel: "Camp Preferences" }),
   field({ systemKey: "areasOfStrength", label: "Areas of Strength", type: "TEXT", required: false, visible: true, sortOrder: 110, groupLabel: "Camp Preferences" }),
   field({ systemKey: "preferredAgeGroup", label: "Preferred Age Group", type: "TEXT", required: false, visible: true, sortOrder: 120, groupLabel: "Camp Preferences" }),
@@ -111,6 +126,7 @@ const TEACHER: SystemFieldDefinition[] = [
 const VOLUNTEER: SystemFieldDefinition[] = [
   ...STAFF_PERSONAL(),
   ...STAFF_CHURCH(60),
+  STAFF_DEPARTMENT_PICKER(95),
   field({ systemKey: "volunteerCategory", label: "Volunteer Category", type: "SELECT", required: false, visible: true, sortOrder: 100, groupLabel: "Camp Preferences", options: VOLUNTEER_CATEGORIES }),
   // Reuses TEACHER_SKILLS since StaffProfile.skills is a shared column with no existing
   // volunteer-specific list — a small deliberate addition, not just a port of prior behavior.

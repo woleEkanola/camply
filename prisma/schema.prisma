@@ -77,6 +77,8 @@ model User {
   id               String         @id @default(cuid())
   email            String         @unique
   password         String
+  passwordSet      Boolean        @default(false)
+  photoUrl         String?
   role             UserRole
   firstName        String?
   lastName         String?
@@ -819,6 +821,7 @@ model Department {
   description      String?
   responsibilities String[]       @default([])
   status           String         @default("ACTIVE") // ACTIVE | INACTIVE
+  maxCapacity      Int? // null = unlimited; mirrors Tribe.maxCapacity
   staff            StaffProfile[]
   deletedAt        DateTime?
   createdAt        DateTime       @default(now())

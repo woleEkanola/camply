@@ -128,6 +128,7 @@ export const orgStructureRouter = createTRPCRouter({
         where: { organizationId: input.organizationId, campId: input.campId, status: "ACTIVE", deletedAt: null },
         include: {
           staff: { where: { status: "APPROVED" }, include: { user: true } },
+          _count: { select: { staff: { where: { status: { in: ["PENDING", "APPROVED"] }, deletedAt: null } } } },
         },
         orderBy: { name: "asc" },
       });
@@ -146,6 +147,10 @@ export const orgStructureRouter = createTRPCRouter({
           assistantHead: assistantHead ? { id: assistantHead.id, name: `${assistantHead.firstName} ${assistantHead.lastName}` } : null,
           memberCount: d.staff.length,
           volunteerCount,
+          maxCapacity: d.maxCapacity,
+          // Pending + Approved — same definition the capacity cap enforces,
+          // so this reflects reserved slots, not just confirmed Members.
+          signedUpCount: d._count.staff,
         };
       });
     }),
