@@ -5,7 +5,8 @@ import { TRPCProvider } from "./providers";
 import { AuthProvider } from "./auth-provider";
 import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
 import { extractRouterConfig } from "uploadthing/server";
-import { ourFileRouter } from "@/app/api/uploadthing/core";
+import { ourFileRouter } from "./api/uploadthing/core";
+import { Suspense } from "react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,7 +36,9 @@ export default function RootLayout({
       >
         <AuthProvider>
           <TRPCProvider>
-            <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
+            <Suspense>
+              <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
+            </Suspense>
             {children}
           </TRPCProvider>
         </AuthProvider>

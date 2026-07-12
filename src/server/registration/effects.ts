@@ -5,13 +5,15 @@ import {
   sendCorrectionEmail,
   sendRejectionEmail,
   sendWaitlistEmail,
+  sendSubmissionEmail,
 } from "../email/sendAcceptanceEmail";
 
 export type SideEffectType =
   | "REGISTRATION_APPROVED"
   | "REGISTRATION_REJECTED"
   | "CORRECTION_REQUESTED"
-  | "REGISTRATION_WAITLISTED";
+  | "REGISTRATION_WAITLISTED"
+  | "REGISTRATION_SUBMITTED";
 
 const MAX_ATTEMPTS = 5;
 const APP_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3001";
@@ -118,6 +120,20 @@ async function runEffect(registrationId: string, type: SideEffectType) {
           channel: "IN_APP",
           title: "Waitlisted",
           body: `${camperName} is on the waitlist for ${registration.camp.name}.`,
+        },
+      });
+      break;
+    }
+    case "REGISTRATION_SUBMITTED": {
+      await sendSubmissionEmail({ to: parentEmail, camperName, campName: registration.camp.name });
+      await prisma.notification.create({
+        data: {
+          organizationId: registration.camper.organizationId,
+          userId: registration.camper.userId,
+          registrationId: registration.id,
+          channel: "IN_APP",
+          title: "Registration Received",
+          body: `${camperName}'s registration for ${registration.camp.name} has been received and is pending review.`,
         },
       });
       break;

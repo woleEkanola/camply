@@ -31,8 +31,12 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [authMethod, setAuthMethod] = useState<'password' | 'otp'>('password');
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
   const orgId = linkData?.organizationId ?? "";
@@ -82,26 +86,78 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
     );
   }
 
-  async function handleSendOtp(e: React.FormEvent) {
+  async function handleEmailStepSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    try {
-      const res = await fetch("/api/staff/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, token }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.message || "Failed to send OTP");
+
+    if (authMethod === "password") {
+      if (password.length < 8) {
+        setError("Password must be at least 8 characters");
+        setLoading(false);
         return;
       }
-      setStep("otp");
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setLoading(false);
+      if (password !== confirmPassword) {
+        setError("Passwords do not match");
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch("/api/base-user/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            role: type, // "TEACHER" or "VOLUNTEER"
+            token,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.message || "Failed to create account");
+          setLoading(false);
+          return;
+        }
+
+        // Log in immediately
+        const loginRes = await signIn("credentials", {
+          redirect: false,
+          email,
+          password,
+        });
+
+        if (loginRes?.error) {
+          setError("Account created, but automatic login failed. Please try logging in.");
+          setLoading(false);
+          return;
+        }
+
+        setStep("fields");
+      } catch (err) {
+        setError("Network error. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // OTP mode
+      try {
+        const res = await fetch("/api/staff/send-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, token }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.message || "Failed to send OTP");
+          return;
+        }
+        setStep("otp");
+      } catch {
+        setError("Network error. Please try again.");
+      } finally {
+        setLoading(false);
+      }
     }
   }
 
@@ -200,10 +256,71 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
             {error && <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
 
             {step === "email" && (
-              <form onSubmit={handleSendOtp} className="space-y-4">
-                <p className="text-sm text-neutral-600">Enter your email to get started.</p>
-                <Input id="email" label="Email Address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
-                <Button type="submit" className="w-full" loading={loading}>Send Code</Button>
+              <form onSubmit={handleEmailStepSubmit} className="space-y-4">
+                <p className="text-sm text-neutral-600">Choose a registration method to get started.</p>
+
+                {/* Tab Selector */}
+                <div className="flex border border-neutral-200 p-1 rounded-full bg-neutral-50/50">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMethod("password")}
+                    className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-full transition-all ${
+                      authMethod === "password"
+                        ? "bg-accent-600 text-white shadow-sm"
+                        : "text-neutral-500 hover:text-neutral-700"
+                    }`}
+                  >
+                    Password
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMethod("otp")}
+                    className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-full transition-all ${
+                      authMethod === "otp"
+                        ? "bg-accent-600 text-white shadow-sm"
+                        : "text-neutral-500 hover:text-neutral-700"
+                    }`}
+                  >
+                    Email OTP
+                  </button>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <Input
+                    id="email"
+                    label="Email Address"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                  {authMethod === "password" && (
+                    <>
+                      <Input
+                        id="password"
+                        label="Password"
+                        type="password"
+                        placeholder="Min 8 characters"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                      />
+                      <Input
+                        id="confirmPassword"
+                        label="Confirm Password"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                      />
+                    </>
+                  )}
+                </div>
+
+                <Button type="submit" className="w-full" loading={loading}>
+                  {authMethod === "password" ? "Next" : "Send Code"}
+                </Button>
               </form>
             )}
 
@@ -220,31 +337,82 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
                 className="space-y-6"
                 onSubmit={(e) => {
                   e.preventDefault();
+                  setError("");
+                  setFieldErrors({});
+
+                  const errors: Record<string, string> = {};
+                  const missingList: string[] = [];
+
+                  for (const f of visibleFields) {
+                    if (f.required) {
+                      const key = fieldKey(f);
+                      if (!hasValue(values[key])) {
+                        errors[key] = "This field is required";
+                        missingList.push(f.label);
+                      }
+                    }
+                  }
+
+                  if (missingList.length > 0) {
+                    setFieldErrors(errors);
+                    setError(`Please fill in all required fields before continuing: ${missingList.join(", ")}`);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    return;
+                  }
+
                   setStep("review");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
               >
                 <DynamicFieldGroup
                   fields={visibleFields}
                   values={values}
                   onChange={setValue}
+                  errors={fieldErrors}
                 />
-                <Button type="submit" className="w-full" disabled={!requiredFieldsSatisfied}>Continue</Button>
+                <Button type="submit" className="w-full">Continue</Button>
               </form>
             )}
 
             {step === "review" && (
-              <div className="space-y-4">
-                <h2 className="font-medium text-neutral-900">Review & Submit</h2>
-                <div className="space-y-1 text-sm text-neutral-600">
-                  <div><span className="font-medium text-neutral-900">Name:</span> {String(firstName ?? "")} {String(lastName ?? "")}</div>
-                  <div><span className="font-medium text-neutral-900">Email:</span> {email}</div>
-                  {!isTeacher && values["volunteerCategory"] ? (
-                    <div><span className="font-medium text-neutral-900">Department:</span> {String(values["volunteerCategory"])}</div>
-                  ) : null}
+              <div className="space-y-6">
+                <h2 className="text-lg font-bold text-neutral-900 mb-2">Review Your Details</h2>
+                <p className="text-sm text-neutral-500 mb-4">Please confirm that all your details are correct before submitting.</p>
+                
+                <div className="border rounded-lg overflow-hidden border-neutral-200">
+                  <table className="w-full text-sm text-left text-neutral-700 bg-white">
+                    <tbody>
+                      <tr className="border-b border-neutral-100">
+                        <td className="px-4 py-2.5 font-medium text-neutral-900 bg-neutral-50/50 w-1/3 border-r border-neutral-100">Email Address</td>
+                        <td className="px-4 py-2.5">{email}</td>
+                      </tr>
+                      {visibleFields.map((f: FormFieldDTO) => {
+                        const key = fieldKey(f);
+                        const val = values[key];
+                        return (
+                          <tr key={f.id} className="border-b last:border-0 border-neutral-100">
+                            <td className="px-4 py-2.5 font-medium text-neutral-900 bg-neutral-50/50 w-1/3 border-r border-neutral-100">{f.label}</td>
+                            <td className="px-4 py-2.5 whitespace-pre-wrap">
+                              {val !== undefined && val !== null && String(val) !== "" ? (
+                                String(val)
+                              ) : (
+                                <span className="text-neutral-400 italic">Not filled</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => setStep("fields")}>Back</Button>
-                  <Button className="flex-1" onClick={handleSubmit} loading={loading}>Submit Registration</Button>
+
+                <div className="flex gap-3">
+                  <Button variant="secondary" onClick={() => setStep("fields")}>
+                    Back to Edit
+                  </Button>
+                  <Button className="flex-grow" onClick={handleSubmit} loading={loading}>
+                    Submit Registration
+                  </Button>
                 </div>
               </div>
             )}

@@ -13,9 +13,6 @@ import {
 function emailInput(page: Page) {
   return page.locator('input[placeholder="Enter your email"]:visible');
 }
-function nextButton(page: Page) {
-  return page.locator("button:visible", { hasText: "Next" });
-}
 
 /**
  * Exercises the signup-link -> Campus -> Venue flow from decision #2 of the
@@ -78,19 +75,20 @@ test.describe("Signup link -> Campus registration -> Venue auto-assignment", () 
   test("parent completes the wizard via a Campus signup link; draft registration has campusId set and venueId null", async ({ page }) => {
     await page.goto(`/signup/${signupToken}`);
 
+    // Switch to OTP tab and fill camper details
+    await page.locator("button:visible", { hasText: "Email OTP" }).click();
+    await page.locator('input[placeholder="Enter first name"]').fill("E2E");
+    await page.locator('input[placeholder="Enter last name"]').fill("Signup Camper");
     await emailInput(page).fill(parentEmail);
-    await nextButton(page).click();
+    await page.getByRole("button", { name: "Send OTP" }).click();
 
-    await expect(page.locator('input[placeholder="Enter OTP code"]:visible')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('input[placeholder="Enter OTP code"]')).toBeVisible({ timeout: 10000 });
     const code = await waitForOtp(parentEmail);
-    await page.locator('input[placeholder="Enter OTP code"]:visible').fill(code);
+    await page.locator('input[placeholder="Enter OTP code"]').fill(code);
     await page.locator("button:visible", { hasText: "Verify OTP" }).click();
 
-    await expect(page.getByText("Complete Your Profile")).toBeVisible({ timeout: 10000 });
-    await page.getByLabel("Full Name").fill("E2E Signup Camper");
-    await page.getByLabel("Date of Birth").fill("2012-06-01");
-    await page.getByLabel("Gender").selectOption({ label: "Male" });
-    await page.locator("button:visible", { hasText: "Complete Signup" }).click();
+    // Auto-create camper + redirect to registration wizard
+    await page.waitForURL(/\/dashboard\/register\/.+/, { timeout: 15000 });
 
     await expect
       .poll(async () => {

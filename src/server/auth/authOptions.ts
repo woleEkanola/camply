@@ -103,12 +103,15 @@ export const authOptions: NextAuthOptions = {
         // Successful auth — reset the failed-attempt counter for this email.
         clearRateLimit(loginKey);
 
-        // Only return user if their role is a valid UserRole (exclude PARENT)
+        // Only return user if their role is a valid UserRole
         if (
           user.role === "SUPER_ADMIN" ||
           user.role === "OWNER" ||
           user.role === "ADMIN" ||
-          user.role === "CAMPUS_REPRESENTATIVE"
+          user.role === "CAMPUS_REPRESENTATIVE" ||
+          user.role === "PARENT" ||
+          user.role === "TEACHER" ||
+          user.role === "VOLUNTEER"
         ) {
           return {
             id: user.id,
@@ -118,7 +121,6 @@ export const authOptions: NextAuthOptions = {
             organizationId: user.organizationId ?? undefined,
           };
         } else {
-          // Invalid/legacy role (e.g., PARENT), do not authorize
           return null;
         }
       },

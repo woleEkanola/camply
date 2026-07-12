@@ -11,6 +11,7 @@ interface DynamicFieldGroupProps {
   disabled?: boolean;
   /** e.g. { campusId: ["Main Campus", "North Site"] } for fields whose options come from a live query rather than stored config. */
   dynamicOptionsByKey?: Record<string, (string | { value: string; label: string })[]>;
+  errors?: Record<string, string>;
 }
 
 /** Groups already-sorted fields into contiguous same-groupLabel runs, rendering a section header per run. */
@@ -28,7 +29,14 @@ function groupFields(fields: FormFieldDTO[]) {
   return groups;
 }
 
-export function DynamicFieldGroup({ fields, values, onChange, disabled, dynamicOptionsByKey }: DynamicFieldGroupProps) {
+export function DynamicFieldGroup({
+  fields,
+  values,
+  onChange,
+  disabled,
+  dynamicOptionsByKey,
+  errors,
+}: DynamicFieldGroupProps) {
   const visibleFields = fields.filter((f) => f.visible);
   const groups = groupFields(visibleFields);
 
@@ -47,6 +55,7 @@ export function DynamicFieldGroup({ fields, values, onChange, disabled, dynamicO
                 onChange={(v) => onChange(key, v)}
                 disabled={disabled}
                 dynamicOptions={field.systemKey ? dynamicOptionsByKey?.[field.systemKey] : undefined}
+                error={errors?.[key]}
               />
             );
           })}

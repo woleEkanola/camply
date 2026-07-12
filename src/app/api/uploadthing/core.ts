@@ -6,8 +6,9 @@ import { authOptions } from "@/server/auth/authOptions";
 const f = createUploadthing();
 
 export const ourFileRouter = {
-  uploader: f({
-    image: { maxFileSize: "4MB", maxFileCount: 1 },
+  documentUploader: f({
+    image: { maxFileSize: "8MB", maxFileCount: 1 },
+    pdf: { maxFileSize: "8MB", maxFileCount: 1 },
   })
     .middleware(async () => {
       const session = await getServerSession(authOptions);
@@ -15,7 +16,19 @@ export const ourFileRouter = {
       return { userId: session.user.id };
     })
     .onUploadComplete(async ({ metadata, file }) => {
-      return { url: file.ufsUrl };
+      return { url: file.ufsUrl, uploadedBy: metadata.userId };
+    }),
+
+  consentFormUploader: f({
+    pdf: { maxFileSize: "8MB", maxFileCount: 1 },
+  })
+    .middleware(async () => {
+      const session = await getServerSession(authOptions);
+      if (!session?.user) throw new UploadThingError("Unauthorized");
+      return { userId: session.user.id };
+    })
+    .onUploadComplete(async ({ metadata, file }) => {
+      return { url: file.ufsUrl, uploadedBy: metadata.userId };
     }),
 } satisfies FileRouter;
 

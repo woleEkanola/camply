@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { api } from "@/utils/trpc";
 import { Button } from "@/components/ui/Button";
@@ -55,9 +55,37 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
 
   const [error, setError] = useState("");
   const create = api.formField.create.useMutation({ onSuccess: () => { setEdit(null); invalidate(); }, onError: (e) => setError(e.message) });
-  const update = api.formField.update.useMutation({ onSuccess: () => { setEdit(null); invalidate(); }, onError: (e) => setError(e.message) });
   const remove = api.formField.remove.useMutation({ onSuccess: invalidate, onError: (e) => setError(e.message) });
   const reorder = api.formField.reorder.useMutation({ onSuccess: invalidate });
+
+  const [optimisticVisible, setOptimisticVisible] = useState<Record<string, boolean>>({});
+  const [optimisticRequired, setOptimisticRequired] = useState<Record<string, boolean>>({});
+
+  const updateVisible = api.formField.update.useMutation({ onSuccess: invalidate });
+  const updateRequired = api.formField.update.useMutation({ onSuccess: invalidate });
+  const update = api.formField.update.useMutation({ onSuccess: () => { setEdit(null); invalidate(); }, onError: (e) => setError(e.message) });
+
+  const toggleVisible = useCallback((id: string, checked: boolean) => {
+    setOptimisticVisible((prev) => ({ ...prev, [id]: checked }));
+    updateVisible.mutate({ id, visible: checked }, {
+      onError: () => setOptimisticVisible((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }),
+    });
+  }, [updateVisible]);
+
+  const toggleRequired = useCallback((id: string, checked: boolean) => {
+    setOptimisticRequired((prev) => ({ ...prev, [id]: checked }));
+    updateRequired.mutate({ id, required: checked }, {
+      onError: () => setOptimisticRequired((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }),
+    });
+  }, [updateRequired]);
 
   const [edit, setEdit] = useState<EditState | null>(null);
   const [form, setForm] = useState({
@@ -153,8 +181,8 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
         <label className="inline-flex items-center gap-2">
           <input
             type="checkbox"
-            checked={f.required}
-            onChange={(e) => update.mutate({ id: f.id, required: e.target.checked })}
+            checked={optimisticRequired[f.id] ?? f.required}
+            onChange={(e) => toggleRequired(f.id, e.target.checked)}
             className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
           />
         </label>
@@ -166,8 +194,8 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
         <label className="inline-flex items-center gap-2">
           <input
             type="checkbox"
-            checked={f.visible}
-            onChange={(e) => update.mutate({ id: f.id, visible: e.target.checked })}
+            checked={optimisticVisible[f.id] ?? f.visible}
+            onChange={(e) => toggleVisible(f.id, e.target.checked)}
             className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
           />
         </label>

@@ -308,15 +308,35 @@ export default function CamperPage() {
                   )}
                 </div>
 
-                {/* Name (always uneditable) */}
-                <div className="mb-4">
-                  <label className="block font-medium mb-1">Name</label>
-                  <input
-                    type="text"
-                    className="border px-2 py-1 rounded w-full bg-gray-100 cursor-not-allowed"
-                    value={profile.name}
-                    disabled
-                  />
+                {/* First Name, Middle Name, Last Name (always uneditable) */}
+                <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block font-medium mb-1 text-sm text-neutral-700">First Name</label>
+                    <input
+                      type="text"
+                      className="border px-2 py-1 rounded w-full bg-gray-100 cursor-not-allowed text-sm text-neutral-800"
+                      value={(profile as any).firstName || ""}
+                      disabled
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-medium mb-1 text-sm text-neutral-700">Middle Name</label>
+                    <input
+                      type="text"
+                      className="border px-2 py-1 rounded w-full bg-gray-100 cursor-not-allowed text-sm text-neutral-800"
+                      value={(profile as any).middleName || ""}
+                      disabled
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-medium mb-1 text-sm text-neutral-700">Last Name</label>
+                    <input
+                      type="text"
+                      className="border px-2 py-1 rounded w-full bg-gray-100 cursor-not-allowed text-sm text-neutral-800"
+                      value={(profile as any).lastName || ""}
+                      disabled
+                    />
+                  </div>
                 </div>
                 {/* Date of Birth (always uneditable) */}
                 <div className="mb-4">

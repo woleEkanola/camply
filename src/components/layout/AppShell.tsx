@@ -224,31 +224,6 @@ export default function AppShell({ area, children }: AppShellProps) {
         </header>
 
         <main className="flex-1 overflow-auto scrollbar-hide p-6">
-          {userProfile && !userProfile.passwordSet && (
-            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 shadow-sm transition-all">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <span className="flex shrink-0 items-center justify-center rounded-full bg-amber-100 p-1.5 text-amber-600">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </span>
-                  <div>
-                    <h4 className="font-semibold text-sm">Secure your account</h4>
-                    <p className="text-xs text-amber-700 mt-0.5">
-                      You currently log in using one-time codes. Set a password to quickly log in anytime.
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href="/profile"
-                  className="inline-flex items-center justify-center rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 shrink-0"
-                >
-                  Set Password
-                </Link>
-              </div>
-            </div>
-          )}
           {children}
         </main>
       </div>

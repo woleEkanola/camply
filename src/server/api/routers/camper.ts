@@ -14,6 +14,9 @@ type OrganizationSettings = {
 // Schema for camper data validation
 const camperSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
+  firstName: z.string().optional(),
+  middleName: z.string().optional(),
+  lastName: z.string().optional(),
   userId: z.string(),
   organizationId: z.string(),
   homeCampusId: z.string().optional(),
@@ -31,6 +34,9 @@ const profileFieldValueSchema = z.object({
 // Schema for camper update
 const camperUpdateSchema = z.object({
   name: z.string().optional(),
+  firstName: z.string().optional(),
+  middleName: z.string().optional(),
+  lastName: z.string().optional(),
   active: z.boolean().optional(),
   homeCampusId: z.string().optional(),
   dateOfBirth: z.string().optional(),
@@ -412,6 +418,9 @@ export const camperRouter = createTRPCRouter({
       const profile = await ctx.prisma.camper.create({
         data: {
           name: input.profile.name,
+          firstName: input.profile.firstName,
+          middleName: input.profile.middleName,
+          lastName: input.profile.lastName,
           active: input.profile.active,
           user: { connect: { id: input.profile.userId } },
           organization: { connect: { id: input.profile.organizationId } },
@@ -497,6 +506,9 @@ export const camperRouter = createTRPCRouter({
         where: { id: input.id },
         data: {
           ...(input.profile.name && { name: input.profile.name }),
+          ...(input.profile.firstName !== undefined && { firstName: input.profile.firstName }),
+          ...(input.profile.middleName !== undefined && { middleName: input.profile.middleName }),
+          ...(input.profile.lastName !== undefined && { lastName: input.profile.lastName }),
           ...(input.profile.active !== undefined && { active: input.profile.active }),
           ...(input.profile.homeCampusId && {
             homeCampus: { connect: { id: input.profile.homeCampusId } }
@@ -510,7 +522,7 @@ export const camperRouter = createTRPCRouter({
           ...(input.profile.dobApproved !== undefined && {
             dobApproved: input.profile.dobApproved
           }),
-          ...(input.profile.birthCert && { birthCert: input.profile.birthCert }),
+          ...(input.profile.birthCert !== undefined && { birthCert: input.profile.birthCert }),
         }
       });
 

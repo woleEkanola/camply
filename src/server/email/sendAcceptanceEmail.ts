@@ -85,3 +85,27 @@ export async function sendWaitlistEmail(params: { to: string; camperName: string
     html: `<p><strong>${params.camperName}</strong> is currently on the waitlist for <strong>${params.campName}</strong>. We'll notify you if a space opens up.</p>`,
   });
 }
+
+export async function sendSubmissionEmail(params: { to: string; camperName: string; campName: string }) {
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  await resend.emails.send({
+    from: "camply@eleto.online",
+    to: params.to,
+    subject: `Registration received: ${params.camperName}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #333333; line-height: 1.6;">
+        <h2 style="color:#E67E22; margin-bottom: 16px;">Registration Received</h2>
+        <p>Dear Parent,</p>
+        <p>We have successfully received the registration for <strong>${params.camperName}</strong> to attend <strong>${params.campName}</strong>.</p>
+        <p>Please note that this registration is currently <strong>pending review and approval</strong> by our camp administration. We will verify the details and documents shortly and notify you via email once a decision has been made.</p>
+        <p>If we require any changes or additional information, we will send you a correction request with instructions.</p>
+        <p style="margin-top: 24px; border-top: 1px solid #eeeeee; padding-top: 16px; font-size: 12px; color: #888888;">
+          Thank you,<br/>
+          The Camply Team
+        </p>
+      </div>
+    `,
+  });
+}

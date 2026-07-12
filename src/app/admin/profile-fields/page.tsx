@@ -5,6 +5,7 @@ import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { FormFieldEditor } from "@/components/forms/FormFieldEditor";
+import { RegistrationConfigEditor } from "@/components/forms/RegistrationConfigEditor";
 
 export default function FormEditorPage() {
   const { data: session } = useSession();
@@ -27,6 +28,7 @@ export default function FormEditorPage() {
             { label: "Parents", content: <FormFieldEditor organizationId={organizationId} audience="CAMPER" /> },
             { label: "Teachers", content: <FormFieldEditor organizationId={organizationId} audience="TEACHER" /> },
             { label: "Volunteers", content: <FormFieldEditor organizationId={organizationId} audience="VOLUNTEER" /> },
+            { label: "Registration Setup", content: <RegistrationConfigEditor organizationId={organizationId} /> },
           ]}
         />
       </div>

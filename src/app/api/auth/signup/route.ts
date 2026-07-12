@@ -11,8 +11,11 @@ import { resolveSignupLinkByToken } from '@/server/registration/resolveSignupLin
 const signupSchema = z.object({
   email: z.string().email('A valid email is required'),
   name: z.string().min(1, 'Name is required'),
-  dob: z.string().min(1, 'Date of birth is required'),
-  gender: z.string().min(1, 'Gender is required'),
+  firstName: z.string().optional(),
+  middleName: z.string().optional(),
+  lastName: z.string().optional(),
+  dob: z.string().optional(),
+  gender: z.string().optional(),
   token: z.string().min(1, 'Token is required'),
   fieldValues: z.array(z.object({ fieldId: z.string(), value: z.string() })).optional(),
 });
@@ -86,6 +89,9 @@ export async function POST(request: Request) {
     const camper = await prisma.camper.create({
       data: {
         name,
+        firstName: result.data.firstName,
+        middleName: result.data.middleName,
+        lastName: result.data.lastName,
         userId: parent!.id,
         organizationId,
         homeCampusId: parent!.homeCampusId, // Always use campus from parent account

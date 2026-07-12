@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { CameraIcon, PhotoIcon, KeyIcon, UserIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 import { Dialog } from "@/components/ui/Dialog";
 import { useUploadThing } from "@/utils/uploadthing-hook";
+import { compressImage } from "@/lib/compressImage";
 
 // Helper function to crop, resize and compress client-side images
 const compressAndResizeImage = (fileOrBlob: File | Blob): Promise<Blob> => {
@@ -164,6 +165,8 @@ export default function ProfilePage() {
       setIsDeleteConfirmOpen(false);
     },
   });
+
+  const { startUpload: startPhotoUpload } = useUploadThing("documentUploader");
 
   const handleDeleteAccount = () => {
     triggerNotification(null, null);
@@ -334,27 +337,24 @@ export default function ProfilePage() {
   };
 
   // Profile Image Upload / capture handlers
-  const { startUpload } = useUploadThing("uploader", {
-    onClientUploadComplete: (res) => {
-      if (res?.[0]?.ufsUrl) {
-        updateProfileMutation.mutate({ photoUrl: res[0].ufsUrl });
-      }
-    },
-    onUploadError: () => {
-      setErrorMsg("Failed to upload image.");
-    },
-  });
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     triggerNotification(null, null);
     try {
-      // Crop to square and compress client-side (avatar-specific)
-      const compressedBlob = await compressAndResizeImage(file);
-      const compressedFile = new File([compressedBlob], file.name, { type: "image/jpeg" });
-      await startUpload([compressedFile]);
+      const compressedFile = await compressImage(file);
+
+      const uploaded = await startPhotoUpload([compressedFile]);
+      const url = uploaded?.[0]?.ufsUrl ?? uploaded?.[0]?.url;
+      if (!url) {
+        throw new Error("Upload failed");
+      }
+
+      // Update profile picture URL in DB
+      updateProfileMutation.mutate({
+        photoUrl: url,
+      });
     } catch (err) {
       setErrorMsg("Failed to upload and compress image.");
     }
@@ -399,9 +399,19 @@ export default function ProfilePage() {
       canvas.toBlob(async (blob) => {
         if (blob) {
           try {
+            // Apply crop, resize and background compression
             const compressedBlob = await compressAndResizeImage(blob);
             const compressedFile = new File([compressedBlob], "captured-avatar.jpg", { type: "image/jpeg" });
-            await startUpload([compressedFile]);
+
+            const uploaded = await startPhotoUpload([compressedFile]);
+            const url = uploaded?.[0]?.ufsUrl ?? uploaded?.[0]?.url;
+            if (!url) throw new Error("Capture upload failed");
+
+            // Update photo in user record
+            updateProfileMutation.mutate({
+              photoUrl: url,
+            });
+
             stopCamera();
           } catch (err) {
             setErrorMsg("Failed to process captured image.");
@@ -444,33 +454,6 @@ export default function ProfilePage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-red-800">{errorMsg}</p>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Dynamic nudge banner for OTP users when not in security tab */}
-        {profile && !profile.passwordSet && activeTab !== "security" && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <span className="flex shrink-0 items-center justify-center rounded-full bg-amber-100 p-1.5 text-amber-600">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </span>
-                <div>
-                  <h4 className="font-semibold text-sm">Secure your account with a password</h4>
-                  <p className="text-xs text-amber-700 mt-0.5">
-                    Setting a password allows you to log in instantly without waiting for OTP codes.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setActiveTab("security")}
-                className="inline-flex items-center justify-center rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-500 shrink-0"
-              >
-                Set Password Now
-              </button>
             </div>
           </div>
         )}
