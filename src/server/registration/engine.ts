@@ -94,7 +94,8 @@ export async function createDraft(params: {
 }
 
 /** Validates and submits a draft registration; moves to PENDING or APPROVED depending on camp config. */
-export async function submitRegistration(params: { registrationId: string; actorId: string }) {
+export async function submitRegistration(params: { registrationId: string; actorId: string; submittedAt?: Date }) {
+  const actualSubmittedAt = params.submittedAt ?? new Date();
   const result = await prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
@@ -112,7 +113,7 @@ export async function submitRegistration(params: { registrationId: string; actor
 
     await tx.registration.update({
       where: { id: registration.id },
-      data: { status: "SUBMITTED", submittedAt: new Date() },
+      data: { status: "SUBMITTED", submittedAt: actualSubmittedAt },
     });
 
     await logEvent(tx, {

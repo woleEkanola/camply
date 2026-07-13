@@ -717,7 +717,7 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       try {
-        return await engine.submitRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
+        return await engine.submitRegistration({ registrationId: input.registrationId, actorId: currentUser.id, submittedAt: new Date() });
       } catch (error) {
         throw toTRPCError(error);
       }

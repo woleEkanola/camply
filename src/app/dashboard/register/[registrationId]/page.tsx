@@ -6,6 +6,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { api } from "@/utils/trpc";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 import type { FormFieldDTO } from "@/components/forms/types";
+import { Button } from "@/components/ui/Button";
 
 const STATUS_COPY: Record<string, string> = {
   DRAFT: "You haven't submitted this registration yet.",
@@ -585,9 +586,12 @@ export default function RegistrationWizardPage() {
                 {/* Navigation and Submit Buttons */}
                 <div className="flex justify-between pt-4 border-t">
                   <button type="button" onClick={() => setStep("documents")} className="flex h-11 items-center rounded-xl border border-neutral-300 bg-white px-5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50">Back to Documents</button>
-                  <button
+                  <Button
                     type="button"
-                    disabled={!declared || submitMutation.isPending || resubmitMutation.isPending}
+                    variant="primary"
+                    className="w-40"
+                    loading={submitMutation.isPending || resubmitMutation.isPending}
+                    disabled={!declared}
                     onClick={() => {
                       if (registration.status === "REQUIRES_ACTION") {
                         resubmitMutation.mutate({ registrationId });
@@ -595,12 +599,9 @@ export default function RegistrationWizardPage() {
                         submitMutation.mutate({ registrationId });
                       }
                     }}
-                    className="flex h-12 w-full items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {submitMutation.isPending || resubmitMutation.isPending
-                      ? "Submitting..."
-                      : "Submit Registration"}
-                  </button>
+                    Submit Registration
+                  </Button>
                 </div>
               </div>
             </div>
