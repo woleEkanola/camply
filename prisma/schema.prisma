@@ -78,6 +78,8 @@ model User {
   email            String         @unique
   password         String
   passwordSet      Boolean        @default(false)
+  emailVerified    DateTime?
+  emailVerifyToken String?        @unique
   photoUrl         String?
   role             UserRole
   firstName        String?
