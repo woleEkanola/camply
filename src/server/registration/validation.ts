@@ -79,7 +79,8 @@ export async function validateSubmission(
   // fields bind to fieldValues), rather than a hardcoded field list.
   const submittedValues: Record<string, unknown> = { ...camper };
   for (const fv of camper.fieldValues) {
-    submittedValues[fv.fieldId] = fv.value;
+    const key = fv.field?.source === "SYSTEM" ? fv.field.systemKey! : fv.fieldId;
+    submittedValues[key] = fv.value;
   }
   const fieldFailures = await validateFormFields(tx, camper.organizationId, "CAMPER", submittedValues);
   for (const f of fieldFailures) {
