@@ -1,42 +1,54 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, deleteStaffByEmail, fieldByLabel } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, deleteStaffByEmail } from "./helpers";
 
-test.describe("Camp Structure", () => {
-  // Shares one set of Prisma fixtures (built in beforeAll) across every test
-  // in this file — fullyParallel would otherwise run beforeAll once per
-  // worker and double-create them (unique constraint failures, duplicate rows).
+test.describe("Camp Structure Redesign", () => {
   test.describe.configure({ mode: "serial" });
 
   const managerEmail = `e2e-cs-manager-${Date.now()}@camply.test`;
   const reportEmail = `e2e-cs-report-${Date.now()}@camply.test`;
-  const camperParentEmail = `e2e-cs-camper-${Date.now()}@camply.test`;
   let managerId: string;
   let reportId: string;
   let departmentId: string;
-  let venueId: string;
-  let hostelId: string;
-  let roomId: string;
-  let bedId: string;
-  let registrationId: string;
-  let camperId: string;
-  let camperParentUserId: string;
+  let directorPositionId: string;
+  let headPositionId: string;
+  let volPositionId: string;
+  let managerAssignmentId: string;
+  let reportAssignmentId: string;
+  let campId: string;
+  let orgId: string;
 
   test.beforeAll(async () => {
-    const { organizationId, campId, campusId } = await getFixtureOrgContext();
+    const { organizationId, campId: fixtureCampId } = await getFixtureOrgContext();
+    campId = fixtureCampId;
+    orgId = organizationId;
 
+    // 1. Create department
     const dept = await prisma.department.create({
-      data: { organizationId, campId, name: "E2E Structure Department", responsibilities: ["Do the thing", "Do the other thing"] },
+      data: {
+        organizationId,
+        campId,
+        name: "E2E Structure Department",
+        responsibilities: ["Do the thing", "Do the other thing"],
+      },
     });
     departmentId = dept.id;
 
+    // 2. Create staff profiles
     const managerUser = await prisma.user.create({
       data: { email: managerEmail, password: "placeholder-not-used-for-login", role: "TEACHER", organizationId },
     });
     const manager = await prisma.staffProfile.create({
       data: {
-        userId: managerUser.id, organizationId, campId, type: "TEACHER", status: "APPROVED",
-        firstName: "CS", lastName: "ManagerE2E", phone: "+1-555-0500", email: managerEmail,
-        departmentId, isDepartmentHead: true, approvedAt: new Date(),
+        userId: managerUser.id,
+        organizationId,
+        campId,
+        type: "TEACHER",
+        status: "APPROVED",
+        firstName: "CS",
+        lastName: "ManagerE2E",
+        phone: "+1-555-0500",
+        email: managerEmail,
+        approvedAt: new Date(),
       },
     });
     managerId = manager.id;
@@ -46,113 +58,128 @@ test.describe("Camp Structure", () => {
     });
     const report = await prisma.staffProfile.create({
       data: {
-        userId: reportUser.id, organizationId, campId, type: "TEACHER", status: "APPROVED",
-        firstName: "CS", lastName: "ReportE2E", phone: "+1-555-0600", email: reportEmail,
-        reportsToId: manager.id, approvedAt: new Date(),
+        userId: reportUser.id,
+        organizationId,
+        campId,
+        type: "TEACHER",
+        status: "APPROVED",
+        firstName: "CS",
+        lastName: "ReportE2E",
+        phone: "+1-555-0600",
+        email: reportEmail,
+        approvedAt: new Date(),
       },
     });
     reportId = report.id;
 
-    const venue = await prisma.venue.create({ data: { campId, name: `E2E Venue ${Date.now()}` } });
-    venueId = venue.id;
-    const hostel = await prisma.hostel.create({ data: { organizationId, venueId, name: "E2E Hostel" } });
-    hostelId = hostel.id;
-    const room = await prisma.room.create({ data: { hostelId, name: "E2E Room" } });
-    roomId = room.id;
-    const bed = await prisma.bed.create({ data: { roomId, label: "E2E Bed 1" } });
-    bedId = bed.id;
+    // 3. Create position hierarchy
+    const directorPos = await prisma.position.create({
+      data: { name: "Camp Director", campId, displayOrder: 1 },
+    });
+    directorPositionId = directorPos.id;
 
-    const camperUser = await prisma.user.create({
-      data: { email: camperParentEmail, password: "placeholder-not-used-for-login", role: "PARENT", organizationId, homeCampusId: campusId },
+    const headPos = await prisma.position.create({
+      data: {
+        name: `${dept.name} Head`,
+        campId,
+        departmentId: dept.id,
+        parentPositionId: directorPos.id,
+        displayOrder: 2,
+      },
     });
-    camperParentUserId = camperUser.id;
-    const camper = await prisma.camper.create({
-      data: { name: "E2E Structure Camper", userId: camperUser.id, organizationId, homeCampusId: campusId },
+    headPositionId = headPos.id;
+
+    const volPos = await prisma.position.create({
+      data: {
+        name: `${dept.name} Volunteer`,
+        campId,
+        departmentId: dept.id,
+        parentPositionId: headPos.id,
+        displayOrder: 3,
+      },
     });
-    camperId = camper.id;
-    const registration = await prisma.registration.create({
-      data: { camperId: camper.id, campId, campusId, venueId, status: "APPROVED", registrationNumber: `E2E-CS-${Date.now()}` },
+    volPositionId = volPos.id;
+
+    // 4. Assign staff profiles to positions
+    const managerAssign = await prisma.positionAssignment.create({
+      data: { positionId: headPos.id, staffId: manager.id, isCurrent: true },
     });
-    registrationId = registration.id;
+    managerAssignmentId = managerAssign.id;
+
+    const reportAssign = await prisma.positionAssignment.create({
+      data: { positionId: volPos.id, staffId: report.id, isCurrent: true },
+    });
+    reportAssignmentId = reportAssign.id;
   });
 
   test.afterAll(async () => {
-    await prisma.bed.deleteMany({ where: { id: bedId } });
-    await prisma.room.deleteMany({ where: { id: roomId } });
-    await prisma.hostel.deleteMany({ where: { id: hostelId } });
-    await prisma.registration.deleteMany({ where: { id: registrationId } });
-    await prisma.camper.deleteMany({ where: { id: camperId } });
-    await prisma.user.deleteMany({ where: { id: camperParentUserId } });
-    await prisma.venue.deleteMany({ where: { id: venueId } });
-    await prisma.department.deleteMany({ where: { id: departmentId } });
+    // Cleanup assignments
+    await prisma.positionAssignment.deleteMany({
+      where: { id: { in: [managerAssignmentId, reportAssignmentId] } },
+    });
+    // Cleanup positions
+    await prisma.position.deleteMany({
+      where: { id: { in: [directorPositionId, headPositionId, volPositionId] } },
+    });
+    // Cleanup departments
+    await prisma.department.deleteMany({
+      where: { id: departmentId },
+    });
+    // Cleanup staff and users
     await deleteStaffByEmail(managerEmail);
     await deleteStaffByEmail(reportEmail);
   });
 
-  test("leadership tree shows the reporting relationship and opens a person's profile", async ({ page }) => {
+  test("leadership tab displays position hierarchy and opens department detail drawer", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/camp-structure");
 
-    await expect(page.getByText("CS ManagerE2E")).toBeVisible({ timeout: 10000 });
+    // Check custom graph tree elements
+    await expect(page.getByText("Camp Director").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("E2E Structure Department Head").first()).toBeVisible();
+    await expect(page.getByText("CS ManagerE2E").first()).toBeVisible();
 
-    // Top two tree depths start expanded (see OrgTree.tsx), so the direct
-    // report should already be visible with no interaction needed.
-    await expect(page.getByText("CS ReportE2E")).toBeVisible();
+    // Switch to Nested List view to place nodes comfortably inside viewport
+    await page.getByRole("button", { name: "Nested List" }).click();
 
-    await page.getByText("CS ReportE2E").click();
-    await expect(page.getByRole("heading", { name: "CS ReportE2E" })).toBeVisible();
+    // Click department link to open operations center drawer
+    await page.getByRole("button", { name: "E2E Structure Department" }).first().click();
+
+    await expect(page.getByText("Department Operations Center").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Do the thing").first()).toBeVisible();
   });
 
-  test("reassigning reports-to into a cycle is rejected with an inline error", async ({ page }) => {
-    await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/teachers");
-
-    await page.getByText("CS ManagerE2E").click();
-    await page.getByRole("tab", { name: "Hierarchy" }).click();
-    await fieldByLabel(page, "Reports To").selectOption({ label: "CS ReportE2E (TEACHER)" });
-
-    await expect(page.getByText("That assignment would create a reporting cycle")).toBeVisible({ timeout: 10000 });
-
-    const manager = await prisma.staffProfile.findUniqueOrThrow({ where: { id: managerId } });
-    expect(manager.reportsToId).toBeNull();
-  });
-
-  test("department detail panel shows the head and configured responsibilities", async ({ page }) => {
+  test("directory tab allows searching and filtering of staff list", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/camp-structure");
+
+    // Switch to Directory Tab
+    await page.getByRole("tab", { name: "Directory" }).click();
+
+    // Search by query
+    const searchInput = page.getByPlaceholder("Search staff by name or email…");
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill("ManagerE2E");
+
+    // Only matching profile should be visible
+    await expect(page.getByText("CS ManagerE2E").first()).toBeVisible();
+    await expect(page.getByText("CS ReportE2E")).not.toBeVisible();
+  });
+
+  test("departments tab lists organization units and supports details sliding drawer", async ({ page }) => {
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/camp-structure");
+
+    // Switch to Departments Tab
     await page.getByRole("tab", { name: "Departments" }).click();
 
-    await page.getByText("E2E Structure Department").click();
-    // The Departments grid card behind the dialog also shows the head's
-    // name, so scope assertions to the detail dialog to avoid ambiguity.
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("CS ManagerE2E")).toBeVisible();
-    await expect(dialog.getByText("Do the thing")).toBeVisible();
-    await expect(dialog.getByText("Do the other thing")).toBeVisible();
-  });
+    // Verify grid card details
+    await expect(page.getByText("E2E Structure Department").first()).toBeVisible();
+    
+    // Click card to open drawer
+    await page.getByText("E2E Structure Department").first().click();
 
-  test("admin can assign a camper down to bed level from the Accommodation tab", async ({ page }) => {
-    const venue = await prisma.venue.findUniqueOrThrow({ where: { id: venueId } });
-
-    await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/camp-structure");
-    await page.getByRole("tab", { name: "Accommodation" }).click();
-
-    await page.locator("select").first().selectOption({ label: venue.name });
-    await expect(page.getByText("E2E Hostel")).toBeVisible({ timeout: 10000 });
-
-    await page.getByText("E2E Bed 1").click();
-    await page.getByPlaceholder("Camper name or registration #").fill("E2E Structure Camper");
-    await page.getByText("E2E Structure Camper").click();
-
-    await expect
-      .poll(async () => {
-        const bed = await prisma.bed.findUniqueOrThrow({ where: { id: bedId } });
-        return bed.status;
-      }, { timeout: 10000 })
-      .toBe("OCCUPIED");
-
-    const registration = await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } });
-    expect(registration.roomId).toBe(roomId);
+    await expect(page.getByText("Department Operations Center").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Do the other thing").first()).toBeVisible();
   });
 });

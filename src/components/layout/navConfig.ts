@@ -106,11 +106,28 @@ const ADMIN_GROUPS: NavGroup[] = [
         icon: HandRaisedIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
+    ],
+  },
+  {
+    name: "Camp Management",
+    items: [
       {
         name: "Camp Structure",
         href: "/admin/camp-structure",
         icon: Squares2X2Icon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
+      },
+      {
+        name: "Tribes",
+        href: "/admin/tribes",
+        icon: UserGroupIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
+      },
+      {
+        name: "Accommodation",
+        href: "/admin/accommodation",
+        icon: BuildingOffice2Icon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
     ],
   },

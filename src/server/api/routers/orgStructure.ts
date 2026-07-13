@@ -40,81 +40,43 @@ export const orgStructureRouter = createTRPCRouter({
       const currentUser = assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
-      // Top-of-chart: org admins (OWNER/ADMIN) + campus reps (CAMPUS_REPRESENTATIVE), one flat query.
-      const leaders = await ctx.prisma.user.findMany({
-        where: { organizationId: input.organizationId, role: { in: ["OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"] }, active: true },
+      const positions = await ctx.prisma.position.findMany({
+        where: { campId: input.campId, deletedAt: null },
+        include: {
+          department: true,
+          assignments: {
+            where: { isCurrent: true },
+            include: {
+              staff: {
+                include: {
+                  user: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       });
 
-      // All staff for the camp, one flat query with everything the tree needs.
-      const staff = await ctx.prisma.staffProfile.findMany({
-        where: { organizationId: input.organizationId, campId: input.campId, status: "APPROVED" },
-        include: { user: true, department: true, assignedTribe: true, assignedVenue: true },
-      });
+      // Build hierarchical tree structure of positions
+      type PositionNode = typeof positions[number] & { children: PositionNode[] };
+      const nodeMap = new Map<string, PositionNode>();
 
-      // Build node id space: "user:<id>" for leaders, "staff:<id>" for staff.
-      type NodeId = string;
-      const nodes = new Map<NodeId, StaffNode & { parentId: NodeId | null }>();
-
-      for (const leader of leaders) {
-        const title = leader.role === "OWNER" ? "Camp Director" : leader.role === "ADMIN" ? "Camp Administrator" : "Campus Representative";
-        nodes.set(`user:${leader.id}`, {
-          kind: "staff",
-          staffProfileId: "",
-          userId: leader.id,
-          name: `${leader.firstName ?? ""} ${leader.lastName ?? ""}`.trim() || leader.email,
-          role: leader.role,
-          title,
-          department: null,
-          tribe: null,
-          centre: null,
-          reportsToId: null, // leaders don't have a reportsTo relation today; wired up as roots
-          children: [],
-          parentId: leader.role === "CAMPUS_REPRESENTATIVE" ? null : null, // owner/admin/campus-reps are all roots for now (no leader-to-leader hierarchy modeled)
-        });
+      for (const pos of positions) {
+        nodeMap.set(pos.id, { ...pos, children: [] });
       }
 
-      for (const s of staff) {
-        let title: string | null = null;
-        if (s.isDepartmentHead) title = "Department Head";
-        else if (s.isAssistantHead) title = "Assistant Department Head";
-        else if (s.isCampMonitor) title = "Camp Monitor";
-        else if (s.isAssistantMonitor) title = "Assistant Camp Monitor";
+      const roots: PositionNode[] = [];
 
-        const parentId: NodeId | null = s.reportsToId ? `staff:${s.reportsToId}` : s.reportsToUserId ? `user:${s.reportsToUserId}` : null;
-
-        nodes.set(`staff:${s.id}`, {
-          kind: "staff",
-          staffProfileId: s.id,
-          userId: s.userId,
-          name: `${s.firstName} ${s.lastName}`.trim(),
-          role: s.type,
-          title,
-          department: s.department?.name ?? null,
-          tribe: s.assignedTribe?.name ?? null,
-          centre: s.assignedVenue?.name ?? null,
-          reportsToId: parentId,
-          children: [],
-          parentId,
-        });
-      }
-
-      // Attach children; normalize dangling/self/both-set parent refs defensively
-      // rather than crashing the tree render (see plan risk notes).
-      const roots: StaffNode[] = [];
-      for (const [id, node] of nodes) {
-        if (node.parentId && node.parentId !== id && nodes.has(node.parentId)) {
-          nodes.get(node.parentId)!.children.push(node);
+      for (const node of nodeMap.values()) {
+        if (node.parentPositionId && nodeMap.has(node.parentPositionId)) {
+          nodeMap.get(node.parentPositionId)!.children.push(node);
         } else {
           roots.push(node);
         }
       }
 
-      const strip = (n: StaffNode & { parentId?: NodeId | null }): StaffNode => {
-        const { parentId, ...rest } = n as any;
-        return { ...rest, children: rest.children.map(strip) };
-      };
-
-      return roots.map(strip);
+      return roots;
     }),
 
   // ─── Department structure ──────────────────────────────────────────────
