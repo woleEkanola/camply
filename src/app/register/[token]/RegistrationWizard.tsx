@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useCallback, useState } from "react";
+import { useReducer, useEffect, useCallback } from "react";
 import { api } from "@/utils/trpc";
 import type { WizardState, WizardAction } from "./types";
 import { VISIBLE_STEPS } from "./types";
@@ -95,16 +95,6 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 }
 
 function createInitialState(token: string): WizardState {
-  const stored =
-    typeof window !== "undefined" ? sessionStorage.getItem(STORAGE_KEY) : null;
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as WizardState;
-      if (parsed.token === token && parsed.step !== "CONFIRMATION" && parsed.step !== "ERROR") {
-        return { ...parsed, direction: "forward" };
-      }
-    } catch {}
-  }
   return {
     step: "LOADING",
     previousStep: null,
@@ -125,11 +115,6 @@ function createInitialState(token: string): WizardState {
 
 export function RegistrationWizard({ token }: { token: string }) {
   const [state, dispatch] = useReducer(wizardReducer, token, createInitialState);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const persist = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -140,6 +125,20 @@ export function RegistrationWizard({ token }: { token: string }) {
   useEffect(() => {
     persist();
   }, [persist]);
+
+  // Restore wizard state from sessionStorage on client mount so refreshing
+  // mid-flow resumes at the correct step. Deferred to useEffect to keep the
+  // initial server/client render identical (both start at LOADING).
+  useEffect(() => {
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as WizardState;
+      if (parsed.token === token && parsed.step !== "CONFIRMATION" && parsed.step !== "ERROR") {
+        dispatch({ type: "GO_TO", step: parsed.step });
+      }
+    } catch {}
+  }, [token]);
 
   const {
     data: signupData,
@@ -177,7 +176,6 @@ export function RegistrationWizard({ token }: { token: string }) {
   const showProgress = currentStepIndex >= 0;
 
   if (state.step === "LOADING") {
-    if (!mounted) return null; // Server: render nothing; Client: match initial null before effect
     return <LoadingSkeleton />;
   }
 
