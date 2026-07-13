@@ -159,6 +159,16 @@ export function RegistrationWizard({ token }: { token: string }) {
           campusName: signupData.campusName,
           organizationId: signupData.organizationId,
           organizationName: signupData.organizationName,
+          year: signupData.year,
+          theme: signupData.theme ?? undefined,
+          bannerUrl: signupData.bannerUrl ?? undefined,
+          logoUrl: signupData.logoUrl ?? undefined,
+          minAge: signupData.minAge ?? undefined,
+          maxAge: signupData.maxAge ?? undefined,
+          ageCutoffDate: signupData.ageCutoffDate ?? undefined,
+          status: signupData.status,
+          registrationOpensAt: signupData.registrationOpensAt ?? undefined,
+          registrationClosesAt: signupData.registrationClosesAt ?? undefined,
         },
       });
     }

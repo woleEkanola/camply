@@ -18,8 +18,16 @@ export interface CampData {
   campusName: string;
   organizationId: string;
   organizationName: string;
-  ageRange?: string;
-  closesAt?: string;
+  year: number;
+  theme?: string;
+  bannerUrl?: string;
+  logoUrl?: string;
+  minAge?: number;
+  maxAge?: number;
+  ageCutoffDate?: string;
+  status: string;
+  registrationOpensAt?: string;
+  registrationClosesAt?: string;
 }
 
 export interface TeenRegistration {
