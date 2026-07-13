@@ -36,6 +36,16 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         direction: "forward",
       };
     case "GO_BACK": {
+      if (state.returnTo) {
+        const target = state.returnTo;
+        return {
+          ...state,
+          step: target,
+          previousStep: state.step,
+          direction: "backward",
+          returnTo: undefined,
+        };
+      }
       const backMap: Partial<Record<WizardState["step"], WizardState["step"]>> = {
         IDENTITY: "LANDING",
         NEW_ACCOUNT: "IDENTITY",
@@ -53,6 +63,15 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         direction: "backward",
       };
     }
+    case "GO_TO_EDIT":
+      return {
+        ...state,
+        activeTeenId: action.camperId,
+        returnTo: "REVIEW",
+        previousStep: state.step,
+        step: "DETAILS",
+        direction: "backward",
+      };
     case "ADD_TEEN":
       return {
         ...state,
@@ -111,6 +130,7 @@ function createInitialState(token: string): WizardState {
     activeTeenId: null,
     declarations: [],
     error: null,
+    returnTo: undefined,
   };
 }
 

@@ -67,6 +67,7 @@ export interface WizardState {
   activeTeenId: string | null;
   declarations: { id: string; checked: boolean }[];
   error: { title: string; message: string } | null;
+  returnTo?: WizardStep;
 }
 
 export type WizardAction =
@@ -77,6 +78,7 @@ export type WizardAction =
   | { type: "SET_AUTH_METHOD"; method: AuthMethod }
   | { type: "GO_TO"; step: WizardStep }
   | { type: "GO_BACK" }
+  | { type: "GO_TO_EDIT"; camperId: string }
   | { type: "ADD_TEEN"; teen: TeenRegistration }
   | { type: "REMOVE_TEEN"; camperId: string }
   | { type: "SET_ACTIVE_TEEN"; camperId: string | null }
