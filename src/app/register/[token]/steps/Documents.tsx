@@ -94,7 +94,7 @@ function DocumentRow({
           <p className="text-sm font-medium text-neutral-900">{requirement.name}</p>
           {requirement.description && <p className="text-xs text-neutral-500">{requirement.description}</p>}
           <p className="mt-0.5 text-xs text-neutral-400">
-            {requirement.acceptedFormats?.replace(/,/g, ", ")} · Up to {requirement.maxSizeMb} MB
+            {requirement.acceptedFormats?.split(",").map((f: string) => f.trim()).join(" or ")}. Up to {requirement.maxSizeMb} MB
           </p>
         </div>
         {done && (

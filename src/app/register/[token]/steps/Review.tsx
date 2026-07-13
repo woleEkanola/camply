@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import type { WizardState, WizardAction } from "../types";
 import { api } from "@/utils/trpc";
 
@@ -11,9 +11,13 @@ interface StepReviewProps {
 
 function TeenReviewCard({
   teen,
+  organizationId,
+  campId,
   dispatch,
 }: {
   teen: WizardState["teens"][0];
+  organizationId: string;
+  campId: string;
   dispatch: React.Dispatch<WizardAction>;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -21,6 +25,11 @@ function TeenReviewCard({
   const { data: camper } = api.camper.getById.useQuery(
     { id: teen.camperId },
     { enabled: !!teen.camperId }
+  );
+
+  const { data: fields } = api.formField.list.useQuery(
+    { organizationId, audience: "CAMPER", campId },
+    { enabled: !!organizationId }
   );
 
   const photoUrl =
@@ -32,6 +41,31 @@ function TeenReviewCard({
           fv.value
       )
       ?.value ?? null;
+
+  const groupedFields = useMemo(() => {
+    if (!camper || !fields) return [];
+
+    const visibleFields = fields.filter((f: any) => f.visible);
+    const grouped: Record<string, { label: string; value: string }[]> = {};
+
+    for (const field of visibleFields) {
+      let value: string | undefined;
+      if (field.source === "SYSTEM" && field.systemKey) {
+        const raw = (camper as any)[field.systemKey];
+        if (raw !== undefined && raw !== null) {
+          value = typeof raw === "string" ? raw : String(raw);
+        }
+      } else {
+        value = camper.fieldValues?.find((fv: any) => fv.fieldId === field.id)?.value;
+      }
+      if (!value) continue;
+      const section = field.groupLabel || "Other";
+      if (!grouped[section]) grouped[section] = [];
+      grouped[section].push({ label: field.label, value });
+    }
+
+    return Object.entries(grouped);
+  }, [camper, fields]);
 
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white shadow-sm">
@@ -100,28 +134,26 @@ function TeenReviewCard({
                 </div>
               )}
             </div>
-            <dl className="min-w-0 flex-1 space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">Name</dt>
-                <dd className="font-medium text-neutral-900">
-                  {teen.firstName} {teen.lastName}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">Date of Birth</dt>
-                <dd className="font-medium text-neutral-900">{teen.dateOfBirth || "—"}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">Gender</dt>
-                <dd className="font-medium text-neutral-900">{teen.gender || "—"}</dd>
-              </div>
-            </dl>
           </div>
+
+          {groupedFields.map(([section, items]) => (
+            <div key={section} className="mb-4 last:mb-0">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">{section}</h4>
+              <dl className="space-y-1.5 text-sm">
+                {items.map(({ label, value }) => (
+                  <div key={label} className="flex justify-between">
+                    <dt className="text-neutral-500">{label}</dt>
+                    <dd className="font-medium text-neutral-900">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ))}
 
           <button
             type="button"
             onClick={() => dispatch({ type: "GO_TO_EDIT", camperId: teen.camperId })}
-            className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-neutral-300 bg-white text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+            className="mt-4 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-neutral-300 bg-white text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
@@ -194,7 +226,7 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
 
       <div className="mb-6 space-y-3">
         {state.teens.map((teen) => (
-          <TeenReviewCard key={teen.camperId} teen={teen} dispatch={dispatch} />
+          <TeenReviewCard key={teen.camperId} teen={teen} organizationId={state.campData?.organizationId ?? ""} campId={state.campData?.campId ?? ""} dispatch={dispatch} />
         ))}
       </div>
 

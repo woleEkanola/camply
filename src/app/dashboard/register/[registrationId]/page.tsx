@@ -2,10 +2,9 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { api } from "@/utils/api";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
-import FileUpload from "@/components/file-upload";
 import type { FormFieldDTO } from "@/components/forms/types";
 
 const STATUS_COPY: Record<string, string> = {
@@ -137,8 +136,7 @@ export default function RegistrationWizardPage() {
   
   // Local state for all fields
   const [values, setValues] = useState<Record<string, unknown>>({});
-  const [birthCertUrl, setBirthCertUrl] = useState("");
-  const [parentConsentUrl, setParentConsentUrl] = useState("");
+  const syncedRef = useRef(false);
   
   // Validation and API errors
   const [profileErrors, setProfileErrors] = useState<string[]>([]);
@@ -178,49 +176,44 @@ export default function RegistrationWizardPage() {
     [fields]
   );
 
-  // Sync camper & registration data to local state
+  // Sync camper & registration data to local state (once)
   useEffect(() => {
-    if (registration?.camper) {
-      const c = registration.camper;
-      const initial: Record<string, unknown> = {};
-      for (const f of visibleFields) {
-        const key = f.source === "SYSTEM" && f.systemKey ? f.systemKey : f.id;
-        if (f.source === "SYSTEM" && f.systemKey) {
-          const directVal = (c as Record<string, unknown>)[f.systemKey];
-          if (directVal !== undefined && directVal !== null) {
-            if (f.type === "DATE") {
-              if (directVal instanceof Date) {
-                initial[key] = directVal.toISOString().split("T")[0];
-              } else if (typeof directVal === "string") {
-                initial[key] = directVal.split("T")[0];
-              } else {
-                initial[key] = directVal;
-              }
+    if (!registration?.camper || syncedRef.current) return;
+    syncedRef.current = true;
+    const c = registration.camper;
+    const initial: Record<string, unknown> = {};
+    for (const f of visibleFields) {
+      const key = f.source === "SYSTEM" && f.systemKey ? f.systemKey : f.id;
+      if (f.source === "SYSTEM" && f.systemKey) {
+        const directVal = (c as Record<string, unknown>)[f.systemKey];
+        if (directVal !== undefined && directVal !== null) {
+          if (f.type === "DATE") {
+            if (directVal instanceof Date) {
+              initial[key] = directVal.toISOString().split("T")[0];
+            } else if (typeof directVal === "string") {
+              initial[key] = directVal.split("T")[0];
             } else {
               initial[key] = directVal;
             }
+          } else {
+            initial[key] = directVal;
           }
         }
       }
-      if (c.fieldValues) {
-        for (const fv of c.fieldValues) {
-          const key = (fv.field?.source === "SYSTEM" && fv.field?.systemKey)
-            ? fv.field.systemKey
-            : fv.fieldId;
-          initial[key] = fv.value;
-        }
+    }
+    if (c.fieldValues) {
+      for (const fv of c.fieldValues) {
+        const key = (fv.field?.source === "SYSTEM" && fv.field?.systemKey)
+          ? fv.field.systemKey
+          : fv.fieldId;
+        initial[key] = fv.value;
       }
-      setValues(initial);
-      setBirthCertUrl(c.birthCert ?? "");
     }
-    if (registration) {
-      setParentConsentUrl(registration.parentConsent ?? "");
-    }
-  }, [registration, visibleFields]);
+    setValues(initial);
+  }, [registration]);
 
   // Mutations
   const camperUpdateMutation = api.camper.update.useMutation();
-  const registrationUpdateMutation = api.registration.updateFields.useMutation();
 
   const submitMutation = api.registration.submit.useMutation({
     onSuccess: () => {
@@ -381,14 +374,6 @@ export default function RegistrationWizardPage() {
 
     const errors: string[] = [];
 
-    if (!birthCertUrl) {
-      errors.push("Birth Certificate document is required");
-    }
-    if (!parentConsentUrl) {
-      errors.push("Parent Consent Form document is required");
-    }
-
-    // Check dynamic requirements
     const missingRequired = (requirements ?? []).filter((req) => {
       if (!req.required) return false;
       return !(documents ?? []).some((d) => d.requirementId === req.id && d.status !== "REJECTED");
@@ -406,32 +391,6 @@ export default function RegistrationWizardPage() {
 
     setStep("review");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleBirthCertUpload = async (url: string) => {
-    setBirthCertUrl(url);
-    try {
-      await camperUpdateMutation.mutateAsync({
-        id: registration.camperId,
-        profile: { birthCert: url },
-      });
-      await refetch();
-    } catch (err) {
-      alert("Failed to save Birth Certificate URL to profile.");
-    }
-  };
-
-  const handleParentConsentUpload = async (url: string) => {
-    setParentConsentUrl(url);
-    try {
-      await registrationUpdateMutation.mutateAsync({
-        id: registration.id,
-        data: { parentConsent: url },
-      });
-      await refetch();
-    } catch (err) {
-      alert("Failed to save Consent Form URL to registration.");
-    }
   };
 
   return (
@@ -503,57 +462,15 @@ export default function RegistrationWizardPage() {
               )}
 
               <form onSubmit={handleDocumentsSubmit} className="space-y-6">
-                {/* 1. Birth Certificate Upload */}
-                <div className={`p-4 border rounded-lg transition ${
-                  !birthCertUrl ? "border-danger-200 bg-danger-25/10" : "border-neutral-200 bg-white"
-                }`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-semibold text-neutral-900">
-                        Birth Certificate <span className="text-danger-600 text-sm">*</span>
-                      </h3>
-                      <p className="text-xs text-neutral-500">Must be a clear photo or scanned PDF copy.</p>
-                    </div>
-                    {birthCertUrl && <span className="text-xs font-semibold text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded-full">✓ Uploaded</span>}
+                {(requirements ?? []).filter(r => r.required).length === 0 ? (
+                  <div className="rounded-xl bg-neutral-50 p-6 text-center">
+                    <p className="text-sm font-medium text-neutral-700">No documents required</p>
+                    <p className="text-xs text-neutral-500">You can continue to review.</p>
                   </div>
-                  <FileUpload
-                    value={birthCertUrl}
-                    onChange={handleBirthCertUpload}
-                    accept="image/*,application/pdf"
-                  />
-                </div>
-
-                {/* 2. Parent Consent Form Upload */}
-                <div className={`p-4 border rounded-lg transition ${
-                  !parentConsentUrl ? "border-danger-200 bg-danger-25/10" : "border-neutral-200 bg-white"
-                }`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-semibold text-neutral-900">
-                        Parent Consent Form <span className="text-danger-600 text-sm">*</span>
-                      </h3>
-                      <p className="text-xs text-neutral-500">
-                        Please download the consent form, sign it, and upload the signed copy.
-                      </p>
-                      <a href="/sample-consent-form.pdf" download className="text-xs font-semibold text-accent-700 hover:text-accent-800 underline mt-1 inline-block">
-                        ↓ Download Sample Consent Form template
-                      </a>
-                    </div>
-                    {parentConsentUrl && <span className="text-xs font-semibold text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded-full">✓ Uploaded</span>}
-                  </div>
-                  <FileUpload
-                    value={parentConsentUrl}
-                    onChange={handleParentConsentUpload}
-                    accept="image/*,application/pdf"
-                  />
-                </div>
-
-                {/* Dynamic documents defined on Camp level */}
-                {(requirements ?? []).length > 0 && (
-                  <div className="pt-4 border-t space-y-4">
-                    <h3 className="font-semibold text-neutral-800 text-sm">Additional Camp Documents</h3>
+                ) : (
+                  <div className="space-y-4">
                     {(requirements ?? []).map((req) => (
-                      <div key={req.id} className={!documents?.some(d => d.requirementId === req.id && d.status !== "REJECTED") && req.required ? "border border-danger-200 p-2 rounded-lg" : ""}>
+                      <div key={req.id} className={!documents?.some(d => d.requirementId === req.id && d.status !== "REJECTED") && req.required ? "border border-danger-200 rounded-xl" : ""}>
                         <DocumentUploader
                           requirement={req}
                           registrationId={registrationId}
@@ -622,18 +539,6 @@ export default function RegistrationWizardPage() {
                     <button className="text-xs text-accent-700 hover:text-accent-800 underline font-normal" onClick={() => setStep("documents")}>Edit</button>
                   </h3>
                   <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-neutral-500">Birth Certificate:</span>
-                      <a href={birthCertUrl} target="_blank" rel="noreferrer" className="text-accent-700 hover:text-accent-800 underline font-medium">
-                        View uploaded birth certificate
-                      </a>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-neutral-500">Parent Consent Form:</span>
-                      <a href={parentConsentUrl} target="_blank" rel="noreferrer" className="text-accent-700 hover:text-accent-800 underline font-medium">
-                        View uploaded consent form
-                      </a>
-                    </div>
                     {(requirements ?? []).map((req) => {
                       const doc = (documents ?? []).find((d) => d.requirementId === req.id && d.status !== "REJECTED");
                       return (
