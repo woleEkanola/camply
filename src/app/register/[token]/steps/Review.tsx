@@ -32,6 +32,16 @@ function TeenReviewCard({
     { enabled: !!organizationId }
   );
 
+  const { data: docs } = api.document.listForRegistration.useQuery(
+    { registrationId: teen.registrationId },
+    { enabled: !!teen.registrationId }
+  );
+
+  const { data: requirements } = api.documentRequirement.listByCamp.useQuery(
+    { campId },
+    { enabled: !!campId }
+  );
+
   const photoUrl =
     camper?.fieldValues
       ?.find(
@@ -149,6 +159,34 @@ function TeenReviewCard({
               </dl>
             </div>
           ))}
+
+          {docs && docs.length > 0 && (
+            <div className="mb-4">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Documents</h4>
+              <div className="space-y-1.5 text-sm">
+                {docs.map((doc: any) => {
+                  const reqName = requirements?.find((r: any) => r.id === doc.requirementId)?.name ?? "Document";
+                  return (
+                    <div key={doc.id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-neutral-500">{reqName}</span>
+                        <span className={`inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-medium ${
+                          doc.status === "APPROVED" ? "bg-success-100 text-success-700" :
+                          doc.status === "REJECTED" ? "bg-danger-100 text-danger-700" :
+                          "bg-neutral-200 text-neutral-600"
+                        }`}>
+                          {doc.status}
+                        </span>
+                      </div>
+                      <a href={doc.url} target="_blank" rel="noreferrer" className="text-xs text-accent-600 hover:underline truncate ml-2 max-w-[120px]">
+                        {doc.fileName}
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <button
             type="button"

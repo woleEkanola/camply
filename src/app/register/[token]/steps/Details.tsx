@@ -104,6 +104,29 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
     [activeTeen, fields]
   );
 
+  async function flushAndNavigate(target: "next_section" | "next_step" | "return_to_review") {
+    if (!activeTeen) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const fieldValues = (fields ?? [])
+      .filter((f) => f.visible)
+      .map((f) => {
+        const key = f.systemKey ?? f.id;
+        return { fieldId: f.id, value: values[key] ?? "" };
+      })
+      .filter((fv) => fv.value);
+    try {
+      await updateCamper.mutateAsync({ id: activeTeen.camperId, profile: {}, fieldValues });
+    } catch {}
+    dispatch({ type: "SET_TEEN_COMPLETE", camperId: activeTeen.camperId, fieldsComplete: true, documentsComplete: activeTeen.documentsComplete });
+    if (target === "return_to_review") {
+      dispatch({ type: "GO_BACK" });
+    } else if (target === "next_step") {
+      dispatch({ type: "GO_TO", step: "DOCUMENTS" });
+    } else {
+      setSectionIndex((i) => i + 1);
+    }
+  }
+
   if (!activeTeen) {
     return (
       <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
@@ -196,15 +219,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
             {state.returnTo === "REVIEW" ? (
               <button
                 type="button"
-                onClick={() => {
-                  dispatch({
-                    type: "SET_TEEN_COMPLETE",
-                    camperId: activeTeen.camperId,
-                    fieldsComplete: true,
-                    documentsComplete: activeTeen.documentsComplete,
-                  });
-                  dispatch({ type: "GO_BACK" });
-                }}
+                onClick={() => flushAndNavigate("return_to_review")}
                 className="flex h-11 items-center gap-1 rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700"
               >
                 Save &amp; Return to Review
@@ -213,17 +228,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
               <button
                 type="button"
                 onClick={() => {
-                  dispatch({
-                    type: "SET_TEEN_COMPLETE",
-                    camperId: activeTeen.camperId,
-                    fieldsComplete: true,
-                    documentsComplete: activeTeen.documentsComplete,
-                  });
-                  if (isLastSection) {
-                    dispatch({ type: "GO_TO", step: "DOCUMENTS" });
-                  } else {
-                    setSectionIndex((i) => i + 1);
-                  }
+                  flushAndNavigate(isLastSection ? "next_step" : "next_section");
                 }}
                 className="flex h-11 items-center gap-1 rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700"
               >
