@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import type { CampData } from "../types";
 
 const STATUS_BADGE: Record<string, { label: string; tone: string }> = {
@@ -22,12 +21,11 @@ export function StepLanding({ campData, onBegin }: StepLandingProps) {
     <div>
       {campData.bannerUrl && (
         <div className="relative mb-6 h-40 w-full overflow-hidden rounded-2xl sm:h-52">
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src={campData.bannerUrl}
             alt=""
-            fill
-            className="object-cover"
-            sizes="(max-width: 640px) 100vw, 32rem"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         </div>
       )}
