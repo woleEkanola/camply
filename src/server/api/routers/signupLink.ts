@@ -311,7 +311,17 @@ export const signupLinkRouter = createTRPCRouter({
         organizationId: signupLink.campus.organization.id,
         organizationName: signupLink.campus.organization.name,
         campId: signupLink.campId,
-        campName: signupLink.camp.name
+        campName: signupLink.camp.name,
+        year: signupLink.camp.year,
+        theme: signupLink.camp.theme ?? null,
+        bannerUrl: signupLink.camp.bannerUrl ?? null,
+        logoUrl: signupLink.camp.logoUrl ?? null,
+        minAge: signupLink.camp.minAge ?? null,
+        maxAge: signupLink.camp.maxAge ?? null,
+        ageCutoffDate: signupLink.camp.ageCutoffDate?.toISOString().split("T")[0] ?? null,
+        status: signupLink.camp.status,
+        registrationOpensAt: signupLink.camp.registrationOpensAt?.toISOString().split("T")[0] ?? null,
+        registrationClosesAt: signupLink.camp.registrationClosesAt?.toISOString().split("T")[0] ?? null,
       };
 
     }),
@@ -364,7 +374,17 @@ export const signupLinkRouter = createTRPCRouter({
         organizationId: signupLink.campus.organization.id,
         organizationName: signupLink.campus.organization.name,
         campId: signupLink.campId,
-        campName: signupLink.camp.name
+        campName: signupLink.camp.name,
+        year: signupLink.camp.year,
+        theme: signupLink.camp.theme ?? null,
+        bannerUrl: signupLink.camp.bannerUrl ?? null,
+        logoUrl: signupLink.camp.logoUrl ?? null,
+        minAge: signupLink.camp.minAge ?? null,
+        maxAge: signupLink.camp.maxAge ?? null,
+        ageCutoffDate: signupLink.camp.ageCutoffDate?.toISOString().split("T")[0] ?? null,
+        status: signupLink.camp.status,
+        registrationOpensAt: signupLink.camp.registrationOpensAt?.toISOString().split("T")[0] ?? null,
+        registrationClosesAt: signupLink.camp.registrationClosesAt?.toISOString().split("T")[0] ?? null,
       };
     }),
 

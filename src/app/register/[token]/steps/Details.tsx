@@ -104,6 +104,29 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
     [activeTeen, fields]
   );
 
+  async function flushAndNavigate(target: "next_section" | "next_step" | "return_to_review") {
+    if (!activeTeen) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const fieldValues = (fields ?? [])
+      .filter((f) => f.visible)
+      .map((f) => {
+        const key = f.systemKey ?? f.id;
+        return { fieldId: f.id, value: values[key] ?? "" };
+      })
+      .filter((fv) => fv.value);
+    try {
+      await updateCamper.mutateAsync({ id: activeTeen.camperId, profile: {}, fieldValues });
+    } catch {}
+    dispatch({ type: "SET_TEEN_COMPLETE", camperId: activeTeen.camperId, fieldsComplete: true, documentsComplete: activeTeen.documentsComplete });
+    if (target === "return_to_review") {
+      dispatch({ type: "GO_BACK" });
+    } else if (target === "next_step") {
+      dispatch({ type: "GO_TO", step: "DOCUMENTS" });
+    } else {
+      setSectionIndex((i) => i + 1);
+    }
+  }
+
   if (!activeTeen) {
     return (
       <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
@@ -180,7 +203,9 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
         )}
 
         <div className="mt-6 flex items-center justify-between">
-          <AutoSaveIndicator status={saveStatus} />
+          <div className="min-w-[110px]">
+            <AutoSaveIndicator status={saveStatus} />
+          </div>
           <div className="flex gap-3">
             {sectionIndex > 0 && (
               <button
@@ -191,28 +216,28 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
                 ← Previous
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                dispatch({
-                  type: "SET_TEEN_COMPLETE",
-                  camperId: activeTeen.camperId,
-                  fieldsComplete: true,
-                  documentsComplete: activeTeen.documentsComplete,
-                });
-                if (isLastSection) {
-                  dispatch({ type: "GO_TO", step: "DOCUMENTS" });
-                } else {
-                  setSectionIndex((i) => i + 1);
-                }
-              }}
-              className="flex h-11 items-center gap-1 rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700"
-            >
-              {isLastSection ? "Continue to Documents" : "Next"}
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-              </svg>
-            </button>
+            {state.returnTo === "REVIEW" ? (
+              <button
+                type="button"
+                onClick={() => flushAndNavigate("return_to_review")}
+                className="flex h-11 items-center gap-1 rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700"
+              >
+                Save &amp; Return to Review
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  flushAndNavigate(isLastSection ? "next_step" : "next_section");
+                }}
+                className="flex h-11 items-center gap-1 rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700"
+              >
+                {isLastSection ? "Continue to Documents" : "Next"}
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </div>

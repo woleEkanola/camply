@@ -42,7 +42,7 @@ function DocumentRow({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const maxBytes = (requirement.maxSizeMb ?? 10) * 1024 * 1024;
+    const maxBytes = (requirement.maxSizeMb ?? 2) * 1024 * 1024;
     if (file.size > maxBytes) {
       setLocalError(`File exceeds the maximum size of ${requirement.maxSizeMb} MB.`);
       return;
@@ -83,7 +83,7 @@ function DocumentRow({
     }
   }
 
-  const acceptedFormatsList = (requirement.acceptedFormats as string)?.split(",").map((f: string) => `.${f.trim()}`).join(",") ?? "image/*,.pdf";
+  const acceptedFormatsList = (requirement.acceptedFormats as string)?.split(",").map((f: string) => `.${f.trim()}`).join(",") ?? ".jpg,.png";
 
   return (
     <div className={`rounded-xl border bg-white p-4 shadow-sm transition-colors ${
@@ -94,7 +94,7 @@ function DocumentRow({
           <p className="text-sm font-medium text-neutral-900">{requirement.name}</p>
           {requirement.description && <p className="text-xs text-neutral-500">{requirement.description}</p>}
           <p className="mt-0.5 text-xs text-neutral-400">
-            {requirement.acceptedFormats?.replace(/,/g, ", ")} · Up to {requirement.maxSizeMb} MB
+            {requirement.acceptedFormats?.split(",").map((f: string) => f.trim()).join(" or ")}. Up to {requirement.maxSizeMb} MB
           </p>
         </div>
         {done && (

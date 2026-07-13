@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
+import FileUpload from "@/components/file-upload";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
 import { Dialog } from "@/components/ui/Dialog";
@@ -128,6 +129,8 @@ export default function CampConfigPage() {
   const [form, setForm] = useState({
     theme: "",
     description: "",
+    bannerUrl: "",
+    logoUrl: "",
     registrationOpensAt: "",
     registrationClosesAt: "",
     arrivalDate: "",
@@ -167,6 +170,8 @@ export default function CampConfigPage() {
     setForm({
       theme: camp.theme ?? "",
       description: camp.description ?? "",
+      bannerUrl: camp.bannerUrl ?? "",
+      logoUrl: camp.logoUrl ?? "",
       registrationOpensAt: toDateInputValue(camp.registrationOpensAt),
       registrationClosesAt: toDateInputValue(camp.registrationClosesAt),
       arrivalDate: toDateInputValue(camp.arrivalDate),
@@ -212,6 +217,8 @@ export default function CampConfigPage() {
       data: {
         theme: form.theme || null,
         description: form.description || null,
+        bannerUrl: form.bannerUrl || null,
+        logoUrl: form.logoUrl || null,
         registrationOpensAt: form.registrationOpensAt ? new Date(form.registrationOpensAt) : null,
         registrationClosesAt: form.registrationClosesAt ? new Date(form.registrationClosesAt) : null,
         arrivalDate: form.arrivalDate ? new Date(form.arrivalDate) : null,
@@ -271,6 +278,13 @@ export default function CampConfigPage() {
             <Input label="Theme" value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} />
             <Input label="Organization Code (for registration numbers)" value={form.orgCode} onChange={(e) => setForm({ ...form, orgCode: e.target.value })} />
             <Textarea containerClassName="md:col-span-2" label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+
+            <div className="md:col-span-2">
+              <FileUpload label="Camp Banner Image" value={form.bannerUrl} onChange={(url) => setForm({ ...form, bannerUrl: url })} accept="image/*" />
+            </div>
+            <div className="md:col-span-2">
+              <FileUpload label="Camp Logo" value={form.logoUrl} onChange={(url) => setForm({ ...form, logoUrl: url })} accept="image/*" />
+            </div>
 
             <Input label="Registration Opens" type="date" value={form.registrationOpensAt} onChange={(e) => setForm({ ...form, registrationOpensAt: e.target.value })} />
             <Input label="Registration Closes" type="date" value={form.registrationClosesAt} onChange={(e) => setForm({ ...form, registrationClosesAt: e.target.value })} />

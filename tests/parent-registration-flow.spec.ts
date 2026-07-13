@@ -10,7 +10,7 @@ import {
   restoreRequiredCustomFields,
 } from "./helpers";
 
-const DUMMY_FILE = path.join(__dirname, "fixtures", "dummy-document.pdf");
+const DUMMY_FILE = path.join(__dirname, "fixtures", "dummy-image.png");
 
 function byLabel(page: Page, labelText: string) {
   return page.locator("label", { hasText: labelText }).locator(
@@ -31,20 +31,6 @@ test.describe("Parent Teen Registration", () => {
     const { organizationId, campId } = await getFixtureOrgContext();
     await resetSystemFieldDefaults("CAMPER");
     relaxedCustomFields = await relaxRequiredCustomFields("CAMPER");
-
-    // Update document requirements to accept PDF so the test fixture works
-    const existingReqs = await prisma.documentRequirement.findMany({
-      where: { campId, required: true, deletedAt: null },
-    });
-    for (const req of existingReqs) {
-      const formats = req.acceptedFormats as string | null;
-      if (formats && !formats.includes("pdf")) {
-        await prisma.documentRequirement.update({
-          where: { id: req.id },
-          data: { acceptedFormats: `${formats},pdf` },
-        });
-      }
-    }
 
     const campus = await prisma.campus.create({
       data: {

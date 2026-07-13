@@ -1,6 +1,7 @@
 "use client";
 
-import { useReducer, useEffect, useCallback, useState } from "react";
+import { useReducer, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
 import type { WizardState, WizardAction } from "./types";
 import { VISIBLE_STEPS } from "./types";
@@ -35,6 +36,16 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         direction: "forward",
       };
     case "GO_BACK": {
+      if (state.returnTo) {
+        const target = state.returnTo;
+        return {
+          ...state,
+          step: target,
+          previousStep: state.step,
+          direction: "backward",
+          returnTo: undefined,
+        };
+      }
       const backMap: Partial<Record<WizardState["step"], WizardState["step"]>> = {
         IDENTITY: "LANDING",
         NEW_ACCOUNT: "IDENTITY",
@@ -52,6 +63,15 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         direction: "backward",
       };
     }
+    case "GO_TO_EDIT":
+      return {
+        ...state,
+        activeTeenId: action.camperId,
+        returnTo: "REVIEW",
+        previousStep: state.step,
+        step: "DETAILS",
+        direction: "backward",
+      };
     case "ADD_TEEN":
       return {
         ...state,
@@ -95,16 +115,6 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 }
 
 function createInitialState(token: string): WizardState {
-  const stored =
-    typeof window !== "undefined" ? sessionStorage.getItem(STORAGE_KEY) : null;
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as WizardState;
-      if (parsed.token === token && parsed.step !== "CONFIRMATION" && parsed.step !== "ERROR") {
-        return { ...parsed, direction: "forward" };
-      }
-    } catch {}
-  }
   return {
     step: "LOADING",
     previousStep: null,
@@ -120,16 +130,13 @@ function createInitialState(token: string): WizardState {
     activeTeenId: null,
     declarations: [],
     error: null,
+    returnTo: undefined,
   };
 }
 
 export function RegistrationWizard({ token }: { token: string }) {
   const [state, dispatch] = useReducer(wizardReducer, token, createInitialState);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const router = useRouter();
 
   const persist = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -140,6 +147,20 @@ export function RegistrationWizard({ token }: { token: string }) {
   useEffect(() => {
     persist();
   }, [persist]);
+
+  // Restore wizard state from sessionStorage on client mount so refreshing
+  // mid-flow resumes at the correct step. Deferred to useEffect to keep the
+  // initial server/client render identical (both start at LOADING).
+  useEffect(() => {
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as WizardState;
+      if (parsed.token === token && parsed.step !== "CONFIRMATION" && parsed.step !== "ERROR") {
+        dispatch({ type: "GO_TO", step: parsed.step });
+      }
+    } catch {}
+  }, [token]);
 
   const {
     data: signupData,
@@ -158,6 +179,16 @@ export function RegistrationWizard({ token }: { token: string }) {
           campusName: signupData.campusName,
           organizationId: signupData.organizationId,
           organizationName: signupData.organizationName,
+          year: signupData.year,
+          theme: signupData.theme ?? undefined,
+          bannerUrl: signupData.bannerUrl ?? undefined,
+          logoUrl: signupData.logoUrl ?? undefined,
+          minAge: signupData.minAge ?? undefined,
+          maxAge: signupData.maxAge ?? undefined,
+          ageCutoffDate: signupData.ageCutoffDate ?? undefined,
+          status: signupData.status,
+          registrationOpensAt: signupData.registrationOpensAt ?? undefined,
+          registrationClosesAt: signupData.registrationClosesAt ?? undefined,
         },
       });
     }
@@ -177,7 +208,6 @@ export function RegistrationWizard({ token }: { token: string }) {
   const showProgress = currentStepIndex >= 0;
 
   if (state.step === "LOADING") {
-    if (!mounted) return null; // Server: render nothing; Client: match initial null before effect
     return <LoadingSkeleton />;
   }
 
@@ -187,6 +217,18 @@ export function RegistrationWizard({ token }: { token: string }) {
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-24 pt-6 sm:pt-10">
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => router.push("/dashboard")}
+          className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-200 hover:text-neutral-600"
+          aria-label="Cancel registration"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
       {showProgress && (
         <WizardProgress
           steps={VISIBLE_STEPS}
