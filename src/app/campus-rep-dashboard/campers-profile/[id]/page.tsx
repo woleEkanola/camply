@@ -2,7 +2,7 @@
 
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { api } from "@/utils/api";
+import { api } from "@/utils/trpc";
 import Link from "next/link";
 import FileUpload from "@/components/file-upload";
 import { useState } from "react";

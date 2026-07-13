@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, UserIcon } from "@heroicons/react/24/outline";
-import { api } from "@/utils/api";
+import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import NotificationBell from "@/components/NotificationBell";
 import { getNavGroups, type Role } from "./navConfig";

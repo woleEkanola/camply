@@ -26,6 +26,8 @@ export interface CampData {
   maxAge?: number;
   ageCutoffDate?: string;
   status: string;
+  startDate?: string;
+  endDate?: string;
   registrationOpensAt?: string;
   registrationClosesAt?: string;
 }

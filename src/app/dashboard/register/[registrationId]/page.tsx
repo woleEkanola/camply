@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState, useMemo, useRef } from "react";
-import { api } from "@/utils/api";
+import { api } from "@/utils/trpc";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 import type { FormFieldDTO } from "@/components/forms/types";
 

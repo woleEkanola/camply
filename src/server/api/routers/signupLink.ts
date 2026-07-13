@@ -304,7 +304,6 @@ export const signupLinkRouter = createTRPCRouter({
           message: "This signup link is for an inactive camp"
         });
       }
-      // Return the signup link details
       return {
         campusId: signupLink.campusId,
         campusName: signupLink.campus.name,
@@ -319,6 +318,8 @@ export const signupLinkRouter = createTRPCRouter({
         minAge: signupLink.camp.minAge ?? null,
         maxAge: signupLink.camp.maxAge ?? null,
         ageCutoffDate: signupLink.camp.ageCutoffDate?.toISOString().split("T")[0] ?? null,
+        startDate: signupLink.camp.startDate?.toISOString().split("T")[0] ?? null,
+        endDate: signupLink.camp.endDate?.toISOString().split("T")[0] ?? null,
         status: signupLink.camp.status,
         registrationOpensAt: signupLink.camp.registrationOpensAt?.toISOString().split("T")[0] ?? null,
         registrationClosesAt: signupLink.camp.registrationClosesAt?.toISOString().split("T")[0] ?? null,
@@ -382,6 +383,8 @@ export const signupLinkRouter = createTRPCRouter({
         minAge: signupLink.camp.minAge ?? null,
         maxAge: signupLink.camp.maxAge ?? null,
         ageCutoffDate: signupLink.camp.ageCutoffDate?.toISOString().split("T")[0] ?? null,
+        startDate: signupLink.camp.startDate?.toISOString().split("T")[0] ?? null,
+        endDate: signupLink.camp.endDate?.toISOString().split("T")[0] ?? null,
         status: signupLink.camp.status,
         registrationOpensAt: signupLink.camp.registrationOpensAt?.toISOString().split("T")[0] ?? null,
         registrationClosesAt: signupLink.camp.registrationClosesAt?.toISOString().split("T")[0] ?? null,

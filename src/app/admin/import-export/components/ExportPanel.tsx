@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { api } from "../../../../utils/api";
+import { api } from "@/utils/trpc";
 import { downloadBlob, toCsv, toJsonBundle, toMarkdown, toXlsxWorkbook } from "../../../../lib/import-export/serialize";
 
 type ExportFormat = "json" | "xlsx" | "csv" | "md";
