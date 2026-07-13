@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useCallback } from "react";
+import { useReducer, useEffect, useCallback, useState } from "react";
 import { api } from "@/utils/trpc";
 import type { WizardState, WizardAction } from "./types";
 import { VISIBLE_STEPS } from "./types";
@@ -125,6 +125,11 @@ function createInitialState(token: string): WizardState {
 
 export function RegistrationWizard({ token }: { token: string }) {
   const [state, dispatch] = useReducer(wizardReducer, token, createInitialState);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const persist = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -172,6 +177,7 @@ export function RegistrationWizard({ token }: { token: string }) {
   const showProgress = currentStepIndex >= 0;
 
   if (state.step === "LOADING") {
+    if (!mounted) return null; // Server: render nothing; Client: match initial null before effect
     return <LoadingSkeleton />;
   }
 
