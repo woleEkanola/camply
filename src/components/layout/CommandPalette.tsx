@@ -6,7 +6,7 @@ import { Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { api } from "@/utils/api";
+import { api } from "@/utils/trpc";
 import { getNavGroups, type Role } from "./navConfig";
 
 interface PaletteResult {

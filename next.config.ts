@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-
-  /* config options here */
+  serverExternalPackages: ["@prisma/client", "@next-auth/prisma-adapter"],
 };
 
 export default nextConfig;

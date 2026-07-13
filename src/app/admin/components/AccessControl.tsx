@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { api } from "../../../utils/api";
+import { api } from "@/utils/trpc";
 
 // UserRole and PermissionType are not exported from @prisma/client after the downgrade.
 // Define them as local enums to allow both type and runtime value usage.

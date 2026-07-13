@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { api } from "../../../utils/api";
+import { api } from "@/utils/trpc";
 import ParentProfilesAccordion from "./ParentProfilesAccordion";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";

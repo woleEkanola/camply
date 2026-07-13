@@ -5,7 +5,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { api } from "../../../../utils/api";
+import { api } from "@/utils/trpc";
 import { detectAndParse } from "../../../../lib/import-export/parse";
 import { toImportBundle, validateBundle, type ValidatedBundle } from "../../../../lib/import-export/validate";
 import type { EntityKind, ImportResult } from "../../../../lib/import-export/types";

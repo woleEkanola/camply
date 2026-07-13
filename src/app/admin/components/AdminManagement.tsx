@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api } from "../../../utils/api";
+import { api } from "@/utils/trpc";
 import DataTable from "./DataTable";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";

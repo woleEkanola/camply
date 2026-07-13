@@ -1,6 +1,6 @@
 "use client";
 import { useParams } from "next/navigation";
-import { api } from "@/utils/api";
+import { api } from "@/utils/trpc";
 import AppShell from "@/components/layout/AppShell";
 import React from "react";
 import StatCard from "../../components/StatCard";

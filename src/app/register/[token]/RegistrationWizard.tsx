@@ -187,6 +187,8 @@ export function RegistrationWizard({ token }: { token: string }) {
           maxAge: signupData.maxAge ?? undefined,
           ageCutoffDate: signupData.ageCutoffDate ?? undefined,
           status: signupData.status,
+          startDate: signupData.startDate ?? undefined,
+          endDate: signupData.endDate ?? undefined,
           registrationOpensAt: signupData.registrationOpensAt ?? undefined,
           registrationClosesAt: signupData.registrationClosesAt ?? undefined,
         },

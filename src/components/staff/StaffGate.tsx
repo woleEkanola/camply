@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/utils/api";
+import { api } from "@/utils/trpc";
 import { Card, CardBody } from "@/components/ui/Card";
 
 const MESSAGES: Record<string, { title: string; body: string }> = {
