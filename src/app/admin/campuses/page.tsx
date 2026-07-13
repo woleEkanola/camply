@@ -651,7 +651,7 @@ export default function CampusesPage() {
       setError("Signup link not available for this campus.");
       return;
     }
-    const signupUrl = `${baseUrl}/signup/${link.campus.slug}_${link.camp.slug}`;
+    const signupUrl = `${baseUrl}/register/${link.campus.slug}_${link.camp.slug}`;
     navigator.clipboard.writeText(signupUrl)
       .then(() => {
         setCopiedLinkId(campusId);
