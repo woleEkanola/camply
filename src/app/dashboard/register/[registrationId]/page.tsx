@@ -4,12 +4,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState, useMemo } from "react";
 import { api } from "@/utils/api";
-import AppShell from "@/components/layout/AppShell";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 import FileUpload from "@/components/file-upload";
 import type { FormFieldDTO } from "@/components/forms/types";
-import { Card, CardBody } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 
 const STATUS_COPY: Record<string, string> = {
   DRAFT: "You haven't submitted this registration yet.",
@@ -78,7 +75,7 @@ function DocumentUploader({
   };
 
   return (
-    <div className="border rounded-lg p-4 flex items-center justify-between gap-4">
+    <div className="rounded-xl border border-neutral-200 bg-white p-4 flex items-center justify-between gap-4">
       <div>
         <div className="font-medium">
           {requirement.name} {requirement.required && <span className="text-xs text-red-600">Required</span>}
@@ -98,7 +95,7 @@ function DocumentUploader({
             </button>
           </div>
         ) : (
-          <label className="cursor-pointer bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">
+          <label className="cursor-pointer inline-flex items-center rounded-lg bg-accent-50 px-3 py-1.5 text-xs font-medium text-accent-700 hover:bg-accent-100">
             {uploading ? "Uploading..." : "Upload"}
             <input
               type="file"
@@ -247,12 +244,12 @@ export default function RegistrationWizardPage() {
 
   if (isLoading || !registration) {
     return (
-      <AppShell area="dashboard">
-        <div className="max-w-2xl mx-auto flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent-600"></div>
-          <span className="ml-3 text-neutral-500 font-medium">Loading registration details...</span>
+      <div className="flex min-h-screen items-center justify-center bg-neutral-50 font-sans">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-500 border-t-transparent" />
+          <span className="font-medium text-neutral-500">Loading...</span>
         </div>
-      </AppShell>
+      </div>
     );
   }
 
@@ -260,9 +257,9 @@ export default function RegistrationWizardPage() {
 
   if (!isEditable) {
     return (
-      <AppShell area="dashboard">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-lg shadow-sm border border-neutral-200 p-6">
+      <div className="min-h-screen bg-neutral-50 font-sans">
+        <div className="mx-auto max-w-lg px-4 pb-24 pt-6">
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
             <h1 className="text-xl font-bold mb-2 text-neutral-900">
               Registration Status: {registration.status.replace(/_/g, " ")}
             </h1>
@@ -311,7 +308,7 @@ export default function RegistrationWizardPage() {
             </button>
           </div>
         </div>
-      </AppShell>
+      </div>
     );
   }
 
@@ -438,42 +435,10 @@ export default function RegistrationWizardPage() {
   };
 
   return (
-    <AppShell area="dashboard">
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="min-h-screen bg-neutral-50 font-sans">
+      <div className="mx-auto max-w-lg px-4 pb-24 pt-6 space-y-6">
         {/* Step Indicator */}
-        <div className="flex items-center justify-between text-xs font-semibold text-neutral-400 border-b pb-4">
-          <button
-            onClick={() => isEditable && setStep("profile")}
-            className={`flex items-center gap-1.5 transition ${
-              step === "profile" ? "text-accent-600 font-bold border-b-2 border-accent-600 pb-4 -mb-4.5" : "hover:text-neutral-600"
-            }`}
-          >
-            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 border text-xs">1</span>
-            Profile Info
-          </button>
-          <span>→</span>
-          <button
-            onClick={() => {
-              if (step === "review") setStep("documents");
-            }}
-            disabled={step === "profile"}
-            className={`flex items-center gap-1.5 transition disabled:opacity-50 ${
-              step === "documents" ? "text-accent-600 font-bold border-b-2 border-accent-600 pb-4 -mb-4.5" : "hover:text-neutral-600"
-            }`}
-          >
-            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 border text-xs">2</span>
-            Documents
-          </button>
-          <span>→</span>
-          <span
-            className={`flex items-center gap-1.5 ${
-              step === "review" ? "text-accent-600 font-bold border-b-2 border-accent-600 pb-4 -mb-4.5" : ""
-            }`}
-          >
-            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 border text-xs">3</span>
-            Review & Submit
-          </span>
-        </div>
+        <div className="flex items-center justify-center gap-2 text-sm font-medium"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-600 text-xs font-bold text-white">1</span><span className="text-neutral-400">→</span><span className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-200 text-xs font-bold text-neutral-500">2</span><span className="text-neutral-400">→</span><span className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-200 text-xs font-bold text-neutral-500">3</span></div>
 
         {registration.status === "REQUIRES_ACTION" && registration.correctionRequest && (
           <div className="bg-yellow-50 text-yellow-800 p-4 rounded-lg border border-yellow-200 text-sm">
@@ -484,8 +449,8 @@ export default function RegistrationWizardPage() {
 
         {/* STEP 1: PROFILE INFO */}
         {step === "profile" && (
-          <Card>
-            <CardBody>
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <div>
               <h2 className="text-lg font-bold text-neutral-900 mb-4">Step 1: Camper Profile Info</h2>
               
               {profileErrors.length > 0 && (
@@ -508,19 +473,19 @@ export default function RegistrationWizardPage() {
                 />
 
                 <div className="flex justify-end pt-4">
-                  <Button type="submit" loading={camperUpdateMutation.isPending}>
+                  <button type="submit" className="flex h-11 items-center rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700 disabled:opacity-50">
                     Continue to Documents
-                  </Button>
+                  </button>
                 </div>
               </form>
-            </CardBody>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* STEP 2: DOCUMENTS */}
         {step === "documents" && (
-          <Card>
-            <CardBody>
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <div>
               <h2 className="text-lg font-bold text-neutral-900 mb-2">Step 2: Required Documents</h2>
               <p className="text-sm text-neutral-500 mb-6">
                 Please upload the required identity and parent authorization documents below to proceed.
@@ -601,22 +566,20 @@ export default function RegistrationWizardPage() {
                 )}
 
                 <div className="flex justify-between pt-4 border-t">
-                  <Button variant="secondary" onClick={() => setStep("profile")}>
-                    Back to Profile Info
-                  </Button>
-                  <Button type="submit">
+                  <button type="button" onClick={() => setStep("profile")} className="flex h-11 items-center rounded-xl border border-neutral-300 bg-white px-5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50">Back to Profile Info</button>
+                  <button type="submit" className="flex h-11 items-center rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700">
                     Continue to Review
-                  </Button>
+                  </button>
                 </div>
               </form>
-            </CardBody>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* STEP 3: REVIEW & SUBMIT */}
         {step === "review" && (
-          <Card>
-            <CardBody>
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <div>
               <h2 className="text-lg font-bold text-neutral-900 mb-4">Step 3: Review & Submit</h2>
 
               {submitErrors.length > 0 && (
@@ -716,10 +679,9 @@ export default function RegistrationWizardPage() {
 
                 {/* Navigation and Submit Buttons */}
                 <div className="flex justify-between pt-4 border-t">
-                  <Button variant="secondary" onClick={() => setStep("documents")}>
-                    Back to Documents
-                  </Button>
-                  <Button
+                  <button type="button" onClick={() => setStep("documents")} className="flex h-11 items-center rounded-xl border border-neutral-300 bg-white px-5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50">Back to Documents</button>
+                  <button
+                    type="button"
                     disabled={!declared || submitMutation.isPending || resubmitMutation.isPending}
                     onClick={() => {
                       if (registration.status === "REQUIRES_ACTION") {
@@ -728,17 +690,18 @@ export default function RegistrationWizardPage() {
                         submitMutation.mutate({ registrationId });
                       }
                     }}
+                    className="flex h-12 w-full items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitMutation.isPending || resubmitMutation.isPending
                       ? "Submitting..."
                       : "Submit Registration"}
-                  </Button>
+                  </button>
                 </div>
               </div>
-            </CardBody>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
-    </AppShell>
+      </div>
   );
 }
