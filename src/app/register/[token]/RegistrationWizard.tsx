@@ -1,6 +1,7 @@
 "use client";
 
 import { useReducer, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
 import type { WizardState, WizardAction } from "./types";
 import { VISIBLE_STEPS } from "./types";
@@ -115,6 +116,7 @@ function createInitialState(token: string): WizardState {
 
 export function RegistrationWizard({ token }: { token: string }) {
   const [state, dispatch] = useReducer(wizardReducer, token, createInitialState);
+  const router = useRouter();
 
   const persist = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -185,6 +187,18 @@ export function RegistrationWizard({ token }: { token: string }) {
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-24 pt-6 sm:pt-10">
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => router.push("/dashboard")}
+          className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-200 hover:text-neutral-600"
+          aria-label="Cancel registration"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
       {showProgress && (
         <WizardProgress
           steps={VISIBLE_STEPS}

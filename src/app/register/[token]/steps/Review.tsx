@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { WizardState, WizardAction } from "../types";
 import { api } from "@/utils/trpc";
 
@@ -13,6 +13,7 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
   const [expandedChild, setExpandedChild] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const submitRef = useRef(false);
 
   const submitRegistration = api.registration.submit.useMutation();
   const { data: config } = api.registrationConfig.getConfig.useQuery(
@@ -31,12 +32,14 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
     );
 
   async function handleSubmit() {
+    if (submitRef.current) return;
     setErrors([]);
     if (!allDeclared) {
       setErrors(["Please accept all required declarations."]);
       return;
     }
 
+    submitRef.current = true;
     setSubmitting(true);
     const results = await Promise.allSettled(
       state.teens.map((teen) =>
@@ -48,6 +51,7 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
     if (failed.length > 0) {
       setErrors(failed.map((f: any) => f.reason?.message ?? "Submission failed"));
       setSubmitting(false);
+      submitRef.current = false;
       return;
     }
 
@@ -154,7 +158,7 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
 
       <button
         type="button"
-        disabled={submitting}
+        disabled={submitting || submitRef.current}
         onClick={handleSubmit}
         className="flex h-12 w-full items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
       >

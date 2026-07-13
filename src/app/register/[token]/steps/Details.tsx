@@ -180,7 +180,9 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
         )}
 
         <div className="mt-6 flex items-center justify-between">
-          <AutoSaveIndicator status={saveStatus} />
+          <div className="min-w-[110px]">
+            <AutoSaveIndicator status={saveStatus} />
+          </div>
           <div className="flex gap-3">
             {sectionIndex > 0 && (
               <button
