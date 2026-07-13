@@ -329,6 +329,7 @@ model Camp {
   medicalVisits        MedicalVisit[]
   mealDistributions    MealDistribution[]
   departments          Department[]
+  positions            Position[]
 
   // Tribe Allocation (PRD Part 4A)
   tribeAllocationEnabled Boolean @default(false)
@@ -715,8 +716,9 @@ model StaffProfile {
   assignedRoomId   String?
   assignedBed      Bed?    @relation("AssignedStaffBed")
 
-  fieldValues       StaffFieldValue[]
-  camperAssignments TeacherCamperAssignment[]
+  fieldValues         StaffFieldValue[]
+  camperAssignments   TeacherCamperAssignment[]
+  positionAssignments PositionAssignment[]
 
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -816,19 +818,23 @@ model MealDistribution {
 // ─── Camp Structure & Organogram ────────────────────────────────────────────
 
 model Department {
-  id               String         @id @default(cuid())
+  id               String                   @id @default(cuid())
   organizationId   String
-  camp             Camp?          @relation(fields: [campId], references: [id], onDelete: Cascade)
+  camp             Camp?                    @relation(fields: [campId], references: [id], onDelete: Cascade)
   campId           String? // per-camp instance, matching Tribe; null = org-wide template
   name             String
   description      String?
-  responsibilities String[]       @default([])
-  status           String         @default("ACTIVE") // ACTIVE | INACTIVE
+  responsibilities String[]                 @default([])
+  status           String                   @default("ACTIVE") // ACTIVE | INACTIVE
   maxCapacity      Int? // null = unlimited; mirrors Tribe.maxCapacity
+  positions        Position[]
+  announcements    DepartmentAnnouncement[]
+  documents        DepartmentDocument[]
+  activityLogs     DepartmentActivityLog[]
   staff            StaffProfile[]
   deletedAt        DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
   // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
   @@index([organizationId, campId, name])
@@ -924,4 +930,84 @@ model RegistrationConfig {
   consentFormSampleUrl   String?
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
+}
+
+model Position {
+  id               String               @id @default(cuid())
+  name             String               // e.g. "Camp Director", "Registration Head"
+  campId           String
+  camp             Camp                 @relation(fields: [campId], references: [id], onDelete: Cascade)
+  departmentId     String?              // Nullable for top-level admin roles outside departments
+  department       Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  parentPositionId String?
+  parentPosition   Position?            @relation("PositionHierarchy", fields: [parentPositionId], references: [id], onDelete: SetNull)
+  childPositions   Position[]           @relation("PositionHierarchy")
+  displayOrder     Int                  @default(0)
+  status           String               @default("ACTIVE") // ACTIVE | ARCHIVED
+  assignments      PositionAssignment[]
+  deletedAt        DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([campId])
+  @@index([departmentId])
+  @@index([parentPositionId])
+  @@index([deletedAt])
+}
+
+model PositionAssignment {
+  id         String       @id @default(cuid())
+  positionId String
+  position   Position     @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  staffId    String
+  staff      StaffProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  startDate  DateTime     @default(now())
+  endDate    DateTime?
+  isCurrent  Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([positionId])
+  @@index([staffId])
+  @@index([isCurrent])
+}
+
+model DepartmentAnnouncement {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  title        String
+  content      String
+  createdById  String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([departmentId])
+}
+
+model DepartmentDocument {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  name         String
+  url          String
+  fileType     String
+  fileSize     Int
+  uploadedById String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([departmentId])
+}
+
+model DepartmentActivityLog {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  action       String     // STAFF_ASSIGNED, STAFF_REMOVED, HEAD_CHANGED, DEPT_RENAMED, DEPT_ARCHIVED
+  actorId      String
+  details      Json?
+  createdAt    DateTime   @default(now())
+
+  @@index([departmentId])
 }

@@ -8,17 +8,19 @@ import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { DepartmentManager } from "@/components/orgStructure/DepartmentManager";
-import { AccommodationManager } from "@/components/orgStructure/AccommodationManager";
-import { LeadershipTreeTab } from "@/components/orgStructure/LeadershipTreeTab";
-import { TribeGrid } from "@/components/orgStructure/TribeGrid";
+import { LeadershipTab } from "@/components/orgStructure/LeadershipTab";
+import { DirectoryTab } from "@/components/orgStructure/DirectoryTab";
+import { DepartmentsTab } from "@/components/orgStructure/DepartmentsTab";
 import { CampStructureSearch } from "@/components/orgStructure/CampStructureSearch";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
 export default function CampStructurePage() {
   const router = useRouter();
-  const { data: session, status } = useSession({ required: true, onUnauthenticated: () => router.push("/login") });
+  const { data: session, status } = useSession({
+    required: true,
+    onUnauthenticated: () => router.push("/login"),
+  });
 
   useEffect(() => {
     if (status === "authenticated" && !ADMIN_ROLES.includes((session?.user as any)?.role ?? "")) {
@@ -38,15 +40,23 @@ export default function CampStructurePage() {
         <EmptyState title="No active camp" description="Set an active camp before managing camp structure." />
       ) : (
         <>
-        <CampStructureSearch organizationId={organizationId} campId={campId} />
-        <Tabs
-          tabs={[
-            { label: "Leadership", content: <LeadershipTreeTab organizationId={organizationId} campId={campId} /> },
-            { label: "Departments", content: <DepartmentManager organizationId={organizationId} campId={campId} /> },
-            { label: "Tribes", content: <TribeGrid organizationId={organizationId} campId={campId} /> },
-            { label: "Accommodation", content: <AccommodationManager organizationId={organizationId} campId={campId} /> },
-          ]}
-        />
+          <CampStructureSearch organizationId={organizationId} campId={campId} />
+          <Tabs
+            tabs={[
+              {
+                label: "Leadership",
+                content: <LeadershipTab organizationId={organizationId} campId={campId} />,
+              },
+              {
+                label: "Directory",
+                content: <DirectoryTab organizationId={organizationId} campId={campId} />,
+              },
+              {
+                label: "Departments",
+                content: <DepartmentsTab organizationId={organizationId} campId={campId} />,
+              },
+            ]}
+          />
         </>
       )}
     </AppShell>
