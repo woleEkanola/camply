@@ -30,21 +30,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Registration has not been approved yet." }, { status: 400 });
   }
 
-  const qrDataUrl = await qrDataUrlForToken(registration.qrToken);
-  const pdfBytes = await generateAcceptanceLetterPdf({
-    campName: registration.camp.name,
-    campusName: registration.campus.name,
-    camperName: registration.camper.name,
-    registrationNumber: registration.registrationNumber,
-    reportingDate: registration.camp.arrivalDate?.toDateString(),
-    qrDataUrl,
-    instructionsHtml: registration.camp.remindersHtml,
-  });
+  try {
+    const qrDataUrl = await qrDataUrlForToken(registration.qrToken);
+    const pdfBytes = await generateAcceptanceLetterPdf({
+      campName: registration.camp.name,
+      campusName: registration.campus.name,
+      camperName: registration.camper.name,
+      registrationNumber: registration.registrationNumber,
+      reportingDate: (registration.camp as any).arrivalDate?.toDateString?.() ?? undefined,
+      qrDataUrl,
+      instructionsHtml: (registration.camp as any).remindersHtml,
+    });
 
-  return new NextResponse(pdfBytes, {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="acceptance-letter-${registration.registrationNumber}.pdf"`,
-    },
-  });
+    return new NextResponse(pdfBytes, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="acceptance-letter-${registration.registrationNumber}.pdf"`,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to generate acceptance letter:", err);
+    return NextResponse.json({ error: "Failed to generate acceptance letter. The registration may be missing required data." }, { status: 500 });
+  }
 }

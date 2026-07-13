@@ -314,6 +314,8 @@ export const userRouter = createTRPCRouter({
           organizationId: true,
           managedCampuses: true,
           passwordSet: true,
+          emailVerified: true,
+          emailVerifyToken: true,
           photoUrl: true,
         },
       });

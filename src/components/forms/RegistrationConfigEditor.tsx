@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { api } from "@/utils/trpc";
 import { Button } from "@/components/ui/Button";
@@ -55,16 +55,11 @@ export function RegistrationConfigEditor({ organizationId }: { organizationId: s
   const [consentDesc, setConsentDesc] = useState(config?.consentFormDescription ?? "");
   const [consentSampleUrl, setConsentSampleUrl] = useState(config?.consentFormSampleUrl ?? "");
 
-  // Sync from query
-  if (config && consentTitle === "Parent Consent Form" && config.consentFormTitle) {
-    setConsentTitle(config.consentFormTitle);
-  }
-  if (config && consentDesc === "" && config.consentFormDescription) {
-    setConsentDesc(config.consentFormDescription);
-  }
-  if (config && consentSampleUrl === "" && config.consentFormSampleUrl) {
-    setConsentSampleUrl(config.consentFormSampleUrl);
-  }
+  useEffect(() => {
+    if (config?.consentFormTitle && consentTitle === "Parent Consent Form") setConsentTitle(config.consentFormTitle);
+    if (config?.consentFormDescription && consentDesc === "") setConsentDesc(config.consentFormDescription);
+    if (config?.consentFormSampleUrl && consentSampleUrl === "") setConsentSampleUrl(config.consentFormSampleUrl);
+  }, [config]);
 
   // Declaration dialog
   const [declDialog, setDeclDialog] = useState<{ mode: "create" | "edit"; id?: string } | null>(null);

@@ -301,6 +301,7 @@ function SignupForm({ token }: { token: string }) {
             password,
             role: 'PARENT',
             token,
+            firstName: firstName.trim() || undefined,
           }),
         });
         const data = await res.json();

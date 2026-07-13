@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/utils/trpc";
 import type { FormFieldDTO } from "@/components/forms/types";
 import Link from "next/link";
@@ -15,9 +15,19 @@ import { Table, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Tabs } from "@/components/ui/Tabs";
 
-export default function UserDashboard() {
+export default function UserDashboardWrapper() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-accent-600" /></div>}>
+      <UserDashboard />
+    </Suspense>
+  );
+}
+
+function UserDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justVerified = searchParams.get("verified") === "true";
 
   useEffect(() => {
     if (status === "loading") return;
@@ -46,6 +56,8 @@ export default function UserDashboard() {
     undefined,
     { enabled: !!session?.user?.id }
   );
+
+  const { data: profile } = api.user.getProfile.useQuery(undefined, { enabled: !!session?.user?.id });
 
   const organizationId = session?.user?.organizationId ?? "";
   const { data: fields = [], isLoading: isLoadingFields } = api.formField.list.useQuery(
@@ -158,6 +170,37 @@ export default function UserDashboard() {
   return (
     <AppShell area="dashboard">
       <PageHeader title="Dashboard" description={`Welcome back, ${session.user.email}`} />
+      {justVerified && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-800 shadow-sm">
+          <h4 className="font-semibold text-sm">Email verified!</h4>
+          <p className="text-xs text-green-700 mt-0.5">Your email address has been verified successfully.</p>
+        </div>
+      )}
+      {profile && !profile.emailVerified && (
+        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-800 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h4 className="font-semibold text-sm">Verify your email address</h4>
+              <p className="text-xs text-blue-700 mt-0.5">
+                Check your inbox for a verification link, or use the token below to verify.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {profile.emailVerifyToken && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/api/auth/verify-email?token=${profile.emailVerifyToken}`);
+                    alert("Verification link copied to clipboard!");
+                  }}
+                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-500 shrink-0"
+                >
+                  Copy Verification Link
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <Tabs tabs={[{ label: "Campers", content: profilesTab }, { label: "Registrations", content: registrationsTab }]} />
     </AppShell>
   );
