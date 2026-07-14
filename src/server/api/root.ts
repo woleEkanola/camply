@@ -29,6 +29,7 @@ import { trashRouter } from "./routers/trash";
 import { importExportRouter } from "./routers/importExport";
 import { registrationConfigRouter } from "./routers/registrationConfig";
 import { positionRouter } from "./routers/position";
+import { communicationRouter } from "./routers/communication";
 
 /**
  * This is the primary router for your server.
@@ -66,6 +67,7 @@ export const appRouter = createTRPCRouter({
   importExport: importExportRouter,
   registrationConfig: registrationConfigRouter,
   position: positionRouter,
+  communication: communicationRouter,
   // booking: bookingRouter, // removed because booking router file was deleted
   // eventType: eventTypeRouter, // removed because eventType router file was deleted
   // schedule: scheduleRouter, // removed because schedule router file was deleted

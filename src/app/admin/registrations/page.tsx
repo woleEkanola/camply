@@ -14,6 +14,12 @@ import { Select } from "@/components/ui/Input";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { Tabs } from "@/components/ui/Tabs";
+import { StatusDialog } from "./components/StatusDialog";
+import { CommunicationCard } from "./components/CommunicationCard";
+import { DecisionHistory } from "./components/DecisionHistory";
+import ReviewProgress from "./components/ReviewProgress";
+import VerifierAssignment from "./components/VerifierAssignment";
+import ChangesSinceReview from "./components/ChangesSinceReview";
 
 type ExtendedUser = {
   id: string;
@@ -38,9 +44,11 @@ const STATUS_OPTIONS = [
 
 function RegistrationDetail({ registrationId, onClose }: { registrationId: string; onClose: () => void }) {
   const utils = api.useUtils();
+  const { data: session } = useSession();
   const { data: registration, refetch } = api.registration.getById.useQuery({ id: registrationId });
   const { data: documents } = api.document.listForRegistration.useQuery({ registrationId });
   const { data: timeline } = api.registration.timeline.useQuery({ registrationId });
+  const { data: review, refetch: refetchReview } = api.registration.getReview.useQuery({ registrationId });
   const { data: tribes } = api.tribe.listByCamp.useQuery(
     { campId: registration?.campId ?? "" },
     { enabled: !!registration?.campId }
@@ -49,11 +57,15 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
     { registrationId },
     { enabled: registration?.status === "APPROVED" && !(registration as any)?.tribeId }
   );
+  const orgId = (registration?.camp as any)?.organizationId || (registration?.campus as any)?.organizationId;
+  const { data: org } = api.organization.getById.useQuery({ id: orgId ?? "" }, { enabled: !!orgId });
+  const isTwoStep = (org as any)?.approvalWorkflow === "TWO_STEP";
 
   const [rejectReason, setRejectReason] = useState("");
   const [correctionMessage, setCorrectionMessage] = useState("");
   const [note, setNote] = useState("");
   const [actionError, setActionError] = useState("");
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
 
   const invalidate = () => {
     refetch();
@@ -72,6 +84,8 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
   const reviewDoc = api.document.review.useMutation({ onSuccess: () => utils.document.listForRegistration.invalidate({ registrationId }) });
   const assignTribe = api.tribe.assign.useMutation({ onSuccess: invalidate, onError: onErr });
   const clearTribe = api.tribe.clear.useMutation({ onSuccess: invalidate, onError: onErr });
+  const transitionWithOptions = api.registration.transitionWithOptions.useMutation({ onSuccess: invalidate, onError: onErr });
+  const sendCommunication = api.registration.sendCommunication.useMutation({ onSuccess: invalidate, onError: onErr });
 
   if (!registration) {
     return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
@@ -127,6 +141,11 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
 
       <div>
         <h3 className="mb-2 text-sm font-semibold text-neutral-900">Actions</h3>
+        <div className="mb-3">
+          <Button variant="primary" onClick={() => setStatusDialogOpen(true)}>
+            Change Status
+          </Button>
+        </div>
         <div className="mb-3 flex flex-wrap gap-2">
           <Button variant="primary" size="sm" loading={approve.isPending} onClick={() => approve.mutate({ registrationId })}>Approve</Button>
           <Button size="sm" className="bg-attention-600 text-white hover:bg-attention-700" loading={waitlist.isPending} onClick={() => waitlist.mutate({ registrationId })}>Waitlist</Button>
@@ -212,7 +231,46 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
           { label: "Overview", content: overviewTab },
           { label: `Documents (${(documents ?? []).length})`, content: documentsTab },
           { label: "Timeline", content: timelineTab },
+          {
+            label: "Review",
+            content: (
+              <div className="space-y-4">
+                {isTwoStep && review && (
+                  <ReviewProgress registration={registration} review={review} isTwoStep={isTwoStep} />
+                )}
+                {isTwoStep && (
+                  <VerifierAssignment
+                    registration={{ id: registration.id }}
+                    review={review}
+                    organizationId={orgId ?? ""}
+                    currentUserId={(session?.user as any)?.id ?? ""}
+                    isTwoStep={isTwoStep}
+                    onRefresh={() => { refetchReview(); invalidate(); }}
+                  />
+                )}
+                <ChangesSinceReview registration={{ fieldChangeLog: (registration as any).fieldChangeLog }} />
+                <CommunicationCard registration={registration} />
+                <DecisionHistory timeline={timeline ?? []} />
+              </div>
+            ),
+          },
         ]}
+      />
+
+      <StatusDialog
+        open={statusDialogOpen}
+        onClose={() => setStatusDialogOpen(false)}
+        registration={registration}
+        onSubmit={(action, options) => {
+          transitionWithOptions.mutate({
+            registrationId: registration.id,
+            action,
+            reason: options.reason,
+            message: options.message,
+            sendEmail: options.sendEmail,
+          });
+          setStatusDialogOpen(false);
+        }}
       />
     </Drawer>
   );
@@ -245,6 +303,8 @@ export default function RegistrationsPage() {
 
   const { data: campuses = [] } = api.campus.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
   const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
+  const { data: org } = api.organization.getById.useQuery({ id: organizationId }, { enabled: !!organizationId });
+  const isTwoStep = (org as any)?.approvalWorkflow === "TWO_STEP";
 
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
@@ -286,15 +346,28 @@ export default function RegistrationsPage() {
       <PageHeader title="Registrations" description={activeCamp ? `For ${activeCamp.name}` : undefined} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN"].map((s) => (
-          <StatCard
-            key={s}
-            label={s.replace(/_/g, " ")}
-            value={kpi[s] ?? 0}
-            selected={filterStatus === s}
-            onClick={() => setFilterStatus(filterStatus === s ? "" : s)}
-          />
-        ))}
+        {isTwoStep
+          ? ["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN"].map((s) => {
+              const label = s === "PENDING" ? "Waiting Decision" : s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ");
+              return (
+                <StatCard
+                  key={s}
+                  label={label}
+                  value={kpi[s] ?? 0}
+                  selected={filterStatus === s}
+                  onClick={() => setFilterStatus(filterStatus === s ? "" : s)}
+                />
+              );
+            })
+          : ["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN"].map((s) => (
+              <StatCard
+                key={s}
+                label={s.replace(/_/g, " ")}
+                value={kpi[s] ?? 0}
+                selected={filterStatus === s}
+                onClick={() => setFilterStatus(filterStatus === s ? "" : s)}
+              />
+            ))}
       </div>
 
       <div className="mb-4 grid gap-3 md:grid-cols-3">

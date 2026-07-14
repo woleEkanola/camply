@@ -116,6 +116,8 @@ model Organization {
   settings     Json? // Holds admin settings such as age range, cutoff date, etc.
   registrationDeclarations RegistrationDeclaration[]
   registrationConfig       RegistrationConfig?
+  branding                 OrganizationBranding?
+  approvalWorkflow String  @default("SINGLE_STEP") // SINGLE_STEP | TWO_STEP
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 }
@@ -262,6 +264,14 @@ model Camper {
   emergencyContactName  String?
   emergencyContactPhone String?
   relationship          String?
+
+  // Contact Details
+  parentPhone       String?
+  teenPhone         String?
+  homeAddressStreet String?
+  homeAddressCity   String?
+  homeAddressState  String?
+  homeAddressZip    String?
 
   // Education / Church
   school       String?
@@ -426,6 +436,8 @@ model Registration {
   checkedInById      String?
   checkedOutAt       DateTime?
   internalNotes      Json? // [{authorId, text, at}]
+  communicationLog   Json? // {"ACCEPTANCE":"SENT"|"NOT_SENT","REJECTION":"SENT"|"NOT_SENT","CORRECTION":"SENT"|"NOT_SENT","WAITLIST":"SENT"|"NOT_SENT"}
+  fieldChangeLog     Json? // [{field, previousValue, newValue, changedAt, changedById}]
   waitlistPosition   Int?
 
   // Tribe Allocation (PRD Part 4A)
@@ -442,6 +454,7 @@ model Registration {
   documents          Document[]
   auditLogs          AuditLog[]
   notifications      Notification[]
+  review             RegistrationReview?
   teacherAssignments TeacherCamperAssignment[]
   attendanceRecords  AttendanceRecord[]
   incidentReports    IncidentReport[]
@@ -459,6 +472,33 @@ model Registration {
   @@index([venueId, status])
   @@index([campId, status])
   @@index([deletedAt])
+}
+
+// ─── Registration Review Workflow ────────────────────────────────────────────
+
+model RegistrationReview {
+  id                 String       @id @default(cuid())
+  registrationId     String       @unique
+  registration       Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  // Verification (two-step only)
+  assignedToId       String?      // userId of verifier
+  verificationStatus String       @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | COMPLETED
+  verifiedById       String?      // userId who completed verification
+  recommendation     String?      // APPROVE | REJECT | CORRECTION
+  reviewNotes        String?      // verifier's private notes
+
+  // Admin decision (populated on final status change)
+  adminDecision      String?      // APPROVE | REJECT | WAITLIST | CORRECTION | CANCEL | ARCHIVE
+  decidedById        String?
+  decidedAt          DateTime?
+
+  // Timestamps
+  assignedAt         DateTime?
+  verifiedAt         DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 }
 
 model DocumentRequirement {
@@ -569,15 +609,16 @@ model Tribe {
 }
 
 model SideEffect {
-  id             String   @id @default(cuid())
-  registrationId String
-  type           String // ACCEPTANCE_WORKFLOW | RESUBMISSION_NOTICE | ...
-  status         String   @default("QUEUED") // QUEUED | DONE | FAILED
-  attempts       Int      @default(0)
-  lastError      String?
-  runAfter       DateTime @default(now())
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  registrationId        String?
+  broadcastRecipientId  String?
+  type                  String   // REGISTRATION_APPROVED | BROADCAST_SEND | ...
+  status                String   @default("QUEUED") // QUEUED | DONE | FAILED
+  attempts              Int      @default(0)
+  lastError             String?
+  runAfter              DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@index([status, runAfter])
 }
@@ -1012,4 +1053,99 @@ model DepartmentActivityLog {
   createdAt    DateTime   @default(now())
 
   @@index([departmentId])
+}
+
+// ─── Communication Center ──────────────────────────────────────────────────
+
+model EmailEventConfig {
+  id             String         @id @default(cuid())
+  organizationId String
+  event          String         // REGISTRATION_APPROVED | REGISTRATION_REJECTED | REGISTRATION_SUBMITTED | CORRECTION_REQUESTED | REGISTRATION_WAITLISTED | STAFF_APPROVED | STAFF_REJECTED | OTP_EMAIL | WELCOME_EMAIL
+  enabled        Boolean        @default(true)
+  templateId     String?
+  template       EmailTemplate? @relation(fields: [templateId], references: [id])
+  channels       Json           @default("[\"EMAIL\", \"IN_APP\"]")
+  recipients     Json           @default("[\"PARENT\"]")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([organizationId, event])
+  @@index([organizationId])
+}
+
+model EmailTemplate {
+  id             String             @id @default(cuid())
+  organizationId String
+  name           String             // "Registration Approved", "Welcome", etc.
+  description    String?
+  subject        String             // "You're approved for {{camp_name}}!"
+  previewText    String?
+  content        Json               // TipTap JSON
+  isDefault      Boolean            @default(false)
+  active         Boolean            @default(true)
+  eventConfigs   EmailEventConfig[] // Events using this template
+  deletedAt      DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([deletedAt])
+}
+
+model OrganizationBranding {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  logoUrl        String?
+  primaryColor   String       @default("#E67E22")
+  accentColor    String       @default("#E67E22")
+  buttonColor    String       @default("#E67E22")
+  headerImageUrl String?
+  footerText     String?
+  supportEmail   String?
+  supportPhone   String?
+  websiteUrl     String?
+  facebookUrl    String?
+  instagramUrl   String?
+  address        String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Broadcast {
+  id             String                @id @default(cuid())
+  organizationId String
+  title          String
+  subject        String
+  body           Json                  // TipTap JSON
+  audience       String                // PARENTS | TEACHERS | VOLUNTEERS | ALL
+  campId         String?
+  campusId       String?
+  status         String                @default("DRAFT") // DRAFT | SENDING | COMPLETED | FAILED
+  createdById    String
+  sentAt         DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  recipients     BroadcastRecipient[]
+
+  @@index([organizationId, status])
+}
+
+model BroadcastRecipient {
+  id          String    @id @default(cuid())
+  broadcastId String
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  recipientId String    // userId
+  email       String
+  status      String    @default("QUEUED") // QUEUED | SENT | FAILED
+  sideEffectId String?
+  queuedAt    DateTime  @default(now())
+  sentAt      DateTime?
+  failedAt    DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([broadcastId, status])
 }

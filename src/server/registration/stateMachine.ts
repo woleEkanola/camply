@@ -10,9 +10,11 @@ const TRANSITIONS: Record<RegistrationStatus, RegistrationStatus[]> = {
   SUBMITTED: ["PENDING", "APPROVED"], // APPROVED only when camp.approvalMode === "AUTO"
   PENDING: ["APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CANCELLED"],
   REQUIRES_ACTION: ["PENDING"],
+  // Relaxed: APPROVED/REJECTED/WAITLISTED can transition freely between each other.
+  // Only CHECKED_IN, COMPLETED, ARCHIVED are final/irreversible.
   WAITLISTED: ["APPROVED", "REJECTED", "CANCELLED"],
-  APPROVED: ["CANCELLED", "CHECKED_IN", "ARCHIVED"],
-  REJECTED: ["PENDING", "ARCHIVED"], // resubmission only if camp.allowResubmission
+  APPROVED: ["REJECTED", "WAITLISTED", "CANCELLED", "CHECKED_IN", "ARCHIVED"],
+  REJECTED: ["APPROVED", "WAITLISTED", "PENDING", "ARCHIVED"],
   CANCELLED: ["ARCHIVED"],
   CHECKED_IN: ["COMPLETED", "ARCHIVED"],
   COMPLETED: ["ARCHIVED"],
