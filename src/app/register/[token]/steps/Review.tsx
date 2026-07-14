@@ -89,9 +89,9 @@ function TeenReviewCard({
   }, [camper, fields]);
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+    <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-100">
             {photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -102,17 +102,17 @@ function TeenReviewCard({
               </svg>
             )}
           </div>
-          <div>
-            <h3 className="font-semibold text-neutral-900">
+          <div className="min-w-0">
+            <h3 className="break-words font-semibold text-neutral-900 [overflow-wrap:anywhere]">
               {teen.firstName} {teen.lastName}
             </h3>
-            <p className="text-xs text-neutral-500">
+            <p className="break-words text-xs text-neutral-500 [overflow-wrap:anywhere]">
               {formattedDob || "No DOB"}
               {teen.gender ? ` · ${teen.gender}` : ""}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <span
             className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
               teen.fieldsComplete && teen.documentsComplete
@@ -136,17 +136,17 @@ function TeenReviewCard({
       </div>
 
       {/* Profile fields grid */}
-      <div className="mb-4 rounded-lg bg-neutral-50 p-4">
+      <div className="mb-4 min-w-0 rounded-lg bg-neutral-50 p-4">
         <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
           Profile Information
         </h4>
         <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
           {fieldEntries.map(({ label, value }) => (
-            <div key={label}>
-              <span className="text-neutral-500">{label}:</span>{" "}
-              <span className="font-medium text-neutral-900">
+            <div key={label} className="min-w-0">
+              <div className="break-words text-neutral-500 [overflow-wrap:anywhere]">{label}:</div>
+              <div className="break-words font-medium text-neutral-900 [overflow-wrap:anywhere]">
                 {value || "—"}
-              </span>
+              </div>
             </div>
           ))}
         </div>
@@ -154,7 +154,7 @@ function TeenReviewCard({
 
       {/* Documents summary */}
       {requirements && requirements.length > 0 && (
-        <div className="rounded-lg bg-neutral-50 p-4">
+        <div className="min-w-0 rounded-lg bg-neutral-50 p-4">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
             Documents
           </h4>
@@ -164,19 +164,19 @@ function TeenReviewCard({
                 (d: any) => d.requirementId === req.id && d.status !== "REJECTED"
               );
               return (
-                <div key={req.id} className="flex items-center justify-between">
-                  <span className="text-neutral-500">{req.name}:</span>
+                <div key={req.id} className="flex min-w-0 items-center justify-between gap-3">
+                  <span className="min-w-0 break-words text-neutral-500 [overflow-wrap:anywhere]">{req.name}:</span>
                   {doc ? (
                     <a
                       href={doc.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-xs text-accent-600 underline hover:text-accent-700"
+                      className="shrink-0 text-xs text-accent-600 underline hover:text-accent-700"
                     >
                       View
                     </a>
                   ) : (
-                    <span className="text-xs italic text-neutral-400">Not uploaded</span>
+                    <span className="shrink-0 text-xs italic text-neutral-400">Not uploaded</span>
                   )}
                 </div>
               );
@@ -250,10 +250,10 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
       </div>
 
       {/* Camp Overview */}
-      <div className="mb-6 rounded-xl bg-white p-4 shadow-sm">
+      <div className="mb-6 min-w-0 rounded-xl bg-white p-4 shadow-sm">
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">Camp</h3>
-        <p className="text-sm font-medium text-neutral-900">{state.campData?.campName}</p>
-        <p className="text-xs text-neutral-500">
+        <p className="break-words text-sm font-medium text-neutral-900 [overflow-wrap:anywhere]">{state.campData?.campName}</p>
+        <p className="break-words text-xs text-neutral-500 [overflow-wrap:anywhere]">
           {state.campData?.organizationName} · {state.campData?.campusName}
           {state.campData?.year ? ` · ${state.campData?.year}` : ""}
         </p>
@@ -274,11 +274,11 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
 
       {/* Consent Declarations */}
       {declarations && declarations.length > 0 && (
-        <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mb-6 min-w-0 rounded-2xl bg-white p-6 shadow-sm">
           <h3 className="mb-3 text-sm font-semibold text-neutral-900">Consent</h3>
           <div className="space-y-3">
             {declarations.map((d) => (
-              <label key={d.id} className="flex items-start gap-3 cursor-pointer">
+              <label key={d.id} className="flex min-w-0 cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
                   checked={state.declarations.find((sd) => sd.id === d.id)?.checked ?? false}
@@ -286,9 +286,9 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
                     dispatch({ type: "SET_DECLARATION", id: d.id, checked: e.target.checked });
                     setErrors([]);
                   }}
-                  className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-accent-600"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-neutral-300 text-accent-600"
                 />
-                <span className="text-sm text-neutral-700">{d.label}</span>
+                <span className="min-w-0 break-words text-sm text-neutral-700 [overflow-wrap:anywhere]">{d.label}</span>
               </label>
             ))}
           </div>
