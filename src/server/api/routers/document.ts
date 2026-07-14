@@ -54,6 +54,27 @@ export const documentRouter = createTRPCRouter({
 
       const requirement = await ctx.prisma.documentRequirement.findUniqueOrThrow({ where: { id: input.requirementId } });
 
+      // Server-side validation: file size
+      const maxBytes = requirement.maxSizeMb * 1024 * 1024;
+      if (input.fileSize > maxBytes) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `File exceeds the maximum size of ${requirement.maxSizeMb} MB.`,
+        });
+      }
+
+      // Server-side validation: accepted formats
+      const acceptedFormatsList = (requirement.acceptedFormats as string)
+        .split(",")
+        .map((f: string) => f.trim().toLowerCase());
+      const ext = input.fileName.split(".").pop()?.toLowerCase();
+      if (ext && acceptedFormatsList.length > 0 && !acceptedFormatsList.includes(ext)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Accepted formats: ${acceptedFormatsList.join(", ")}.`,
+        });
+      }
+
       const document = await ctx.prisma.document.create({
         data: {
           requirementId: requirement.id,

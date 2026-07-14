@@ -41,6 +41,15 @@ function TeenReviewCard({
     { enabled: !!campId }
   );
 
+  const formattedDob = useMemo(() => {
+    if (!teen.dateOfBirth) return null;
+    try {
+      return format(parseISO(teen.dateOfBirth), "MMMM d, yyyy");
+    } catch {
+      return teen.dateOfBirth;
+    }
+  }, [teen.dateOfBirth]);
+
   const photoUrl =
     camper?.fieldValues
       ?.find(
@@ -98,7 +107,7 @@ function TeenReviewCard({
               {teen.firstName} {teen.lastName}
             </h3>
             <p className="text-xs text-neutral-500">
-              {teen.dateOfBirth || "No DOB"}
+              {formattedDob || "No DOB"}
               {teen.gender ? ` · ${teen.gender}` : ""}
             </p>
           </div>

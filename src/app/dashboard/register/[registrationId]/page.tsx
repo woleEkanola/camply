@@ -51,6 +51,15 @@ function DocumentUploader({
       setLocalError(`File exceeds the maximum size of ${requirement.maxSizeMb} MB.`);
       return;
     }
+
+    // Validate accepted formats
+    const formats = (requirement.acceptedFormats as string).split(",").map((f: string) => f.trim().toLowerCase());
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (formats.length > 0 && ext && !formats.includes(ext)) {
+      setLocalError(`Accepted formats: ${formats.join(", ")}.`);
+      return;
+    }
+
     setUploading(true);
     try {
       const formData = new FormData();
@@ -81,6 +90,9 @@ function DocumentUploader({
           {requirement.name} {requirement.required && <span className="text-xs text-red-600">Required</span>}
         </div>
         {requirement.description && <div className="text-sm text-gray-500">{requirement.description}</div>}
+        <div className="text-xs text-gray-400">
+          {(requirement.acceptedFormats as string).split(",").map((f: string) => f.trim()).join(" or ")}. Up to {requirement.maxSizeMb} MB
+        </div>
         {localError && <div className="text-sm text-red-600 mt-1">{localError}</div>}
       </div>
       <div className="flex-shrink-0">

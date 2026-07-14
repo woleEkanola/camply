@@ -1,13 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { api } from "@/utils/trpc";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Dialog } from "@/components/ui/Dialog";
-import { Table, type Column } from "@/components/ui/Table";
-import { Badge } from "@/components/ui/Badge";
+import { DraggableFieldList } from "./DraggableFieldList";
 import { parseFieldOptions, stringifyFieldOptions } from "@/lib/formFieldOptions";
 import type { FormFieldDTO, FormFieldType, FormFieldAudience } from "./types";
 
@@ -54,8 +52,17 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
   const invalidate = () => utils.formField.list.invalidate({ organizationId, audience });
 
   const [error, setError] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const create = api.formField.create.useMutation({ onSuccess: () => { setEdit(null); invalidate(); }, onError: (e) => setError(e.message) });
-  const remove = api.formField.remove.useMutation({ onSuccess: invalidate, onError: (e) => setError(e.message) });
+  const remove = api.formField.remove.useMutation({ onSuccess: () => { setSelectedIds(new Set()); invalidate(); }, onError: (e) => setError(e.message) });
+  const removeMany = api.formField.removeMany.useMutation({
+    onSuccess: (result) => {
+      setError(`Deleted ${result.deleted} field(s).${result.skipped > 0 ? ` Skipped ${result.skipped} (system or in-use).` : ""}`);
+      setSelectedIds(new Set());
+      invalidate();
+    },
+    onError: (e) => setError(e.message),
+  });
   const reorder = api.formField.reorder.useMutation({ onSuccess: invalidate });
 
   const [optimisticVisible, setOptimisticVisible] = useState<Record<string, boolean>>({});
@@ -115,13 +122,26 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
     setEdit({ mode: "edit", field });
   }
 
-  function moveField(index: number, direction: -1 | 1) {
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= fields.length) return;
-    const reordered = [...fields];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(targetIndex, 0, moved);
-    reorder.mutate({ organizationId, audience, orderedIds: reordered.map((f: FormFieldDTO) => f.id) });
+  function handleSelect(id: string, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  }
+
+  function handleSelectAll() {
+    const customIds = fields.filter((f) => f.source === "CUSTOM").map((f) => f.id);
+    if (selectedIds.size === customIds.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(customIds));
+    }
+  }
+
+  function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    removeMany.mutate({ ids: Array.from(selectedIds) });
   }
 
   function handleSave() {
@@ -161,100 +181,59 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
   const isSystemEdit = edit?.mode === "edit" && edit.field?.source === "SYSTEM";
   const dynamicOptionsCaption = edit?.field?.systemKey ? DYNAMIC_OPTION_KEYS[edit.field.systemKey] : undefined;
 
-  const columns: Column<FormFieldDTO>[] = [
-    {
-      header: "Field",
-      accessor: (f) => (
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-neutral-900">{f.label}</span>
-            <Badge tone="neutral">{f.type}</Badge>
-            {f.source === "SYSTEM" && <Badge tone="info">System</Badge>}
-          </div>
-          {f.groupLabel && <div className="text-xs text-neutral-500">{f.groupLabel}</div>}
-        </div>
-      ),
-    },
-    {
-      header: "Required",
-      accessor: (f) => (
-        <label className="inline-flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={optimisticRequired[f.id] ?? f.required}
-            onChange={(e) => toggleRequired(f.id, e.target.checked)}
-            className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
-          />
-        </label>
-      ),
-    },
-    {
-      header: "Visible",
-      accessor: (f) => (
-        <label className="inline-flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={optimisticVisible[f.id] ?? f.visible}
-            onChange={(e) => toggleVisible(f.id, e.target.checked)}
-            className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
-          />
-        </label>
-      ),
-    },
-    {
-      header: "Order",
-      accessor: (f) => {
-        const index = fields.findIndex((x: FormFieldDTO) => x.id === f.id);
-        return (
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => moveField(index, -1)}
-              disabled={index === 0}
-              className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-30"
-              aria-label="Move up"
-            >
-              <ChevronUpIcon className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => moveField(index, 1)}
-              disabled={index === fields.length - 1}
-              className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-30"
-              aria-label="Move down"
-            >
-              <ChevronDownIcon className="h-4 w-4" />
-            </button>
-          </div>
-        );
-      },
-    },
-  ];
+  const customFields = fields.filter((f) => f.source === "CUSTOM");
+  const allCustomSelected = customFields.length > 0 && selectedIds.size === customFields.length;
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-neutral-500">Fields shown to the wizard, in order. System fields can be hidden or required but not removed.</p>
-        <Button size="sm" onClick={openCreate}>Add Custom Field</Button>
+        <p className="text-sm text-neutral-500">Fields shown to the wizard, in order. Drag to reorder. System fields can be hidden or required but not removed.</p>
+        <Button size="sm" className="whitespace-nowrap px-3" onClick={openCreate}>Add Custom Field</Button>
       </div>
 
       {error && !edit && <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
 
-      <Table
-        columns={columns}
-        data={fields}
-        rowKey={(f: FormFieldDTO) => f.id}
-        isLoading={isLoading}
-        emptyTitle="No fields yet"
-        actions={(f: FormFieldDTO) => (
-          <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => openEdit(f)}>Edit</Button>
-            {f.source === "CUSTOM" && (
-              <Button size="sm" variant="ghost" onClick={() => remove.mutate({ id: f.id })}>Delete</Button>
-            )}
-          </div>
-        )}
-      />
+      {/* Bulk actions bar */}
+      {selectedIds.size > 0 && (
+        <div className="mb-3 flex items-center gap-3 rounded-lg border border-accent-200 bg-accent-50 px-4 py-2">
+          <span className="text-sm font-medium text-accent-800">{selectedIds.size} field(s) selected</span>
+          <div className="flex-1" />
+          <Button size="sm" variant="ghost" onClick={handleSelectAll}>
+            {allCustomSelected ? "Deselect All" : `Select All (${customFields.length})`}
+          </Button>
+          <Button size="sm" variant="danger" onClick={handleBulkDelete} loading={removeMany.isPending}>
+            Delete Selected
+          </Button>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="animate-pulse space-y-2">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-14 rounded-lg bg-neutral-100" />
+          ))}
+        </div>
+      ) : fields.length === 0 ? (
+        <div className="rounded-lg border border-neutral-200 bg-white py-12 text-center">
+          <p className="text-sm font-medium text-neutral-700">No fields yet</p>
+          <p className="mt-1 text-xs text-neutral-500">Click "Add Custom Field" to create your first field.</p>
+        </div>
+      ) : (
+        <DraggableFieldList
+          fields={fields}
+          optimisticVisible={optimisticVisible}
+          optimisticRequired={optimisticRequired}
+          selectedIds={selectedIds}
+          allCustomSelected={allCustomSelected}
+          onToggleVisible={toggleVisible}
+          onToggleRequired={toggleRequired}
+          onEdit={openEdit}
+          onDelete={(id) => remove.mutate({ id })}
+          onSelect={handleSelect}
+          onSelectAll={handleSelectAll}
+          onReorder={(orderedIds) => reorder.mutate({ organizationId, audience, orderedIds })}
+        />
+      )}
 
       <Dialog
         open={!!edit}

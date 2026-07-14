@@ -108,12 +108,7 @@ test.describe("Parent Teen Registration", () => {
     await page.getByRole("button", { name: "Continue to Registration" }).click();
     await expect(page.getByRole("heading", { name: "Test Camper" })).toBeVisible({ timeout: 10000 });
 
-    // ── Navigate sections ──
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await page.waitForTimeout(300);
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await page.waitForTimeout(300);
-
+    // ── Navigate to Documents (all fields are now in one scrollable form) ──
     const toDocsBtn = page.getByRole("button", { name: "Continue to Documents" });
     await expect(toDocsBtn).toBeVisible({ timeout: 5000 });
     await toDocsBtn.click();
