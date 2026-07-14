@@ -24,8 +24,8 @@ const documentRequirementSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   required: z.boolean().default(true),
-  acceptedFormats: z.string().default("jpg,png,webp"),
-  maxSizeMb: z.number().int().min(1).max(50).default(10),
+  acceptedFormats: z.string().default("jpg,png"),
+  maxSizeMb: z.number().int().min(1).max(50).default(2),
   scope: z.enum(["CAMPER", "REGISTRATION"]).default("CAMPER"),
   sortOrder: z.number().int().default(0),
 });

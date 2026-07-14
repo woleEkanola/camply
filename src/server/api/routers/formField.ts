@@ -158,6 +158,34 @@ export const formFieldRouter = createTRPCRouter({
       return ctx.prisma.formField.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 
+  // Bulk-delete custom fields (soft delete). Skips SYSTEM and in-use fields.
+  removeMany: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()) }))
+    .mutation(async ({ ctx, input }) => {
+      let deleted = 0;
+      let skipped = 0;
+      const now = new Date();
+
+      const fields = await ctx.prisma.formField.findMany({
+        where: { id: { in: input.ids }, deletedAt: null },
+      });
+
+      for (const field of fields) {
+        if (field.source === "SYSTEM") { skipped++; continue; }
+        await assertOrgAdminOrCampusRep(ctx, field.organizationId);
+
+        const inUse = field.audience === "CAMPER"
+          ? await ctx.prisma.profileFieldValue.findFirst({ where: { fieldId: field.id } })
+          : await ctx.prisma.staffFieldValue.findFirst({ where: { fieldId: field.id } });
+        if (inUse) { skipped++; continue; }
+
+        await ctx.prisma.formField.update({ where: { id: field.id }, data: { deletedAt: now } });
+        deleted++;
+      }
+
+      return { deleted, skipped };
+    }),
+
   reorder: protectedProcedure
     .input(z.object({ organizationId: z.string(), audience: audienceEnum, orderedIds: z.array(z.string()) }))
     .mutation(async ({ ctx, input }) => {

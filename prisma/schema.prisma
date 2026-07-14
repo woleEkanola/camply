@@ -508,8 +508,8 @@ model DocumentRequirement {
   name            String
   description     String?
   required        Boolean    @default(true)
-  acceptedFormats String     @default("pdf,jpg,png,webp")
-  maxSizeMb       Int        @default(10)
+  acceptedFormats String     @default("jpg,png")
+  maxSizeMb       Int        @default(2)
   scope           String     @default("CAMPER") // CAMPER | REGISTRATION
   sortOrder       Int        @default(0)
   documents       Document[]
