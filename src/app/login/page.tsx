@@ -11,7 +11,7 @@ const RESEND_COOLDOWN_SECONDS = 30;
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [loginType, setLoginType] = useState<"otp" | "password">("password");
+  const [loginType, setLoginType] = useState<"otp" | "password">("otp");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
@@ -406,21 +406,6 @@ export default function LoginPage() {
       <button
         type="button"
         onClick={() => {
-          setLoginType("password");
-          setError("");
-          setInfo("");
-        }}
-        className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
-          loginType === "password"
-            ? "border-[#E67E22] text-[#E67E22]"
-            : "border-transparent text-gray-500 hover:text-gray-900"
-        }`}
-      >
-        Password
-      </button>
-      <button
-        type="button"
-        onClick={() => {
           setLoginType("otp");
           setError("");
           setInfo("");
@@ -432,6 +417,21 @@ export default function LoginPage() {
         }`}
       >
         Email OTP
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setLoginType("password");
+          setError("");
+          setInfo("");
+        }}
+        className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
+          loginType === "password"
+            ? "border-[#E67E22] text-[#E67E22]"
+            : "border-transparent text-gray-500 hover:text-gray-900"
+        }`}
+      >
+        Password
       </button>
     </div>
   );

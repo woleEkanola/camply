@@ -11,7 +11,6 @@ test.describe("Login page: back / resend code / forgot password", () => {
     // test uses its own unique email so the per-email send-otp rate limit
     // (3/15min) isn't shared across unrelated tests in this file.
     await page.goto("/login");
-    await page.locator('button:visible', { hasText: "Email OTP" }).first().click();
     await emailInput(page).fill(`e2e-login-back-${Date.now()}@camply.test`);
     await nextButton(page).click();
     await expect(page.locator('input[placeholder="Enter Verification Code"]:visible')).toBeVisible();
@@ -24,7 +23,6 @@ test.describe("Login page: back / resend code / forgot password", () => {
 
   test("email step blocks progress and shows an error when the send fails, and proceeds with a confirmation on success", async ({ page }) => {
     await page.goto("/login");
-    await page.locator('button:visible', { hasText: "Email OTP" }).first().click();
     await emailInput(page).fill(`e2e-login-confirm-${Date.now()}@camply.test`);
     await nextButton(page).click();
 
@@ -37,7 +35,6 @@ test.describe("Login page: back / resend code / forgot password", () => {
 
   test("Resend code button sends another code and enters a cooldown", async ({ page }) => {
     await page.goto("/login");
-    await page.locator('button:visible', { hasText: "Email OTP" }).first().click();
     await emailInput(page).fill(`e2e-login-resend-${Date.now()}@camply.test`);
     await nextButton(page).click();
     await expect(page.locator('input[placeholder="Enter Verification Code"]:visible')).toBeVisible();

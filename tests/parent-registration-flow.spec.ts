@@ -66,7 +66,7 @@ test.describe("Parent Teen Registration", () => {
     // ── Landing ──
     await page.goto(`/register/${signupToken}`);
 
-    const beginBtn = page.getByRole("button", { name: "Start Registration" });
+    const beginBtn = page.getByRole("button", { name: "Begin Registration" });
     await expect(beginBtn).toBeVisible({ timeout: 20000 });
     await beginBtn.click();
 
@@ -214,10 +214,10 @@ test.describe("Parent Teen Registration", () => {
     test.setTimeout(60000);
     await page.goto(`/register/${signupToken}`);
 
-    await expect(page.getByRole("button", { name: "Start Registration" })).toBeVisible({
+    await expect(page.getByRole("button", { name: "Begin Registration" })).toBeVisible({
       timeout: 20000,
     });
-    await page.getByRole("button", { name: "Start Registration" }).click();
+    await page.getByRole("button", { name: "Begin Registration" }).click();
 
     await expect(page.getByText("What's your email address?")).toBeVisible({ timeout: 5000 });
     await page.locator('input[type="email"]:visible').fill(parentEmail);

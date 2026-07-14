@@ -19,16 +19,8 @@ function loginButton(page: Page) {
 }
 
 test.describe("Authentication", () => {
-  test("login page renders with password step as default", async ({ page }) => {
+  test("login page renders the email step", async ({ page }) => {
     await page.goto("/login");
-    await expect(emailInput(page)).toBeVisible();
-    await expect(passwordInput(page)).toBeVisible();
-    await expect(loginButton(page)).toBeVisible();
-  });
-
-  test("switching to Email OTP tab shows the email-only step", async ({ page }) => {
-    await page.goto("/login");
-    await page.locator('button:visible', { hasText: "Email OTP" }).first().click();
     await expect(emailInput(page)).toBeVisible();
     await expect(nextButton(page)).toBeVisible();
   });

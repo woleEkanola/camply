@@ -21,7 +21,6 @@ export function StepIdentity({ state, dispatch }: StepIdentityProps) {
           dispatch({ type: "SET_IS_NEW_USER", isNewUser: isNew });
           dispatch({ type: "GO_TO", step: isNew ? "NEW_ACCOUNT" : "RETURNING_USER" });
         }}
-        onBack={() => dispatch({ type: "GO_BACK" })}
         campName={state.campData?.campName ?? "Camp"}
       />
     );
