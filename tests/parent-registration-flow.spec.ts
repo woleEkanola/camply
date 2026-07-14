@@ -84,6 +84,10 @@ test.describe("Parent Teen Registration", () => {
     await page.locator("#reg-pw-confirm").fill(parentPassword);
     await page.getByRole("button", { name: "Create Account" }).click();
 
+    // ── Hub (Choose Action) ──
+    await expect(page.getByText("Welcome, Parent!")).toBeVisible({ timeout: 10000 });
+    await page.getByRole("button", { name: "Register a Teen" }).click();
+
     // ── Add Teen ──
     await expect(page.getByText("Who's coming to camp?")).toBeVisible({ timeout: 10000 });
 
@@ -109,7 +113,7 @@ test.describe("Parent Teen Registration", () => {
     await expect(page.getByRole("heading", { name: "Test Camper" })).toBeVisible({ timeout: 10000 });
 
     // ── Navigate to Documents (all fields are now in one scrollable form) ──
-    const toDocsBtn = page.getByRole("button", { name: "Continue to Documents" });
+    const toDocsBtn = page.getByRole("button", { name: "Next", exact: true });
     await expect(toDocsBtn).toBeVisible({ timeout: 5000 });
     await toDocsBtn.click();
 
@@ -169,7 +173,7 @@ test.describe("Parent Teen Registration", () => {
       }
     }
 
-    const reviewBtn = page.getByRole("button", { name: /Continue to Review/ });
+    const reviewBtn = page.getByRole("button", { name: "Next", exact: true });
     await expect(reviewBtn).toBeVisible({ timeout: 5000 });
     await reviewBtn.click();
 
@@ -233,6 +237,9 @@ test.describe("Parent Teen Registration", () => {
       await page.locator("#reg-pw-confirm").fill(parentPassword);
       await page.getByRole("button", { name: "Create Account" }).click();
     }
+
+    // ── Hub (Choose Action) ──
+    await page.getByRole("button", { name: "Register a Teen" }).click();
 
     await expect(page.getByText("Who's coming to camp?")).toBeVisible({ timeout: 15000 });
 

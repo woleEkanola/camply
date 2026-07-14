@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { buildFromAddress } from './fromAddress';
 
 let resend: Resend | null = null;
 
@@ -10,7 +11,7 @@ export async function sendWelcomeEmail(email: string, firstName: string, verifyT
     }
     resend = new Resend(process.env.RESEND_API_KEY);
   }
-  const from = orgSlug ? `${orgSlug}@camply.ng` : 'donotreply@camply.ng';
+  const from = buildFromAddress({ orgSlug });
   const verifyUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3001'}/api/auth/verify-email?token=${verifyToken}`;
   
   try {

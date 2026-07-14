@@ -26,6 +26,7 @@ function DocumentRow({
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
   const uploadMutation = api.document.upload.useMutation({
     onSuccess: () => {
@@ -122,22 +123,42 @@ function DocumentRow({
       )}
 
       {!isDone && !uploading && (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-accent-50 px-3 py-1.5 text-xs font-medium text-accent-700 hover:bg-accent-100"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
-          </svg>
-          {localError ? "Retry" : "Upload"}
-        </button>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent-50 px-3 py-2 text-xs font-medium text-accent-700 hover:bg-accent-100 min-h-[36px]"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
+            </svg>
+            Choose File
+          </button>
+          <button
+            type="button"
+            onClick={() => cameraRef.current?.click()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent-50 px-3 py-2 text-xs font-medium text-accent-700 hover:bg-accent-100 min-h-[36px]"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z" />
+            </svg>
+            Take Photo
+          </button>
+        </div>
       )}
 
       <input
         ref={inputRef}
         type="file"
         accept={acceptedFormatsList}
+        onChange={handleFile}
+        className="hidden"
+      />
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
         capture="environment"
         onChange={handleFile}
         className="hidden"
@@ -211,23 +232,37 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => {
-          if (activeTeen) {
-            dispatch({
-              type: "SET_TEEN_COMPLETE",
-              camperId: activeTeen.camperId,
-              fieldsComplete: activeTeen.fieldsComplete,
-              documentsComplete: allRequiredDone,
-            });
-          }
-          dispatch({ type: "GO_TO", step: "REVIEW" });
-        }}
-        className="mt-6 flex h-12 w-full items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2"
-      >
-        {allRequiredDone ? "Continue to Review" : "Continue to Review (documents pending)"}
-      </button>
+      <div className="mt-6 flex gap-3">
+        <button
+          type="button"
+          onClick={() => dispatch({ type: "GO_BACK" })}
+          className="flex h-12 flex-1 items-center justify-center rounded-xl border border-neutral-300 bg-white text-base font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+        >
+          ← Back
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (activeTeen) {
+              dispatch({
+                type: "SET_TEEN_COMPLETE",
+                camperId: activeTeen.camperId,
+                fieldsComplete: activeTeen.fieldsComplete,
+                documentsComplete: allRequiredDone,
+              });
+            }
+            dispatch({ type: "GO_TO", step: "REVIEW" });
+          }}
+          className="flex h-12 flex-1 items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2"
+        >
+          Next
+        </button>
+      </div>
+      <div className="mt-6 text-center">
+        <a href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-600 underline">
+          Go to Dashboard
+        </a>
+      </div>
     </div>
   );
 }

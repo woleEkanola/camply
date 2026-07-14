@@ -52,12 +52,9 @@ export function TeenCard({ teen, isActive, onClick, onRemove }: TeenCardProps) {
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-danger-50 hover:text-danger-600"
-          aria-label={`Remove ${teen.firstName}`}
+          className="rounded border border-neutral-300 bg-white px-2 py-0.5 text-xs font-medium text-danger-600 transition-colors hover:bg-danger-50"
         >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-          </svg>
+          Delete
         </button>
       </div>
     </div>

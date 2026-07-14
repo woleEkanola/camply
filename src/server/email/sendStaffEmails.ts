@@ -1,11 +1,12 @@
 import { Resend } from "resend";
+import { buildFromAddress } from "./fromAddress";
 
 let resend: Resend | null = null;
 
 export async function sendStaffApprovedEmail(params: { to: string; name: string; campName: string; type: "TEACHER" | "VOLUNTEER"; dashboardUrl: string; orgSlug?: string }) {
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
   const role = params.type === "TEACHER" ? "Teacher" : "Volunteer";
-  const from = params.orgSlug ? `${params.orgSlug}@camply.ng` : 'donotreply@camply.ng';
+  const from = buildFromAddress({ orgSlug: params.orgSlug });
   await resend.emails.send({
     from,
     to: params.to,
@@ -23,7 +24,7 @@ export async function sendStaffApprovedEmail(params: { to: string; name: string;
 export async function sendStaffRejectedEmail(params: { to: string; name: string; campName: string; type: "TEACHER" | "VOLUNTEER"; reason?: string; orgSlug?: string }) {
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
   const role = params.type === "TEACHER" ? "Teacher" : "Volunteer";
-  const from = params.orgSlug ? `${params.orgSlug}@camply.ng` : 'donotreply@camply.ng';
+  const from = buildFromAddress({ orgSlug: params.orgSlug });
   await resend.emails.send({
     from,
     to: params.to,

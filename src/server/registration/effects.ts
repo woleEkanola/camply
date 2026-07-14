@@ -199,7 +199,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
         camper_name: camperName,
         camp_name: registration.camp.name,
       }, async () => {
-        await sendSubmissionEmail({ to: parentEmail, camperName, campName: registration.camp.name });
+        await sendSubmissionEmail({ to: parentEmail, camperName, campName: registration.camp.name, orgSlug });
       });
       await prisma.notification.create({
         data: {

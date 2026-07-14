@@ -74,7 +74,12 @@ function TeenReviewCard({
       if (!value && field.source === "SYSTEM" && field.systemKey) {
         const raw = (camper as any)[field.systemKey];
         if (raw !== undefined && raw !== null) {
-          value = typeof raw === "string" ? raw : String(raw);
+          // Prisma returns Date objects — convert to ISO date-only string
+          if (raw instanceof Date) {
+            value = raw.toISOString().split("T")[0];
+          } else {
+            value = typeof raw === "string" ? raw : String(raw);
+          }
         }
       }
 
@@ -125,12 +130,9 @@ function TeenReviewCard({
           <button
             type="button"
             onClick={() => dispatch({ type: "GO_TO_EDIT", camperId: teen.camperId })}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600"
-            aria-label="Edit profile"
+            className="rounded border border-neutral-300 bg-white px-2 py-0.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-            </svg>
+            Edit
           </button>
         </div>
       </div>
@@ -303,18 +305,33 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
         </div>
       )}
 
-      <button
-        type="button"
-        disabled={submitting || submitRef.current}
-        onClick={handleSubmit}
-        className="flex h-12 w-full items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {submitting ? (
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-        ) : (
-          "Submit Registration"
-        )}
-      </button>
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => dispatch({ type: "GO_BACK" })}
+          disabled={submitting || submitRef.current}
+          className="flex h-12 flex-1 items-center justify-center rounded-xl border border-neutral-300 bg-white text-base font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          ← Back
+        </button>
+        <button
+          type="button"
+          disabled={submitting || submitRef.current}
+          onClick={handleSubmit}
+          className="flex h-12 flex-1 items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {submitting ? (
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          ) : (
+            "Submit Registration"
+          )}
+        </button>
+      </div>
+      <div className="mt-6 text-center">
+        <a href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-600 underline">
+          Go to Dashboard
+        </a>
+      </div>
     </div>
   );
 }

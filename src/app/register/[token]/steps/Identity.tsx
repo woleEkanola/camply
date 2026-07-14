@@ -38,7 +38,7 @@ export function StepIdentity({ state, dispatch }: StepIdentityProps) {
         onLastNameChange={(v) => dispatch({ type: "SET_NAMES", firstName: state.firstName, lastName: v })}
         onAuthMethodChange={(m) => dispatch({ type: "SET_AUTH_METHOD", method: m })}
         onBack={() => dispatch({ type: "GO_BACK" })}
-        onSuccess={() => dispatch({ type: "GO_TO", step: "TEENS" })}
+        onSuccess={() => dispatch({ type: "GO_TO", step: "HUB" })}
         token={state.token}
         organizationId={state.campData?.organizationId ?? ""}
         campusId={state.campData?.campusId ?? ""}
@@ -52,7 +52,7 @@ export function StepIdentity({ state, dispatch }: StepIdentityProps) {
       <ReturningUserForm
         email={state.email}
         onBack={() => dispatch({ type: "GO_BACK" })}
-        onSuccess={() => dispatch({ type: "GO_TO", step: "TEENS" })}
+        onSuccess={() => dispatch({ type: "GO_TO", step: "HUB" })}
       />
     );
   }
