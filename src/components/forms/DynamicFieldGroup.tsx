@@ -43,7 +43,7 @@ export function DynamicFieldGroup({
   return (
     <div className="space-y-6">
       {groups.map((group, i) => (
-        <div key={group.label ?? `group-${i}`} className="space-y-4">
+        <div key={`group-${i}`} className="space-y-4">
           {group.label && <h3 className="font-medium text-neutral-900">{group.label}</h3>}
           {group.fields.map((field) => {
             const key = field.source === "SYSTEM" ? field.systemKey! : field.id;
