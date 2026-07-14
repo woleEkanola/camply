@@ -54,7 +54,7 @@ export default function NewProfilePage() {
     
     if (!session) {
       router.push("/login");
-    } else if (session.user.role !== "ADMIN") {
+    } else if (session.user.role !== "PARENT" && session.user.role !== "ADMIN") {
       // If not a parent, redirect to appropriate dashboard
       if (session.user.role === "SUPER_ADMIN") {
         router.push("/super-admin");

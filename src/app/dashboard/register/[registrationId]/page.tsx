@@ -144,7 +144,7 @@ export default function RegistrationWizardPage() {
   const [documentErrors, setDocumentErrors] = useState<string[]>([]);
   const [submitErrors, setSubmitErrors] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [declared, setDeclared] = useState(false);
+  const [declarationChecks, setDeclarationChecks] = useState<Record<string, boolean>>({});
 
   const utils = api.useUtils();
   
@@ -176,6 +176,25 @@ export default function RegistrationWizardPage() {
     () => fields.filter((f: FormFieldDTO) => f.visible),
     [fields]
   );
+
+  // Fetch admin-configured declarations
+  const { data: declarations } = api.registrationConfig.listDeclarations.useQuery(
+    { organizationId: registration?.camper?.organizationId ?? "" },
+    { enabled: !!registration?.camper?.organizationId }
+  );
+
+  // Sync declarations into local state, preserving existing checks
+  useEffect(() => {
+    if (declarations && declarations.length > 0) {
+      setDeclarationChecks((prev) => {
+        const next: Record<string, boolean> = {};
+        for (const d of declarations) {
+          next[d.id] = prev[d.id] ?? false;
+        }
+        return next;
+      });
+    }
+  }, [declarations]);
 
   // Sync camper & registration data to local state (once)
   useEffect(() => {
@@ -570,18 +589,28 @@ export default function RegistrationWizardPage() {
                   </div>
                 </div>
 
-                {/* Declarations Checkbox */}
-                <label className="flex items-start gap-2.5 text-sm text-neutral-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={declared}
-                    onChange={(e) => setDeclared(e.target.checked)}
-                    className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 mt-0.5"
-                  />
-                  <span>
-                    I confirm that all information provided is accurate, and I agree to the terms and guidelines of the camp.
-                  </span>
-                </label>
+                {/* Declarations */}
+                {declarations && declarations.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-neutral-900 border-b pb-2 text-sm">Consent</h3>
+                    {declarations.map((d) => (
+                      <label key={d.id} className="flex items-start gap-2.5 text-sm text-neutral-700 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={declarationChecks[d.id] ?? false}
+                          onChange={(e) =>
+                            setDeclarationChecks((prev) => ({ ...prev, [d.id]: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 mt-0.5"
+                        />
+                        <span>
+                          {d.label}
+                          {d.required && <span className="ml-1 text-xs text-danger-600">(required)</span>}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
 
                 {/* Navigation and Submit Buttons */}
                 <div className="flex justify-between pt-4 border-t">
@@ -591,7 +620,7 @@ export default function RegistrationWizardPage() {
                     variant="primary"
                     className="w-40"
                     loading={submitMutation.isPending || resubmitMutation.isPending}
-                    disabled={!declared}
+                    disabled={(declarations ?? []).filter(d => d.required).some(d => !declarationChecks[d.id])}
                     onClick={() => {
                       if (registration.status === "REQUIRES_ACTION") {
                         resubmitMutation.mutate({ registrationId });

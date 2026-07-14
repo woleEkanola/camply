@@ -133,27 +133,13 @@ export function StepLanding({ campData, onBegin }: StepLandingProps) {
       {/* Expectations */}
       <div className="mb-8">
         <h3 className="mb-4 text-sm font-semibold text-neutral-700">
-          Here&apos;s what we&apos;ll ask for
+          Ready to get started?
         </h3>
-        <ol className="space-y-2.5 text-sm text-neutral-600">
-          <li className="flex items-center gap-3">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-xs font-bold text-neutral-500">1</span>
-            Your teen&apos;s information
-          </li>
-          <li className="flex items-center gap-3">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-xs font-bold text-neutral-500">2</span>
-            Medical &amp; emergency details
-          </li>
-          <li className="flex items-center gap-3">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-xs font-bold text-neutral-500">3</span>
-            Birth certificate
-          </li>
-          <li className="flex items-center gap-3">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-xs font-bold text-neutral-500">4</span>
-            Parent consent
-          </li>
-        </ol>
-        <p className="mt-3 text-xs text-neutral-400">That&apos;s it.</p>
+        <p className="text-sm leading-relaxed text-neutral-600">
+          You&apos;ll provide information about your teen, upload any documents
+          requested by the camp, and review everything before submitting.
+        </p>
+        <p className="mt-3 text-xs text-neutral-400">It only takes a few minutes.</p>
       </div>
 
       {/* Trust Footer */}

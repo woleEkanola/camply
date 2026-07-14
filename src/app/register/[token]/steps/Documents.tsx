@@ -15,21 +15,20 @@ interface StepDocumentsProps {
 function DocumentRow({
   requirement,
   registrationId,
+  existingDoc,
   onUploaded,
 }: {
   requirement: any;
   registrationId: string;
+  existingDoc: any | undefined;
   onUploaded: () => void;
 }) {
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState("");
-  const [done, setDone] = useState(false);
-  const [fileName, setFileName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const uploadMutation = api.document.upload.useMutation({
     onSuccess: () => {
-      setDone(true);
       onUploaded();
     },
     onError: (e) => {
@@ -65,7 +64,6 @@ function DocumentRow({
       });
       const uploaded = res[0];
       if (uploaded) {
-        setFileName(uploaded.name);
         uploadMutation.mutate({
           requirementId: requirement.id,
           registrationId,
@@ -84,10 +82,11 @@ function DocumentRow({
   }
 
   const acceptedFormatsList = (requirement.acceptedFormats as string)?.split(",").map((f: string) => `.${f.trim()}`).join(",") ?? ".jpg,.png";
+  const isDone = !!existingDoc;
 
   return (
     <div className={`rounded-xl border bg-white p-4 shadow-sm transition-colors ${
-      done ? "border-success-300 bg-success-50" : localError ? "border-danger-300" : "border-neutral-200"
+      isDone ? "border-success-300 bg-success-50" : localError ? "border-danger-300" : "border-neutral-200"
     }`}>
       <div className="mb-2 flex items-start justify-between">
         <div>
@@ -97,7 +96,7 @@ function DocumentRow({
             {requirement.acceptedFormats?.split(",").map((f: string) => f.trim()).join(" or ")}. Up to {requirement.maxSizeMb} MB
           </p>
         </div>
-        {done && (
+        {isDone && (
           <svg className="h-5 w-5 shrink-0 text-success-500" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
           </svg>
@@ -113,9 +112,16 @@ function DocumentRow({
 
       {localError && <p className="text-xs text-danger-600 mb-2">{localError}</p>}
 
-      {done && fileName && <p className="text-xs text-success-700">{fileName}</p>}
+      {isDone && existingDoc?.fileName && (
+        <p className="text-xs text-success-700">
+          {existingDoc.fileName}
+          {existingDoc.url && (
+            <a href={existingDoc.url} target="_blank" rel="noreferrer" className="ml-2 text-accent-600 underline">View</a>
+          )}
+        </p>
+      )}
 
-      {!done && !uploading && (
+      {!isDone && !uploading && (
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
@@ -142,19 +148,23 @@ function DocumentRow({
 
 export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
   const activeTeen = state.teens.find((t) => t.camperId === state.activeTeenId);
-  const [uploadedDocIds, setUploadedDocIds] = useState<Set<string>>(new Set());
 
   const { data: requirements } = api.documentRequirement.listByCamp.useQuery(
     { campId: state.campData?.campId ?? "" },
     { enabled: !!state.campData?.campId }
   );
 
-  function handleDocUploaded(requirementId: string) {
-    setUploadedDocIds((prev) => new Set(prev).add(requirementId));
-  }
+  // Fetch existing documents from the server (survives refresh)
+  const { data: existingDocs, refetch: refetchDocs } = api.document.listForRegistration.useQuery(
+    { registrationId: activeTeen?.registrationId ?? "" },
+    { enabled: !!activeTeen?.registrationId }
+  );
 
   const requiredReqs = requirements?.filter((r) => r.required) ?? [];
-  const allRequiredDone = requiredReqs.length === 0 || requiredReqs.every((r) => uploadedDocIds.has(r.id));
+  const uploadedReqIds = new Set(
+    (existingDocs ?? []).filter((d: any) => d.status !== "REJECTED").map((d: any) => d.requirementId)
+  );
+  const allRequiredDone = requiredReqs.length === 0 || requiredReqs.every((r) => uploadedReqIds.has(r.id));
 
   return (
     <div>
@@ -194,7 +204,8 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
               key={req.id}
               requirement={req}
               registrationId={activeTeen?.registrationId ?? ""}
-              onUploaded={() => handleDocUploaded(req.id)}
+              existingDoc={(existingDocs ?? []).find((d: any) => d.requirementId === req.id && d.status !== "REJECTED")}
+              onUploaded={() => refetchDocs()}
             />
           ))}
         </div>

@@ -86,6 +86,7 @@ export type WizardAction =
   | { type: "SET_ACTIVE_TEEN"; camperId: string | null }
   | { type: "SET_TEEN_COMPLETE"; camperId: string; fieldsComplete: boolean; documentsComplete: boolean }
   | { type: "SET_DECLARATION"; id: string; checked: boolean }
+  | { type: "SET_DECLARATIONS"; declarations: { id: string; label: string; required: boolean }[] }
   | { type: "SET_ERROR"; title: string; message: string }
   | { type: "CLEAR_ERROR" };
 
