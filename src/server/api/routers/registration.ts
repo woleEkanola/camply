@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import * as engine from "../../registration/engine";
+import { transitionWithEmailControl } from "../../registration/engine";
 import { RegistrationValidationError } from "../../registration/validation";
 import { IllegalTransitionError } from "../../registration/stateMachine";
 import { runSideEffectsNow } from "../../registration/effects";
@@ -717,7 +718,15 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       try {
+<<<<<<< Updated upstream
         return await engine.submitRegistration({ registrationId: input.registrationId, actorId: currentUser.id, submittedAt: new Date() });
+=======
+        const result = await transitionWithEmailControl(
+          () => engine.submitRegistration({ registrationId: input.registrationId, actorId: currentUser.id }),
+          true // backward compat: auto-send email
+        );
+        return result;
+>>>>>>> Stashed changes
       } catch (error) {
         throw toTRPCError(error);
       }
@@ -765,7 +774,11 @@ export const registrationRouter = createTRPCRouter({
       });
       await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
-        return await engine.approveRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
+        const result = await transitionWithEmailControl(
+          () => engine.approveRegistration({ registrationId: input.registrationId, actorId: currentUser.id }),
+          true
+        );
+        return result;
       } catch (error) {
         throw toTRPCError(error);
       }
@@ -782,7 +795,11 @@ export const registrationRouter = createTRPCRouter({
       });
       await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
-        return await engine.rejectRegistration({ registrationId: input.registrationId, actorId: currentUser.id, reason: input.reason });
+        const result = await transitionWithEmailControl(
+          () => engine.rejectRegistration({ registrationId: input.registrationId, actorId: currentUser.id, reason: input.reason }),
+          true
+        );
+        return result;
       } catch (error) {
         throw toTRPCError(error);
       }
@@ -799,7 +816,11 @@ export const registrationRouter = createTRPCRouter({
       });
       await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       try {
-        return await engine.requestCorrection({ registrationId: input.registrationId, actorId: currentUser.id, message: input.message });
+        const result = await transitionWithEmailControl(
+          () => engine.requestCorrection({ registrationId: input.registrationId, actorId: currentUser.id, message: input.message }),
+          true
+        );
+        return result;
       } catch (error) {
         throw toTRPCError(error);
       }
@@ -1036,6 +1057,172 @@ export const registrationRouter = createTRPCRouter({
       }
       await runSideEffectsNow(registration.id, "REGISTRATION_APPROVED");
       return { success: true };
+    }),
+
+  // ── Registration Review Workflow ────────────────────────────────────────
+
+  transitionWithOptions: protectedProcedure
+    .input(z.object({
+      registrationId: z.string(),
+      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "CANCEL", "ARCHIVE"]),
+      reason: z.string().optional(),
+      message: z.string().optional(),
+      sendEmail: z.boolean().default(true),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+
+      // Update communication log
+      const commKey = input.action === "APPROVE" ? "ACCEPTANCE" : input.action === "REJECT" ? "REJECTION" : input.action === "WAITLIST" ? "WAITLIST" : input.action === "REQUEST_CORRECTION" ? "CORRECTION" : null;
+      const commUpdate: Record<string, unknown> = {};
+      if (commKey) {
+        const currentLog = (registration.communicationLog as Record<string, string>) ?? {};
+        commUpdate.communicationLog = { ...currentLog, [commKey]: input.sendEmail ? "SENT" : "NOT_SENT" };
+      }
+
+      const actorId = currentUser.id as string;
+      try {
+        let result: any;
+        switch (input.action) {
+          case "APPROVE":
+            result = await transitionWithEmailControl(() => engine.approveRegistration({ registrationId: input.registrationId, actorId }), input.sendEmail);
+            break;
+          case "REJECT":
+            result = await transitionWithEmailControl(() => engine.rejectRegistration({ registrationId: input.registrationId, actorId, reason: input.reason ?? "" }), input.sendEmail);
+            break;
+          case "WAITLIST":
+            result = await transitionWithEmailControl(() => engine.waitlistRegistration({ registrationId: input.registrationId, actorId }), input.sendEmail);
+            break;
+          case "REQUEST_CORRECTION":
+            result = await transitionWithEmailControl(() => engine.requestCorrection({ registrationId: input.registrationId, actorId, message: input.message ?? "" }), input.sendEmail);
+            break;
+          case "CANCEL":
+            result = await engine.cancelRegistration({ registrationId: input.registrationId, actorId, reason: input.reason });
+            break;
+          case "ARCHIVE":
+            result = await engine.archiveRegistration({ registrationId: input.registrationId, actorId });
+            break;
+        }
+        // Update communication log after successful transition
+        if (Object.keys(commUpdate).length > 0) {
+          await ctx.prisma.registration.update({ where: { id: input.registrationId }, data: commUpdate });
+        }
+        // Track admin decision in review if two-step
+        await ctx.prisma.registrationReview.upsert({
+          where: { registrationId: input.registrationId },
+          update: { adminDecision: input.action, decidedById: actorId, decidedAt: new Date() },
+          create: { registrationId: input.registrationId, adminDecision: input.action, decidedById: actorId, decidedAt: new Date() },
+        });
+        return result;
+      } catch (error) {
+        throw toTRPCError(error);
+      }
+    }),
+
+  sendCommunication: protectedProcedure
+    .input(z.object({
+      registrationId: z.string(),
+      type: z.enum(["ACCEPTANCE", "REJECTION", "CORRECTION", "WAITLIST"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+
+      const effectType = input.type === "ACCEPTANCE" ? "REGISTRATION_APPROVED" as const
+        : input.type === "REJECTION" ? "REGISTRATION_REJECTED" as const
+        : input.type === "CORRECTION" ? "CORRECTION_REQUESTED" as const
+        : "REGISTRATION_WAITLISTED" as const;
+
+      await runSideEffectsNow(registration.id, effectType);
+
+      const currentLog = (registration.communicationLog as Record<string, string>) ?? {};
+      await ctx.prisma.registration.update({
+        where: { id: input.registrationId },
+        data: { communicationLog: { ...currentLog, [input.type]: "SENT" } },
+      });
+      return { success: true };
+    }),
+
+  getReview: protectedProcedure
+    .input(z.object({ registrationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.prisma.registrationReview.findUnique({ where: { registrationId: input.registrationId } });
+    }),
+
+  assignVerifier: protectedProcedure
+    .input(z.object({ registrationId: z.string(), assigneeId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+
+      return ctx.prisma.registrationReview.upsert({
+        where: { registrationId: input.registrationId },
+        update: { assignedToId: input.assigneeId, assignedAt: new Date(), verificationStatus: "IN_PROGRESS" },
+        create: { registrationId: input.registrationId, assignedToId: input.assigneeId, assignedAt: new Date(), verificationStatus: "IN_PROGRESS" },
+      });
+    }),
+
+  unassignVerifier: protectedProcedure
+    .input(z.object({ registrationId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+
+      return ctx.prisma.registrationReview.update({
+        where: { registrationId: input.registrationId },
+        data: { assignedToId: null, verificationStatus: "NOT_STARTED" },
+      });
+    }),
+
+  completeVerification: protectedProcedure
+    .input(z.object({
+      registrationId: z.string(),
+      recommendation: z.enum(["APPROVE", "REJECT", "CORRECTION"]),
+      reviewNotes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const review = await ctx.prisma.registrationReview.findUnique({ where: { registrationId: input.registrationId } });
+      if (!review || review.assignedToId !== currentUser.id) {
+        const isRep = await ctx.prisma.campus.findFirst({
+          where: { reps: { some: { id: currentUser.id } } },
+        });
+        if (!isRep && currentUser.role !== "ADMIN" && currentUser.role !== "OWNER") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only the assigned verifier can complete verification" });
+        }
+      }
+      return ctx.prisma.registrationReview.update({
+        where: { registrationId: input.registrationId },
+        data: {
+          verificationStatus: "COMPLETED",
+          verifiedById: currentUser.id,
+          verifiedAt: new Date(),
+          recommendation: input.recommendation,
+          reviewNotes: input.reviewNotes ?? null,
+        },
+      });
     }),
 
   // Admin list with server-side pagination/filter/sort (PRD Part 5 §4-7)

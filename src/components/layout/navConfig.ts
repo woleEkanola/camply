@@ -135,9 +135,33 @@ const ADMIN_GROUPS: NavGroup[] = [
     name: "Communication",
     items: [
       {
-        name: "Announcements",
-        href: "/admin/announcements",
+        name: "Overview",
+        href: "/admin/communication",
         icon: MegaphoneIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Email Events",
+        href: "/admin/communication/events",
+        icon: MegaphoneIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Templates",
+        href: "/admin/communication/templates",
+        icon: IdentificationIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Broadcast",
+        href: "/admin/communication/broadcast",
+        icon: MegaphoneIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Branding",
+        href: "/admin/communication/branding",
+        icon: Cog6ToothIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
     ],

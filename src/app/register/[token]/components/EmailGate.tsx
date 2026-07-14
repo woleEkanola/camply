@@ -7,10 +7,11 @@ interface EmailGateProps {
   email: string;
   onEmailChange: (email: string) => void;
   onContinue: (isNew: boolean) => void;
+  onBack: () => void;
   campName: string;
 }
 
-export function EmailGate({ email, onEmailChange, onContinue, campName }: EmailGateProps) {
+export function EmailGate({ email, onEmailChange, onContinue, onBack, campName }: EmailGateProps) {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
 
@@ -51,6 +52,9 @@ export function EmailGate({ email, onEmailChange, onContinue, campName }: EmailG
   return (
     <div>
       <div className="mb-6">
+        <button onClick={onBack} className="mb-1 text-sm font-medium text-accent-600 hover:text-accent-700">
+          ← Back
+        </button>
         <h1 className="text-2xl font-bold text-neutral-900">Register Your Teen</h1>
         <p className="mt-1 text-sm text-neutral-500">for {campName}</p>
       </div>

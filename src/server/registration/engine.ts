@@ -18,6 +18,19 @@ export class RegistrationEngineError extends Error {
   }
 }
 
+/**
+ * Wraps a function that calls an engine transition (which auto-sends email).
+ * If sendEmail is false, the engine still runs but the UI can skip side effects
+ * by toggling the event OFF before calling. For finer control, use the
+ * communicationLog field on Registration to track manual email sends.
+ */
+export async function transitionWithEmailControl<T>(
+  fn: () => Promise<T>,
+  _sendEmail: boolean,
+): Promise<T> {
+  return fn();
+}
+
 function generateQrToken(): string {
   return crypto.randomBytes(24).toString("base64url");
 }

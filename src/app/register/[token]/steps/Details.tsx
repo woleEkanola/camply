@@ -7,7 +7,7 @@ import { TeenSwitcher } from "../components/TeenSwitcher";
 import { FieldRenderer } from "../components/FieldRenderer";
 import { AutoSaveIndicator } from "../components/AutoSaveIndicator";
 
-const SECTIONS = ["Camper Information", "Medical & Emergency", "Education & Church"];
+const SECTIONS = ["Camper Information", "Contact Details", "Medical & Emergency"];
 
 interface StepDetailsProps {
   state: WizardState;
