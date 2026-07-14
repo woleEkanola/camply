@@ -73,7 +73,6 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
 
     debounceRef.current = setTimeout(async () => {
       try {
-        // Build profile object from system field values
         const profile: Record<string, unknown> = {};
         const fieldValues: { fieldId: string; value: string }[] = [];
 
@@ -103,7 +102,6 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
 
   const handleChange = useCallback(
     (key: string, value: unknown) => {
-      // Clear error for this field when user edits
       setFieldErrors((prev) => {
         if (prev[key]) {
           const next = { ...prev };
@@ -121,7 +119,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
     [activeTeen, visibleFields]
   );
 
-  async function flushAndNavigate() {
+  async function handleNext() {
     if (!activeTeen) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -147,7 +145,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
       return;
     }
 
-    // Build profile and fieldValues for final save
+    // Final save before navigating
     const profile: Record<string, unknown> = {};
     const fieldValues: { fieldId: string; value: string }[] = [];
 
@@ -173,11 +171,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
       documentsComplete: activeTeen.documentsComplete,
     });
 
-    if (state.returnTo === "REVIEW") {
-      dispatch({ type: "GO_BACK" });
-    } else {
-      dispatch({ type: "GO_TO", step: "DOCUMENTS" });
-    }
+    dispatch({ type: "GO_TO", step: "DOCUMENTS" });
   }
 
   if (!activeTeen) {
@@ -194,9 +188,6 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
   return (
     <div>
       <div className="mb-6">
-        <button onClick={() => dispatch({ type: "GO_BACK" })} className="mb-1 text-sm font-medium text-accent-600 hover:text-accent-700">
-          ← Back
-        </button>
         <TeenSwitcher
           teens={state.teens}
           activeTeenId={state.activeTeenId}
@@ -231,28 +222,31 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
             <AutoSaveIndicator status={saveStatus} />
           </div>
           <div className="flex gap-3">
-            {state.returnTo === "REVIEW" ? (
-              <button
-                type="button"
-                onClick={() => flushAndNavigate()}
-                className="flex h-11 items-center gap-1 rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700"
-              >
-                Save &amp; Return to Review
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => flushAndNavigate()}
-                className="flex h-11 items-center gap-1 rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700"
-              >
-                Continue to Documents
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                </svg>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => dispatch({ type: "GO_BACK" })}
+              className="flex h-12 items-center justify-center rounded-xl border border-neutral-300 bg-white px-6 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+            >
+              ← Back
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              className="flex h-12 items-center gap-1 rounded-xl bg-accent-600 px-6 text-sm font-medium text-white transition-colors hover:bg-accent-700"
+            >
+              Next
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+              </svg>
+            </button>
           </div>
         </div>
+      </div>
+
+      <div className="mt-6 text-center">
+        <a href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-600 underline">
+          Go to Dashboard
+        </a>
       </div>
     </div>
   );

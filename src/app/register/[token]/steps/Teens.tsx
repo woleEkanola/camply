@@ -129,6 +129,11 @@ export function StepTeens({ state, dispatch }: StepTeensProps) {
           Continue to Registration
         </button>
       )}
+      <div className="mt-6 text-center">
+        <a href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-600 underline">
+          Go to Dashboard
+        </a>
+      </div>
     </div>
   );
 }

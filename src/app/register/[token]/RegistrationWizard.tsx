@@ -8,6 +8,7 @@ import { VISIBLE_STEPS } from "./types";
 import { WizardProgress } from "./components/WizardProgress";
 import { StepLanding } from "./steps/Landing";
 import { StepIdentity } from "./steps/Identity";
+import { StepHub } from "./steps/Hub";
 import { StepTeens } from "./steps/Teens";
 import { StepDetails } from "./steps/Details";
 import { StepDocuments } from "./steps/Documents";
@@ -50,8 +51,9 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         IDENTITY: "LANDING",
         NEW_ACCOUNT: "IDENTITY",
         RETURNING_USER: "IDENTITY",
-        TEENS: "IDENTITY",
-        DETAILS: "TEENS",
+        HUB: "IDENTITY",
+        TEENS: "HUB",
+        DETAILS: "HUB",
         DOCUMENTS: "DETAILS",
         REVIEW: "DOCUMENTS",
       };
@@ -258,6 +260,10 @@ export function RegistrationWizard({ token }: { token: string }) {
 
       {(state.step === "IDENTITY" || state.step === "NEW_ACCOUNT" || state.step === "RETURNING_USER") && (
         <StepIdentity state={state} dispatch={dispatch} />
+      )}
+
+      {state.step === "HUB" && (
+        <StepHub state={state} dispatch={dispatch} />
       )}
 
       {state.step === "TEENS" && (

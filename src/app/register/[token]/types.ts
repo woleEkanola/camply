@@ -4,6 +4,7 @@ export type WizardStep =
   | "IDENTITY"
   | "NEW_ACCOUNT"
   | "RETURNING_USER"
+  | "HUB"
   | "TEENS"
   | "DETAILS"
   | "DOCUMENTS"
@@ -96,6 +97,7 @@ export const STEP_LABELS: Record<WizardStep, string> = {
   IDENTITY: "Email",
   NEW_ACCOUNT: "Account",
   RETURNING_USER: "Sign In",
+  HUB: "Register",
   TEENS: "Teens",
   DETAILS: "Details",
   DOCUMENTS: "Documents",
@@ -104,4 +106,4 @@ export const STEP_LABELS: Record<WizardStep, string> = {
   ERROR: "",
 };
 
-export const VISIBLE_STEPS: WizardStep[] = ["IDENTITY", "TEENS", "DETAILS", "REVIEW"];
+export const VISIBLE_STEPS: WizardStep[] = ["IDENTITY", "HUB", "TEENS", "DETAILS", "REVIEW"];

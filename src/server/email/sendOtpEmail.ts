@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { buildFromAddress } from './fromAddress';
 
 let resend: Resend | null = null;
 
@@ -7,7 +8,7 @@ export async function sendOtpEmail(email: string, otp: string, orgSlug?: string)
     console.log("[RESEND] Initializing Resend client");
     resend = new Resend(process.env.RESEND_API_KEY);
   }
-  const from = orgSlug ? `${orgSlug}@camply.ng` : 'donotreply@camply.ng';
+  const from = buildFromAddress({ orgSlug });
   console.log("[RESEND] Sending OTP email to", email, "from", from);
   const result = await resend.emails.send({
     from,

@@ -71,7 +71,7 @@ export default function CampConfigPage() {
     onSuccess: () => {
       refetchRequirements();
       refetchReadiness();
-      setNewReq({ name: "", description: "", required: true, scope: "CAMPER" });
+      setNewReq({ name: "", description: "", required: true, scope: "CAMPER", acceptedFormats: "jpg,png", maxSizeMb: 2 });
     },
   });
   const deleteRequirement = api.documentRequirement.delete.useMutation({
@@ -148,7 +148,7 @@ export default function CampConfigPage() {
   const [error, setError] = useState("");
   const [deleteReqTarget, setDeleteReqTarget] = useState<{ id: string; name: string } | null>(null);
   const [success, setSuccess] = useState("");
-  const [newReq, setNewReq] = useState({ name: "", description: "", required: true, scope: "CAMPER" as "CAMPER" | "REGISTRATION" });
+  const [newReq, setNewReq] = useState({ name: "", description: "", required: true, scope: "CAMPER" as "CAMPER" | "REGISTRATION", acceptedFormats: "jpg,png", maxSizeMb: 2 });
 
   // Tribes States
   const [tribeEnabled, setTribeEnabled] = useState(false);
@@ -348,6 +348,7 @@ export default function CampConfigPage() {
               <div>
                 <div className="font-medium text-neutral-900">{req.name} {req.required && <Badge tone="danger" className="ml-1">required</Badge>}</div>
                 <div className="text-xs text-neutral-500">{req.scope === "CAMPER" ? "Reusable across camps" : "Specific to this camp"} · {req.description}</div>
+                <div className="text-xs text-neutral-400 mt-0.5">{req.acceptedFormats} · Up to {req.maxSizeMb} MB</div>
               </div>
               <div className="flex gap-3 text-sm">
                 <button className="text-accent-700 hover:underline" onClick={() => toggleRequirement.mutate({ id: req.id, data: { required: !req.required } })}>
@@ -372,6 +373,18 @@ export default function CampConfigPage() {
             <option value="CAMPER">Camper (reusable)</option>
             <option value="REGISTRATION">Registration (per camp)</option>
           </Select>
+          <Input
+            label="Formats"
+            value={newReq.acceptedFormats}
+            onChange={(e) => setNewReq({ ...newReq, acceptedFormats: e.target.value })}
+            placeholder="jpg,png"
+          />
+          <Input
+            label="Max Size (MB)"
+            type="number"
+            value={String(newReq.maxSizeMb)}
+            onChange={(e) => setNewReq({ ...newReq, maxSizeMb: Number(e.target.value) || 2 })}
+          />
           <Button disabled={!newReq.name} loading={createRequirement.isPending} onClick={() => createRequirement.mutate({ campId: id, ...newReq })}>
             Add
           </Button>
