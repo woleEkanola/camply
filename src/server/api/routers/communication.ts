@@ -216,6 +216,7 @@ export const communicationRouter = createTRPCRouter({
     .input(
       z.object({
         logoUrl: z.string().nullable().optional(),
+        senderName: z.string().nullable().optional(),
         primaryColor: z.string().optional(),
         accentColor: z.string().optional(),
         buttonColor: z.string().optional(),
@@ -482,6 +483,7 @@ export const communicationRouter = createTRPCRouter({
         branding: z
           .object({
             logoUrl: z.string().nullable().optional(),
+        senderName: z.string().nullable().optional(),
             primaryColor: z.string().default("#E67E22"),
             accentColor: z.string().default("#E67E22"),
             buttonColor: z.string().default("#E67E22"),
@@ -506,6 +508,7 @@ export const communicationRouter = createTRPCRouter({
         accentColor: input.branding?.accentColor ?? "#E67E22",
         buttonColor: input.branding?.buttonColor ?? "#E67E22",
         logoUrl: input.branding?.logoUrl ?? null,
+        senderName: (input.branding as any)?.senderName ?? null,
         headerImageUrl: input.branding?.headerImageUrl ?? null,
         footerText: input.branding?.footerText ?? null,
         supportEmail: input.branding?.supportEmail ?? null,

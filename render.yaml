@@ -3,7 +3,7 @@ services:
   name: next-js
   runtime: node
   plan: free
-  buildCommand: yarn; yarn build
+  buildCommand: yarn; npx prisma migrate deploy; yarn build
   startCommand: yarn start
   autoDeploy: false
   envVars:

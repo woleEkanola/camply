@@ -42,6 +42,7 @@ export default function BrandingPage() {
   const [facebookUrl, setFacebookUrl] = useState("");
   const [instagramUrl, setInstagramUrl] = useState("");
   const [address, setAddress] = useState("");
+  const [senderName, setSenderName] = useState("");
 
   const [saved, setSaved] = useState(false);
 
@@ -60,6 +61,7 @@ export default function BrandingPage() {
       setFacebookUrl(branding.facebookUrl ?? "");
       setInstagramUrl(branding.instagramUrl ?? "");
       setAddress(branding.address ?? "");
+      setSenderName(branding.senderName ?? "");
     }
   }, [branding]);
 
@@ -135,6 +137,7 @@ export default function BrandingPage() {
       facebookUrl: facebookUrl || null,
       instagramUrl: instagramUrl || null,
       address: address || null,
+      senderName: senderName || null,
     });
   };
 
@@ -306,6 +309,15 @@ export default function BrandingPage() {
                   placeholder="123 Church Street&#10;City, State 12345"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
+                />
+
+                {/* Sender Name */}
+                <Input
+                  label="Email Sender Name"
+                  helpText="Display name shown as the sender of all emails (e.g. 'Grace Community Church'). Leave empty to show just the email address."
+                  placeholder="Grace Community Church"
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
                 />
 
                 {/* Save */}

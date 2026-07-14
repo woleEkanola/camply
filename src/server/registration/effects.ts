@@ -10,6 +10,7 @@ import {
 } from "../email/sendAcceptanceEmail";
 import { loadTemplateForEvent } from "../email/templateLoader";
 import { renderEmail } from "../email/renderer";
+import { buildFromAddress } from "../email/fromAddress";
 
 let resend: Resend | null = null;
 function getResend() {
@@ -69,7 +70,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
         finalHtml = finalHtml.replace(variables.qr_code, `<img src="${variables.qr_code}" alt="QR Code" width="180" height="180" />`);
       }
       await getResend().emails.send({
-        from: orgSlug ? `${orgSlug}@camply.ng` : "donotreply@camply.ng",
+        from: buildFromAddress({ orgSlug, senderName: loaded.branding?.senderName ?? undefined }),
         to: parentEmail,
         subject: loaded.subject,
         html: finalHtml,
@@ -278,7 +279,7 @@ async function processBroadcastEffect(effectId: string) {
   });
 
   await getResend().emails.send({
-    from: "donotreply@camply.ng",
+    from: buildFromAddress({ senderName: branding?.senderName ?? undefined }),
     to: recipient.email,
     subject: broadcast.subject,
     html,

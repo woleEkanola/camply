@@ -1101,6 +1101,7 @@ model OrganizationBranding {
   accentColor    String       @default("#E67E22")
   buttonColor    String       @default("#E67E22")
   headerImageUrl String?
+  senderName     String?      // Display name for email sender (e.g. "Grace Community Church")
   footerText     String?
   supportEmail   String?
   supportPhone   String?
