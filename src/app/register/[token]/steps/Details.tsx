@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { api } from "@/utils/trpc";
 import type { WizardState, WizardAction } from "../types";
 import { TeenSwitcher } from "../components/TeenSwitcher";
-import { FieldRenderer } from "../components/FieldRenderer";
+import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
+import type { FormFieldDTO } from "@/components/forms/types";
 import { AutoSaveIndicator } from "../components/AutoSaveIndicator";
-
-const SECTIONS = ["Camper Information", "Contact Details", "Medical & Emergency"];
 
 interface StepDetailsProps {
   state: WizardState;
@@ -16,9 +15,9 @@ interface StepDetailsProps {
 
 export function StepDetails({ state, dispatch }: StepDetailsProps) {
   const activeTeen = state.teens.find((t) => t.camperId === state.activeTeenId);
-  const [sectionIndex, setSectionIndex] = useState(0);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, unknown>>({});
   const [loaded, setLoaded] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateCamper = api.camper.update.useMutation();
@@ -38,9 +37,15 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
     { enabled: !!activeTeen?.camperId }
   );
 
+  const visibleFields = useMemo(() => {
+    return (fields ?? [])
+      .filter((f: FormFieldDTO) => f.visible)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [fields]);
+
   useEffect(() => {
     if (camperData && !loaded) {
-      const initial: Record<string, string> = {
+      const initial: Record<string, unknown> = {
         firstName: activeTeen?.firstName ?? "",
         lastName: activeTeen?.lastName ?? "",
         dateOfBirth: activeTeen?.dateOfBirth ?? "",
@@ -61,28 +66,31 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
     setLoaded(false);
   }, [activeTeen?.camperId]);
 
-  const sectionFields = (fields ?? []).filter(
-    (f) => f.visible && f.groupLabel === SECTIONS[sectionIndex]
-  );
-
-  function persistToBackend(newValues: Record<string, string>) {
+  function persistToBackend(newValues: Record<string, unknown>) {
     if (!activeTeen) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSaveStatus("saving");
 
     debounceRef.current = setTimeout(async () => {
       try {
-        const fieldValues = (fields ?? [])
-          .filter((f) => f.visible)
-          .map((f) => {
-            const key = f.systemKey ?? f.id;
-            return { fieldId: f.id, value: newValues[key] ?? "" };
-          })
-          .filter((fv) => fv.value);
+        // Build profile object from system field values
+        const profile: Record<string, unknown> = {};
+        const fieldValues: { fieldId: string; value: string }[] = [];
+
+        for (const f of visibleFields) {
+          const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
+          const val = newValues[key];
+          if (val !== undefined && val !== null && String(val) !== "") {
+            if (f.source === "SYSTEM" && f.systemKey) {
+              profile[f.systemKey] = val;
+            }
+            fieldValues.push({ fieldId: f.id, value: String(val) });
+          }
+        }
 
         await updateCamper.mutateAsync({
           id: activeTeen.camperId,
-          profile: {},
+          profile,
           fieldValues,
         });
         setSaveStatus("saved");
@@ -94,36 +102,81 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
   }
 
   const handleChange = useCallback(
-    (key: string, value: string) => {
+    (key: string, value: unknown) => {
+      // Clear error for this field when user edits
+      setFieldErrors((prev) => {
+        if (prev[key]) {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+        return prev;
+      });
       setValues((prev) => {
         const next = { ...prev, [key]: value };
         persistToBackend(next);
         return next;
       });
     },
-    [activeTeen, fields]
+    [activeTeen, visibleFields]
   );
 
-  async function flushAndNavigate(target: "next_section" | "next_step" | "return_to_review") {
+  async function flushAndNavigate() {
     if (!activeTeen) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    const fieldValues = (fields ?? [])
-      .filter((f) => f.visible)
-      .map((f) => {
-        const key = f.systemKey ?? f.id;
-        return { fieldId: f.id, value: values[key] ?? "" };
-      })
-      .filter((fv) => fv.value);
+
+    // Validate required fields
+    const errors: Record<string, string> = {};
+    for (const f of visibleFields) {
+      if (!f.required) continue;
+      const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
+      const val = values[key];
+      if (
+        val === undefined ||
+        val === null ||
+        String(val).trim() === "" ||
+        (Array.isArray(val) && val.length === 0)
+      ) {
+        errors[key] = `${f.label} is required`;
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    // Build profile and fieldValues for final save
+    const profile: Record<string, unknown> = {};
+    const fieldValues: { fieldId: string; value: string }[] = [];
+
+    for (const f of visibleFields) {
+      const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
+      const val = values[key];
+      if (val !== undefined && val !== null && String(val) !== "") {
+        if (f.source === "SYSTEM" && f.systemKey) {
+          profile[f.systemKey] = val;
+        }
+        fieldValues.push({ fieldId: f.id, value: String(val) });
+      }
+    }
+
     try {
-      await updateCamper.mutateAsync({ id: activeTeen.camperId, profile: {}, fieldValues });
+      await updateCamper.mutateAsync({ id: activeTeen.camperId, profile, fieldValues });
     } catch {}
-    dispatch({ type: "SET_TEEN_COMPLETE", camperId: activeTeen.camperId, fieldsComplete: true, documentsComplete: activeTeen.documentsComplete });
-    if (target === "return_to_review") {
+
+    dispatch({
+      type: "SET_TEEN_COMPLETE",
+      camperId: activeTeen.camperId,
+      fieldsComplete: true,
+      documentsComplete: activeTeen.documentsComplete,
+    });
+
+    if (state.returnTo === "REVIEW") {
       dispatch({ type: "GO_BACK" });
-    } else if (target === "next_step") {
-      dispatch({ type: "GO_TO", step: "DOCUMENTS" });
     } else {
-      setSectionIndex((i) => i + 1);
+      dispatch({ type: "GO_TO", step: "DOCUMENTS" });
     }
   }
 
@@ -137,8 +190,6 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
       </div>
     );
   }
-
-  const isLastSection = sectionIndex === SECTIONS.length - 1;
 
   return (
     <div>
@@ -154,29 +205,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
         <h1 className="text-xl font-bold text-neutral-900">{activeTeen.firstName} {activeTeen.lastName}</h1>
       </div>
 
-      <div className="mb-5 flex gap-1" role="tablist" aria-label="Sections">
-        {SECTIONS.map((s, i) => (
-          <button
-            key={s}
-            role="tab"
-            aria-selected={i === sectionIndex}
-            onClick={() => setSectionIndex(i)}
-            className={`flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              i === sectionIndex
-                ? "bg-accent-600 text-white"
-                : i < sectionIndex
-                  ? "bg-accent-100 text-accent-700"
-                  : "bg-neutral-100 text-neutral-500"
-            }`}
-          >
-            {s.replace(" & ", "/").split(" ")[0]}
-          </button>
-        ))}
-      </div>
-
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold text-neutral-900">{SECTIONS[sectionIndex]}</h2>
-
         {!fields ? (
           <div className="animate-pulse space-y-4">
             {[1, 2, 3].map((i) => (
@@ -186,20 +215,15 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
               </div>
             ))}
           </div>
-        ) : sectionFields.length === 0 ? (
-          <p className="text-sm text-neutral-500">No fields in this section.</p>
+        ) : visibleFields.length === 0 ? (
+          <p className="text-sm text-neutral-500">No fields configured.</p>
         ) : (
-          <div className="space-y-4">
-            {sectionFields.map((field) => (
-              <FieldRenderer
-                key={field.id}
-                field={field}
-                value={values[field.systemKey ?? field.id] ?? ""}
-                onChange={(v) => handleChange(field.systemKey ?? field.id, v)}
-                registrationId={activeTeen.registrationId}
-              />
-            ))}
-          </div>
+          <DynamicFieldGroup
+            fields={visibleFields}
+            values={values}
+            onChange={handleChange}
+            errors={fieldErrors}
+          />
         )}
 
         <div className="mt-6 flex items-center justify-between">
@@ -207,19 +231,10 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
             <AutoSaveIndicator status={saveStatus} />
           </div>
           <div className="flex gap-3">
-            {sectionIndex > 0 && (
-              <button
-                type="button"
-                onClick={() => setSectionIndex((i) => i - 1)}
-                className="flex h-11 items-center gap-1 rounded-xl border border-neutral-300 bg-white px-5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
-              >
-                ← Previous
-              </button>
-            )}
             {state.returnTo === "REVIEW" ? (
               <button
                 type="button"
-                onClick={() => flushAndNavigate("return_to_review")}
+                onClick={() => flushAndNavigate()}
                 className="flex h-11 items-center gap-1 rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700"
               >
                 Save &amp; Return to Review
@@ -227,12 +242,10 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
             ) : (
               <button
                 type="button"
-                onClick={() => {
-                  flushAndNavigate(isLastSection ? "next_step" : "next_section");
-                }}
+                onClick={() => flushAndNavigate()}
                 className="flex h-11 items-center gap-1 rounded-xl bg-accent-600 px-5 text-sm font-medium text-white transition-colors hover:bg-accent-700"
               >
-                {isLastSection ? "Continue to Documents" : "Next"}
+                Continue to Documents
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
                 </svg>

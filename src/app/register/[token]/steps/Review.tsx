@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { format, parseISO } from "date-fns";
 import type { WizardState, WizardAction } from "../types";
 import { api } from "@/utils/trpc";
@@ -190,9 +190,17 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
     { enabled: !!state.campData?.organizationId }
   );
 
+  // Sync fetched declarations into wizard state
+  useEffect(() => {
+    if (declarations && declarations.length > 0) {
+      dispatch({ type: "SET_DECLARATIONS", declarations });
+    }
+  }, [declarations, dispatch]);
+
+  const requiredDeclarations = declarations?.filter((d) => d.required) ?? [];
   const allDeclared =
-    !declarations?.length ||
-    declarations.every((d) =>
+    requiredDeclarations.length === 0 ||
+    requiredDeclarations.every((d) =>
       state.declarations.find((sd) => sd.id === d.id)?.checked
     );
 

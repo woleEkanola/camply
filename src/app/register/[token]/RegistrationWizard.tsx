@@ -101,9 +101,19 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
     case "SET_DECLARATION":
       return {
         ...state,
-        declarations: state.declarations.map((d) =>
-          d.id === action.id ? { ...d, checked: action.checked } : d
-        ),
+        declarations: state.declarations.some((d) => d.id === action.id)
+          ? state.declarations.map((d) =>
+              d.id === action.id ? { ...d, checked: action.checked } : d
+            )
+          : [...state.declarations, { id: action.id, checked: action.checked }],
+      };
+    case "SET_DECLARATIONS":
+      return {
+        ...state,
+        declarations: action.declarations.map((d) => ({
+          id: d.id,
+          checked: state.declarations.find((sd) => sd.id === d.id)?.checked ?? false,
+        })),
       };
     case "SET_ERROR":
       return { ...state, step: "ERROR", error: { title: action.title, message: action.message } };
