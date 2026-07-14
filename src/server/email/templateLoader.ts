@@ -33,6 +33,7 @@ export async function loadTemplateForEvent(
     tiptapJson: (config.template?.content as Record<string, unknown>) ?? getDefaultContent(event),
     branding: branding
       ? {
+          senderName: branding.senderName,
           logoUrl: branding.logoUrl,
           primaryColor: branding.primaryColor,
           accentColor: branding.accentColor,

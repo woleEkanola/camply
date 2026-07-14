@@ -56,14 +56,6 @@ export function StepLanding({ campData, onBegin }: StepLandingProps) {
         </div>
       )}
 
-      {/* Trust Signal */}
-      <div className="mb-1 flex items-center gap-1.5">
-        <svg className="h-4 w-4 text-success-500" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-        </svg>
-        <span className="text-xs font-medium text-success-600">Invitation Verified</span>
-      </div>
-
       {/* Camp Confirmation */}
       <div className="mb-6">
         <p className="mb-2 text-sm font-medium text-neutral-400">You&apos;re registering for</p>
@@ -107,7 +99,7 @@ export function StepLanding({ campData, onBegin }: StepLandingProps) {
       {/* Primary CTA */}
       <div className="mb-8 rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="mb-1 text-xl font-bold text-neutral-900">
-          Register Your Child
+          Register Your Teen
         </h2>
         <p className="mb-5 text-sm leading-relaxed text-neutral-500">
           We&apos;ll guide you through the entire registration process. It only takes a few minutes.
@@ -146,7 +138,7 @@ export function StepLanding({ campData, onBegin }: StepLandingProps) {
         <ol className="space-y-2.5 text-sm text-neutral-600">
           <li className="flex items-center gap-3">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-xs font-bold text-neutral-500">1</span>
-            Your child&apos;s information
+            Your teen&apos;s information
           </li>
           <li className="flex items-center gap-3">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-xs font-bold text-neutral-500">2</span>
@@ -182,7 +174,7 @@ export function StepLanding({ campData, onBegin }: StepLandingProps) {
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
           </svg>
-          One registration per child
+          One registration per teen
         </span>
       </div>
     </div>

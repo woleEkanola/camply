@@ -11,6 +11,7 @@ export interface Branding {
   accentColor: string;
   buttonColor: string;
   headerImageUrl?: string | null;
+  senderName?: string | null;
   footerText?: string | null;
   supportEmail?: string | null;
   supportPhone?: string | null;
