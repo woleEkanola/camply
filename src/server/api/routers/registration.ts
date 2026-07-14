@@ -718,15 +718,11 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       try {
-<<<<<<< Updated upstream
-        return await engine.submitRegistration({ registrationId: input.registrationId, actorId: currentUser.id, submittedAt: new Date() });
-=======
         const result = await transitionWithEmailControl(
           () => engine.submitRegistration({ registrationId: input.registrationId, actorId: currentUser.id }),
           true // backward compat: auto-send email
         );
         return result;
->>>>>>> Stashed changes
       } catch (error) {
         throw toTRPCError(error);
       }
