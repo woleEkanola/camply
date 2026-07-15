@@ -245,9 +245,6 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
   return (
     <div>
       <div className="mb-6">
-        <button onClick={() => dispatch({ type: "GO_BACK" })} className="mb-1 text-sm font-medium text-accent-600 hover:text-accent-700">
-          ← Back
-        </button>
         <h1 className="text-2xl font-bold text-neutral-900">Review Your Registration</h1>
       </div>
 

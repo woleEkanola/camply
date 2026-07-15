@@ -172,20 +172,20 @@ test.describe("Communication Center", () => {
     ];
 
     for (const url of pages) {
-      const errors: string[] = [];
-      page.on("pageerror", (err) => errors.push(err.message));
+      const pageErrors: string[] = [];
+      page.on("pageerror", (err) => pageErrors.push(err.message));
 
       await page.goto(url);
       await page.waitForLoadState("networkidle");
       await page.waitForTimeout(500);
 
-      // No Next.js error overlay
-      const errorOverlay = await page.locator("nextjs-portal").count();
-      expect(errorOverlay).toBe(0);
+      // No real page errors (ignore Next.js dev tools portal in dev mode)
+      expect(pageErrors.filter((e) => !e.includes("nextjs-portal"))).toEqual([]);
 
-      // No unexpected page content
+      // No crashed pages
       const body = await page.textContent("body");
       expect(body).not.toContain("Internal Server Error");
+      expect(body).not.toContain("Application error");
     }
   });
 });

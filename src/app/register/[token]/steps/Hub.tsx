@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
 import type { WizardState, WizardAction } from "../types";
 
@@ -18,9 +19,11 @@ function getStepForRegistration(status: string, fieldsComplete: boolean, documen
 }
 
 export function StepHub({ state, dispatch }: StepHubProps) {
+  const { data: session } = useSession();
+  const userEmail = state.email || session?.user?.email;
   const { data: registrations, isLoading } = api.registration.getByUserId.useQuery(
     undefined,
-    { enabled: !!state.email }
+    { enabled: !!userEmail }
   );
 
   const campRegistrations = (registrations ?? []).filter(

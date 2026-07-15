@@ -190,9 +190,6 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
   return (
     <div>
       <div className="mb-6">
-        <button onClick={() => dispatch({ type: "GO_BACK" })} className="mb-1 text-sm font-medium text-accent-600 hover:text-accent-700">
-          ← Back
-        </button>
         <TeenSwitcher
           teens={state.teens}
           activeTeenId={state.activeTeenId}

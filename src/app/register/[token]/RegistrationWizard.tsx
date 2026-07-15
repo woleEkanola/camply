@@ -1,7 +1,8 @@
 "use client";
 
 import { useReducer, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/utils/trpc";
 import type { WizardState, WizardAction } from "./types";
 import { VISIBLE_STEPS } from "./types";
@@ -208,6 +209,22 @@ export function RegistrationWizard({ token }: { token: string }) {
     }
   }, [signupData]);
 
+  // If ?step=hub is in the URL, route directly to hub after token validation
+  const searchParams = useSearchParams();
+  const shouldGoToHub = searchParams.get("step") === "hub";
+  const { data: session } = useSession();
+
+  useEffect(() => {
+    if (!shouldGoToHub || !signupData) return;
+    if (session?.user?.email) {
+      dispatch({ type: "SET_EMAIL", email: session.user.email });
+      dispatch({ type: "GO_TO", step: "HUB" });
+    } else {
+      // Not logged in — route through identity which will then go to HUB
+      dispatch({ type: "GO_TO", step: "IDENTITY" });
+    }
+  }, [shouldGoToHub, signupData, session]);
+
   useEffect(() => {
     if (validationError && state.step === "LOADING") {
       dispatch({
@@ -283,7 +300,7 @@ export function RegistrationWizard({ token }: { token: string }) {
       )}
 
       {state.step === "CONFIRMATION" && (
-        <StepConfirmation campName={state.campData?.campName ?? "Camp"} teens={state.teens} />
+        <StepConfirmation campName={state.campData?.campName ?? "Camp"} teens={state.teens} token={token} />
       )}
     </div>
   );

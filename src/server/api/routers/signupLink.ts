@@ -101,6 +101,26 @@ export const signupLinkRouter = createTRPCRouter({
       });
     }),
 
+  // Get the first active signup link for the current user's organization.
+  // Accessible by any authenticated user (parents need this for wizard navigation).
+  getActiveForUser: protectedProcedure
+    .query(async ({ ctx }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const orgId = currentUser.organizationId;
+      if (!orgId) return null;
+
+      const link = await ctx.prisma.signupLink.findFirst({
+        where: { campus: { organizationId: orgId }, active: true },
+        orderBy: { createdAt: "desc" },
+        include: { campus: { select: { name: true } } },
+      });
+      if (!link) return null;
+
+      return { token: link.token, campusName: link.campus?.name };
+    }),
+
   // Get signup link for a campus and camp
   getByCampusAndCamp: protectedProcedure
     .input(z.object({

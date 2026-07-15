@@ -337,57 +337,17 @@ export default function CampConfigPage() {
     </div>
   );
 
-  // Tab 2: Required Documents
+  // Tab 2: Required Documents — now managed in Profile Fields
   const tab2Content = (
     <Card>
-      <CardHeader><CardTitle>Required Documents</CardTitle></CardHeader>
-      <CardBody className="space-y-4">
-        <div className="space-y-2">
-          {requirements?.map((req) => (
-            <div key={req.id} className="flex items-center justify-between rounded-md border border-neutral-200 px-3 py-2">
-              <div>
-                <div className="font-medium text-neutral-900">{req.name} {req.required && <Badge tone="danger" className="ml-1">required</Badge>}</div>
-                <div className="text-xs text-neutral-500">{req.scope === "CAMPER" ? "Reusable across camps" : "Specific to this camp"} · {req.description}</div>
-                <div className="text-xs text-neutral-400 mt-0.5">{req.acceptedFormats} · Up to {req.maxSizeMb} MB</div>
-              </div>
-              <div className="flex gap-3 text-sm">
-                <button className="text-accent-700 hover:underline" onClick={() => toggleRequirement.mutate({ id: req.id, data: { required: !req.required } })}>
-                  {req.required ? "Make Optional" : "Make Required"}
-                </button>
-                <button className="text-danger-600 hover:underline" onClick={() => setDeleteReqTarget({ id: req.id, name: req.name })}>Remove</button>
-              </div>
-            </div>
-          ))}
-          {requirements?.length === 0 && <p className="text-sm text-neutral-500">No document requirements yet.</p>}
-        </div>
-
-        <div className="grid grid-cols-1 items-end gap-2 border-t border-neutral-200 pt-4 md:grid-cols-4">
-          <Input
-            containerClassName="md:col-span-2"
-            label="Document Name"
-            value={newReq.name}
-            onChange={(e) => setNewReq({ ...newReq, name: e.target.value })}
-            placeholder="e.g. Birth Certificate"
-          />
-          <Select label="Scope" value={newReq.scope} onChange={(e) => setNewReq({ ...newReq, scope: e.target.value as any })}>
-            <option value="CAMPER">Camper (reusable)</option>
-            <option value="REGISTRATION">Registration (per camp)</option>
-          </Select>
-          <Input
-            label="Formats"
-            value={newReq.acceptedFormats}
-            onChange={(e) => setNewReq({ ...newReq, acceptedFormats: e.target.value })}
-            placeholder="jpg,png"
-          />
-          <Input
-            label="Max Size (MB)"
-            type="number"
-            value={String(newReq.maxSizeMb)}
-            onChange={(e) => setNewReq({ ...newReq, maxSizeMb: Number(e.target.value) || 2 })}
-          />
-          <Button disabled={!newReq.name} loading={createRequirement.isPending} onClick={() => createRequirement.mutate({ campId: id, ...newReq })}>
-            Add
-          </Button>
+      <CardBody>
+        <div className="py-8 text-center">
+          <p className="text-sm font-medium text-neutral-700">Required documents are now managed in Profile Fields</p>
+          <p className="mt-1 text-xs text-neutral-500">
+            <a href="/admin/profile-fields" className="text-accent-600 underline">
+              Go to Profile Fields → Required Documents tab
+            </a>
+          </p>
         </div>
       </CardBody>
     </Card>

@@ -122,6 +122,11 @@ export function ReturningUserForm({ email, onBack, onSuccess }: ReturningUserFor
               required
               className="block w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
             />
+            <p className="mt-1.5 text-right">
+              <a href="/login?reset=true" className="text-xs font-medium text-accent-600 hover:text-accent-700">
+                Forgot password?
+              </a>
+            </p>
           </div>
 
           {error && (

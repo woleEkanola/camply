@@ -74,7 +74,7 @@ export function EmailGate({ email, onEmailChange, onContinue, onBack, campName }
               id="reg-email"
               type="email"
               value={email}
-              onChange={(e) => { onEmailChange(e.target.value); setError(""); }}
+              onChange={(e) => { onEmailChange(e.target.value.toLowerCase()); setError(""); }}
               placeholder="parent@example.com"
               autoComplete="email"
               autoFocus
