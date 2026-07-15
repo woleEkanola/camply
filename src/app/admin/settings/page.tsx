@@ -10,6 +10,7 @@ import { Card, CardBody } from "@/components/ui/Card";
 
 const AgeRangeSettings = dynamic(() => import("../settings-age-range"), { ssr: false });
 const OrgProfileSettings = dynamic(() => import("../settings-org-profile"), { ssr: false });
+const ApprovalWorkflowSettings = dynamic(() => import("../settings-approval-workflow"), { ssr: false });
 
 export default function AdminSettingsPage() {
   const { data: session } = useSession();
@@ -32,6 +33,7 @@ export default function AdminSettingsPage() {
   // Memoize initial values to avoid prop changes after mount
   const initialName = orgData?.name || "";
   const initialSlug = (orgData as any)?.slug || "";
+  const initialApprovalWorkflow = (orgData?.approvalWorkflow as "SINGLE_STEP" | "TWO_STEP" | undefined) || "SINGLE_STEP";
   const initialLogoUrl = useMemo(() => (typeof settings === 'object' && settings !== null && 'logoUrl' in settings ? (settings as any).logoUrl : undefined) ?? "", [settings]);
   const initialColorTheme = useMemo(() => (typeof settings === 'object' && settings !== null && 'colorTheme' in settings ? (settings as any).colorTheme : undefined) ?? "#E67E22", [settings]);
 
@@ -65,6 +67,19 @@ export default function AdminSettingsPage() {
               initialColorTheme={initialColorTheme}
               onSaveSuccess={() => {
                 refetchSettings();
+                refetchOrg();
+              }}
+            />
+          </CardBody>
+        </Card>
+
+        {/* Approval Workflow Card */}
+        <Card>
+          <CardBody>
+            <ApprovalWorkflowSettings
+              organizationId={organizationId}
+              initialApprovalWorkflow={initialApprovalWorkflow}
+              onSettingsSaved={() => {
                 refetchOrg();
               }}
             />

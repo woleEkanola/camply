@@ -4,6 +4,7 @@ import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 
 const STATUS_CHANGE_ACTIONS = [
+  "REGISTRATION_ENDORSED",
   "REGISTRATION_APPROVED",
   "REGISTRATION_REJECTED",
   "WAITLISTED",
@@ -13,6 +14,7 @@ const STATUS_CHANGE_ACTIONS = [
 ];
 
 const STATUS_LABELS: Record<string, string> = {
+  REGISTRATION_ENDORSED: "Endorsed",
   REGISTRATION_APPROVED: "Approved",
   REGISTRATION_REJECTED: "Rejected",
   WAITLISTED: "Waitlisted",
@@ -22,6 +24,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
+  REGISTRATION_ENDORSED: "bg-info-100 text-info-700 border-info-300",
   REGISTRATION_APPROVED: "bg-success-100 text-success-700 border-success-300",
   REGISTRATION_REJECTED: "bg-danger-100 text-danger-700 border-danger-300",
   WAITLISTED: "bg-attention-100 text-attention-700 border-attention-300",
@@ -56,7 +59,10 @@ export function DecisionHistory({ timeline }: DecisionHistoryProps) {
         <div className="relative">
           {statusChanges.map((event: any, index: number) => {
             const isLast = index === statusChanges.length - 1;
-            const label = STATUS_LABELS[event.action] ?? event.action.replace(/_/g, " ");
+            const isOverride = event.action === "REGISTRATION_APPROVED" && event.newValue?.twoStepOverride === true;
+            const label = isOverride
+              ? "Approved (admin override — no endorsement)"
+              : (STATUS_LABELS[event.action] ?? event.action.replace(/_/g, " "));
             const colorClass = STATUS_COLORS[event.action] ?? "bg-neutral-100 text-neutral-700 border-neutral-300";
 
             // Build a human-readable reason/message from event metadata

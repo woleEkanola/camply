@@ -13,6 +13,12 @@ interface ReviewReview {
   verifiedAt?: Date | string | null;
   completedAt?: Date | string | null;
   assignee?: { id?: string; firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+  verifiedBy?: { id?: string; firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+}
+
+function displayName(user: { firstName?: string | null; lastName?: string | null; email?: string | null } | null | undefined): string | null {
+  if (!user) return null;
+  return `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.email || null;
 }
 
 interface ReviewProgressProps {
@@ -177,7 +183,9 @@ export default function ReviewProgress({ registration, review, isTwoStep }: Revi
       )}
       {verificationStatus === "COMPLETED" && review?.verifiedAt && (
         <p className="mt-2 text-xs text-neutral-500 text-center">
-          Verified on {new Date(review.verifiedAt).toLocaleDateString()}
+          {review.recommendation === "APPROVE"
+            ? `Endorsed by ${displayName(review.verifiedBy) ?? "a campus rep"} on ${new Date(review.verifiedAt).toLocaleDateString()}`
+            : `Verified on ${new Date(review.verifiedAt).toLocaleDateString()}`}
         </p>
       )}
     </div>

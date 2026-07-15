@@ -5,6 +5,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
+import { isEndorsed } from "@/server/registration/endorsement";
 
 type Action = "APPROVE" | "REJECT" | "WAITLIST" | "REQUEST_CORRECTION" | "CANCEL" | "ARCHIVE";
 
@@ -13,6 +14,8 @@ interface StatusDialogProps {
   onClose: () => void;
   registration: any;
   onSubmit: (action: Action, opts: { reason?: string; message?: string; sendEmail?: boolean }) => void;
+  isTwoStep?: boolean;
+  review?: { verificationStatus?: string | null; recommendation?: string | null } | null;
 }
 
 const ACTION_OPTIONS: { value: Action; label: string }[] = [
@@ -24,7 +27,7 @@ const ACTION_OPTIONS: { value: Action; label: string }[] = [
   { value: "ARCHIVE", label: "Archive" },
 ];
 
-export function StatusDialog({ open, onClose, registration, onSubmit }: StatusDialogProps) {
+export function StatusDialog({ open, onClose, registration, onSubmit, isTwoStep, review }: StatusDialogProps) {
   const [action, setAction] = useState<Action>("APPROVE");
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
@@ -67,6 +70,11 @@ export function StatusDialog({ open, onClose, registration, onSubmit }: StatusDi
       case "APPROVE":
         return (
           <div className="space-y-4">
+            {isTwoStep && !isEndorsed(review) && (
+              <div className="rounded-md bg-attention-50 p-3 text-sm text-attention-700">
+                This registration has not been endorsed by a campus rep. Approving now is an admin override.
+              </div>
+            )}
             {venues.length > 0 && (
               <Select
                 label="Venue"

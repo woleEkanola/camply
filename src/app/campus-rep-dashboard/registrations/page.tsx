@@ -6,7 +6,9 @@ import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Table } from "@/components/ui/Table";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Input";
+import { isEndorsed } from "@/server/registration/endorsement";
 import React from 'react';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
@@ -28,6 +30,7 @@ interface Registration {
   published?: boolean;
   campusId: string;
   parentConsent?: boolean;
+  review?: { verificationStatus: string; recommendation: string | null } | null;
 }
 
 export default function CampusRepRegistrationsPage() {
@@ -38,13 +41,39 @@ export default function CampusRepRegistrationsPage() {
   const organizationId = session?.user?.organizationId ?? "";
   const campusId = managedCampuses[0];
 
-  // Always call hooks at the top level (fixes Rules of Hooks error)
-  const { data: registrations, isLoading, error } = api.registration.getByOrganizationAndYear.useQuery(
-    { organizationId },
+  // --- Filter state ---
+  const [statusFilter, setStatusFilter] = React.useState<string | 'ALL'>('ALL');
+  const [consentFilter, setConsentFilter] = React.useState<'ALL' | 'UPLOADED' | 'NOT_UPLOADED'>('ALL');
+  const [reviewStateFilter, setReviewStateFilter] = React.useState<'ALL' | 'AWAITING_VETTING' | 'AWAITING_FINAL'>('ALL');
+  const [actionError, setActionError] = React.useState("");
+
+  const { data: org } = api.organization.getById.useQuery(
+    { id: organizationId },
     { enabled: !!organizationId }
   );
-  const parentConsentMutation = api.registration.updateFields.useMutation();
-  const updateStatusMutation = api.registration.updateFields.useMutation();
+  const isTwoStep = org?.approvalWorkflow === "TWO_STEP";
+
+  // Always call hooks at the top level (fixes Rules of Hooks error)
+  const { data: adminListData, isLoading, error, refetch } = api.registration.adminList.useQuery(
+    {
+      organizationId,
+      campusId,
+      limit: 100,
+      ...(isTwoStep && reviewStateFilter !== 'ALL' ? { reviewState: reviewStateFilter } : {}),
+    },
+    { enabled: !!organizationId && !!campusId }
+  );
+
+  const onMutationSettled = () => {
+    setActionError("");
+    void refetch();
+  };
+  const onMutationError = (err: { message?: string }) => setActionError(err?.message || "Action failed");
+
+  const approveMutation = api.registration.approve.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
+  const endorseMutation = api.registration.endorse.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
+  const rejectMutation = api.registration.reject.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
+  const requestCorrectionMutation = api.registration.requestCorrection.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
 
   // Helper to calculate age from DOB
   const getAge = (dob: string | null | undefined): number | null => {
@@ -59,9 +88,17 @@ export default function CampusRepRegistrationsPage() {
     return age;
   };
 
-  // --- Filter state ---
-  const [statusFilter, setStatusFilter] = React.useState<string | 'ALL'>('ALL');
-  const [consentFilter, setConsentFilter] = React.useState<'ALL' | 'UPLOADED' | 'NOT_UPLOADED'>('ALL');
+  function handleReject(reg: Registration) {
+    const reason = window.prompt("Rejection reason?") || "";
+    if (!reason) return;
+    rejectMutation.mutate({ registrationId: reg.id, reason });
+  }
+
+  function handleRequestCorrection(reg: Registration) {
+    const message = window.prompt("What needs to be corrected?") || "";
+    if (!message) return;
+    requestCorrectionMutation.mutate({ registrationId: reg.id, message });
+  }
 
   // Add column definitions for DataTable
   const columns = [
@@ -84,24 +121,11 @@ export default function CampusRepRegistrationsPage() {
     {
       header: "Status",
       accessor: (reg: Registration) => (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1">
           <Badge tone={STATUS_TONE[reg.status] ?? "neutral"}>{reg.status}</Badge>
-          <Select
-            containerClassName="w-28"
-            value={reg.status}
-            onChange={e =>
-              updateStatusMutation.mutate({
-                id: reg.id,
-                data: { status: e.target.value as "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" }
-              })
-            }
-            aria-label="Update registration status"
-          >
-            <option value="PENDING">PENDING</option>
-            <option value="APPROVED">APPROVED</option>
-            <option value="REJECTED">REJECTED</option>
-            <option value="CANCELLED">CANCELLED</option>
-          </Select>
+          {isTwoStep && reg.status === "PENDING" && isEndorsed(reg.review) && (
+            <Badge tone="info">Endorsed ✓ awaiting admin</Badge>
+          )}
         </div>
       ),
       sortable: true,
@@ -110,10 +134,44 @@ export default function CampusRepRegistrationsPage() {
       header: "Parent Consent",
       accessor: (reg: Registration) => <Badge tone={reg.parentConsent ? "success" : "danger"}>{reg.parentConsent ? 'True' : 'False'}</Badge>,
     },
+    {
+      header: "Actions",
+      accessor: (reg: Registration) => {
+        if (reg.status !== "PENDING" && reg.status !== "REQUIRES_ACTION") return null;
+        const endorsed = isEndorsed(reg.review);
+        return (
+          <div className="flex flex-wrap gap-2">
+            {isTwoStep ? (
+              reg.status === "PENDING" && !endorsed && (
+                <Button size="sm" loading={endorseMutation.isPending} onClick={() => endorseMutation.mutate({ registrationId: reg.id })}>
+                  Endorse
+                </Button>
+              )
+            ) : (
+              reg.status === "PENDING" && (
+                <Button size="sm" loading={approveMutation.isPending} onClick={() => approveMutation.mutate({ registrationId: reg.id })}>
+                  Approve
+                </Button>
+              )
+            )}
+            {reg.status === "PENDING" && (
+              <>
+                <Button size="sm" variant="secondary" loading={requestCorrectionMutation.isPending} onClick={() => handleRequestCorrection(reg)}>
+                  Request Correction
+                </Button>
+                <Button size="sm" variant="danger" loading={rejectMutation.isPending} onClick={() => handleReject(reg)}>
+                  Reject
+                </Button>
+              </>
+            )}
+          </div>
+        );
+      },
+    },
   ];
 
   // Adapt registrations to Registration[] shape, converting dateOfBirth if needed
-  const allRegs: Registration[] = (registrations || [])
+  const allRegs: Registration[] = (adminListData?.items || [])
     .map((reg: any) => ({
       ...reg,
       camper: {
@@ -124,8 +182,7 @@ export default function CampusRepRegistrationsPage() {
             ? reg.camper.dateOfBirth.toISOString().slice(0, 10)
             : reg.camper?.dateOfBirth ?? null,
       },
-    }))
-    .filter((reg: Registration) => reg.campusId === campusId);
+    }));
 
   // --- Filtered registrations ---
   const filteredRegs = allRegs.filter(reg => {
@@ -170,7 +227,14 @@ export default function CampusRepRegistrationsPage() {
 
   return (
     <AppShell area="campus-rep">
-      <PageHeader title="Registrations" />
+      <PageHeader
+        title="Registrations"
+        description={
+          isTwoStep
+            ? "Endorse registrations for your campus — an organization admin gives final approval and the acceptance email is sent then."
+            : undefined
+        }
+      />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-3">
           <Select label="Status" containerClassName="w-36" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
@@ -185,11 +249,22 @@ export default function CampusRepRegistrationsPage() {
             <option value="UPLOADED">Uploaded</option>
             <option value="NOT_UPLOADED">Not Uploaded</option>
           </Select>
+          {isTwoStep && (
+            <Select label="Review" containerClassName="w-48" value={reviewStateFilter} onChange={e => setReviewStateFilter(e.target.value as any)}>
+              <option value="ALL">All pending</option>
+              <option value="AWAITING_VETTING">Awaiting vetting</option>
+              <option value="AWAITING_FINAL">Awaiting final approval</option>
+            </Select>
+          )}
         </div>
         <div>
           <span className="text-sm font-medium text-neutral-700">Approved: {approvedCount}</span>
         </div>
       </div>
+
+      {actionError && (
+        <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{actionError}</div>
+      )}
 
       <Table
         data={filteredRegs}

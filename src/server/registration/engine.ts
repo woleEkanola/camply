@@ -6,6 +6,18 @@ import { assertTransition } from "./stateMachine";
 import { RegistrationValidationError, validateSubmission } from "./validation";
 import { runSideEffectsNow } from "./effects";
 import { autoAssignTribeOnApproval } from "../tribe/engine";
+import { isEndorsed } from "./endorsement";
+
+const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
+
+/** Reads whether an org requires campus-rep endorsement before an admin's final approval. */
+async function isTwoStepOrg(tx: TxClient, organizationId: string): Promise<boolean> {
+  const org = await tx.organization.findUnique({
+    where: { id: organizationId },
+    select: { approvalWorkflow: true },
+  });
+  return org?.approvalWorkflow === "TWO_STEP";
+}
 
 type TxClient = PrismaClient | Prisma.TransactionClient;
 
@@ -122,7 +134,13 @@ export async function submitRegistration(params: { registrationId: string; actor
       throw new RegistrationValidationError(failures);
     }
 
-    const nextStatus: RegistrationStatus = registration.camp.approvalMode === "AUTO" ? "APPROVED" : "PENDING";
+    // AUTO-approve on submit is only honored for SINGLE_STEP orgs — TWO_STEP
+    // is an explicit statement that a human (campus rep endorsement, then
+    // admin approval) must review every registration, so a camp's AUTO
+    // approvalMode never silently bypasses that.
+    const twoStep = await isTwoStepOrg(tx, registration.camper.organizationId);
+    const nextStatus: RegistrationStatus =
+      registration.camp.approvalMode === "AUTO" && !twoStep ? "APPROVED" : "PENDING";
 
     await tx.registration.update({
       where: { id: registration.id },
@@ -176,6 +194,25 @@ async function approveRegistrationInTx(
   });
 
   assertTransition(registration.status, "APPROVED");
+
+  // Two-layer approval: in a TWO_STEP org, a campus rep can only endorse
+  // (see endorseRegistration below) — final approval, and the acceptance
+  // email it triggers, requires an org admin. An admin may still approve
+  // without a prior endorsement (an explicit override, recorded below).
+  const twoStep = await isTwoStepOrg(tx, registration.camper.organizationId);
+  if (twoStep && params.actorId) {
+    const actor = await tx.user.findUnique({ where: { id: params.actorId }, select: { role: true } });
+    if (!actor || !ORG_ADMIN_ROLES.includes(actor.role)) {
+      throw new RegistrationEngineError(
+        "ADMIN_APPROVAL_REQUIRED",
+        "In two-step review, campus representatives endorse; an organization admin must give final approval."
+      );
+    }
+  }
+  const review = twoStep
+    ? await tx.registrationReview.findUnique({ where: { registrationId: registration.id } })
+    : null;
+  const endorsed = isEndorsed(review);
 
   // Venue assignment is deferred until approval (parents only pick a Campus at
   // signup). Auto-assign when the Camp has exactly one Venue; otherwise the
@@ -248,8 +285,21 @@ async function approveRegistrationInTx(
     actorId: params.actorId,
     action: "REGISTRATION_APPROVED",
     previousValue: { status: registration.status },
-    newValue: { status: "APPROVED", registrationNumber, qrToken },
+    newValue: {
+      status: "APPROVED",
+      registrationNumber,
+      qrToken,
+      ...(twoStep ? { twoStepOverride: !endorsed } : {}),
+    },
   });
+
+  if (twoStep) {
+    await tx.registrationReview.upsert({
+      where: { registrationId: registration.id },
+      update: { adminDecision: "APPROVE", decidedById: params.actorId, decidedAt: new Date() },
+      create: { registrationId: registration.id, adminDecision: "APPROVE", decidedById: params.actorId, decidedAt: new Date() },
+    });
+  }
 
   return updated;
 }
@@ -263,6 +313,87 @@ export async function approveRegistration(params: { registrationId: string; acto
     await runSideEffectsNow(result.id, "REGISTRATION_WAITLISTED");
   }
   return result;
+}
+
+/**
+ * A campus rep's (or admin's) vetting sign-off on a PENDING registration in a
+ * TWO_STEP org — records a recommendation but does NOT change the
+ * registration's status and does NOT trigger the acceptance email. Only a
+ * subsequent admin `approveRegistration` call finalizes the registration.
+ * Idempotent: calling this again once already endorsed is a no-op (returns
+ * the existing review, no duplicate audit event).
+ */
+export async function endorseRegistration(params: { registrationId: string; actorId: string; notes?: string }) {
+  return prisma.$transaction(async (tx) => {
+    const registration = await tx.registration.findUniqueOrThrow({
+      where: { id: params.registrationId },
+      include: { camper: true },
+    });
+
+    if (registration.status !== "PENDING") {
+      throw new RegistrationEngineError("NOT_PENDING", "Only a pending registration can be endorsed.");
+    }
+    const twoStep = await isTwoStepOrg(tx, registration.camper.organizationId);
+    if (!twoStep) {
+      throw new RegistrationEngineError("NOT_TWO_STEP", "This organization does not use two-step approval.");
+    }
+
+    const existing = await tx.registrationReview.findUnique({ where: { registrationId: registration.id } });
+    if (isEndorsed(existing)) {
+      return existing!;
+    }
+
+    const review = await tx.registrationReview.upsert({
+      where: { registrationId: registration.id },
+      update: {
+        verificationStatus: "COMPLETED",
+        recommendation: "APPROVE",
+        verifiedById: params.actorId,
+        verifiedAt: new Date(),
+        reviewNotes: params.notes ?? existing?.reviewNotes ?? null,
+      },
+      create: {
+        registrationId: registration.id,
+        verificationStatus: "COMPLETED",
+        recommendation: "APPROVE",
+        verifiedById: params.actorId,
+        verifiedAt: new Date(),
+        reviewNotes: params.notes ?? null,
+      },
+    });
+
+    await logEvent(tx, {
+      organizationId: registration.camper.organizationId,
+      registrationId: registration.id,
+      actorId: params.actorId,
+      action: "REGISTRATION_ENDORSED",
+      newValue: { verifiedById: params.actorId, recommendation: "APPROVE" },
+    });
+
+    // Best-effort in-app notification to org admins — never blocks endorsement.
+    try {
+      const admins = await tx.user.findMany({
+        where: { organizationId: registration.camper.organizationId, role: { in: ["SUPER_ADMIN", "OWNER", "ADMIN"] }, deletedAt: null },
+        select: { id: true },
+      });
+      if (admins.length > 0) {
+        await tx.notification.createMany({
+          data: admins.map((admin) => ({
+            organizationId: registration.camper.organizationId,
+            userId: admin.id,
+            registrationId: registration.id,
+            channel: "IN_APP" as const,
+            title: "Registration endorsed",
+            body: `A registration was endorsed by a campus rep and now awaits final approval.`,
+          })),
+        });
+      }
+    } catch (error) {
+      console.error("[endorseRegistration] Failed to notify admins", error);
+    }
+
+    return review;
+  });
 }
 
 export async function rejectRegistration(params: { registrationId: string; actorId: string; reason: string }) {
@@ -427,13 +558,27 @@ export async function resubmitRegistration(params: { registrationId: string; act
       data: { status: "PENDING", correctionRequest: null, rejectionReason: null },
     });
 
+    // A correction/resubmission means the data changed since any prior
+    // vetting, so a stale endorsement can't be trusted — reset it back to
+    // NOT_STARTED (keep the assigned verifier so the same person is
+    // re-prompted rather than needing re-assignment).
+    const existingReview = await tx.registrationReview.findUnique({ where: { registrationId: registration.id } });
+    let reviewReset = false;
+    if (existingReview && isEndorsed(existingReview)) {
+      await tx.registrationReview.update({
+        where: { registrationId: registration.id },
+        data: { verificationStatus: "NOT_STARTED", recommendation: null, verifiedById: null, verifiedAt: null },
+      });
+      reviewReset = true;
+    }
+
     await logEvent(tx, {
       organizationId: registration.camper.organizationId,
       registrationId: registration.id,
       actorId: params.actorId,
       action: "REGISTRATION_RESUBMITTED",
       previousValue: { status: registration.status },
-      newValue: { status: "PENDING" },
+      newValue: { status: "PENDING", reviewReset },
     });
 
     return updated;

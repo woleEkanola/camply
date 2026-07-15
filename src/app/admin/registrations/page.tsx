@@ -20,6 +20,8 @@ import { DecisionHistory } from "./components/DecisionHistory";
 import ReviewProgress from "./components/ReviewProgress";
 import VerifierAssignment from "./components/VerifierAssignment";
 import ChangesSinceReview from "./components/ChangesSinceReview";
+import { Badge } from "@/components/ui/Badge";
+import { isEndorsed } from "@/server/registration/endorsement";
 
 type ExtendedUser = {
   id: string;
@@ -242,6 +244,7 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
                   <VerifierAssignment
                     registration={{ id: registration.id }}
                     review={review}
+                    assignee={(review as any)?.assignee}
                     organizationId={orgId ?? ""}
                     currentUserId={(session?.user as any)?.id ?? ""}
                     isTwoStep={isTwoStep}
@@ -261,6 +264,8 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
         open={statusDialogOpen}
         onClose={() => setStatusDialogOpen(false)}
         registration={registration}
+        isTwoStep={isTwoStep}
+        review={review}
         onSubmit={(action, options) => {
           transitionWithOptions.mutate({
             registrationId: registration.id,
@@ -282,6 +287,7 @@ export default function RegistrationsPage() {
   const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL">("");
 
   const { data: session, status } = useSession({
     required: true,
@@ -312,6 +318,7 @@ export default function RegistrationsPage() {
       campId: activeCamp?.id,
       campusId: filterCampus || undefined,
       status: filterStatus || undefined,
+      reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
       q: searchQuery || undefined,
       limit: 50,
     },
@@ -324,6 +331,8 @@ export default function RegistrationsPage() {
     acc[s] = registrations.filter((r: any) => r.status === s).length;
     return acc;
   }, {});
+  const awaitingVettingCount = registrations.filter((r: any) => r.status === "PENDING" && !isEndorsed(r.review)).length;
+  const awaitingFinalCount = registrations.filter((r: any) => r.status === "PENDING" && isEndorsed(r.review)).length;
 
   const tableColumns: Column<any>[] = [
     {
@@ -337,7 +346,17 @@ export default function RegistrationsPage() {
     },
     { header: "Campus", accessor: (row) => row.campus?.name },
     { header: "Registration #", accessor: (row) => row.registrationNumber || "—" },
-    { header: "Status", accessor: (row) => <StatusBadge status={row.status} /> },
+    {
+      header: "Status",
+      accessor: (row) => (
+        <div className="flex flex-col gap-1">
+          <StatusBadge status={row.status} />
+          {isTwoStep && row.status === "PENDING" && isEndorsed(row.review) && (
+            <Badge tone="info">Endorsed</Badge>
+          )}
+        </div>
+      ),
+    },
     { header: "Updated", accessor: (row) => new Date(row.updatedAt).toLocaleDateString() },
   ];
 
@@ -346,28 +365,40 @@ export default function RegistrationsPage() {
       <PageHeader title="Registrations" description={activeCamp ? `For ${activeCamp.name}` : undefined} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        {isTwoStep
-          ? ["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN"].map((s) => {
-              const label = s === "PENDING" ? "Waiting Decision" : s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ");
-              return (
-                <StatCard
-                  key={s}
-                  label={label}
-                  value={kpi[s] ?? 0}
-                  selected={filterStatus === s}
-                  onClick={() => setFilterStatus(filterStatus === s ? "" : s)}
-                />
-              );
-            })
-          : ["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN"].map((s) => (
-              <StatCard
-                key={s}
-                label={s.replace(/_/g, " ")}
-                value={kpi[s] ?? 0}
-                selected={filterStatus === s}
-                onClick={() => setFilterStatus(filterStatus === s ? "" : s)}
-              />
-            ))}
+        {isTwoStep && (
+          <>
+            <StatCard
+              label="Awaiting Vetting"
+              value={awaitingVettingCount}
+              selected={reviewStateFilter === "AWAITING_VETTING"}
+              onClick={() => {
+                setFilterStatus("");
+                setReviewStateFilter(reviewStateFilter === "AWAITING_VETTING" ? "" : "AWAITING_VETTING");
+              }}
+            />
+            <StatCard
+              label="Awaiting Final Approval"
+              value={awaitingFinalCount}
+              selected={reviewStateFilter === "AWAITING_FINAL"}
+              onClick={() => {
+                setFilterStatus("");
+                setReviewStateFilter(reviewStateFilter === "AWAITING_FINAL" ? "" : "AWAITING_FINAL");
+              }}
+            />
+          </>
+        )}
+        {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN"].map((s) => (
+          <StatCard
+            key={s}
+            label={s === "PENDING" && isTwoStep ? "Waiting Decision" : s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
+            value={kpi[s] ?? 0}
+            selected={filterStatus === s}
+            onClick={() => {
+              setReviewStateFilter("");
+              setFilterStatus(filterStatus === s ? "" : s);
+            }}
+          />
+        ))}
       </div>
 
       <div className="mb-4 grid gap-3 md:grid-cols-3">
