@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import bcrypt from "bcryptjs";
+import { normalizeEmail } from "../../../lib/email";
 
 export const ownerRouter = createTRPCRouter({
   // Create a new owner for an organization (Super Admin only)
@@ -36,7 +37,7 @@ export const ownerRouter = createTRPCRouter({
       // Create the owner
       const owner = await prisma.user.create({
         data: {
-          email: input.email,
+          email: normalizeEmail(input.email),
           password: hashedPassword,
           role: "OWNER",
           organizationId: input.organizationId

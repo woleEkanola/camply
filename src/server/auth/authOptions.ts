@@ -83,7 +83,7 @@ export const authOptions: NextAuthOptions = {
           ) {
             return {
               id: user.id,
-              email: normalizedEmail,
+              email: user.email,
               name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || undefined,
               role: user.role as UserRole,
               organizationId: user.organizationId ?? undefined,
@@ -119,7 +119,7 @@ export const authOptions: NextAuthOptions = {
         ) {
           return {
             id: user.id,
-            email: normalizedEmail,
+            email: user.email,
             name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || undefined,
             role: user.role as UserRole,
             organizationId: user.organizationId ?? undefined,

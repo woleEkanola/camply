@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/server/db";
 import { resolveSignupLinkByToken } from "@/server/registration/resolveSignupLink";
 import { sendWelcomeEmail } from "@/server/email/sendWelcomeEmail";
+import { normalizeEmail } from "@/lib/email";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -20,7 +21,8 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ message: parsed.error.errors[0]?.message || "Invalid input data" }, { status: 400 });
     }
-    const { email, password, role, token, firstName } = parsed.data;
+    const { email: rawEmail, password, role, token, firstName } = parsed.data;
+    const email = normalizeEmail(rawEmail);
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });

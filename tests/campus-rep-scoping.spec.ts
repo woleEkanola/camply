@@ -13,8 +13,12 @@ import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
 test.describe("Campus Representative scoping", () => {
   test.describe.configure({ mode: "serial" });
 
-  const repAEmail = `e2e-repA-${Date.now()}@camply.test`;
-  const repBEmail = `e2e-repB-${Date.now()}@camply.test`;
+  // Lowercase: authOptions.authorize() normalizes (trim + lowercase) the
+  // login email before querying, so a fixture user created with a raw
+  // prisma.user.create() must already be stored lowercase or login here
+  // will never find it.
+  const repAEmail = `e2e-repa-${Date.now()}@camply.test`;
+  const repBEmail = `e2e-repb-${Date.now()}@camply.test`;
   const camperAParentEmail = `e2e-campera-parent-${Date.now()}@camply.test`;
   const camperBParentEmail = `e2e-camperb-parent-${Date.now()}@camply.test`;
 

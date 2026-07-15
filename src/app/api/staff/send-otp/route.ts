@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/server/db";
 import { sendOtpEmail } from "@/server/email/sendOtpEmail";
 import { rateLimit } from "@/server/rateLimit";
+import { normalizeEmail } from "@/lib/email";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -16,7 +17,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ message: "A valid email is required" }, { status: 400 });
   }
-  const { email, token } = parsed.data;
+  const { email: rawEmail, token } = parsed.data;
+  const email = normalizeEmail(rawEmail);
 
   if (!rateLimit(`staff-send-otp:${email}`, 3, 15 * 60 * 1000)) {
     return NextResponse.json({ message: "Too many requests. Try again later." }, { status: 429 });

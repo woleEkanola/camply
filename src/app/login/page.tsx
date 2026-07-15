@@ -93,6 +93,7 @@ export default function LoginPage() {
     setPasswordValue("");
     setError("");
     setInfo("");
+    setHint("");
   }
 
   async function handleRedirectAfterLogin() {
@@ -141,6 +142,7 @@ export default function LoginPage() {
   async function handleOtpSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setHint("");
     setLoading(true);
     try {
       const authRes = await signIn("credentials", { redirect: false, email: normalizeEmail(email), otp: authValue });
@@ -163,6 +165,7 @@ export default function LoginPage() {
     }
     setError("");
     setInfo("");
+    setHint("");
     setForgotLoading(true);
     try {
       const res = await fetch("/api/base-user/forgot-password", {
@@ -192,6 +195,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setInfo("");
+    setHint("");
     if (newPassword !== confirmPassword) {
       setError("Passwords don't match.");
       return;
@@ -379,7 +383,7 @@ export default function LoginPage() {
       <div className="mt-4 flex items-center justify-between text-sm">
         <button
           type="button"
-          onClick={() => { setStep(1); setLoginType("password"); setError(""); setInfo(""); }}
+          onClick={() => { setStep(1); setLoginType("password"); setError(""); setInfo(""); setHint(""); }}
           className="text-gray-500 hover:text-gray-700 hover:underline cursor-pointer"
         >
           &larr; Back
@@ -454,7 +458,7 @@ export default function LoginPage() {
           {info}
         </div>
       )}
-      {!error && !info && hint && (
+      {hint && (
         <div className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-700">
           {hint}
         </div>

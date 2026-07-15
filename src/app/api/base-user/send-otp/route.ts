@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         update: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), attempts: 0 }, // 10 min expiry
         create: { email: normalizedEmail, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
       });
-      console.log("[SEND-OTP] OTP stored in DB", { email });
+      console.log("[SEND-OTP] OTP stored in DB", { email: normalizedEmail });
     } catch (err) {
       console.error("[SEND-OTP] Error storing OTP in DB", err);
       throw err;
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     // Send OTP email
     try {
       await sendOtpEmail(normalizedEmail, otp, orgSlug);
-      console.log("[SEND-OTP] OTP email sent", { email });
+      console.log("[SEND-OTP] OTP email sent", { email: normalizedEmail });
     } catch (err) {
       console.error("[SEND-OTP] Error sending OTP email", err);
       throw err;

@@ -147,41 +147,49 @@ async function main() {
   const ownerEmail = "owner@camply.com";
   const ownerPassword = await bcrypt.hash("password123", 10);
 
-  const organization = await prisma.organization.create({
-    data: {
-      name: "Demo Organization",
-    },
+  // Organization.name is unique — find-or-create so re-running the seed
+  // against a DB that already has "Demo Organization" doesn't fork a second
+  // org (previously always ran organization.create unconditionally).
+  const organization = await prisma.organization.upsert({
+    where: { name: "Demo Organization" },
+    update: {},
+    create: { name: "Demo Organization" },
   });
 
   // Create a default camp for the organization
   const currentYear = new Date().getFullYear();
 
-  const camp = await prisma.camp.create({
-    data: {
-      name: `${currentYear}`,
-      slug: slugify(`${currentYear}`),
-      year: currentYear,
-      startDate: new Date(currentYear, 0, 1), // January 1st of current year
-      endDate: new Date(currentYear, 11, 31), // December 31st of current year
-      active: true,
-      organizationId: organization.id,
-      theme: "Demo Camp Theme",
-      description: "A demo camp used for local development and seed data.",
-      registrationOpensAt: new Date(currentYear, 0, 1),
-      registrationClosesAt: new Date(currentYear, 11, 1),
-      arrivalDate: new Date(currentYear, 11, 15),
-      departureDate: new Date(currentYear, 11, 20),
-      minAge: 6,
-      maxAge: 17,
-      ageCutoffDate: new Date(currentYear, 11, 1),
-      maxRegistrations: 500,
-      capacityBehavior: "WAITLIST",
-      approvalMode: "MANUAL",
-      allowResubmission: true,
-      status: "OPEN",
-      orgCode: "DEMO",
-    },
+  let camp = await prisma.camp.findFirst({
+    where: { organizationId: organization.id, year: currentYear },
   });
+  if (!camp) {
+    camp = await prisma.camp.create({
+      data: {
+        name: `${currentYear}`,
+        slug: slugify(`${currentYear}`),
+        year: currentYear,
+        startDate: new Date(currentYear, 0, 1), // January 1st of current year
+        endDate: new Date(currentYear, 11, 31), // December 31st of current year
+        active: true,
+        organizationId: organization.id,
+        theme: "Demo Camp Theme",
+        description: "A demo camp used for local development and seed data.",
+        registrationOpensAt: new Date(currentYear, 0, 1),
+        registrationClosesAt: new Date(currentYear, 11, 1),
+        arrivalDate: new Date(currentYear, 11, 15),
+        departureDate: new Date(currentYear, 11, 20),
+        minAge: 6,
+        maxAge: 17,
+        ageCutoffDate: new Date(currentYear, 11, 1),
+        maxRegistrations: 500,
+        capacityBehavior: "WAITLIST",
+        approvalMode: "MANUAL",
+        allowResubmission: true,
+        status: "OPEN",
+        orgCode: "DEMO",
+      },
+    });
+  }
 
   // Update organization with the active camp
   await prisma.organization.update({
@@ -229,65 +237,78 @@ async function main() {
 
   // Create a campus (permanent church branch)
 
-  const campus = await prisma.campus.create({
-    data: {
-      name: "Demo Campus",
-      slug: slugify("Demo Campus"),
-      address: "123 Main St",
-      city: "Demo City",
-      state: "DS",
-      zipCode: "12345",
-      country: "Demo Country",
-      organizationId: organization.id,
-      campusCode: "DEM",
-      email: "campus@camply.com",
-      phone: "+1-555-0100",
-      active: true,
-    },
+  let campus = await prisma.campus.findFirst({
+    where: { organizationId: organization.id, name: "Demo Campus" },
   });
+  if (!campus) {
+    campus = await prisma.campus.create({
+      data: {
+        name: "Demo Campus",
+        slug: slugify("Demo Campus"),
+        address: "123 Main St",
+        city: "Demo City",
+        state: "DS",
+        zipCode: "12345",
+        country: "Demo Country",
+        organizationId: organization.id,
+        campusCode: "DEM",
+        email: "campus@camply.com",
+        phone: "+1-555-0100",
+        active: true,
+      },
+    });
+  }
 
   // Create a venue (physical camp site for this camp)
-  const venue = await prisma.venue.create({
-    data: {
-      name: "Demo Venue",
-      address: "123 Main St",
-      campId: camp.id,
-      code: "DEM",
-      contactEmail: "venue@camply.com",
-      contactPhone: "+1-555-0100",
-      quota: 250,
-      visible: true,
-    },
-  });
+  let venue = await prisma.venue.findFirst({ where: { campId: camp.id, name: "Demo Venue" } });
+  if (!venue) {
+    venue = await prisma.venue.create({
+      data: {
+        name: "Demo Venue",
+        address: "123 Main St",
+        campId: camp.id,
+        code: "DEM",
+        contactEmail: "venue@camply.com",
+        contactPhone: "+1-555-0100",
+        quota: 250,
+        visible: true,
+      },
+    });
+  }
 
   // Document requirements for the demo camp
-  await prisma.documentRequirement.createMany({
-    data: [
-      {
-        campId: camp.id,
-        name: "Birth Certificate",
-        description: "A clear photo or scan of the camper's birth certificate.",
-        required: true,
-        acceptedFormats: "jpg,png",
-        maxSizeMb: 2,
-        scope: "CAMPER",
-        sortOrder: 0,
-      },
-      {
-        campId: camp.id,
-        name: "Parent Consent Form",
-        description: "Signed consent form for this camp.",
-        required: true,
-        acceptedFormats: "jpg,png",
-        maxSizeMb: 2,
-        scope: "REGISTRATION",
-        sortOrder: 1,
-      },
-    ],
-  });
+  const existingDocRequirements = await prisma.documentRequirement.count({ where: { campId: camp.id } });
+  if (existingDocRequirements === 0) {
+    await prisma.documentRequirement.createMany({
+      data: [
+        {
+          campId: camp.id,
+          name: "Birth Certificate",
+          description: "A clear photo or scan of the camper's birth certificate.",
+          required: true,
+          acceptedFormats: "jpg,png",
+          maxSizeMb: 2,
+          scope: "CAMPER",
+          sortOrder: 0,
+        },
+        {
+          campId: camp.id,
+          name: "Parent Consent Form",
+          description: "Signed consent form for this camp.",
+          required: true,
+          acceptedFormats: "jpg,png",
+          maxSizeMb: 2,
+          scope: "REGISTRATION",
+          sortOrder: 1,
+        },
+      ],
+    });
+  }
 
-  const campusRep = await prisma.user.create({
-    data: {
+  const campusRep = await prisma.user.upsert({
+    where: { email: campusRepEmail },
+    update: {},
+    create: {
       email: campusRepEmail,
       password: campusRepPassword,
       role: "CAMPUS_REPRESENTATIVE",
@@ -309,37 +330,45 @@ async function main() {
   });
 
   // Create a sample camper
-  const camper = await prisma.camper.create({
-    data: {
-      name: "Demo Camper",
-      firstName: "Demo",
-      lastName: "Camper",
-      dateOfBirth: new Date(currentYear - 12, 5, 1),
-      gender: "MALE",
-      userId: campusRep.id, // Assign to campus rep for testing
-      organizationId: organization.id,
-      homeCampusId: campus.id,
-      active: true,
-    },
-  });
+  let camper = await prisma.camper.findFirst({ where: { userId: campusRep.id, name: "Demo Camper" } });
+  if (!camper) {
+    camper = await prisma.camper.create({
+      data: {
+        name: "Demo Camper",
+        firstName: "Demo",
+        lastName: "Camper",
+        dateOfBirth: new Date(currentYear - 12, 5, 1),
+        gender: "MALE",
+        userId: campusRep.id, // Assign to campus rep for testing
+        organizationId: organization.id,
+        homeCampusId: campus.id,
+        active: true,
+      },
+    });
+  }
 
   // Create a sample registration
-  await prisma.registration.create({
-    data: {
-      camperId: camper.id,
-      campId: camp.id,
-      campusId: campus.id,
-      venueId: venue.id,
-      status: "PENDING",
-      notes: "Sample registration for testing",
-    },
-  });
+  const existingRegistration = await prisma.registration.findFirst({ where: { camperId: camper.id, campId: camp.id } });
+  if (!existingRegistration) {
+    await prisma.registration.create({
+      data: {
+        camperId: camper.id,
+        campId: camp.id,
+        campusId: campus.id,
+        venueId: venue.id,
+        status: "PENDING",
+        notes: "Sample registration for testing",
+      },
+    });
+  }
 
   // Approved teacher (for testing teacher dashboard/attendance)
   const teacherEmail = "teacher@camply.com";
   const teacherPassword = await bcrypt.hash("password123", 10);
-  const teacherUser = await prisma.user.create({
-    data: {
+  const teacherUser = await prisma.user.upsert({
+    where: { email: teacherEmail },
+    update: {},
+    create: {
       email: teacherEmail,
       password: teacherPassword,
       role: "TEACHER",
@@ -349,28 +378,33 @@ async function main() {
       organizationId: organization.id,
     },
   });
-  await prisma.staffProfile.create({
-    data: {
-      userId: teacherUser.id,
-      organizationId: organization.id,
-      campId: camp.id,
-      type: "TEACHER",
-      status: "APPROVED",
-      firstName: "Demo",
-      lastName: "Teacher",
-      phone: "+1-555-0200",
-      email: teacherEmail,
-      skills: ["Teaching", "Counseling"],
-      assignedVenueId: venue.id,
-      approvedAt: new Date(),
-    },
-  });
+  const existingTeacherProfile = await prisma.staffProfile.findFirst({ where: { userId: teacherUser.id, campId: camp.id } });
+  if (!existingTeacherProfile) {
+    await prisma.staffProfile.create({
+      data: {
+        userId: teacherUser.id,
+        organizationId: organization.id,
+        campId: camp.id,
+        type: "TEACHER",
+        status: "APPROVED",
+        firstName: "Demo",
+        lastName: "Teacher",
+        phone: "+1-555-0200",
+        email: teacherEmail,
+        skills: ["Teaching", "Counseling"],
+        assignedVenueId: venue.id,
+        approvedAt: new Date(),
+      },
+    });
+  }
 
   // Approved volunteer, Medical department (for testing volunteer dashboard)
   const volunteerEmail = "volunteer@camply.com";
   const volunteerPassword = await bcrypt.hash("password123", 10);
-  const volunteerUser = await prisma.user.create({
-    data: {
+  const volunteerUser = await prisma.user.upsert({
+    where: { email: volunteerEmail },
+    update: {},
+    create: {
       email: volunteerEmail,
       password: volunteerPassword,
       role: "VOLUNTEER",
@@ -380,23 +414,26 @@ async function main() {
       organizationId: organization.id,
     },
   });
-  await prisma.staffProfile.create({
-    data: {
-      userId: volunteerUser.id,
-      organizationId: organization.id,
-      campId: camp.id,
-      type: "VOLUNTEER",
-      status: "APPROVED",
-      firstName: "Demo",
-      lastName: "Volunteer",
-      phone: "+1-555-0300",
-      email: volunteerEmail,
-      volunteerCategory: "Medical",
-      skills: ["Medical"],
-      assignedVenueId: venue.id,
-      approvedAt: new Date(),
-    },
-  });
+  const existingVolunteerProfile = await prisma.staffProfile.findFirst({ where: { userId: volunteerUser.id, campId: camp.id } });
+  if (!existingVolunteerProfile) {
+    await prisma.staffProfile.create({
+      data: {
+        userId: volunteerUser.id,
+        organizationId: organization.id,
+        campId: camp.id,
+        type: "VOLUNTEER",
+        status: "APPROVED",
+        firstName: "Demo",
+        lastName: "Volunteer",
+        phone: "+1-555-0300",
+        email: volunteerEmail,
+        volunteerCategory: "Medical",
+        skills: ["Medical"],
+        assignedVenueId: venue.id,
+        approvedAt: new Date(),
+      },
+    });
+  }
 
   // Seed production data (campuses, tribes, departments)
   await seedCampuses(organization.id);
