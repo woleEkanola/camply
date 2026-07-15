@@ -9,7 +9,7 @@ import {
   sendSubmissionEmail,
 } from "../email/sendAcceptanceEmail";
 import { loadTemplateForEvent } from "../email/templateLoader";
-import { renderEmail } from "../email/renderer";
+import { renderEmail, renderEmailWithEvent } from "../email/renderer";
 import { buildFromAddress } from "../email/fromAddress";
 
 let resend: Resend | null = null;
@@ -62,18 +62,20 @@ async function runEffect(registrationId: string, type: SideEffectType) {
     if (!loaded || !loaded.channels.includes("EMAIL")) { await hardcodedFn(); return; }
 
     try {
-      const html = await renderEmail({ tiptapJson: loaded.tiptapJson, variables, branding: loaded.branding });
-      // Post-process QR code variable — TipTap JSON can't hold base64 images
-      let finalHtml = html;
-      if (variables.qr_code && variables.qr_code.startsWith("data:image")) {
-        finalHtml = finalHtml.replace("{{qr_code}}", `<img src="${variables.qr_code}" alt="QR Code" width="180" height="180" />`);
-        finalHtml = finalHtml.replace(variables.qr_code, `<img src="${variables.qr_code}" alt="QR Code" width="180" height="180" />`);
-      }
+      // Use the new component-based renderer with event key for proper layout
+      const qrCode = variables.qr_code?.startsWith("data:image") ? variables.qr_code : undefined;
+      const html = await renderEmailWithEvent({
+        eventKey: eventKey as any,
+        tiptapJson: loaded.tiptapJson,
+        variables,
+        branding: loaded.branding,
+        qrDataUrl: qrCode,
+      });
       await getResend().emails.send({
         from: buildFromAddress({ orgSlug, senderName: loaded.branding?.senderName ?? undefined }),
         to: parentEmail,
         subject: loaded.subject,
-        html: finalHtml,
+        html: html,
       });
     } catch (err) {
       console.error(`[effects] Template email failed for ${eventKey}, falling back to hardcoded:`, err);

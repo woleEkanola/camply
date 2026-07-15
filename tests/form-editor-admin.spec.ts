@@ -26,13 +26,13 @@ test.describe("Form Editor (admin)", () => {
       await expect(page.getByText(label)).toBeVisible({ timeout: 10000 });
 
       // Edit
-      await page.getByText(label).locator("xpath=ancestor::tr[1]").getByRole("button", { name: "Edit" }).click();
+      await page.getByText(label).locator("..").locator("..").locator("..").getByRole("button", { name: "Edit" }).click();
       await fieldByLabel(page, "Label").fill(updatedLabel);
       await page.getByRole("button", { name: "Save" }).click();
       await expect(page.getByText(updatedLabel)).toBeVisible({ timeout: 10000 });
 
       // Delete
-      await page.getByText(updatedLabel).locator("xpath=ancestor::tr[1]").getByRole("button", { name: "Delete" }).click();
+      await page.getByText(updatedLabel).locator("..").locator("..").locator("..").getByRole("button", { name: "Delete" }).click();
       await expect(page.getByText(updatedLabel)).not.toBeVisible({ timeout: 10000 });
 
       const deleted = await prisma.formField.findFirstOrThrow({
@@ -72,7 +72,7 @@ test.describe("Form Editor (admin)", () => {
       expect(a.sortOrder).toBeLessThan(b.sortOrder);
 
       // Move A down once — should swap past B.
-      await page.getByText("E2E Order A").locator("xpath=ancestor::tr[1]").getByRole("button", { name: "Move down" }).click();
+      await page.getByText("E2E Order A").locator("..").locator("..").locator("..").getByRole("button", { name: "Move down" }).click();
 
       await expect
         .poll(async () => {
@@ -119,7 +119,7 @@ test.describe("Form Editor (admin)", () => {
     await prisma.staffFieldValue.create({ data: { fieldId: field.id, staffProfileId: staffProfile.id, value: "some answer" } });
 
     try {
-      await page.getByText("E2E In Use").locator("xpath=ancestor::tr[1]").getByRole("button", { name: "Delete" }).click();
+      await page.getByText("E2E In Use").locator("..").locator("..").locator("..").getByRole("button", { name: "Delete" }).click();
       await expect(page.getByText(/already has submitted answers/i)).toBeVisible({ timeout: 10000 });
 
       const stillExists = await prisma.formField.findUnique({ where: { id: field.id } });
@@ -142,7 +142,7 @@ test.describe("Form Editor (admin)", () => {
     await showAllRows(page);
 
     await expect(page.getByText("Church", { exact: true })).toBeVisible({ timeout: 10000 });
-    const churchRow = page.getByText("Church", { exact: true }).locator("xpath=ancestor::tr[1]");
+    const churchRow = page.getByText("Church", { exact: true }).locator("..").locator("..").locator("..");
     await expect(churchRow.getByRole("button", { name: "Delete" })).toHaveCount(0);
 
     const original = await prisma.formField.findFirstOrThrow({
@@ -180,7 +180,7 @@ test.describe("Form Editor (admin)", () => {
 
     try {
       await expect(page.getByText("Volunteer Category", { exact: true })).toBeVisible({ timeout: 10000 });
-      await page.getByText("Volunteer Category", { exact: true }).locator("xpath=ancestor::tr[1]").getByRole("button", { name: "Edit" }).click();
+      await page.getByText("Volunteer Category", { exact: true }).locator("..").locator("..").locator("..").getByRole("button", { name: "Edit" }).click();
       await fieldByLabel(page, "Options (comma separated)").fill("Registration, Medical, Kitchen, E2E New Category");
       await page.getByRole("button", { name: "Save" }).click();
 

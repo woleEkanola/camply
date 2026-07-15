@@ -7,9 +7,10 @@ import type { TeenRegistration } from "../types";
 interface StepConfirmationProps {
   campName: string;
   teens: TeenRegistration[];
+  token: string;
 }
 
-export function StepConfirmation({ campName, teens }: StepConfirmationProps) {
+export function StepConfirmation({ campName, teens, token }: StepConfirmationProps) {
   return (
     <div>
       <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
@@ -51,12 +52,20 @@ export function StepConfirmation({ campName, teens }: StepConfirmationProps) {
           </div>
         )}
 
-        <Link
-          href="/dashboard"
-          className="inline-flex h-12 items-center justify-center rounded-xl bg-accent-600 px-8 text-base font-medium text-white transition-colors hover:bg-accent-700"
-        >
-          View Registration Status
-        </Link>
+        <div className="flex gap-3 justify-center">
+          <Link
+            href="/dashboard"
+            className="inline-flex h-12 items-center justify-center rounded-xl bg-accent-600 px-6 text-base font-medium text-white transition-colors hover:bg-accent-700"
+          >
+            Go to Dashboard
+          </Link>
+          <Link
+            href={`/register/${token}?step=hub`}
+            className="inline-flex h-12 items-center justify-center rounded-xl border border-neutral-300 bg-white px-6 text-base font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          >
+            Add Another Camper
+          </Link>
+        </div>
       </div>
     </div>
   );

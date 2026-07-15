@@ -455,10 +455,26 @@ export const camperRouter = createTRPCRouter({
         }
       });
 
-      // Create field values
+      // Create field values — guardrail: only accept valid CUSTOM field IDs
       if (input.fieldValues.length > 0) {
+        // Fetch valid CUSTOM form field IDs for this organization
+        const validFieldIds = new Set(
+          (await ctx.prisma.formField.findMany({
+            where: { organizationId: input.profile.organizationId, source: "CUSTOM", deletedAt: null },
+            select: { id: true },
+          })).map((f) => f.id)
+        );
+
+        const validFieldValues = input.fieldValues.filter((fv) => {
+          if (!validFieldIds.has(fv.fieldId)) {
+            console.warn(`[camper.create] Rejected fieldValue with non-CUSTOM or invalid fieldId: ${fv.fieldId}`);
+            return false;
+          }
+          return true;
+        });
+
         await Promise.all(
-          input.fieldValues.map(fieldValue =>
+          validFieldValues.map(fieldValue =>
             ctx.prisma.profileFieldValue.create({
               data: {
                 value: fieldValue.value,

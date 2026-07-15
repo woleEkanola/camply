@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { FormFieldEditor } from "@/components/forms/FormFieldEditor";
 import { RegistrationConfigEditor } from "@/components/forms/RegistrationConfigEditor";
+import { DocumentRequirementsEditor } from "@/components/forms/DocumentRequirementsEditor";
 
 export default function FormEditorPage() {
   const { data: session } = useSession();
@@ -22,13 +23,14 @@ export default function FormEditorPage() {
   return (
     <AppShell area="admin">
       <div className="mx-auto max-w-3xl">
-        <PageHeader title="Form Editor" description="Decide what's collected during registration, what's required, and dropdown options — for parents, teachers, and volunteers." />
+        <PageHeader title="Profile Fields" description="Camper form fields, declarations, and required documents for registration." />
         <Tabs
           tabs={[
             { label: "Parents", content: <FormFieldEditor organizationId={organizationId} audience="CAMPER" /> },
             { label: "Teachers", content: <FormFieldEditor organizationId={organizationId} audience="TEACHER" /> },
             { label: "Volunteers", content: <FormFieldEditor organizationId={organizationId} audience="VOLUNTEER" /> },
             { label: "Registration Setup", content: <RegistrationConfigEditor organizationId={organizationId} /> },
+            { label: "Required Documents", content: <DocumentRequirementsEditor organizationId={organizationId} /> },
           ]}
         />
       </div>

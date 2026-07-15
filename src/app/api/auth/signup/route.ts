@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/server/auth/authOptions';
@@ -62,23 +60,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Organization not found for this signup link/campus.' }, { status: 400 });
     }
 
-    // The parent must be the exact user who verified OTP for this email —
-    // never guess by picking "the most recently created user at this campus".
-    let parent = await prisma.user.findUnique({ where: { email } });
+    // The parent must be the authenticated user from the session — use the
+    // session's user ID directly (never look up by email, which can differ in case).
+    let parent = await prisma.user.findUnique({ where: { id: session.user.id } });
     if (!parent) {
-      // Should already exist from the OTP step, but create defensively.
-      const placeholderPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
-      parent = await prisma.user.create({
-        data: {
-          role: 'PARENT',
-          organizationId,
-          homeCampusId: signupLink.campusId,
-          email,
-          password: placeholderPassword,
-          active: true,
-        },
-      });
-    } else if (!parent.organizationId || !parent.homeCampusId) {
+      return NextResponse.json({ message: 'User account not found' }, { status: 400 });
+    }
+    if (!parent.organizationId || !parent.homeCampusId) {
       parent = await prisma.user.update({
         where: { id: parent.id },
         data: { organizationId, homeCampusId: signupLink.campusId },
