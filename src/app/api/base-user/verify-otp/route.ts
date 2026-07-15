@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/db";
 import { MAX_OTP_ATTEMPTS, otpEqual } from "@/server/otp";
+import { normalizeEmail } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,8 +10,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Email and OTP are required." }, { status: 400 });
     }
 
+    const normalizedEmail = normalizeEmail(email);
+
     // Find OTP record for this email
-    const otpRecord = await prisma.oTP.findUnique({ where: { email } });
+    const otpRecord = await prisma.oTP.findUnique({ where: { email: normalizedEmail } });
     if (!otpRecord) {
       return NextResponse.json({ message: "Invalid or expired OTP." }, { status: 401 });
     }
@@ -26,7 +29,7 @@ export async function POST(req: NextRequest) {
     // Constant-time comparison; count failed attempts to block brute force
     if (!otpEqual(otpRecord.code, otp)) {
       await prisma.oTP.update({
-        where: { email },
+        where: { email: normalizedEmail },
         data: { attempts: { increment: 1 } },
       });
       return NextResponse.json({ message: "Invalid or expired OTP." }, { status: 401 });
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     // Authenticate user: create session via NextAuth
     // Find user
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) {
       return NextResponse.json({ message: "User not found." }, { status: 404 });
     }

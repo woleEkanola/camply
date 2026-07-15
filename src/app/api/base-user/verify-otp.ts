@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/server/auth/authOptions";
+import { normalizeEmail } from "@/lib/email";
 
 const prisma = new PrismaClient();
 
@@ -12,8 +13,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Email and OTP are required." }, { status: 400 });
     }
 
+    const normalizedEmail = normalizeEmail(email);
+
     // Find OTP record for this email
-    const otpRecord = await prisma.oTP.findUnique({ where: { email } });
+    const otpRecord = await prisma.oTP.findUnique({ where: { email: normalizedEmail } });
     if (!otpRecord) {
       return NextResponse.json({ message: "No OTP found for this email." }, { status: 404 });
     }
@@ -27,11 +30,11 @@ export async function POST(req: NextRequest) {
     }
 
     // OTP is valid, delete it (one-time use)
-    await prisma.oTP.delete({ where: { email } });
+    await prisma.oTP.delete({ where: { email: normalizedEmail } });
 
     // Authenticate user: create session via NextAuth
     // Find user
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) {
       return NextResponse.json({ message: "User not found." }, { status: 404 });
     }
