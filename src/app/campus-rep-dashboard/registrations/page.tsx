@@ -53,6 +53,12 @@ export default function CampusRepRegistrationsPage() {
   );
   const isTwoStep = org?.approvalWorkflow === "TWO_STEP";
 
+  // Read-only campus quota display (admin-set, see /admin/campuses "Set Quota").
+  const { data: signupLink } = api.signupLink.getByCampusAndCamp.useQuery(
+    { campusId },
+    { enabled: !!campusId }
+  );
+
   // Always call hooks at the top level (fixes Rules of Hooks error)
   const { data: adminListData, isLoading, error, refetch } = api.registration.adminList.useQuery(
     {
@@ -194,10 +200,12 @@ export default function CampusRepRegistrationsPage() {
     return statusMatch && consentMatch;
   });
 
-  // Approved registrations count for this campus. Quota/capacity is no longer
-  // a Campus-level concept under the new model (it moved to Venue, enforced
-  // at approval/allocation time) — this summary drops the old quota display.
+  // Approved registrations count for this campus. Venue capacity is separate
+  // (enforced at approval/allocation time); the campus-level quota below is
+  // admin-set on the SignupLink (PRD 17.4) and shown read-only here.
   const approvedCount = allRegs.filter(r => r.status === 'APPROVED').length;
+  const campusQuota = signupLink?.quota ?? 0;
+  const quotaLabel = campusQuota > 0 ? `${approvedCount} / ${campusQuota}` : `${approvedCount} (no limit)`;
 
   if (status === "loading") {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
@@ -258,7 +266,7 @@ export default function CampusRepRegistrationsPage() {
           )}
         </div>
         <div>
-          <span className="text-sm font-medium text-neutral-700">Approved: {approvedCount}</span>
+          <span className="text-sm font-medium text-neutral-700">Approved: {quotaLabel}</span>
         </div>
       </div>
 

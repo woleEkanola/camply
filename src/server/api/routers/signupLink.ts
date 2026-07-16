@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PrismaClient } from "@prisma/client";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { randomBytes } from "crypto";
@@ -9,6 +10,26 @@ const signupLinkSchema = z.object({
   campusId: z.string(),
   campId: z.string().optional(), // If not provided, use active camp
 });
+
+// Early-banner check for the public signup page. Mirrors the pipeline-status
+// count validation.ts uses at submission time; that check remains the
+// authoritative gate, this is only a courtesy heads-up before a parent starts
+// filling out the form.
+async function computeQuotaReached(
+  prisma: PrismaClient,
+  signupLink: { campusId: string; campId: string; quota: number; quotaFullBehavior: string }
+): Promise<boolean> {
+  if (signupLink.quota <= 0 || signupLink.quotaFullBehavior !== "CLOSE") return false;
+  const pipelineCount = await prisma.registration.count({
+    where: {
+      campusId: signupLink.campusId,
+      campId: signupLink.campId,
+      status: { in: ["SUBMITTED", "PENDING", "APPROVED"] },
+      deletedAt: null,
+    },
+  });
+  return pipelineCount >= signupLink.quota;
+}
 
 export const signupLinkRouter = createTRPCRouter({
   // Get all signup links for an organization
@@ -59,46 +80,69 @@ export const signupLinkRouter = createTRPCRouter({
       }
 
       // For campus reps, only show signup links for their managed campuses
-      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
-        const managedCampuses = await ctx.prisma.campus.findMany({
-          where: {
-            organizationId: input.organizationId,
-            reps: {
-              some: {
-                id: currentUser.id
+      const links = currentUser.role === "CAMPUS_REPRESENTATIVE"
+        ? await (async () => {
+            const managedCampuses = await ctx.prisma.campus.findMany({
+              where: {
+                organizationId: input.organizationId,
+                reps: {
+                  some: {
+                    id: currentUser.id
+                  }
+                }
+              },
+              select: { id: true }
+            });
+
+            const campusIds = managedCampuses.map((c: { id: string }) => c.id);
+
+            return ctx.prisma.signupLink.findMany({
+              where: {
+                campId,
+                campusId: { in: campusIds }
+              },
+              include: {
+                campus: true,
+                camp: true
               }
+            });
+          })()
+        // For other roles, show all signup links for the organization
+        : await ctx.prisma.signupLink.findMany({
+            where: {
+              campId,
+              campus: {
+                organizationId: input.organizationId
+              }
+            },
+            include: {
+              campus: true,
+              camp: true
             }
-          },
-          select: { id: true }
-        });
+          });
 
-        const campusIds = managedCampuses.map((c: { id: string }) => c.id);
-
-        return await ctx.prisma.signupLink.findMany({
-          where: {
-            campId,
-            campusId: { in: campusIds }
-          },
-          include: {
-            campus: true,
-            camp: true
-          }
-        });
-      }
-
-      // For other roles, show all signup links for the organization
-      return await ctx.prisma.signupLink.findMany({
-        where: {
-          campId,
-          campus: {
-            organizationId: input.organizationId
-          }
-        },
-        include: {
-          campus: true,
-          camp: true
-        }
+      // Attach per-campus registration counts so the admin UI can show
+      // quota usage (used = pipeline count that the CLOSE gate checks
+      // against; approved = the count updateQuota's lower-bound refuses to
+      // undercut) without a separate round trip per campus.
+      const usedCounts = await ctx.prisma.registration.groupBy({
+        by: ["campusId"],
+        where: { campId, status: { in: ["SUBMITTED", "PENDING", "APPROVED"] }, deletedAt: null },
+        _count: { _all: true },
       });
+      const approvedCounts = await ctx.prisma.registration.groupBy({
+        by: ["campusId"],
+        where: { campId, status: "APPROVED" },
+        _count: { _all: true },
+      });
+      const usedByCampus = new Map(usedCounts.map((r) => [r.campusId, r._count._all]));
+      const approvedByCampus = new Map(approvedCounts.map((r) => [r.campusId, r._count._all]));
+
+      return links.map((link) => ({
+        ...link,
+        usedCount: usedByCampus.get(link.campusId) ?? 0,
+        approvedCount: approvedByCampus.get(link.campusId) ?? 0,
+      }));
     }),
 
   // Get the first active signup link for the current user's organization.
@@ -303,6 +347,56 @@ export const signupLinkRouter = createTRPCRouter({
       return signupLink;
     }),
 
+  // Set/adjust a campus's registration quota for a camp (PRD 17.4: admin-only,
+  // campus reps do not manage camp operations — same access rule as Venue
+  // quota, no CAMPUS_REPRESENTATIVE branch here unlike generate/deactivate).
+  updateQuota: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      quota: z.number().int().min(0),
+      quotaFullBehavior: z.enum(["CLOSE", "WAITLIST"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+      }
+
+      const signupLink = await ctx.prisma.signupLink.findUnique({
+        where: { id: input.id },
+        include: { campus: true },
+      });
+      if (!signupLink) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found" });
+      }
+
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        (currentUser.role === "OWNER" && currentUser.organizationId === signupLink.campus.organizationId) ||
+        (currentUser.role === "ADMIN" && currentUser.organizationId === signupLink.campus.organizationId);
+      if (!hasPermission) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to set quotas for this campus" });
+      }
+
+      const approvedCount = await ctx.prisma.registration.count({
+        where: { campusId: signupLink.campusId, campId: signupLink.campId, status: "APPROVED" },
+      });
+      if (input.quota > 0 && input.quota < approvedCount) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Quota cannot be less than the number of already-approved registrations.",
+        });
+      }
+
+      return ctx.prisma.signupLink.update({
+        where: { id: input.id },
+        data: {
+          quota: input.quota,
+          ...(input.quotaFullBehavior ? { quotaFullBehavior: input.quotaFullBehavior } : {}),
+        },
+      });
+    }),
+
   // Validate a signup link token
   validateToken: publicProcedure
     .input(z.object({ token: z.string() }))
@@ -324,6 +418,8 @@ export const signupLinkRouter = createTRPCRouter({
           message: "This signup link is for an inactive camp"
         });
       }
+      const quotaReached = await computeQuotaReached(ctx.prisma, signupLink);
+
       return {
         campusId: signupLink.campusId,
         campusName: signupLink.campus.name,
@@ -343,6 +439,7 @@ export const signupLinkRouter = createTRPCRouter({
         status: signupLink.camp.status,
         registrationOpensAt: signupLink.camp.registrationOpensAt?.toISOString().split("T")[0] ?? null,
         registrationClosesAt: signupLink.camp.registrationClosesAt?.toISOString().split("T")[0] ?? null,
+        quotaReached,
       };
 
     }),
@@ -389,6 +486,8 @@ export const signupLinkRouter = createTRPCRouter({
       if (!signupLink.camp.active) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "This signup link is for an inactive camp" });
       }
+      const quotaReached = await computeQuotaReached(ctx.prisma, signupLink);
+
       return {
         campusId: signupLink.campusId,
         campusName: signupLink.campus.name,
@@ -408,6 +507,7 @@ export const signupLinkRouter = createTRPCRouter({
         status: signupLink.camp.status,
         registrationOpensAt: signupLink.camp.registrationOpensAt?.toISOString().split("T")[0] ?? null,
         registrationClosesAt: signupLink.camp.registrationClosesAt?.toISOString().split("T")[0] ?? null,
+        quotaReached,
       };
     }),
 

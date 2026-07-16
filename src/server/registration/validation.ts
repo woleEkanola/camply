@@ -93,15 +93,35 @@ export async function validateSubmission(
     }
   }
 
-  // Step 5: Campus gate validation. Only boolean gates are checked here -
-  // capacity (quota/fullBehavior) is deliberately NOT checked at submission
-  // time. Under the new domain model, capacity is a Venue concept, and Venue
-  // isn't assigned to a registration until approval/allocation time (a Campus
-  // signup link being "full" is no longer a submission-time concept). See
-  // engine.ts's approveRegistrationInTx/transferVenue for the Venue-scoped
-  // capacity check that replaces this.
+  // Step 5: Campus gate validation (boolean gates). Venue capacity is a
+  // separate, later-assigned concept checked at approval time instead (see
+  // engine.ts's approveRegistrationInTx/transferVenue).
   if (!campus.active || !campus.signupOpen) {
     failures.push({ step: "campus", code: "CAMPUS_CLOSED", message: "This campus is not currently accepting registrations." });
+  }
+
+  // Step 5b: Campus registration quota (per campus+camp, via SignupLink).
+  // Unlike Venue capacity, this IS enforced at submission time when
+  // quotaFullBehavior is CLOSE, per PRD 17.4 - parents must see "Campus
+  // quota reached" rather than submit into a black hole. WAITLIST behavior
+  // skips this gate and relies on the approval-time backstop in engine.ts.
+  const signupLink = await tx.signupLink.findUnique({
+    where: { campusId_campId: { campusId: registration.campusId, campId: registration.campId } },
+  });
+  if (signupLink && signupLink.quota > 0 && signupLink.quotaFullBehavior === "CLOSE") {
+    await tx.$queryRaw`SELECT id FROM "SignupLink" WHERE id = ${signupLink.id} FOR UPDATE`;
+    const pipelineCount = await tx.registration.count({
+      where: {
+        campusId: registration.campusId,
+        campId: registration.campId,
+        id: { not: registration.id },
+        status: { in: ["SUBMITTED", "PENDING", "APPROVED"] },
+        deletedAt: null,
+      },
+    });
+    if (pipelineCount >= signupLink.quota) {
+      failures.push({ step: "campus", code: "CAMPUS_QUOTA_REACHED", message: "Campus quota reached for this camp." });
+    }
   }
 
   // Step 6: Duplicate detection (also enforced by a DB unique constraint)

@@ -174,6 +174,12 @@ export default function CampusesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
+  const [quotaSignupLinkId, setQuotaSignupLinkId] = useState<string | null>(null);
+  const [quotaFormData, setQuotaFormData] = useState<{ quota: number; quotaFullBehavior: "CLOSE" | "WAITLIST" }>({
+    quota: 0,
+    quotaFullBehavior: "CLOSE",
+  });
   const [selectedCampus, setSelectedCampus] = useState<string | null>(null);
   const [formData, setFormData] = useState<CampusFormData>({
     name: "",
@@ -221,6 +227,12 @@ export default function CampusesPage() {
   const canDeleteCampus = userPermissions.includes('DELETE_CAMPUS') || (session?.user as ExtendedUser)?.role === 'OWNER' || (session?.user as ExtendedUser)?.role === 'SUPER_ADMIN';
   const canGenerateSignupLink = userPermissions.includes('GENERATE_SIGNUP_LINK') || (session?.user as ExtendedUser)?.role === 'OWNER' || (session?.user as ExtendedUser)?.role === 'SUPER_ADMIN';
   const canManageAdmins = userPermissions.includes('MANAGE_CAMPUS_REPS') || (session?.user as ExtendedUser)?.role === 'OWNER' || (session?.user as ExtendedUser)?.role === 'SUPER_ADMIN';
+  // PRD 17.4: quotas are admin-only — campus reps do not manage camp operations.
+  // Matches the backend's updateQuota permission check exactly (SUPER_ADMIN/OWNER/ADMIN).
+  const canManageQuota =
+    (session?.user as ExtendedUser)?.role === 'OWNER' ||
+    (session?.user as ExtendedUser)?.role === 'SUPER_ADMIN' ||
+    (session?.user as ExtendedUser)?.role === 'ADMIN';
 
   // Check if user is authenticated
   useEffect(() => {
@@ -615,6 +627,38 @@ export default function CampusesPage() {
     },
   });
 
+  // Set/adjust a campus's registration quota
+  const updateQuotaMutation = api.signupLink.updateQuota.useMutation({
+    onSuccess: () => {
+      setSuccess("Quota updated successfully!");
+      setIsQuotaModalOpen(false);
+      setQuotaSignupLinkId(null);
+      void refetchSignupLinks();
+    },
+    onError: (error) => {
+      setError(`Error updating quota: ${error.message}`);
+    },
+  });
+
+  const handleOpenQuotaModal = (link: SignupLink) => {
+    setQuotaSignupLinkId(link.id);
+    setQuotaFormData({
+      quota: link.quota ?? 0,
+      quotaFullBehavior: (link.quotaFullBehavior as "CLOSE" | "WAITLIST") ?? "CLOSE",
+    });
+    setIsQuotaModalOpen(true);
+  };
+
+  const handleSaveQuota = () => {
+    if (!quotaSignupLinkId) return;
+    setError("");
+    updateQuotaMutation.mutate({
+      id: quotaSignupLinkId,
+      quota: quotaFormData.quota,
+      quotaFullBehavior: quotaFormData.quotaFullBehavior,
+    });
+  };
+
   // Get signup links for all campuses at once
   const { data: signupLinks = [], refetch: refetchSignupLinks } = api.signupLink.getByOrganization.useQuery(
     {
@@ -734,6 +778,29 @@ export default function CampusesPage() {
           );
         }
         return null;
+      },
+    },
+    {
+      header: "Quota (used/limit)",
+      accessor: (campus) => {
+        const signupLink = getSignupLinkForCampus(campus.id);
+        if (!activeCamp || !signupLink) return <span className="text-neutral-400">—</span>;
+        const limitLabel = signupLink.quota > 0 ? signupLink.quota : "no limit";
+        return (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-neutral-700">
+              {signupLink.usedCount} / {limitLabel}
+            </span>
+            {canManageQuota && (
+              <button
+                onClick={() => handleOpenQuotaModal(signupLink)}
+                className="inline-flex items-center rounded-md bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-200"
+              >
+                Set Quota
+              </button>
+            )}
+          </div>
+        );
       },
     },
   ];
@@ -868,6 +935,38 @@ export default function CampusesPage() {
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setIsAdminModalOpen(false)}>Cancel</Button>
           <Button loading={isSubmitting} onClick={handleSaveAdmins}>Save Reps</Button>
+        </div>
+      </Dialog>
+
+      {/* Set Quota Modal */}
+      <Dialog open={isQuotaModalOpen} onClose={() => setIsQuotaModalOpen(false)} title="Set Campus Quota" size="sm">
+        {error && <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
+        <div className="space-y-4">
+          <Input
+            label="Registration Quota (0 = unlimited)"
+            type="number"
+            id="quota"
+            value={quotaFormData.quota}
+            onChange={(e) => setQuotaFormData({ ...quotaFormData, quota: parseInt(e.target.value, 10) || 0 })}
+          />
+          <div>
+            <label className="block text-sm font-medium mb-1">When Full</label>
+            <select
+              className="w-full border rounded px-3 py-2"
+              value={quotaFormData.quotaFullBehavior}
+              onChange={(e) => setQuotaFormData({ ...quotaFormData, quotaFullBehavior: e.target.value as "CLOSE" | "WAITLIST" })}
+            >
+              <option value="CLOSE">Close — block new submissions once the quota is reached</option>
+              <option value="WAITLIST">Waitlist — accept submissions, waitlist excess at approval</option>
+            </select>
+            <p className="mt-1 text-xs text-neutral-500">
+              Lowering the quota below the number of already-approved registrations for this campus is not allowed.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setIsQuotaModalOpen(false)}>Cancel</Button>
+          <Button loading={updateQuotaMutation.isPending} onClick={handleSaveQuota}>Save Quota</Button>
         </div>
       </Dialog>
     </AppShell>
