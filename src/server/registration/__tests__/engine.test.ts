@@ -156,6 +156,47 @@ describe("submission pipeline", () => {
     const second = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
     expect(second.id).toBe(first.id);
   });
+
+  it("re-submitting an already-PENDING registration is a no-op — no error, no duplicate audit event or side effect", async () => {
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+    const pending = await engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
+    expect(pending.status).toBe("PENDING");
+
+    const retried = await engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
+    expect(retried.status).toBe("PENDING");
+    expect(retried.id).toBe(pending.id);
+
+    const submittedEvents = await prisma.auditLog.findMany({
+      where: { registrationId: pending.id, action: "REGISTRATION_SUBMITTED" },
+    });
+    expect(submittedEvents).toHaveLength(1);
+
+    const sideEffects = await prisma.sideEffect.findMany({
+      where: { registrationId: pending.id, type: "REGISTRATION_SUBMITTED" },
+    });
+    expect(sideEffects).toHaveLength(1);
+  });
+
+  it("re-submitting an already-SUBMITTED registration is a no-op (mid-transaction race window)", async () => {
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+    await prisma.registration.update({ where: { id: draft.id }, data: { status: "SUBMITTED" } });
+
+    const result = await engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
+    expect(result.status).toBe("SUBMITTED");
+  });
+
+  it("still throws IllegalTransitionError for a genuinely illegal re-submit (e.g. already APPROVED)", async () => {
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+    const pending = await engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
+    await engine.approveRegistration({ registrationId: pending.id, actorId: parentId });
+
+    await expect(
+      engine.submitRegistration({ registrationId: pending.id, actorId: parentId })
+    ).rejects.toBeInstanceOf(IllegalTransitionError);
+  });
 });
 
 describe("approval workflow", () => {

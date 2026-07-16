@@ -58,7 +58,7 @@ function TeenReviewCard({
           fv.field?.systemKey === "photoUrl" &&
           fv.value
       )
-      ?.value ?? null;
+      ?.value ?? (camper as any)?.photoUrl ?? null;
 
   const fieldEntries = useMemo(() => {
     if (!camper || !fields) return [];

@@ -18,7 +18,18 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [loaded, setLoaded] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [uploadingKeys, setUploadingKeys] = useState<Set<string>>(new Set());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleFieldUploadingChange = useCallback((key: string, uploading: boolean) => {
+    setUploadingKeys((prev) => {
+      const next = new Set(prev);
+      if (uploading) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+  const isUploading = uploadingKeys.size > 0;
 
   const updateCamper = api.camper.update.useMutation();
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -64,6 +75,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
 
   useEffect(() => {
     setLoaded(false);
+    setUploadingKeys(new Set());
   }, [activeTeen?.camperId]);
 
   function persistToBackend(newValues: Record<string, unknown>) {
@@ -121,6 +133,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
 
   async function handleNext() {
     if (!activeTeen) return;
+    if (isUploading) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     // Validate required fields
@@ -214,6 +227,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
             values={values}
             onChange={handleChange}
             errors={fieldErrors}
+            onFieldUploadingChange={handleFieldUploadingChange}
           />
         )}
 
@@ -221,24 +235,30 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
           <div className="min-w-[110px]">
             <AutoSaveIndicator status={saveStatus} />
           </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => dispatch({ type: "GO_BACK" })}
-              className="flex h-12 items-center justify-center rounded-xl border border-neutral-300 bg-white px-6 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
-            >
-              ← Back
-            </button>
-            <button
-              type="button"
-              onClick={handleNext}
-              className="flex h-12 items-center gap-1 rounded-xl bg-accent-600 px-6 text-sm font-medium text-white transition-colors hover:bg-accent-700"
-            >
-              Next
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-              </svg>
-            </button>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => dispatch({ type: "GO_BACK" })}
+                className="flex h-12 items-center justify-center rounded-xl border border-neutral-300 bg-white px-6 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={handleNext}
+                className="flex h-12 items-center gap-1 rounded-xl bg-accent-600 px-6 text-sm font-medium text-white transition-colors hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent-600"
+              >
+                Next
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                </svg>
+              </button>
+            </div>
+            {isUploading && (
+              <p className="text-xs text-neutral-500">Please wait for uploads to finish.</p>
+            )}
           </div>
         </div>
       </div>

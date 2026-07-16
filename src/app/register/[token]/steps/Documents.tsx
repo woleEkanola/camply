@@ -17,16 +17,23 @@ function DocumentRow({
   registrationId,
   existingDoc,
   onUploaded,
+  onUploadingChange,
 }: {
   requirement: any;
   registrationId: string;
   existingDoc: any | undefined;
   onUploaded: () => void;
+  onUploadingChange: (requirementId: string, uploading: boolean) => void;
 }) {
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+
+  function setUploadingState(value: boolean) {
+    setUploading(value);
+    onUploadingChange(requirement.id, value);
+  }
 
   const uploadMutation = api.document.upload.useMutation({
     onSuccess: () => {
@@ -34,7 +41,7 @@ function DocumentRow({
     },
     onError: (e) => {
       setLocalError(e.message);
-      setUploading(false);
+      setUploadingState(false);
     },
   });
 
@@ -56,7 +63,7 @@ function DocumentRow({
     }
 
     setLocalError("");
-    setUploading(true);
+    setUploadingState(true);
 
     try {
       const compressed = await compressImage(file);
@@ -78,7 +85,7 @@ function DocumentRow({
       console.error("UploadThing error:", err);
       setLocalError(err.message || "Upload failed");
     } finally {
-      setUploading(false);
+      setUploadingState(false);
     }
   }
 
@@ -169,6 +176,16 @@ function DocumentRow({
 
 export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
   const activeTeen = state.teens.find((t) => t.camperId === state.activeTeenId);
+  const [uploadingReqIds, setUploadingReqIds] = useState<Set<string>>(new Set());
+
+  function handleUploadingChange(requirementId: string, uploading: boolean) {
+    setUploadingReqIds((prev) => {
+      const next = new Set(prev);
+      if (uploading) next.add(requirementId);
+      else next.delete(requirementId);
+      return next;
+    });
+  }
 
   const { data: requirements } = api.documentRequirement.listByCamp.useQuery(
     { campId: state.campData?.campId ?? "" },
@@ -186,6 +203,8 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
     (existingDocs ?? []).filter((d: any) => d.status !== "REJECTED").map((d: any) => d.requirementId)
   );
   const allRequiredDone = requiredReqs.length === 0 || requiredReqs.every((r) => uploadedReqIds.has(r.id));
+  const isUploading = uploadingReqIds.size > 0;
+  const nextBlocked = isUploading || !allRequiredDone;
 
   return (
     <div>
@@ -224,6 +243,7 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
               registrationId={activeTeen?.registrationId ?? ""}
               existingDoc={(existingDocs ?? []).find((d: any) => d.requirementId === req.id && d.status !== "REJECTED")}
               onUploaded={() => refetchDocs()}
+              onUploadingChange={handleUploadingChange}
             />
           ))}
         </div>
@@ -239,7 +259,9 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
         </button>
         <button
           type="button"
+          disabled={nextBlocked}
           onClick={() => {
+            if (nextBlocked) return;
             if (activeTeen) {
               dispatch({
                 type: "SET_TEEN_COMPLETE",
@@ -250,11 +272,16 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
             }
             dispatch({ type: "GO_TO", step: "REVIEW" });
           }}
-          className="flex h-12 flex-1 items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2"
+          className="flex h-12 flex-1 items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent-600"
         >
           Next
         </button>
       </div>
+      {nextBlocked && (
+        <p className="mt-2 text-center text-xs text-neutral-500">
+          {isUploading ? "Please wait for uploads to finish." : "Upload all required documents to continue."}
+        </p>
+      )}
       <div className="mt-6 text-center">
         <a href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-600 underline">
           Go to Dashboard

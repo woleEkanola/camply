@@ -12,6 +12,8 @@ interface DynamicFieldGroupProps {
   /** e.g. { campusId: ["Main Campus", "North Site"] } for fields whose options come from a live query rather than stored config. */
   dynamicOptionsByKey?: Record<string, (string | { value: string; label: string })[]>;
   errors?: Record<string, string>;
+  /** Fired with (fieldKey, uploading) whenever a FILE field's upload state changes, so a parent step can gate navigation until every upload settles. */
+  onFieldUploadingChange?: (fieldKey: string, uploading: boolean) => void;
 }
 
 /** Groups already-sorted fields into contiguous same-groupLabel runs, rendering a section header per run. */
@@ -36,6 +38,7 @@ export function DynamicFieldGroup({
   disabled,
   dynamicOptionsByKey,
   errors,
+  onFieldUploadingChange,
 }: DynamicFieldGroupProps) {
   const visibleFields = fields.filter((f) => f.visible);
   const groups = groupFields(visibleFields);
@@ -56,6 +59,7 @@ export function DynamicFieldGroup({
                 disabled={disabled}
                 dynamicOptions={field.systemKey ? dynamicOptionsByKey?.[field.systemKey] : undefined}
                 error={errors?.[key]}
+                onUploadingChange={onFieldUploadingChange ? (uploading) => onFieldUploadingChange(key, uploading) : undefined}
               />
             );
           })}
