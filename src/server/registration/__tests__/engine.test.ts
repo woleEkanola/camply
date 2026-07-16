@@ -30,6 +30,12 @@ async function makeCamper(overrides: Partial<{ dateOfBirth: Date }> = {}) {
   return camper;
 }
 
+async function makePending() {
+  const camper = await makeCamper();
+  const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+  return engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
+}
+
 beforeEach(async () => {
   const org = await prisma.organization.create({ data: { name: `Test Org ${Date.now()}-${Math.random()}` } });
   orgId = org.id;
@@ -397,12 +403,6 @@ describe("rejection and correction workflow", () => {
 });
 
 describe("two-step approval workflow", () => {
-  async function makePending() {
-    const camper = await makeCamper();
-    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
-    return engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
-  }
-
   async function enableTwoStep() {
     await prisma.organization.update({ where: { id: orgId }, data: { approvalWorkflow: "TWO_STEP" } });
   }
@@ -524,5 +524,98 @@ describe("two-step approval workflow", () => {
     const pending = await makePending();
     const approved = await engine.approveRegistration({ registrationId: pending.id, actorId: parentId });
     expect(approved.status).toBe("APPROVED");
+  });
+});
+
+describe("document action workflow", () => {
+  async function makeRequirement() {
+    return prisma.documentRequirement.create({
+      data: {
+        campId,
+        name: "Birth Certificate",
+        required: true,
+        acceptedFormats: "jpg,png,pdf",
+        maxSizeMb: 2,
+        scope: "REGISTRATION",
+      },
+    });
+  }
+
+  async function makeDocument(registrationId: string, requirementId: string) {
+    return prisma.document.create({
+      data: {
+        requirementId,
+        registrationId,
+        url: "https://example.com/doc.pdf",
+        fileName: "doc.pdf",
+        fileType: "application/pdf",
+        fileSize: 1024,
+        uploadedById: parentId,
+      },
+    });
+  }
+
+  it("flagDocumentRequiresAction creates DocumentAction and moves registration to REQUIRES_ACTION", async () => {
+    const pending = await makePending();
+    const requirement = await makeRequirement();
+    const document = await makeDocument(pending.id, requirement.id);
+
+    const updated = await engine.flagDocumentRequiresAction({
+      documentId: document.id,
+      registrationId: pending.id,
+      actorId: adminId,
+      reason: "Document is blurry",
+    });
+
+    expect(updated.status).toBe("REQUIRES_ACTION");
+    expect(updated.correctionRequest).toContain("Birth Certificate needs action");
+    expect(updated.correctionRequest).toContain("Document is blurry");
+
+    const actions = await prisma.documentAction.findMany({ where: { documentId: document.id } });
+    expect(actions).toHaveLength(1);
+    expect(actions[0]?.status).toBe("REQUIRES_ACTION");
+    expect(actions[0]?.reason).toBe("Document is blurry");
+    expect(actions[0]?.requestedById).toBe(adminId);
+  });
+
+  it("advanceFromRequiresAction moves registration back to PENDING", async () => {
+    const pending = await makePending();
+    const requirement = await makeRequirement();
+    const document = await makeDocument(pending.id, requirement.id);
+    await engine.flagDocumentRequiresAction({
+      documentId: document.id,
+      registrationId: pending.id,
+      actorId: adminId,
+      reason: "Need clearer copy",
+    });
+
+    const advanced = await engine.advanceFromRequiresAction({ registrationId: pending.id, actorId: adminId });
+    expect(advanced.status).toBe("PENDING");
+    expect(advanced.correctionRequest).toBeNull();
+  });
+
+  it("flagDocumentRequiresAction resolves any prior active action before creating a new one", async () => {
+    const pending = await makePending();
+    const requirement = await makeRequirement();
+    const document = await makeDocument(pending.id, requirement.id);
+    await engine.flagDocumentRequiresAction({
+      documentId: document.id,
+      registrationId: pending.id,
+      actorId: adminId,
+      reason: "First issue",
+    });
+
+    await engine.flagDocumentRequiresAction({
+      documentId: document.id,
+      registrationId: pending.id,
+      actorId: adminId,
+      reason: "Second issue",
+    });
+
+    const actions = await prisma.documentAction.findMany({ where: { documentId: document.id }, orderBy: { createdAt: "asc" } });
+    expect(actions).toHaveLength(2);
+    expect(actions[0]?.status).toBe("RESOLVED");
+    expect(actions[1]?.status).toBe("REQUIRES_ACTION");
+    expect(actions[1]?.reason).toBe("Second issue");
   });
 });

@@ -9,6 +9,8 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Input";
 import { isEndorsed } from "@/server/registration/endorsement";
+import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
+import { Dialog } from "@/components/ui/Dialog";
 import React from 'react';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
@@ -44,8 +46,9 @@ export default function CampusRepRegistrationsPage() {
   // --- Filter state ---
   const [statusFilter, setStatusFilter] = React.useState<string | 'ALL'>('ALL');
   const [consentFilter, setConsentFilter] = React.useState<'ALL' | 'UPLOADED' | 'NOT_UPLOADED'>('ALL');
-  const [reviewStateFilter, setReviewStateFilter] = React.useState<'ALL' | 'AWAITING_VETTING' | 'AWAITING_FINAL'>('ALL');
+  const [reviewStateFilter, setReviewStateFilter] = React.useState<'ALL' | 'AWAITING_VETTING' | 'AWAITING_FINAL' | 'AWAITING_DOCUMENT_REPLACEMENT'>('ALL');
   const [actionError, setActionError] = React.useState("");
+  const [documentRegId, setDocumentRegId] = React.useState<string | null>(null);
 
   const { data: org } = api.organization.getById.useQuery(
     { id: organizationId },
@@ -65,7 +68,7 @@ export default function CampusRepRegistrationsPage() {
       organizationId,
       campusId,
       limit: 100,
-      ...(isTwoStep && reviewStateFilter !== 'ALL' ? { reviewState: reviewStateFilter } : {}),
+      ...(reviewStateFilter !== 'ALL' ? { reviewState: reviewStateFilter } : {}),
     },
     { enabled: !!organizationId && !!campusId }
   );
@@ -143,24 +146,23 @@ export default function CampusRepRegistrationsPage() {
     {
       header: "Actions",
       accessor: (reg: Registration) => {
-        if (reg.status !== "PENDING" && reg.status !== "REQUIRES_ACTION") return null;
         const endorsed = isEndorsed(reg.review);
         return (
           <div className="flex flex-wrap gap-2">
-            {isTwoStep ? (
-              reg.status === "PENDING" && !endorsed && (
-                <Button size="sm" loading={endorseMutation.isPending} onClick={() => endorseMutation.mutate({ registrationId: reg.id })}>
-                  Endorse
-                </Button>
-              )
-            ) : (
-              reg.status === "PENDING" && (
-                <Button size="sm" loading={approveMutation.isPending} onClick={() => approveMutation.mutate({ registrationId: reg.id })}>
-                  Approve
-                </Button>
-              )
+            <Button size="sm" variant="secondary" onClick={() => setDocumentRegId(reg.id)}>
+              Documents
+            </Button>
+            {reg.status === "PENDING" && isTwoStep && !endorsed && (
+              <Button size="sm" loading={endorseMutation.isPending} onClick={() => endorseMutation.mutate({ registrationId: reg.id })}>
+                Endorse
+              </Button>
             )}
-            {reg.status === "PENDING" && (
+            {reg.status === "PENDING" && !isTwoStep && (
+              <Button size="sm" loading={approveMutation.isPending} onClick={() => approveMutation.mutate({ registrationId: reg.id })}>
+                Approve
+              </Button>
+            )}
+            {(reg.status === "PENDING" || reg.status === "REQUIRES_ACTION") && (
               <>
                 <Button size="sm" variant="secondary" loading={requestCorrectionMutation.isPending} onClick={() => handleRequestCorrection(reg)}>
                   Request Correction
@@ -257,13 +259,12 @@ export default function CampusRepRegistrationsPage() {
             <option value="UPLOADED">Uploaded</option>
             <option value="NOT_UPLOADED">Not Uploaded</option>
           </Select>
-          {isTwoStep && (
-            <Select label="Review" containerClassName="w-48" value={reviewStateFilter} onChange={e => setReviewStateFilter(e.target.value as any)}>
-              <option value="ALL">All pending</option>
-              <option value="AWAITING_VETTING">Awaiting vetting</option>
-              <option value="AWAITING_FINAL">Awaiting final approval</option>
-            </Select>
-          )}
+          <Select label="Review" containerClassName="w-48" value={reviewStateFilter} onChange={e => setReviewStateFilter(e.target.value as any)}>
+            <option value="ALL">All pending</option>
+            <option value="AWAITING_VETTING">Awaiting vetting</option>
+            <option value="AWAITING_FINAL">Awaiting final approval</option>
+            <option value="AWAITING_DOCUMENT_REPLACEMENT">Awaiting document replacement</option>
+          </Select>
         </div>
         <div>
           <span className="text-sm font-medium text-neutral-700">Approved: {quotaLabel}</span>
@@ -287,6 +288,15 @@ export default function CampusRepRegistrationsPage() {
           Error: {typeof error === 'string' ? error : (error && 'message' in error && typeof error.message === 'string') ? error.message : (error && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data) ? (error.data as any).message : JSON.stringify(error)}
         </div>
       )}
+
+      <Dialog
+        open={!!documentRegId}
+        onClose={() => setDocumentRegId(null)}
+        title="Documents"
+        size="lg"
+      >
+        {documentRegId && <RegistrationDocumentPanel registrationId={documentRegId} />}
+      </Dialog>
     </AppShell>
   );
 }

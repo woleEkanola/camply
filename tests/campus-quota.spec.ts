@@ -80,12 +80,14 @@ async function driveTeenToSubmit(page: Page, opts: {
   // doc comment — driving the hidden file input fires a real UploadThing
   // call with no local token configured) so Next enables without a real
   // upload transport.
-  const wizardData = await page.evaluate(() => sessionStorage.getItem("camply-registration-wizard"));
+  const storageKey = `camply-registration-wizard:${signupToken}`;
+  const wizardData = await page.evaluate((key) => localStorage.getItem(key), storageKey);
   const parsed = wizardData ? JSON.parse(wizardData) : null;
-  const teen = parsed?.teens?.[0];
+  const state = parsed?.state ?? parsed;
+  const teen = state?.teens?.[0];
   if (teen && teen.registrationId) {
     const reqs = await prisma.documentRequirement.findMany({
-      where: { campId: parsed.campData?.campId, required: true, deletedAt: null },
+      where: { campId: state?.campData?.campId, required: true, deletedAt: null },
     });
     const parentUser = await prisma.user.findUniqueOrThrow({ where: { email: parentEmail } });
     for (const req of reqs) {

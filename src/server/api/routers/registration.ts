@@ -814,6 +814,23 @@ export const registrationRouter = createTRPCRouter({
       }
     }),
 
+  advanceFromRequiresAction: protectedProcedure
+    .input(z.object({ registrationId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      try {
+        return await engine.advanceFromRequiresAction({ registrationId: input.registrationId, actorId: currentUser.id });
+      } catch (error) {
+        throw toTRPCError(error);
+      }
+    }),
+
   waitlist: protectedProcedure
     .input(z.object({ registrationId: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -1276,7 +1293,7 @@ export const registrationRouter = createTRPCRouter({
       status: z.string().optional(),
       // TWO_STEP-only queue filter: PENDING registrations split into "not yet
       // endorsed by a rep" vs "endorsed, waiting on an admin's final approve".
-      reviewState: z.enum(["AWAITING_VETTING", "AWAITING_FINAL"]).optional(),
+      reviewState: z.enum(["AWAITING_VETTING", "AWAITING_FINAL", "AWAITING_DOCUMENT_REPLACEMENT"]).optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
       limit: z.number().min(1).max(100).default(25),
@@ -1308,6 +1325,10 @@ export const registrationRouter = createTRPCRouter({
         ...(input.status && { status: input.status }),
         ...(input.reviewState === "AWAITING_VETTING" && { status: "PENDING", ...notEndorsedFilter }),
         ...(input.reviewState === "AWAITING_FINAL" && { status: "PENDING", ...endorsedFilter }),
+        ...(input.reviewState === "AWAITING_DOCUMENT_REPLACEMENT" && {
+          status: "REQUIRES_ACTION",
+          documents: { some: { deletedAt: null, documentActions: { some: { status: "REQUIRES_ACTION" } } } },
+        }),
         ...(input.q && {
           OR: [
             { registrationNumber: { contains: input.q, mode: "insensitive" } },
