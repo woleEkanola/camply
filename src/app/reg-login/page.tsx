@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { normalizeEmail } from "@/lib/email";
 
 export default function RegLoginPage() {
   const [email, setEmail] = useState("");
@@ -23,7 +24,7 @@ export default function RegLoginPage() {
       const res = await fetch("/api/base-user/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizeEmail(email) }),
       });
       const data = await res.json();
       if (res.ok) {

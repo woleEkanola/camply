@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/trpc";
 import bcrypt from "bcryptjs";
 import { softDeleteUser } from "../../trash/userCascade";
+import { normalizeEmail } from "../../../lib/email";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT";
@@ -57,7 +58,7 @@ export const userRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new Error("User not authenticated");
       const target = await ctx.prisma.user.findUnique({
-        where: { email: input.email },
+        where: { email: normalizeEmail(input.email) },
         omit: { password: true },
       });
       if (!target) return null;
@@ -535,9 +536,11 @@ export const userRouter = createTRPCRouter({
         throw new Error("Not authorized to create this user role");
       }
 
+      const normalizedEmail = normalizeEmail(input.email);
+
       // Check if email is already in use
       const existingUser = await ctx.prisma.user.findUnique({
-        where: { email: input.email },
+        where: { email: normalizedEmail },
       });
 
       if (existingUser) {
@@ -550,7 +553,7 @@ export const userRouter = createTRPCRouter({
       // Create the user
       const user = await ctx.prisma.user.create({
         data: {
-          email: input.email,
+          email: normalizedEmail,
           firstName: input.firstName,
           lastName: input.lastName,
           phone: input.phone,
@@ -664,6 +667,11 @@ export const userRouter = createTRPCRouter({
       // Hash the password if provided
       if (updateData.password) {
         updateData.password = await bcrypt.hash(updateData.password, 10);
+      }
+
+      // Normalize email if provided
+      if (updateData.email) {
+        updateData.email = normalizeEmail(updateData.email);
       }
 
       // Update the user

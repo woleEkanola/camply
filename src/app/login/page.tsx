@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
+import { normalizeEmail } from "@/lib/email";
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [loginType, setLoginType] = useState<"otp" | "password">("password");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [hint, setHint] = useState("");
   const [loading, setLoading] = useState(false);
   
   // States for verification code (OTP) and password
@@ -42,7 +44,7 @@ export default function LoginPage() {
       const res = await fetch("/api/base-user/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizeEmail(email) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -58,6 +60,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setInfo("");
+    setHint("");
     setLoading(true);
     const result = await sendCode();
     setLoading(false);
@@ -90,6 +93,7 @@ export default function LoginPage() {
     setPasswordValue("");
     setError("");
     setInfo("");
+    setHint("");
   }
 
   async function handleRedirectAfterLogin() {
@@ -121,9 +125,10 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const authRes = await signIn("credentials", { redirect: false, email, password: passwordValue });
+      const authRes = await signIn("credentials", { redirect: false, email: normalizeEmail(email), password: passwordValue });
       if (authRes?.error) {
         setError("Incorrect email or password.");
+        setHint("If you registered with a verification code, use Email OTP or reset your password.");
       } else {
         await handleRedirectAfterLogin();
       }
@@ -137,9 +142,10 @@ export default function LoginPage() {
   async function handleOtpSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setHint("");
     setLoading(true);
     try {
-      const authRes = await signIn("credentials", { redirect: false, email, otp: authValue });
+      const authRes = await signIn("credentials", { redirect: false, email: normalizeEmail(email), otp: authValue });
       if (authRes?.error) {
         setError("Incorrect verification code.");
       } else {
@@ -159,12 +165,13 @@ export default function LoginPage() {
     }
     setError("");
     setInfo("");
+    setHint("");
     setForgotLoading(true);
     try {
       const res = await fetch("/api/base-user/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizeEmail(email) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -188,6 +195,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setInfo("");
+    setHint("");
     if (newPassword !== confirmPassword) {
       setError("Passwords don't match.");
       return;
@@ -197,7 +205,7 @@ export default function LoginPage() {
       const res = await fetch("/api/base-user/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp: resetOtp, newPassword }),
+        body: JSON.stringify({ email: normalizeEmail(email), otp: resetOtp, newPassword }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -375,7 +383,7 @@ export default function LoginPage() {
       <div className="mt-4 flex items-center justify-between text-sm">
         <button
           type="button"
-          onClick={() => { setStep(1); setLoginType("password"); setError(""); setInfo(""); }}
+          onClick={() => { setStep(1); setLoginType("password"); setError(""); setInfo(""); setHint(""); }}
           className="text-gray-500 hover:text-gray-700 hover:underline cursor-pointer"
         >
           &larr; Back
@@ -409,6 +417,7 @@ export default function LoginPage() {
           setLoginType("password");
           setError("");
           setInfo("");
+          setHint("");
         }}
         className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
           loginType === "password"
@@ -424,6 +433,7 @@ export default function LoginPage() {
           setLoginType("otp");
           setError("");
           setInfo("");
+          setHint("");
         }}
         className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
           loginType === "otp"
@@ -446,6 +456,11 @@ export default function LoginPage() {
       {!error && info && (
         <div className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-700">
           {info}
+        </div>
+      )}
+      {hint && (
+        <div className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-700">
+          {hint}
         </div>
       )}
     </>

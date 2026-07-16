@@ -2,6 +2,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "../db";
 import { verifyPassword } from "../../lib/auth";
+import { normalizeEmail } from "../../lib/email";
 import { rateLimit, clearRateLimit } from "../rateLimit";
 import { MAX_OTP_ATTEMPTS, otpEqual } from "../otp";
 import { type NextAuthOptions } from "next-auth";
@@ -24,19 +25,22 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Normalize email for case-insensitive / whitespace-tolerant lookup.
+        const normalizedEmail = normalizeEmail(credentials.email);
+
         // Throttle login attempts per email (in-memory, per instance). The
         // counter is cleared on every SUCCESSFUL auth below, so this bounds
         // *consecutive failed* attempts (brute force) rather than total logins
         // — a legitimate user (or the E2E suite) signing in repeatedly never
         // trips it, which previously caused late-in-run login timeouts once a
         // full Playwright run logged in as owner@camply.com more than 30 times.
-        const loginKey = `login:${credentials.email}`;
+        const loginKey = `login:${normalizedEmail}`;
         if (!rateLimit(loginKey, 30, 15 * 60 * 1000)) {
           return null;
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: normalizedEmail },
         });
 
         // Reject soft-deleted AND deactivated accounts. The admin Users page
@@ -50,7 +54,7 @@ export const authOptions: NextAuthOptions = {
         // OTP-based login (for parents, no password supplied)
         if (credentials.otp) {
           // Check OTP in the OTP table
-          const otpRecord = await prisma.oTP.findUnique({ where: { email: credentials.email } });
+          const otpRecord = await prisma.oTP.findUnique({ where: { email: normalizedEmail } });
           if (!otpRecord) return null;
           if (otpRecord.expiresAt.getTime() < Date.now() || otpRecord.attempts >= MAX_OTP_ATTEMPTS) {
             return null;
@@ -58,13 +62,13 @@ export const authOptions: NextAuthOptions = {
           if (!otpEqual(otpRecord.code, credentials.otp)) {
             // Count the failed attempt so the code can't be brute-forced
             await prisma.oTP.update({
-              where: { email: credentials.email },
+              where: { email: normalizedEmail },
               data: { attempts: { increment: 1 } },
             });
             return null;
           }
           // OTP is valid, delete it (one-time use)
-          await prisma.oTP.delete({ where: { email: credentials.email } });
+          await prisma.oTP.delete({ where: { email: normalizedEmail } });
           // Successful auth — reset the failed-attempt counter for this email.
           clearRateLimit(loginKey);
           // Only allow login for valid roles (including PARENT, TEACHER, VOLUNTEER)

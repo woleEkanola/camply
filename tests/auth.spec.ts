@@ -36,7 +36,7 @@ test.describe("Authentication", () => {
   test("admin can log in with seeded credentials and reach /admin", async ({ page }) => {
     await page.goto("/login");
     await page.locator('button:visible', { hasText: "Password" }).first().click();
-    await emailInput(page).fill("admin@camply.com");
+    await emailInput(page).fill("owner@camply.com");
     await passwordInput(page).fill("password123");
     await loginButton(page).click();
 
@@ -46,7 +46,7 @@ test.describe("Authentication", () => {
   test("wrong password is rejected with an error message", async ({ page }) => {
     await page.goto("/login");
     await page.locator('button:visible', { hasText: "Password" }).first().click();
-    await emailInput(page).fill("admin@camply.com");
+    await emailInput(page).fill("owner@camply.com");
     await passwordInput(page).fill("wrong-password");
     await loginButton(page).click();
 
@@ -54,5 +54,40 @@ test.describe("Authentication", () => {
       page.locator("div.bg-red-100:visible", { hasText: /invalid|incorrect|failed/i })
     ).toBeVisible({ timeout: 10000 });
     await expect(page).not.toHaveURL(/\/admin/);
+  });
+
+  test("password login succeeds with uppercase and spaced email", async ({ page }) => {
+    await page.goto("/login");
+    await page.locator('button:visible', { hasText: "Password" }).first().click();
+    await emailInput(page).fill("  OWNER@CAMPly.com  ");
+    await passwordInput(page).fill("password123");
+    await loginButton(page).click();
+
+    await expect(page).toHaveURL(/\/admin/, { timeout: 15000 });
+  });
+
+  test("wrong password fails even with normalized (spaced) email", async ({ page }) => {
+    await page.goto("/login");
+    await page.locator('button:visible', { hasText: "Password" }).first().click();
+    await emailInput(page).fill("  owner@camply.com  ");
+    await passwordInput(page).fill("wrong-password!!");
+    await loginButton(page).click();
+
+    await expect(
+      page.locator("div.bg-red-100:visible", { hasText: /invalid|incorrect|failed/i })
+    ).toBeVisible({ timeout: 10000 });
+    await expect(page).not.toHaveURL(/\/admin/);
+  });
+
+  test("password failure shows OTP hint message", async ({ page }) => {
+    await page.goto("/login");
+    await page.locator('button:visible', { hasText: "Password" }).first().click();
+    await emailInput(page).fill("owner@camply.com");
+    await passwordInput(page).fill("wrong-password");
+    await loginButton(page).click();
+
+    await expect(
+      page.locator("div.bg-blue-50:visible", { hasText: /verification code|Email OTP|reset your password/i })
+    ).toBeVisible({ timeout: 10000 });
   });
 });

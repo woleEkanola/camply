@@ -5,6 +5,7 @@ import { authOptions } from "@/server/auth/authOptions";
 import { prisma } from "@/server/db";
 import { validateFormFields } from "@/server/registration/validateFormFields";
 import { assertDepartmentHasCapacity, DepartmentCapacityError } from "@/server/staff/departmentCapacity";
+import { normalizeEmail } from "@/lib/email";
 
 const bodySchema = z.object({
   token: z.string().min(1),
@@ -49,7 +50,8 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ message: "Invalid input data", errors: parsed.error.errors }, { status: 400 });
     }
-    const { token, email, fieldValues, dateOfBirth, ...rest } = parsed.data;
+    const { token, email: rawEmail, fieldValues, dateOfBirth, ...rest } = parsed.data;
+    const email = normalizeEmail(rawEmail);
 
     // The caller must be signed in as the account this staff profile is being
     // created for. The wizard completes OTP verification + signIn before

@@ -5,6 +5,7 @@ import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
 import { sendStaffApprovedEmail, sendStaffRejectedEmail } from "../../email/sendStaffEmails";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { normalizeEmail } from "../../../lib/email";
 
 
 async function requireStaffProfile(ctx: { prisma: any; userId: string }) {
@@ -604,7 +605,8 @@ export const staffRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
-      const existing = await ctx.prisma.user.findUnique({ where: { email: input.email } });
+      const normalizedEmail = normalizeEmail(input.email);
+      const existing = await ctx.prisma.user.findUnique({ where: { email: normalizedEmail } });
       if (existing) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "A user with this email already exists" });
       }
@@ -640,7 +642,7 @@ export const staffRouter = createTRPCRouter({
       return ctx.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
-            email: input.email,
+            email: normalizedEmail,
             password: placeholderPassword,
             role: input.type,
             firstName,
@@ -662,7 +664,7 @@ export const staffRouter = createTRPCRouter({
             lastName,
             gender,
             phone,
-            email: input.email,
+            email: normalizedEmail,
             preferredCampusId: systemValues.preferredCampusId || null,
             // Admin manual-add deliberately does NOT enforce the department
             // capacity cap (unlike /api/staff/register) — an admin picking a

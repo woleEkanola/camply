@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/server/db";
 import { hashPassword } from "@/lib/auth";
+import { normalizeEmail } from "@/lib/email";
 import { MAX_OTP_ATTEMPTS, otpEqual } from "@/server/otp";
 
 const bodySchema = z.object({
@@ -16,7 +17,8 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ message: parsed.error.errors[0]?.message || "Invalid input" }, { status: 400 });
     }
-    const { email, otp, newPassword } = parsed.data;
+    const { email: rawEmail, otp, newPassword } = parsed.data;
+    const email = normalizeEmail(rawEmail);
 
     const otpRecord = await prisma.oTP.findUnique({ where: { email } });
     if (!otpRecord) {

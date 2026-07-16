@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
+import { normalizeEmail } from '@/lib/email';
 
 interface AuthFormProps {
   mode: 'signin' | 'signup';
@@ -57,7 +58,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           const res = await fetch('/api/base-user/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email }),
+            body: JSON.stringify({ email: normalizeEmail(email) }),
           });
           const data = await res.json();
           if (!res.ok) {
@@ -72,7 +73,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           const res = await fetch('/api/base-user/verify-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, otp }),
+            body: JSON.stringify({ email: normalizeEmail(email), otp }),
           });
           const data = await res.json();
           if (!res.ok) {
@@ -92,7 +93,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
             },
             body: JSON.stringify({
               name,
-              email,
+              email: normalizeEmail(email),
               password,
             }),
           });
@@ -138,7 +139,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           const res = await fetch('/api/base-user/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email }),
+            body: JSON.stringify({ email: normalizeEmail(email) }),
           });
           const data = await res.json();
           if (!res.ok) {
@@ -192,7 +193,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           const res = await fetch('/api/base-user/verify-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, otp }),
+            body: JSON.stringify({ email: normalizeEmail(email), otp }),
           });
           const data = await res.json();
           if (!res.ok) {
@@ -246,7 +247,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
             },
             body: JSON.stringify({
               name,
-              email,
+              email: normalizeEmail(email),
               password,
             }),
           });

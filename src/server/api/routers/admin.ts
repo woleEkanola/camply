@@ -4,6 +4,7 @@ import { prisma } from "../../db";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { softDeleteUser } from "../../trash/userCascade";
+import { normalizeEmail } from "../../../lib/email";
 
 // PermissionType is not exported from @prisma/client after downgrade. Define as local enum to match schema.
 export enum PermissionType {
@@ -67,7 +68,7 @@ export const adminRouter = createTRPCRouter({
         // Create the admin user
         const adminUser = await tx.user.create({
           data: {
-            email: input.email,
+            email: normalizeEmail(input.email),
             password: hashedPassword,
             role: "ADMIN",
             organizationId: input.organizationId,

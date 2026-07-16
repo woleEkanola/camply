@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import bcrypt from "bcryptjs";
+import { normalizeEmail } from "../../../lib/email";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -39,25 +40,27 @@ export const authRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN", message: "Not allowed to create users in another organization" });
       }
       try {
+        const normalizedEmail = normalizeEmail(input.email);
+
         // Check if user already exists
         const existingUser = await prisma.user.findUnique({
-          where: { email: input.email }
+          where: { email: normalizedEmail }
         });
-        
+
         if (existingUser) {
           return {
             success: false,
             message: "User with this email already exists"
           };
         }
-        
+
         // Hash the password
         const hashedPassword = await bcrypt.hash(input.password, 10);
-        
+
         // Create the user
         const user = await prisma.user.create({
           data: {
-            email: input.email,
+            email: normalizedEmail,
             password: hashedPassword,
             firstName: input.firstName,
             lastName: input.lastName,
@@ -91,9 +94,11 @@ export const authRouter = createTRPCRouter({
       lastName: z.string().min(1, "Last name is required"),
     }))
     .mutation(async ({ input }) => {
+      const normalizedEmail = normalizeEmail(input.email);
+
       // 1. Check if user already exists
       const existingUser = await prisma.user.findUnique({
-        where: { email: input.email }
+        where: { email: normalizedEmail }
       });
       if (existingUser) {
         throw new TRPCError({
@@ -125,7 +130,7 @@ export const authRouter = createTRPCRouter({
         // Create the user with role OWNER
         const user = await tx.user.create({
           data: {
-            email: input.email,
+            email: normalizedEmail,
             password: hashedPassword,
             firstName: input.firstName,
             lastName: input.lastName,

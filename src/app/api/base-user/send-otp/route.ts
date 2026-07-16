@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { prisma } from "@/server/db";
 import { sendOtpEmail } from "@/server/email/sendOtpEmail";
 import { rateLimit } from "@/server/rateLimit";
+import { normalizeEmail } from "@/lib/email";
 
 // Generic response used regardless of whether the email exists, so this
 // endpoint can't be used to enumerate registered accounts.
@@ -21,6 +22,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Email is required" }, { status: 400 });
     }
 
+    const normalizedEmail = normalizeEmail(email);
+
     // Check if user exists with this email — respond identically either way
     // so the endpoint can't be used to probe for registered emails. Deliberately
     // checked BEFORE the rate limit below: password-login accounts (admin/
@@ -31,13 +34,13 @@ export async function POST(req: NextRequest) {
     // OTP in the first place — this happened in practice across the Playwright
     // suite's dozens of loginWithPassword() calls against the same seeded
     // admin/owner accounts. Only real OTP-eligible sends below are throttled.
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user || !["PARENT", "TEACHER", "VOLUNTEER"].includes(user.role)) {
       return NextResponse.json(GENERIC_OK, { status: 200 });
     }
 
     // Throttle OTP sends per email
-    if (!rateLimit(`send-otp:${email}`, 3, 15 * 60 * 1000)) {
+    if (!rateLimit(`send-otp:${normalizedEmail}`, 3, 15 * 60 * 1000)) {
       return NextResponse.json({ message: "Too many requests. Try again later." }, { status: 429 });
     }
 
@@ -46,11 +49,11 @@ export async function POST(req: NextRequest) {
     // Store OTP in DB (create a table for OTPs if not exists, or use a cache)
     try {
       await prisma.oTP.upsert({
-        where: { email },
+        where: { email: normalizedEmail },
         update: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), attempts: 0 }, // 10 min expiry
-        create: { email, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+        create: { email: normalizedEmail, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
       });
-      console.log("[SEND-OTP] OTP stored in DB", { email });
+      console.log("[SEND-OTP] OTP stored in DB", { email: normalizedEmail });
     } catch (err) {
       console.error("[SEND-OTP] Error storing OTP in DB", err);
       throw err;
@@ -65,8 +68,8 @@ export async function POST(req: NextRequest) {
 
     // Send OTP email
     try {
-      await sendOtpEmail(email, otp, orgSlug);
-      console.log("[SEND-OTP] OTP email sent", { email });
+      await sendOtpEmail(normalizedEmail, otp, orgSlug);
+      console.log("[SEND-OTP] OTP email sent", { email: normalizedEmail });
     } catch (err) {
       console.error("[SEND-OTP] Error sending OTP email", err);
       throw err;
