@@ -15,6 +15,7 @@ export function ReturningUserForm({ email, onBack, onSuccess }: ReturningUserFor
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
 
   async function handlePasswordSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -37,7 +38,24 @@ export function ReturningUserForm({ email, onBack, onSuccess }: ReturningUserFor
 
   async function handleSendOtp() {
     setError("");
-    setMode("otp");
+    setSendingOtp(true);
+    try {
+      const res = await fetch("/api/base-user/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      if (res.ok) {
+        setMode("otp");
+      } else {
+        const data = await res.json();
+        setError(data.message ?? "Could not send verification code.");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSendingOtp(false);
+    }
   }
 
   async function handleOtpComplete(code: string) {
@@ -87,7 +105,15 @@ export function ReturningUserForm({ email, onBack, onSuccess }: ReturningUserFor
           )}
           <OtpInput disabled={loading} onComplete={handleOtpComplete} />
           <p className="mt-4 text-center text-sm text-neutral-500">
-            Didn&apos;t receive it? <button type="button" onClick={handleSendOtp} className="font-medium text-accent-600 hover:text-accent-700">Resend</button>
+            Didn&apos;t receive it?{" "}
+            <button
+              type="button"
+              onClick={handleSendOtp}
+              disabled={sendingOtp}
+              className="font-medium text-accent-600 hover:text-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {sendingOtp ? "Sending…" : "Resend"}
+            </button>
           </p>
         </div>
       </div>
@@ -151,9 +177,10 @@ export function ReturningUserForm({ email, onBack, onSuccess }: ReturningUserFor
         <button
           type="button"
           onClick={handleSendOtp}
-          className="flex h-12 w-full items-center justify-center rounded-xl border border-neutral-300 bg-white text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          disabled={sendingOtp}
+          className="flex h-12 w-full items-center justify-center rounded-xl border border-neutral-300 bg-white text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Send me a verification code
+          {sendingOtp ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600" /> : "Send me a verification code"}
         </button>
       </div>
     </div>

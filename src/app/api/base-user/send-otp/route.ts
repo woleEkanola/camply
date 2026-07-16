@@ -66,13 +66,14 @@ export async function POST(req: NextRequest) {
       orgSlug = org?.slug ?? undefined;
     }
 
-    // Send OTP email
+    // Best-effort delivery — the OTP is already persisted above, so a
+    // transient email failure (e.g. no RESEND_API_KEY configured locally)
+    // shouldn't block the flow, matching create-and-send-otp/route.ts.
     try {
       await sendOtpEmail(normalizedEmail, otp, orgSlug);
       console.log("[SEND-OTP] OTP email sent", { email: normalizedEmail });
     } catch (err) {
       console.error("[SEND-OTP] Error sending OTP email", err);
-      throw err;
     }
 
     return NextResponse.json(GENERIC_OK, { status: 200 });
