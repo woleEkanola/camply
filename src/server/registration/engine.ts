@@ -121,6 +121,18 @@ export async function createDraft(params: {
 /** Validates and submits a draft registration; moves to PENDING or APPROVED depending on camp config. */
 export async function submitRegistration(params: { registrationId: string; actorId: string; submittedAt?: Date }) {
   const actualSubmittedAt = params.submittedAt ?? new Date();
+
+  // Idempotent no-op: a retried submit (e.g. the parent wizard re-submitting
+  // every teen after one teen in a multi-teen batch failed validation) must
+  // not error or re-trigger side effects/emails for a teen that already
+  // advanced past DRAFT on the earlier attempt. Only SUBMITTED/PENDING
+  // short-circuit here — a genuinely illegal transition (e.g. re-submitting
+  // an already-APPROVED registration) still hits assertTransition below.
+  const existing = await prisma.registration.findUniqueOrThrow({ where: { id: params.registrationId } });
+  if (existing.status === "SUBMITTED" || existing.status === "PENDING") {
+    return existing;
+  }
+
   const result = await prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },

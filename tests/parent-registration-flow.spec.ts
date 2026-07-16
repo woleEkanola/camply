@@ -1,5 +1,4 @@
 import { test, expect, type Page } from "@playwright/test";
-import path from "path";
 import { randomBytes } from "crypto";
 import {
   prisma,
@@ -9,8 +8,6 @@ import {
   relaxRequiredCustomFields,
   restoreRequiredCustomFields,
 } from "./helpers";
-
-const DUMMY_FILE = path.join(__dirname, "fixtures", "dummy-image.png");
 
 function byLabel(page: Page, labelText: string) {
   return page.locator("label", { hasText: labelText }).locator(
@@ -120,61 +117,62 @@ test.describe("Parent Teen Registration", () => {
     // ── Documents ──
     await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible({ timeout: 5000 });
 
-    const fileInputs = page.locator('input[type="file"]');
-    const inputCount = await fileInputs.count();
-
-    if (inputCount > 0) {
-      // Trigger the upload code path by setting files on all inputs.
-      for (let i = 0; i < inputCount; i++) {
-        await fileInputs.nth(i).setInputFiles(DUMMY_FILE);
-      }
-
-      // UploadThing can take 10-15s per file on cold start — the debug
-      // test (now removed) verified the upload path works end-to-end with
-      // a real UPLOADTHING_TOKEN (green checkmark + document.upload tRPC
-      // mutation succeeded). For this flow test, we immediately fill
-      // documents via Prisma to keep the test fast and deterministic.
-      const wizardData = await page.evaluate(() =>
-        sessionStorage.getItem("camply-registration-wizard")
-      );
-      const parsed = wizardData ? JSON.parse(wizardData) : null;
-      const teen = parsed?.teens?.[0];
-      if (teen && teen.registrationId) {
-        const reqs = await prisma.documentRequirement.findMany({
-          where: { campId: parsed.campData?.campId, required: true, deletedAt: null },
+    // Deliberately not driving the real hidden file inputs here: doing so
+    // fires a real UploadThing call, which has no token configured locally
+    // and never settles — since Next is now correctly gated on uploads
+    // actually completing (src/app/register/[token]/steps/Documents.tsx),
+    // that would leave Next permanently disabled. Instead seed the Document
+    // rows directly via Prisma (bypassing the upload transport, not the
+    // gating logic) and force StepDocuments to remount so its existingDocs
+    // query refetches and picks them up.
+    const wizardData = await page.evaluate(() =>
+      sessionStorage.getItem("camply-registration-wizard")
+    );
+    const parsed = wizardData ? JSON.parse(wizardData) : null;
+    const teen = parsed?.teens?.[0];
+    if (teen && teen.registrationId) {
+      const reqs = await prisma.documentRequirement.findMany({
+        where: { campId: parsed.campData?.campId, required: true, deletedAt: null },
+      });
+      const parentUser = await prisma.user.findUniqueOrThrow({ where: { email: parentEmail } });
+      for (const req of reqs) {
+        const existing = await prisma.document.findFirst({
+          where: {
+            requirementId: req.id,
+            ...(req.scope === "CAMPER"
+              ? { camperId: teen.camperId }
+              : { registrationId: teen.registrationId }),
+            deletedAt: null,
+          },
         });
-        const parentUser = await prisma.user.findUniqueOrThrow({ where: { email: parentEmail } });
-        for (const req of reqs) {
-          const existing = await prisma.document.findFirst({
-            where: {
+        if (!existing) {
+          await prisma.document.create({
+            data: {
               requirementId: req.id,
               ...(req.scope === "CAMPER"
                 ? { camperId: teen.camperId }
                 : { registrationId: teen.registrationId }),
-              deletedAt: null,
+              url: `https://utfs.io/f/e2e-doc-${Date.now()}.pdf`,
+              fileName: "dummy-document.pdf",
+              fileType: "application/pdf",
+              fileSize: 1024,
+              uploadedById: parentUser.id,
             },
           });
-          if (!existing) {
-            await prisma.document.create({
-              data: {
-                requirementId: req.id,
-                ...(req.scope === "CAMPER"
-                  ? { camperId: teen.camperId }
-                  : { registrationId: teen.registrationId }),
-                url: `https://utfs.io/f/e2e-doc-${Date.now()}.pdf`,
-                fileName: "dummy-document.pdf",
-                fileType: "application/pdf",
-                fileSize: 1024,
-                uploadedById: parentUser.id,
-              },
-            });
-          }
         }
       }
+
+      // Remount StepDocuments (Back to Details, Next back to Documents) so
+      // the existingDocs query refetches and Next becomes enabled.
+      await page.getByRole("button", { name: "← Back" }).click();
+      await expect(page.getByRole("heading", { name: "Test Camper" })).toBeVisible({ timeout: 5000 });
+      await page.getByRole("button", { name: "Next", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible({ timeout: 5000 });
     }
 
     const reviewBtn = page.getByRole("button", { name: "Next", exact: true });
     await expect(reviewBtn).toBeVisible({ timeout: 5000 });
+    await expect(reviewBtn).toBeEnabled({ timeout: 10000 });
     await reviewBtn.click();
 
     // ── Review ──

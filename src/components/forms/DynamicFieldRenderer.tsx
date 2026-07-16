@@ -13,9 +13,11 @@ interface DynamicFieldRendererProps {
   /** Overrides field.options with dynamically-fetched choices (e.g. Location list for a "Centre" field). */
   dynamicOptions?: (string | { value: string; label: string })[];
   error?: string;
+  /** FILE fields only: fired when the upload-in-flight state changes. */
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
-export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamicOptions, error }: DynamicFieldRendererProps) {
+export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamicOptions, error, onUploadingChange }: DynamicFieldRendererProps) {
   const rawOptions = dynamicOptions ?? parseFieldOptions(field.options);
   const options = rawOptions.map((opt) =>
     typeof opt === "object" && opt !== null && "value" in opt
@@ -225,6 +227,8 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
             value={(value as string) ?? ""}
             onChange={(url) => onChange(url)}
             disabled={disabled}
+            onUploadingChange={onUploadingChange}
+            variant={field.systemKey === "photoUrl" ? "avatar" : "default"}
           />
           {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
         </div>
