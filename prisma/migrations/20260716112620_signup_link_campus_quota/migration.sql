@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "SignupLink" ADD COLUMN     "quota" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "quotaFullBehavior" TEXT NOT NULL DEFAULT 'CLOSE';

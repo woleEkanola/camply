@@ -251,6 +251,122 @@ describe("approval workflow", () => {
   });
 });
 
+describe("campus registration quota (SignupLink-scoped)", () => {
+  async function makeSignupLink(overrides: Partial<{ quota: number; quotaFullBehavior: string }> = {}) {
+    // Campus quota tests need the Venue's own quota out of the way so the
+    // Venue capacity check (quota=1 by default in beforeEach) never
+    // interferes with these campus-scoped assertions.
+    await prisma.venue.update({ where: { id: venueId }, data: { quota: 100 } });
+    return prisma.signupLink.create({
+      data: {
+        token: `tok-${Date.now()}-${Math.random()}`,
+        campusId,
+        campId,
+        quota: overrides.quota ?? 1,
+        quotaFullBehavior: overrides.quotaFullBehavior ?? "CLOSE",
+      },
+    });
+  }
+
+  it("blocks submission with CAMPUS_QUOTA_REACHED once quota is hit (CLOSE behavior)", async () => {
+    await makeSignupLink({ quota: 1, quotaFullBehavior: "CLOSE" });
+
+    const camperA = await makeCamper();
+    const draftA = await engine.createDraft({ camperId: camperA.id, campId, campusId, actorId: parentId });
+    await engine.submitRegistration({ registrationId: draftA.id, actorId: parentId });
+
+    const camperB = await makeCamper();
+    const draftB = await engine.createDraft({ camperId: camperB.id, campId, campusId, actorId: parentId });
+
+    await expect(engine.submitRegistration({ registrationId: draftB.id, actorId: parentId })).rejects.toMatchObject({
+      name: "RegistrationValidationError",
+      failures: expect.arrayContaining([expect.objectContaining({ code: "CAMPUS_QUOTA_REACHED" })]),
+    });
+
+    const reloadedB = await prisma.registration.findUniqueOrThrow({ where: { id: draftB.id } });
+    expect(reloadedB.status).toBe("DRAFT");
+  });
+
+  it("WAITLIST behavior allows submission past quota, then waitlists the excess at approval", async () => {
+    await makeSignupLink({ quota: 1, quotaFullBehavior: "WAITLIST" });
+
+    const camperA = await makeCamper();
+    const draftA = await engine.createDraft({ camperId: camperA.id, campId, campusId, actorId: parentId });
+    const pendingA = await engine.submitRegistration({ registrationId: draftA.id, actorId: parentId });
+
+    const camperB = await makeCamper();
+    const draftB = await engine.createDraft({ camperId: camperB.id, campId, campusId, actorId: parentId });
+    const pendingB = await engine.submitRegistration({ registrationId: draftB.id, actorId: parentId });
+    expect(pendingB.status).toBe("PENDING"); // submission itself is not gated for WAITLIST behavior
+
+    const approvedA = await engine.approveRegistration({ registrationId: pendingA.id, actorId: parentId });
+    expect(approvedA.status).toBe("APPROVED");
+
+    const approvedB = await engine.approveRegistration({ registrationId: pendingB.id, actorId: parentId });
+    expect(approvedB.status).toBe("WAITLISTED");
+
+    const auditRow = await prisma.auditLog.findFirst({
+      where: { registrationId: approvedB.id, action: "REGISTRATION_WAITLISTED" },
+    });
+    expect((auditRow?.newValue as any)?.reason).toBe("CAMPUS_QUOTA_REACHED");
+  });
+
+  it("quota=0 means unlimited — no gate at submission or approval", async () => {
+    await makeSignupLink({ quota: 0, quotaFullBehavior: "CLOSE" });
+
+    const camperA = await makeCamper();
+    const draftA = await engine.createDraft({ camperId: camperA.id, campId, campusId, actorId: parentId });
+    const pendingA = await engine.submitRegistration({ registrationId: draftA.id, actorId: parentId });
+
+    const camperB = await makeCamper();
+    const draftB = await engine.createDraft({ camperId: camperB.id, campId, campusId, actorId: parentId });
+    const pendingB = await engine.submitRegistration({ registrationId: draftB.id, actorId: parentId });
+
+    const approvedA = await engine.approveRegistration({ registrationId: pendingA.id, actorId: parentId });
+    const approvedB = await engine.approveRegistration({ registrationId: pendingB.id, actorId: parentId });
+    expect(approvedA.status).toBe("APPROVED");
+    expect(approvedB.status).toBe("APPROVED");
+  });
+
+  it("a rejected registration frees its slot for the next submission (CLOSE behavior)", async () => {
+    await makeSignupLink({ quota: 1, quotaFullBehavior: "CLOSE" });
+
+    const camperA = await makeCamper();
+    const draftA = await engine.createDraft({ camperId: camperA.id, campId, campusId, actorId: parentId });
+    const pendingA = await engine.submitRegistration({ registrationId: draftA.id, actorId: parentId });
+    await engine.rejectRegistration({ registrationId: pendingA.id, actorId: parentId, reason: "Ineligible" });
+
+    const camperB = await makeCamper();
+    const draftB = await engine.createDraft({ camperId: camperB.id, campId, campusId, actorId: parentId });
+    const pendingB = await engine.submitRegistration({ registrationId: draftB.id, actorId: parentId });
+    expect(pendingB.status).toBe("PENDING");
+  });
+
+  it("does not exceed campus quota when submitting concurrently (CLOSE, quota=1)", async () => {
+    await makeSignupLink({ quota: 1, quotaFullBehavior: "CLOSE" });
+
+    const camperA = await makeCamper();
+    const camperB = await makeCamper();
+    const draftA = await engine.createDraft({ camperId: camperA.id, campId, campusId, actorId: parentId });
+    const draftB = await engine.createDraft({ camperId: camperB.id, campId, campusId, actorId: parentId });
+
+    const results = await Promise.allSettled([
+      engine.submitRegistration({ registrationId: draftA.id, actorId: parentId }),
+      engine.submitRegistration({ registrationId: draftB.id, actorId: parentId }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    const pipelineCount = await prisma.registration.count({
+      where: { campusId, campId, status: { in: ["SUBMITTED", "PENDING", "APPROVED"] } },
+    });
+    expect(pipelineCount).toBe(1);
+  });
+});
+
 describe("rejection and correction workflow", () => {
   it("rejects a pending registration with a reason", async () => {
     const camper = await makeCamper();

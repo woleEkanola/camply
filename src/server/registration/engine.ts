@@ -272,6 +272,35 @@ async function approveRegistrationInTx(
     }
   }
 
+  // Re-check campus quota under lock (SignupLink-scoped) to prevent
+  // overbooking on concurrent approvals - the authoritative backstop for
+  // both CLOSE (already gated at submission) and WAITLIST (not gated at
+  // submission) quotaFullBehavior, mirroring the Venue quota check above.
+  const signupLink = await tx.signupLink.findUnique({
+    where: { campusId_campId: { campusId: registration.campusId, campId: registration.campId } },
+  });
+  if (signupLink && signupLink.quota > 0) {
+    await tx.$queryRaw`SELECT id FROM "SignupLink" WHERE id = ${signupLink.id} FOR UPDATE`;
+    const approvedCampusCount = await tx.registration.count({
+      where: { campusId: registration.campusId, campId: registration.campId, status: "APPROVED" },
+    });
+    if (approvedCampusCount >= signupLink.quota) {
+      const waitlisted = await tx.registration.update({
+        where: { id: registration.id },
+        data: { status: "WAITLISTED" },
+      });
+      await logEvent(tx, {
+        organizationId: registration.camper.organizationId,
+        registrationId: registration.id,
+        actorId: params.actorId,
+        action: "REGISTRATION_WAITLISTED",
+        previousValue: { status: registration.status },
+        newValue: { status: "WAITLISTED", reason: "CAMPUS_QUOTA_REACHED" },
+      });
+      return waitlisted;
+    }
+  }
+
   const registrationNumber = await nextRegistrationNumber(tx, {
     orgCode: registration.camp.orgCode,
     campName: registration.camp.name,

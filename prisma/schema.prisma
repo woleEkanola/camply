@@ -392,6 +392,8 @@ model SignupLink {
   camp      Camp     @relation(fields: [campId], references: [id], onDelete: Cascade)
   campId    String
   active    Boolean  @default(true)
+  quota     Int      @default(0) // 0 = unlimited
+  quotaFullBehavior String @default("CLOSE") // CLOSE | WAITLIST
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

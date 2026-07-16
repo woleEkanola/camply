@@ -6,6 +6,10 @@ export interface SignupLink {
   campusId: string;
   campId: string;
   active: boolean;
+  quota: number;
+  quotaFullBehavior: string;
+  usedCount: number;
+  approvedCount: number;
   campus: {
     id: string;
     name: string;
