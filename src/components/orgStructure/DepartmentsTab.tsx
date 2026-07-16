@@ -24,6 +24,7 @@ export function DepartmentsTab({ organizationId, campId }: { organizationId: str
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
   // Create form state
   const [name, setName] = useState("");
@@ -67,6 +68,13 @@ export function DepartmentsTab({ organizationId, campId }: { organizationId: str
 
   const archiveDept = api.department.archive.useMutation({
     onSuccess: invalidate,
+  });
+
+  const deleteDept = api.department.delete.useMutation({
+    onSuccess: () => {
+      setDeleteTarget(null);
+      invalidate();
+    },
   });
 
   if (isLoading) return <p className="text-sm text-neutral-500">Loading Departments…</p>;
@@ -140,6 +148,14 @@ export function DepartmentsTab({ organizationId, campId }: { organizationId: str
                   >
                     Archive
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-danger-600 hover:bg-danger-50"
+                    onClick={() => setDeleteTarget({ id: d.id, label: d.name })}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </CardBody>
             </Card>
@@ -209,6 +225,23 @@ export function DepartmentsTab({ organizationId, campId }: { organizationId: str
               Merge Departments
             </Button>
           </div>
+        </div>
+      </Dialog>
+
+      {/* ── Confirm Delete Dialog ── */}
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
+        <p className="text-sm text-neutral-500">
+          Are you sure you want to delete &quot;{deleteTarget?.label}&quot;? This can be recovered from Trash.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteDept.isPending}
+            onClick={() => deleteTarget && deleteDept.mutate({ id: deleteTarget.id })}
+          >
+            Delete
+          </Button>
         </div>
       </Dialog>
 

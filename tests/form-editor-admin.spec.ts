@@ -44,7 +44,7 @@ test.describe("Form Editor (admin)", () => {
     }
   });
 
-  test("admin can reorder custom fields with the up/down buttons", async ({ page }) => {
+  test("admin can reorder custom fields via drag-and-drop", async ({ page }) => {
     const { organizationId } = await getFixtureOrgContext();
     await ensureFormFields("VOLUNTEER");
     const nameA = `e2e_order_a_${Date.now()}`;
@@ -71,8 +71,17 @@ test.describe("Form Editor (admin)", () => {
       const b = before.find((f) => f.name === nameB)!;
       expect(a.sortOrder).toBeLessThan(b.sortOrder);
 
-      // Move A down once — should swap past B.
-      await page.getByText("E2E Order A").locator("..").locator("..").locator("..").getByRole("button", { name: "Move down" }).click();
+      // Move A down once — should swap past B. Reordering is drag-and-drop
+      // only (DraggableFieldList.tsx, @hello-pangea/dnd) — its drag handle
+      // ships the library's standard keyboard interaction (Space to lift,
+      // arrow keys to move, Space to drop), which is far more reliable to
+      // drive in Playwright than simulating a mouse drag.
+      const rowA = page.getByText("E2E Order A").locator("..").locator("..").locator("..");
+      const dragHandleA = rowA.locator('[aria-label="Drag to reorder"]');
+      await dragHandleA.focus();
+      await page.keyboard.press("Space");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Space");
 
       await expect
         .poll(async () => {

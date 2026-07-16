@@ -124,8 +124,8 @@ test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", 
     const venue = await prisma.venue.findUniqueOrThrow({ where: { id: venueId! } });
 
     await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/camp-structure");
-    await page.getByRole("tab", { name: "Accommodation" }).click();
+    // Accommodation management is its own page, not a tab under Camp Structure.
+    await page.goto("/admin/accommodation");
     await page.locator("select").first().selectOption({ label: venue.name });
     await expect(page.getByText(hostel.name)).toBeVisible({ timeout: 10000 });
 
@@ -144,7 +144,6 @@ test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", 
     await prisma.bed.update({ where: { id: bedId! }, data: { registrationId: null, status: "AVAILABLE" } });
     await prisma.registration.update({ where: { id: registrationId! }, data: { roomId: null } });
     await page.reload();
-    await page.getByRole("tab", { name: "Accommodation" }).click();
     await page.locator("select").first().selectOption({ label: venue.name });
     await expect(page.getByText(hostel.name)).toBeVisible({ timeout: 10000 });
 
