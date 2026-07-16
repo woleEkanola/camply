@@ -40,6 +40,8 @@ test.describe("Department capacity ('quota') for camp-role signup", () => {
     await page.goto(`/register/volunteers/${token}`);
     await expect(page.getByRole("heading", { name: "Volunteer Registration" })).toBeVisible();
 
+    // The wizard defaults to the Password auth tab — switch to Email OTP first.
+    await page.getByRole("button", { name: "Email OTP" }).click();
     await page.getByLabel("Email Address").fill(emailA);
     await page.getByRole("button", { name: "Send Code" }).click();
     await expect(page.getByLabel("Verification Code")).toBeVisible({ timeout: 10000 });
@@ -56,7 +58,7 @@ test.describe("Department capacity ('quota') for camp-role signup", () => {
     await page.getByLabel("Camp Department").selectOption({ label: departmentName });
     await page.getByRole("button", { name: "Continue" }).click();
 
-    await expect(page.getByText("Review & Submit")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Review Your Details" })).toBeVisible();
     await page.getByRole("button", { name: "Submit Registration" }).click();
     await expect(page.getByText("Registration submitted")).toBeVisible({ timeout: 10000 });
 
@@ -68,6 +70,8 @@ test.describe("Department capacity ('quota') for camp-role signup", () => {
     const token = await ensureStaffSignupLink("VOLUNTEER");
     await page.goto(`/register/volunteers/${token}`);
 
+    // The wizard defaults to the Password auth tab — switch to Email OTP first.
+    await page.getByRole("button", { name: "Email OTP" }).click();
     await page.getByLabel("Email Address").fill(emailB);
     await page.getByRole("button", { name: "Send Code" }).click();
     await expect(page.getByLabel("Verification Code")).toBeVisible({ timeout: 10000 });

@@ -36,8 +36,8 @@ test.describe("Accommodation: bulk-add beds", () => {
     const room = await prisma.room.findUniqueOrThrow({ where: { id: roomId! } });
 
     await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/camp-structure");
-    await page.getByRole("tab", { name: "Accommodation" }).click();
+    // Accommodation management is its own page, not a tab under Camp Structure.
+    await page.goto("/admin/accommodation");
     await page.locator("select").first().selectOption({ label: venue.name });
     await expect(page.getByText(room.name)).toBeVisible({ timeout: 10000 });
 

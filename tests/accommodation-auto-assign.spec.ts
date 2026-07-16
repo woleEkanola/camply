@@ -103,8 +103,8 @@ test.describe("Accommodation: Auto Assign Rooms & Beds", () => {
     const venue = await prisma.venue.findUniqueOrThrow({ where: { id: venueId! } });
 
     await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/camp-structure");
-    await page.getByRole("tab", { name: "Accommodation" }).click();
+    // Accommodation management is its own page, not a tab under Camp Structure.
+    await page.goto("/admin/accommodation");
     await page.locator("select").first().selectOption({ label: venue.name });
 
     page.once("dialog", (dialog) => dialog.accept());

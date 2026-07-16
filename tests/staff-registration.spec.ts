@@ -17,6 +17,8 @@ test.describe("Staff self-registration", () => {
       await page.goto(`/register/teachers/${token}`);
       await expect(page.getByRole("heading", { name: "Teacher Registration" })).toBeVisible();
 
+      // The wizard defaults to the Password auth tab — switch to Email OTP first.
+      await page.getByRole("button", { name: "Email OTP" }).click();
       // Email step — the confirmation email never actually sends locally
       // (no RESEND_API_KEY), so read the code straight from the DB.
       await page.getByLabel("Email Address").fill(email);
@@ -36,7 +38,7 @@ test.describe("Staff self-registration", () => {
       await page.getByRole("button", { name: "Teaching", exact: true }).click();
       await page.getByRole("button", { name: "Continue" }).click();
 
-      await expect(page.getByText("Review & Submit")).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Review Your Details" })).toBeVisible();
       await page.getByRole("button", { name: "Submit Registration" }).click();
 
       await expect(page.getByText("Registration submitted")).toBeVisible({ timeout: 10000 });
@@ -58,6 +60,8 @@ test.describe("Staff self-registration", () => {
       await page.goto(`/register/volunteers/${token}`);
       await expect(page.getByRole("heading", { name: "Volunteer Registration" })).toBeVisible();
 
+      // The wizard defaults to the Password auth tab — switch to Email OTP first.
+      await page.getByRole("button", { name: "Email OTP" }).click();
       await page.getByLabel("Email Address").fill(email);
       await page.getByRole("button", { name: "Send Code" }).click();
 
@@ -73,8 +77,7 @@ test.describe("Staff self-registration", () => {
       await page.getByLabel("Volunteer Category").selectOption("Kitchen");
       await page.getByRole("button", { name: "Continue" }).click();
 
-      await expect(page.getByText("Review & Submit")).toBeVisible();
-      await expect(page.getByText("Department:")).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Review Your Details" })).toBeVisible();
       await expect(page.getByText("Kitchen")).toBeVisible();
       await page.getByRole("button", { name: "Submit Registration" }).click();
 
