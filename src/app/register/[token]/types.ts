@@ -89,7 +89,8 @@ export type WizardAction =
   | { type: "SET_DECLARATION"; id: string; checked: boolean }
   | { type: "SET_DECLARATIONS"; declarations: { id: string; label: string; required: boolean }[] }
   | { type: "SET_ERROR"; title: string; message: string }
-  | { type: "CLEAR_ERROR" };
+  | { type: "CLEAR_ERROR" }
+  | { type: "RESTORE"; state: Partial<WizardState> };
 
 export const STEP_LABELS: Record<WizardStep, string> = {
   LOADING: "",

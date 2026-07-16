@@ -1,11 +1,12 @@
 "use client";
 
-import { useReducer, useEffect, useCallback } from "react";
+import { useReducer, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/utils/trpc";
-import type { WizardState, WizardAction } from "./types";
+import type { WizardState } from "./types";
 import { VISIBLE_STEPS } from "./types";
+import { wizardReducer, createInitialState, RESTORE_KEYS } from "./wizardReducer";
 import { WizardProgress } from "./components/WizardProgress";
 import { StepLanding } from "./steps/Landing";
 import { StepIdentity } from "./steps/Identity";
@@ -18,141 +19,35 @@ import { StepConfirmation } from "./steps/Confirmation";
 
 const STORAGE_KEY = "camply-registration-wizard";
 
-function wizardReducer(state: WizardState, action: WizardAction): WizardState {
-  switch (action.type) {
-    case "SET_CAMP_DATA":
-      return { ...state, campData: action.data, step: "LANDING" };
-    case "SET_EMAIL":
-      return { ...state, email: action.email };
-    case "SET_IS_NEW_USER":
-      return { ...state, isNewUser: action.isNewUser };
-    case "SET_NAMES":
-      return { ...state, firstName: action.firstName, lastName: action.lastName };
-    case "SET_AUTH_METHOD":
-      return { ...state, authMethod: action.method };
-    case "GO_TO":
-      return {
-        ...state,
-        previousStep: state.step,
-        step: action.step,
-        direction: "forward",
-      };
-    case "GO_BACK": {
-      if (state.returnTo) {
-        const target = state.returnTo;
-        return {
-          ...state,
-          step: target,
-          previousStep: state.step,
-          direction: "backward",
-          returnTo: undefined,
-        };
-      }
-      const backMap: Partial<Record<WizardState["step"], WizardState["step"]>> = {
-        IDENTITY: "LANDING",
-        NEW_ACCOUNT: "IDENTITY",
-        RETURNING_USER: "IDENTITY",
-        HUB: "IDENTITY",
-        TEENS: "HUB",
-        DETAILS: "HUB",
-        DOCUMENTS: "DETAILS",
-        REVIEW: "DOCUMENTS",
-      };
-      const prev = backMap[state.step] ?? state.previousStep;
-      return {
-        ...state,
-        step: prev ?? "LANDING",
-        previousStep: state.step,
-        direction: "backward",
-      };
-    }
-    case "GO_TO_EDIT":
-      return {
-        ...state,
-        activeTeenId: action.camperId,
-        returnTo: "REVIEW",
-        previousStep: state.step,
-        step: "DETAILS",
-        direction: "backward",
-      };
-    case "ADD_TEEN":
-      return {
-        ...state,
-        teens: [...state.teens, action.teen],
-        activeTeenId: action.teen.camperId,
-      };
-    case "REMOVE_TEEN":
-      return {
-        ...state,
-        teens: state.teens.filter((t) => t.camperId !== action.camperId),
-        activeTeenId:
-          state.activeTeenId === action.camperId
-            ? state.teens[0]?.camperId ?? null
-            : state.activeTeenId,
-      };
-    case "SET_ACTIVE_TEEN":
-      return { ...state, activeTeenId: action.camperId };
-    case "SET_TEEN_COMPLETE":
-      return {
-        ...state,
-        teens: state.teens.map((t) =>
-          t.camperId === action.camperId
-            ? { ...t, fieldsComplete: action.fieldsComplete, documentsComplete: action.documentsComplete }
-            : t
-        ),
-      };
-    case "SET_DECLARATION":
-      return {
-        ...state,
-        declarations: state.declarations.some((d) => d.id === action.id)
-          ? state.declarations.map((d) =>
-              d.id === action.id ? { ...d, checked: action.checked } : d
-            )
-          : [...state.declarations, { id: action.id, checked: action.checked }],
-      };
-    case "SET_DECLARATIONS":
-      return {
-        ...state,
-        declarations: action.declarations.map((d) => ({
-          id: d.id,
-          checked: state.declarations.find((sd) => sd.id === d.id)?.checked ?? false,
-        })),
-      };
-    case "SET_ERROR":
-      return { ...state, step: "ERROR", error: { title: action.title, message: action.message } };
-    case "CLEAR_ERROR":
-      return { ...state, step: state.previousStep ?? "LANDING", error: null };
-    default:
-      return state;
-  }
-}
-
-function createInitialState(token: string): WizardState {
-  return {
-    step: "LOADING",
-    previousStep: null,
-    direction: "forward",
-    token,
-    campData: null,
-    email: "",
-    isNewUser: null,
-    firstName: "",
-    lastName: "",
-    authMethod: "password",
-    teens: [],
-    activeTeenId: null,
-    declarations: [],
-    error: null,
-    returnTo: undefined,
-  };
-}
-
 export function RegistrationWizard({ token }: { token: string }) {
   const [state, dispatch] = useReducer(wizardReducer, token, createInitialState);
   const router = useRouter();
+  const hydratedRef = useRef(false);
+
+  // Restore wizard state from sessionStorage on client mount so refreshing
+  // mid-flow (e.g. a mobile photo picker evicting the page) resumes at the
+  // correct step WITH the in-progress teens intact, not just the step number.
+  // Must run — and mark hydration complete — before the persist effect below,
+  // or the initial LOADING/empty-teens render clobbers storage first.
+  useEffect(() => {
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as WizardState;
+        if (parsed.token === token && parsed.step !== "CONFIRMATION" && parsed.step !== "ERROR" && parsed.step !== "LOADING") {
+          const restored: Partial<WizardState> = {};
+          for (const key of RESTORE_KEYS) {
+            (restored as any)[key] = parsed[key];
+          }
+          dispatch({ type: "RESTORE", state: restored });
+        }
+      } catch {}
+    }
+    hydratedRef.current = true;
+  }, [token]);
 
   const persist = useCallback(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && hydratedRef.current) {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
   }, [state]);
@@ -160,20 +55,6 @@ export function RegistrationWizard({ token }: { token: string }) {
   useEffect(() => {
     persist();
   }, [persist]);
-
-  // Restore wizard state from sessionStorage on client mount so refreshing
-  // mid-flow resumes at the correct step. Deferred to useEffect to keep the
-  // initial server/client render identical (both start at LOADING).
-  useEffect(() => {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored) as WizardState;
-      if (parsed.token === token && parsed.step !== "CONFIRMATION" && parsed.step !== "ERROR") {
-        dispatch({ type: "GO_TO", step: parsed.step });
-      }
-    } catch {}
-  }, [token]);
 
   const {
     data: signupData,
@@ -212,7 +93,7 @@ export function RegistrationWizard({ token }: { token: string }) {
   // If ?step=hub is in the URL, route directly to hub after token validation
   const searchParams = useSearchParams();
   const shouldGoToHub = searchParams.get("step") === "hub";
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
 
   useEffect(() => {
     if (!shouldGoToHub || !signupData) return;
@@ -234,6 +115,16 @@ export function RegistrationWizard({ token }: { token: string }) {
       });
     }
   }, [validationError, state.step]);
+
+  // Fallback for a restored teen-scoped step whose session cookie didn't
+  // survive the reload (normally it does — the JWT cookie is independent of
+  // sessionStorage). Email is already restored, so re-auth is one step.
+  const TEEN_SCOPED_STEPS: WizardState["step"][] = ["HUB", "TEENS", "DETAILS", "DOCUMENTS", "REVIEW"];
+  useEffect(() => {
+    if (sessionStatus === "unauthenticated" && TEEN_SCOPED_STEPS.includes(state.step)) {
+      dispatch({ type: "GO_TO", step: "IDENTITY" });
+    }
+  }, [sessionStatus, state.step]);
 
   const currentStepIndex = VISIBLE_STEPS.indexOf(state.step);
   const showProgress = currentStepIndex >= 0;

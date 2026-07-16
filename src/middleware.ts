@@ -6,10 +6,11 @@ import { getToken } from "next-auth/jwt";
 const DASHBOARD_ROUTE: Record<string, string> = {
   SUPER_ADMIN: "/super-admin",
   OWNER: "/admin",
-  ADMIN: "/dashboard",
+  ADMIN: "/admin",
   CAMPUS_REPRESENTATIVE: "/campus-rep-dashboard",
   TEACHER: "/teacher",
   VOLUNTEER: "/volunteer",
+  PARENT: "/dashboard",
 };
 
 export async function middleware(req: NextRequest) {

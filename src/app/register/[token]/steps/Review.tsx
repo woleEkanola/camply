@@ -231,9 +231,15 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
       )
     );
 
-    const failed = results.filter((r) => r.status === "rejected");
-    if (failed.length > 0) {
-      setErrors(failed.map((f: any) => f.reason?.message ?? "Submission failed"));
+    const errorMessages = results.flatMap((r, i) => {
+      if (r.status !== "rejected") return [];
+      const teen = state.teens[i];
+      const name = teen ? `${teen.firstName} ${teen.lastName}` : "One camper";
+      const message = (r.reason as { message?: string })?.message ?? "Submission failed";
+      return [`${name}: ${message}`];
+    });
+    if (errorMessages.length > 0) {
+      setErrors(errorMessages);
       setSubmitting(false);
       submitRef.current = false;
       return;
