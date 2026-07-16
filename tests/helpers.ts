@@ -221,12 +221,19 @@ export async function loginWithPassword(page: Page, email: string, password: str
   await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard)/, { timeout: 15000 });
 }
 
+/** Fills the shared 6-box OtpInput grid (src/components/ui/OtpInput.tsx) — each box is aria-labelled "Digit N of 6", not a single field, so getByLabel("Verification Code")-style locators no longer resolve to a fillable element. */
+export async function fillOtpGrid(page: Page, code: string) {
+  for (let i = 0; i < code.length; i++) {
+    await page.getByLabel(`Digit ${i + 1} of 6`).fill(code[i]);
+  }
+}
+
 /** Logs in via the OTP flow (TEACHER/VOLUNTEER/PARENT) using /reg-login/verify-otp, reading the code from the DB — the user must already exist (e.g. created directly via Prisma as a test fixture). */
 export async function loginWithOtp(page: Page, email: string) {
   await page.request.post("/api/base-user/send-otp", { data: { email } });
   const code = await waitForOtp(email);
   await page.goto("/reg-login/verify-otp");
   await page.locator("#email").fill(email);
-  await page.locator("#otp").fill(code);
+  await fillOtpGrid(page, code);
   await page.locator('button:visible', { hasText: "Verify OTP" }).click();
 }

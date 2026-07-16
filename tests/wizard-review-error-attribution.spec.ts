@@ -105,10 +105,17 @@ test.describe("Review step attributes submit errors to the correct teen", () => 
   }
 
   async function seedDocsForActiveTeen(page: Page) {
-    const wizardData = await page.evaluate(() => sessionStorage.getItem("camply-registration-wizard"));
-    const parsed = wizardData ? JSON.parse(wizardData) : null;
+    // Persistence lives in localStorage (survives a mobile tab discard,
+    // unlike sessionStorage), keyed per-token, wrapped with a savedAt
+    // timestamp — see RegistrationWizard.tsx's storageKey()/persist().
+    const wizardData = await page.evaluate(
+      (key) => localStorage.getItem(key),
+      `camply-registration-wizard:${signupToken}`
+    );
+    const snapshot = wizardData ? JSON.parse(wizardData) : null;
+    const parsed = snapshot?.state ?? null;
     const activeTeen = parsed?.teens?.find((t: any) => t.camperId === parsed.activeTeenId) ?? parsed?.teens?.at(-1);
-    if (!activeTeen) throw new Error("No active teen found in wizard sessionStorage");
+    if (!activeTeen) throw new Error("No active teen found in wizard localStorage");
 
     const reqs = await prisma.documentRequirement.findMany({ where: { campId, required: true, deletedAt: null } });
     const parentUser = await prisma.user.findUniqueOrThrow({ where: { email: parentEmail } });
@@ -175,7 +182,7 @@ test.describe("Review step attributes submit errors to the correct teen", () => 
 
     await page.getByRole("button", { name: "Register a Teen" }).click();
     await expect(page.getByText("Who's coming to camp?")).toBeVisible({ timeout: 10000 });
-    await fillTeenForm(page, "Bob", "Failer", "03", "20", "2008", "Male");
+    await fillTeenForm(page, "Bob", "Failer", "03", "20", "2011", "Male"); // in range for the fixture camp's 6-17 age policy
 
     await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible({ timeout: 5000 });

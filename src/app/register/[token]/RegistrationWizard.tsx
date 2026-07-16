@@ -17,29 +17,54 @@ import { StepDocuments } from "./steps/Documents";
 import { StepReview } from "./steps/Review";
 import { StepConfirmation } from "./steps/Confirmation";
 
-const STORAGE_KEY = "camply-registration-wizard";
+const STORAGE_PREFIX = "camply-registration-wizard";
+// A snapshot older than this is treated as stale and ignored on restore —
+// localStorage (unlike sessionStorage) outlives the browser session, so an
+// abandoned registration from days ago shouldn't silently resume.
+const MAX_SNAPSHOT_AGE_MS = 24 * 60 * 60 * 1000;
+
+function storageKey(token: string) {
+  return `${STORAGE_PREFIX}:${token}`;
+}
+
+function clearPersistedWizardState(token: string) {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(storageKey(token));
+  }
+}
 
 export function RegistrationWizard({ token }: { token: string }) {
   const [state, dispatch] = useReducer(wizardReducer, token, createInitialState);
   const router = useRouter();
   const hydratedRef = useRef(false);
 
-  // Restore wizard state from sessionStorage on client mount so refreshing
-  // mid-flow (e.g. a mobile photo picker evicting the page) resumes at the
-  // correct step WITH the in-progress teens intact, not just the step number.
-  // Must run — and mark hydration complete — before the persist effect below,
-  // or the initial LOADING/empty-teens render clobbers storage first.
+  // Restore wizard state from localStorage on client mount so refreshing
+  // mid-flow — or the mobile browser discarding a backgrounded tab, which
+  // wipes sessionStorage but not localStorage — resumes at the correct step
+  // WITH the in-progress teens intact, not just the step number. Must run —
+  // and mark hydration complete — before the persist effect below, or the
+  // initial LOADING/empty-teens render clobbers storage first.
   useEffect(() => {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(storageKey(token));
     if (stored) {
       try {
-        const parsed = JSON.parse(stored) as WizardState;
-        if (parsed.token === token && parsed.step !== "CONFIRMATION" && parsed.step !== "ERROR" && parsed.step !== "LOADING") {
+        const snapshot = JSON.parse(stored) as { savedAt: number; state: WizardState };
+        const parsed = snapshot.state;
+        const isFresh = Date.now() - snapshot.savedAt < MAX_SNAPSHOT_AGE_MS;
+        if (
+          isFresh &&
+          parsed.token === token &&
+          parsed.step !== "CONFIRMATION" &&
+          parsed.step !== "ERROR" &&
+          parsed.step !== "LOADING"
+        ) {
           const restored: Partial<WizardState> = {};
           for (const key of RESTORE_KEYS) {
             (restored as any)[key] = parsed[key];
           }
           dispatch({ type: "RESTORE", state: restored });
+        } else if (!isFresh) {
+          clearPersistedWizardState(token);
         }
       } catch {}
     }
@@ -48,13 +73,22 @@ export function RegistrationWizard({ token }: { token: string }) {
 
   const persist = useCallback(() => {
     if (typeof window !== "undefined" && hydratedRef.current) {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(storageKey(token), JSON.stringify({ savedAt: Date.now(), state }));
     }
-  }, [state]);
+  }, [state, token]);
 
   useEffect(() => {
     persist();
   }, [persist]);
+
+  // Once a registration is submitted, the saved snapshot has nothing left to
+  // resume — clear it so a later visit to this same signup link starts fresh
+  // instead of restoring a completed wizard.
+  useEffect(() => {
+    if (state.step === "CONFIRMATION") {
+      clearPersistedWizardState(token);
+    }
+  }, [state.step, token]);
 
   const {
     data: signupData,
@@ -142,7 +176,10 @@ export function RegistrationWizard({ token }: { token: string }) {
       <div className="mb-4 flex justify-end">
         <button
           type="button"
-          onClick={() => router.push("/dashboard")}
+          onClick={() => {
+            clearPersistedWizardState(token);
+            router.push("/dashboard");
+          }}
           className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-200 hover:text-neutral-600"
           aria-label="Cancel registration"
         >

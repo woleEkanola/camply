@@ -44,11 +44,13 @@ export async function POST(req: NextRequest) {
       create: { email: normalizedEmail, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
     });
 
+    // Best-effort delivery — the OTP is already persisted, so a transient
+    // email failure (e.g. no RESEND_API_KEY configured locally) shouldn't
+    // block the flow, matching create-and-send-otp's pattern.
     try {
       await sendOtpEmail(normalizedEmail, otp);
     } catch (err) {
       console.error("[FORGOT-PASSWORD] Failed to send reset email", err);
-      return NextResponse.json({ message: "Couldn't send the reset code. Please try again shortly." }, { status: 500 });
     }
 
     return NextResponse.json(GENERIC_OK, { status: 200 });

@@ -1,5 +1,8 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { validateFormFields } from "./validateFormFields";
+import { calculateAge } from "./age";
+
+export { calculateAge };
 
 type TxClient = PrismaClient | Prisma.TransactionClient;
 
@@ -16,15 +19,6 @@ export class RegistrationValidationError extends Error {
     this.name = "RegistrationValidationError";
     this.failures = failures;
   }
-}
-
-export function calculateAge(dateOfBirth: Date, cutoffDate: Date): number {
-  let age = cutoffDate.getFullYear() - dateOfBirth.getFullYear();
-  const monthDiff = cutoffDate.getMonth() - dateOfBirth.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && cutoffDate.getDate() < dateOfBirth.getDate())) {
-    age--;
-  }
-  return age;
 }
 
 /**

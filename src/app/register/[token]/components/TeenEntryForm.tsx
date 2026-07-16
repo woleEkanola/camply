@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import { DatePicker } from "./DatePicker";
+import { calculateAge } from "@/server/registration/age";
+import type { CampData } from "../types";
 
 interface TeenEntryFormProps {
   onSubmit: (data: { firstName: string; lastName: string; dateOfBirth: string; gender: string }) => void;
   onCancel?: () => void;
   loading?: boolean;
+  campData?: CampData | null;
 }
 
-export function TeenEntryForm({ onSubmit, onCancel, loading }: TeenEntryFormProps) {
+export function TeenEntryForm({ onSubmit, onCancel, loading, campData }: TeenEntryFormProps) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -20,7 +23,25 @@ export function TeenEntryForm({ onSubmit, onCancel, loading }: TeenEntryFormProp
     const e: Record<string, string> = {};
     if (!firstName.trim()) e.firstName = "First name is required.";
     if (!lastName.trim()) e.lastName = "Last name is required.";
-    if (!dateOfBirth) e.dateOfBirth = "Date of birth is required.";
+    if (!dateOfBirth) {
+      e.dateOfBirth = "Date of birth is required.";
+    } else if (campData && (campData.minAge != null || campData.maxAge != null)) {
+      // Block ineligible teens right here — the same age gate re-runs
+      // server-side at submission (src/server/registration/validation.ts),
+      // but there's no reason to make a parent fill out the rest of the
+      // wizard for a teen who was never eligible for this camp.
+      const cutoff = campData.ageCutoffDate
+        ? new Date(campData.ageCutoffDate)
+        : campData.startDate
+          ? new Date(campData.startDate)
+          : new Date();
+      const age = calculateAge(new Date(dateOfBirth), cutoff);
+      if (campData.minAge != null && age < campData.minAge) {
+        e.dateOfBirth = `This camp is for ages ${campData.minAge}${campData.maxAge != null ? `–${campData.maxAge}` : "+"}. This teen would be ${age} at camp.`;
+      } else if (campData.maxAge != null && age > campData.maxAge) {
+        e.dateOfBirth = `This camp is for ages ${campData.minAge ?? 0}–${campData.maxAge}. This teen would be ${age} at camp.`;
+      }
+    }
     if (!gender) e.gender = "Please select a gender.";
     setErrors(e);
     return Object.keys(e).length === 0;

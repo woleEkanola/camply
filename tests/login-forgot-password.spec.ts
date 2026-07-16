@@ -14,12 +14,12 @@ test.describe("Login page: back / resend code / forgot password", () => {
     await page.locator('button:visible', { hasText: "Email OTP" }).first().click();
     await emailInput(page).fill(`e2e-login-back-${Date.now()}@camply.test`);
     await nextButton(page).click();
-    await expect(page.locator('input[placeholder="Enter Verification Code"]:visible')).toBeVisible();
+    await expect(page.locator('[aria-label="Digit 1 of 6"]:visible')).toBeVisible();
 
     await page.locator("button:visible", { hasText: "Back" }).click();
 
     await expect(emailInput(page)).toBeVisible();
-    await expect(page.locator('input[placeholder="Enter Verification Code"]:visible')).not.toBeVisible();
+    await expect(page.locator('[aria-label="Digit 1 of 6"]:visible')).not.toBeVisible();
   });
 
   test("email step blocks progress and shows an error when the send fails, and proceeds with a confirmation on success", async ({ page }) => {
@@ -31,7 +31,7 @@ test.describe("Login page: back / resend code / forgot password", () => {
     // This email isn't OTP-eligible, so send-otp responds 200 (no-op)
     // regardless of whether the mail service works — the step should always
     // advance and show the generic confirmation message.
-    await expect(page.locator('input[placeholder="Enter Verification Code"]:visible')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[aria-label="Digit 1 of 6"]:visible')).toBeVisible({ timeout: 10000 });
     await expect(page.locator("div.bg-green-50:visible")).toBeVisible({ timeout: 10000 });
   });
 
@@ -40,7 +40,7 @@ test.describe("Login page: back / resend code / forgot password", () => {
     await page.locator('button:visible', { hasText: "Email OTP" }).first().click();
     await emailInput(page).fill(`e2e-login-resend-${Date.now()}@camply.test`);
     await nextButton(page).click();
-    await expect(page.locator('input[placeholder="Enter Verification Code"]:visible')).toBeVisible();
+    await expect(page.locator('[aria-label="Digit 1 of 6"]:visible')).toBeVisible();
 
     const resendButton = page.locator("button:visible", { hasText: /Resend code/i });
     await expect(resendButton).toBeVisible();
@@ -72,13 +72,11 @@ test.describe("Login page: back / resend code / forgot password", () => {
       await prisma.oTP.deleteMany({ where: { email } });
     });
 
-    test("clicking 'Forgot password?' either sends a code or fails clearly without hanging or crashing", async ({ page }) => {
-      // Real outbound delivery depends on RESEND_API_KEY being configured
-      // (deliberately unset in local dev per CLAUDE.md — only staging/prod
-      // have it), so this only asserts the UI handles both outcomes
-      // correctly: either it advances to the Reset Password step with a
-      // success banner, or it stays put with a clear, visible error — never a
-      // silent failure or a hang.
+    test("clicking 'Forgot password?' always advances to Reset Password (best-effort email send, never blocks on delivery), and the resend button enters a cooldown", async ({ page }) => {
+      // forgot-password's email send is best-effort (the OTP row is already
+      // persisted before the send attempt) — a transient delivery failure
+      // (e.g. no RESEND_API_KEY configured locally, per CLAUDE.md) must never
+      // block the user from reaching the Reset Password step.
       await page.goto("/login");
       await page.locator('button:visible', { hasText: "Password" }).first().click();
       await emailInput(page).fill(email);
@@ -86,8 +84,13 @@ test.describe("Login page: back / resend code / forgot password", () => {
       await page.locator("button:visible", { hasText: "Forgot password?" }).click();
 
       const resetHeading = page.locator("h2:visible", { hasText: "Reset Password" });
-      const errorBanner = page.locator("div.bg-red-100:visible");
-      await expect(resetHeading.or(errorBanner)).toBeVisible({ timeout: 15000 });
+      await expect(resetHeading).toBeVisible({ timeout: 15000 });
+
+      // The resend button on this step enters a cooldown immediately after
+      // the initial send, same as the step-2 login OTP resend.
+      const resendButton = page.locator("button:visible", { hasText: /Resend code/i });
+      await expect(resendButton).toBeVisible();
+      await expect(page.locator("button:visible", { hasText: /Resend code \(\d+s\)/ })).toBeVisible({ timeout: 5000 });
     });
 
     test("reset-password endpoint verifies the OTP, updates the password, and the old password stops working", async ({ page }) => {

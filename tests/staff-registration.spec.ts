@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { ensureStaffSignupLink, waitForOtp, prisma, deleteStaffByEmail, resetSystemFieldDefaults } from "./helpers";
+import { ensureStaffSignupLink, waitForOtp, prisma, deleteStaffByEmail, resetSystemFieldDefaults, fillOtpGrid } from "./helpers";
 
 test.describe("Staff self-registration", () => {
   // Realign the shared fixture org's SYSTEM fields to registry defaults so
@@ -24,9 +24,9 @@ test.describe("Staff self-registration", () => {
       await page.getByLabel("Email Address").fill(email);
       await page.getByRole("button", { name: "Send Code" }).click();
 
-      await expect(page.getByLabel("Verification Code")).toBeVisible({ timeout: 10000 });
+      await expect(page.getByLabel("Digit 1 of 6")).toBeVisible({ timeout: 10000 });
       const code = await waitForOtp(email);
-      await page.getByLabel("Verification Code").fill(code);
+      await fillOtpGrid(page, code);
       await page.getByRole("button", { name: "Verify" }).click();
 
       // Single data-driven "fields" step — system + custom fields interleaved
@@ -65,9 +65,9 @@ test.describe("Staff self-registration", () => {
       await page.getByLabel("Email Address").fill(email);
       await page.getByRole("button", { name: "Send Code" }).click();
 
-      await expect(page.getByLabel("Verification Code")).toBeVisible({ timeout: 10000 });
+      await expect(page.getByLabel("Digit 1 of 6")).toBeVisible({ timeout: 10000 });
       const code = await waitForOtp(email);
-      await page.getByLabel("Verification Code").fill(code);
+      await fillOtpGrid(page, code);
       await page.getByRole("button", { name: "Verify" }).click();
 
       await expect(page.getByText("Personal Information")).toBeVisible({ timeout: 10000 });

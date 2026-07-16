@@ -7,6 +7,7 @@ import { api } from "@/utils/trpc";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { OtpInput } from "@/components/ui/OtpInput";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 import type { FormFieldDTO } from "@/components/forms/types";
 
@@ -327,8 +328,11 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
             {step === "otp" && (
               <form onSubmit={handleVerifyOtp} className="space-y-4">
                 <p className="text-sm text-neutral-600">Enter the 6-digit code sent to {email}.</p>
-                <Input id="otp" label="Verification Code" value={otp} onChange={(e) => setOtp(e.target.value)} required maxLength={6} autoFocus />
-                <Button type="submit" className="w-full" loading={loading}>Verify</Button>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-neutral-700">Verification Code</label>
+                  <OtpInput disabled={loading} onComplete={setOtp} />
+                </div>
+                <Button type="submit" className="w-full" loading={loading} disabled={otp.length !== 6}>Verify</Button>
               </form>
             )}
 

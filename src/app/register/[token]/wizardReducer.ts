@@ -38,7 +38,12 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
         IDENTITY: "LANDING",
         NEW_ACCOUNT: "IDENTITY",
         RETURNING_USER: "IDENTITY",
-        HUB: "IDENTITY",
+        // Not IDENTITY: a signed-in parent on the Hub going "back" to
+        // "What's your email address?" reads as being logged out, even
+        // though the session is untouched. LANDING is the right rest state
+        // for an authenticated user; a signed-out user never reaches HUB
+        // in the first place (TEEN_SCOPED_STEPS bounces them to IDENTITY).
+        HUB: "LANDING",
         TEENS: "HUB",
         DETAILS: "HUB",
         DOCUMENTS: "DETAILS",

@@ -4,7 +4,7 @@ import { prisma } from "../db";
 import { verifyPassword } from "../../lib/auth";
 import { normalizeEmail } from "../../lib/email";
 import { rateLimit, clearRateLimit } from "../rateLimit";
-import { MAX_OTP_ATTEMPTS, otpEqual } from "../otp";
+import { MAX_OTP_ATTEMPTS, normalizeOtp, otpEqual } from "../otp";
 import { type NextAuthOptions } from "next-auth";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
@@ -59,7 +59,7 @@ export const authOptions: NextAuthOptions = {
           if (otpRecord.expiresAt.getTime() < Date.now() || otpRecord.attempts >= MAX_OTP_ATTEMPTS) {
             return null;
           }
-          if (!otpEqual(otpRecord.code, credentials.otp)) {
+          if (!otpEqual(otpRecord.code, normalizeOtp(credentials.otp))) {
             // Count the failed attempt so the code can't be brute-forced
             await prisma.oTP.update({
               where: { email: normalizedEmail },

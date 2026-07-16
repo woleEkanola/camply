@@ -114,8 +114,16 @@ test.describe("Wizard survives a mid-flow page reload", () => {
     await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible({ timeout: 15000 });
     await expect(page.getByText("Welcome, Parent!")).not.toBeVisible();
 
-    const wizardData = await page.evaluate(() => sessionStorage.getItem("camply-registration-wizard"));
-    const parsed = wizardData ? JSON.parse(wizardData) : null;
+    // Persistence lives in localStorage (survives a mobile tab discard,
+    // unlike sessionStorage), keyed per-token, wrapped with a savedAt
+    // timestamp — see RegistrationWizard.tsx's storageKey()/persist().
+    const wizardData = await page.evaluate(
+      (key) => localStorage.getItem(key),
+      `camply-registration-wizard:${signupToken}`
+    );
+    const snapshot = wizardData ? JSON.parse(wizardData) : null;
+    expect(typeof snapshot?.savedAt).toBe("number");
+    const parsed = snapshot?.state ?? null;
     const teen = parsed?.teens?.[0];
     expect(teen).toBeTruthy();
     expect(teen.firstName).toBe("Reload");
