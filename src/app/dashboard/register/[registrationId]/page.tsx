@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/Button";
 
 const STATUS_COPY: Record<string, string> = {
   DRAFT: "You haven't submitted this registration yet.",
-  SUBMITTED: "We're processing your registration.",
-  PENDING: "Your registration is awaiting review by camp administrators.",
+  SUBMITTED: "Your registration is in review.",
+  PENDING: "Your registration is in review by camp administrators.",
   REQUIRES_ACTION: "We need a bit more information from you before we can continue reviewing this registration.",
   APPROVED: "Your registration has been approved! You're ready for camp.",
   REJECTED: "This registration was not approved.",
@@ -21,6 +21,17 @@ const STATUS_COPY: Record<string, string> = {
   COMPLETED: "This camper completed camp.",
   ARCHIVED: "This registration is archived.",
 };
+
+// Parents see "In Review" instead of the internal "Pending"/"Submitted"
+// status names — mirrors the dashboard list's StatusBadge labelOverrides.
+const PARENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "In Review",
+  SUBMITTED: "In Review",
+};
+
+function parentStatusLabel(status: string): string {
+  return PARENT_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+}
 
 function DocumentUploader({
   requirement,
@@ -286,7 +297,7 @@ export default function RegistrationWizardPage() {
         <div className="mx-auto max-w-lg px-4 pb-24 pt-6">
           <div className="rounded-2xl bg-white p-6 shadow-sm">
             <h1 className="text-xl font-bold mb-2 text-neutral-900">
-              Registration Status: {registration.status.replace(/_/g, " ")}
+              Registration Status: {parentStatusLabel(registration.status)}
             </h1>
             <p className="text-neutral-600 mb-4">{STATUS_COPY[registration.status] ?? ""}</p>
             {registration.registrationNumber && (

@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
 import { normalizeEmail } from "@/lib/email";
+import { OtpInput } from "@/components/ui/OtpInput";
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
@@ -38,6 +39,12 @@ export default function LoginPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [forgotResendCooldown, setForgotResendCooldown] = useState(0);
+  useEffect(() => {
+    if (forgotResendCooldown <= 0) return;
+    const id = setInterval(() => setForgotResendCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [forgotResendCooldown]);
 
   async function sendCode(): Promise<{ ok: boolean; message: string }> {
     try {
@@ -159,6 +166,7 @@ export default function LoginPage() {
   }
 
   async function handleForgotPassword() {
+    if (forgotResendCooldown > 0) return;
     if (!email) {
       setError("Please enter your email address first.");
       return;
@@ -184,6 +192,7 @@ export default function LoginPage() {
       setNewPassword("");
       setConfirmPassword("");
       setStep(3);
+      setForgotResendCooldown(RESEND_COOLDOWN_SECONDS);
     } catch {
       setError("Couldn't reach the server. Check your connection and try again.");
     } finally {
@@ -283,10 +292,10 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleForgotPassword}
-          disabled={forgotLoading}
+          disabled={forgotLoading || forgotResendCooldown > 0}
           className="text-[#E67E22] hover:underline font-medium disabled:opacity-50 cursor-pointer"
         >
-          {forgotLoading ? "Sending..." : "Forgot password?"}
+          {forgotLoading ? "Sending..." : forgotResendCooldown > 0 ? `Try again in ${forgotResendCooldown}s` : "Forgot password?"}
         </button>
       </div>
     </form>
@@ -295,21 +304,14 @@ export default function LoginPage() {
   const authStepForm = (
     <form onSubmit={handleOtpSubmit}>
       <div className="mb-5">
-        <input
-          type="text"
-          placeholder="Enter Verification Code"
-          value={authValue}
-          onChange={(e) => setAuthValue(e.target.value)}
-          required
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
-        />
-        <p className="mt-1 ml-2 text-xs text-gray-500">
+        <OtpInput disabled={loading} onComplete={setAuthValue} />
+        <p className="mt-2 text-center text-xs text-gray-500">
           Enter the 6-digit verification code emailed to you.
         </p>
       </div>
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || authValue.length !== 6}
         className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
       >
         {loading ? "Logging in..." : "Login"}
@@ -342,14 +344,7 @@ export default function LoginPage() {
         Enter the verification code we sent to <span className="font-medium">{email}</span> and choose a new password.
       </p>
       <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Verification code"
-          value={resetOtp}
-          onChange={(e) => setResetOtp(e.target.value)}
-          required
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
-        />
+        <OtpInput disabled={resetLoading} onComplete={setResetOtp} />
       </div>
       <div className="mb-4">
         <input
@@ -375,7 +370,7 @@ export default function LoginPage() {
       </div>
       <button
         type="submit"
-        disabled={resetLoading}
+        disabled={resetLoading || resetOtp.length !== 6}
         className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
       >
         {resetLoading ? "Updating..." : "Reset Password"}
@@ -391,10 +386,10 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleForgotPassword}
-          disabled={forgotLoading}
+          disabled={forgotLoading || forgotResendCooldown > 0}
           className="text-[#E67E22] hover:underline font-medium disabled:opacity-50 cursor-pointer"
         >
-          {forgotLoading ? "Resending..." : "Resend code"}
+          {forgotLoading ? "Resending..." : forgotResendCooldown > 0 ? `Resend code (${forgotResendCooldown}s)` : "Resend code"}
         </button>
       </div>
     </form>

@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { OtpInput } from "@/components/ui/OtpInput";
 
 export default function VerifyOtpPage() {
   const [email, setEmail] = useState("");
@@ -48,18 +49,13 @@ export default function VerifyOtpPage() {
               onChange={e => setEmail(e.target.value)}
               required
             />
-            <Input
-              label="OTP Code"
-              id="otp"
-              type="text"
-              value={otp}
-              onChange={e => setOtp(e.target.value)}
-              required
-              maxLength={6}
-            />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-neutral-700">OTP Code</label>
+              <OtpInput disabled={loading} onComplete={setOtp} />
+            </div>
             {error && <div className="text-sm text-danger-600">{error}</div>}
             {success && <div className="text-sm text-success-600">{success}</div>}
-            <Button type="submit" className="w-full" loading={loading}>Verify OTP</Button>
+            <Button type="submit" className="w-full" loading={loading} disabled={otp.length !== 6}>Verify OTP</Button>
           </form>
         </CardBody>
       </Card>

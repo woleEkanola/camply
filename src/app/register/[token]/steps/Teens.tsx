@@ -102,6 +102,7 @@ export function StepTeens({ state, dispatch }: StepTeensProps) {
             onSubmit={handleAddTeen}
             onCancel={state.teens.length > 0 ? () => setShowAdd(false) : undefined}
             loading={addingTeen}
+            campData={state.campData}
           />
         </div>
       ) : (

@@ -7,6 +7,7 @@ import {
   loginWithPassword,
   deleteStaffByEmail,
   resetSystemFieldDefaults,
+  fillOtpGrid,
 } from "./helpers";
 
 test.describe("Department capacity ('quota') for camp-role signup", () => {
@@ -44,9 +45,9 @@ test.describe("Department capacity ('quota') for camp-role signup", () => {
     await page.getByRole("button", { name: "Email OTP" }).click();
     await page.getByLabel("Email Address").fill(emailA);
     await page.getByRole("button", { name: "Send Code" }).click();
-    await expect(page.getByLabel("Verification Code")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel("Digit 1 of 6")).toBeVisible({ timeout: 10000 });
     const code = await waitForOtp(emailA);
-    await page.getByLabel("Verification Code").fill(code);
+    await fillOtpGrid(page, code);
     await page.getByRole("button", { name: "Verify" }).click();
 
     await expect(page.getByText("Personal Information")).toBeVisible({ timeout: 10000 });
@@ -74,9 +75,9 @@ test.describe("Department capacity ('quota') for camp-role signup", () => {
     await page.getByRole("button", { name: "Email OTP" }).click();
     await page.getByLabel("Email Address").fill(emailB);
     await page.getByRole("button", { name: "Send Code" }).click();
-    await expect(page.getByLabel("Verification Code")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel("Digit 1 of 6")).toBeVisible({ timeout: 10000 });
     const code = await waitForOtp(emailB);
-    await page.getByLabel("Verification Code").fill(code);
+    await fillOtpGrid(page, code);
     await page.getByRole("button", { name: "Verify" }).click();
 
     await expect(page.getByText("Personal Information")).toBeVisible({ timeout: 10000 });

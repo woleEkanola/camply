@@ -12,6 +12,14 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
+// Parents see "In Review" instead of the internal "Pending"/"Submitted"
+// status names — admin and campus-rep screens are unaffected (those roles
+// act on the underlying status, so the raw name stays there).
+const PARENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "In Review",
+  SUBMITTED: "In Review",
+};
+
 function getCamperAction(camper: any, activeReg: any | undefined, isProfileComplete: boolean, wizardUrl: string | null): {
   label: string;
   href: string;
@@ -180,7 +188,7 @@ function UserDashboard() {
                         {activeReg ? (
                           <div className="mt-1 flex items-center gap-2">
                             <span className="text-xs text-neutral-500">{activeReg.camp?.name}</span>
-                            <StatusBadge status={activeReg.status} />
+                            <StatusBadge status={activeReg.status} labelOverrides={PARENT_STATUS_LABELS} />
                           </div>
                         ) : (
                           <p className="mt-1 text-xs text-neutral-400">Not registered for current camp</p>
@@ -234,7 +242,7 @@ function UserDashboard() {
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <span className="text-xs text-neutral-400">{r.campus?.name}</span>
-                      <StatusBadge status={r.status} />
+                      <StatusBadge status={r.status} labelOverrides={PARENT_STATUS_LABELS} />
                     </div>
                   </Link>
                 ))}

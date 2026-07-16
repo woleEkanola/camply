@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import type { AuthMethod } from "../types";
-import { OtpInput } from "./OtpInput";
+import { OtpInput } from "@/components/ui/OtpInput";
 
 interface NewAccountFormProps {
   email: string;

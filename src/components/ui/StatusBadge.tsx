@@ -28,13 +28,20 @@ export function statusLabel(status: string): string {
 export interface StatusBadgeProps {
   status: string;
   className?: string;
+  /**
+   * Per-caller display-label overrides, consulted before the default
+   * `statusLabel` replace. Tone (color meaning) is never overridden — only
+   * the text. Use this for audience-specific copy (e.g. parents see "In
+   * Review" for PENDING/SUBMITTED) without touching the canonical map above.
+   */
+  labelOverrides?: Record<string, string>;
 }
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
+export function StatusBadge({ status, className, labelOverrides }: StatusBadgeProps) {
   const tone = REGISTRATION_STATUS_TONE[status] ?? "neutral";
   return (
     <Badge tone={tone} className={className}>
-      {statusLabel(status)}
+      {labelOverrides?.[status] ?? statusLabel(status)}
     </Badge>
   );
 }

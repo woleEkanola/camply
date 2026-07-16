@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/db";
-import { MAX_OTP_ATTEMPTS, otpEqual } from "@/server/otp";
+import { MAX_OTP_ATTEMPTS, normalizeOtp, otpEqual } from "@/server/otp";
 import { normalizeEmail } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Constant-time comparison; count failed attempts to block brute force
-    if (!otpEqual(otpRecord.code, otp)) {
+    if (!otpEqual(otpRecord.code, normalizeOtp(otp))) {
       await prisma.oTP.update({
         where: { email: normalizedEmail },
         data: { attempts: { increment: 1 } },

@@ -83,5 +83,11 @@ describe("wizardReducer", () => {
       const next = wizardReducer(state, { type: "GO_BACK" });
       expect(next.step).toBe("HUB");
     });
+
+    it("routes HUB back to LANDING, not IDENTITY — a signed-in parent must never see the email-entry screen again", () => {
+      const state: WizardState = { ...createInitialState(TOKEN), step: "HUB", previousStep: "TEENS" };
+      const next = wizardReducer(state, { type: "GO_BACK" });
+      expect(next.step).toBe("LANDING");
+    });
   });
 });

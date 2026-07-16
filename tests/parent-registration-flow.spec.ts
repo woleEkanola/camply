@@ -125,10 +125,15 @@ test.describe("Parent Teen Registration", () => {
     // rows directly via Prisma (bypassing the upload transport, not the
     // gating logic) and force StepDocuments to remount so its existingDocs
     // query refetches and picks them up.
-    const wizardData = await page.evaluate(() =>
-      sessionStorage.getItem("camply-registration-wizard")
+    // Persistence lives in localStorage (survives a mobile tab discard,
+    // unlike sessionStorage), keyed per-token, wrapped with a savedAt
+    // timestamp — see RegistrationWizard.tsx's storageKey()/persist().
+    const wizardData = await page.evaluate(
+      (key) => localStorage.getItem(key),
+      `camply-registration-wizard:${signupToken}`
     );
-    const parsed = wizardData ? JSON.parse(wizardData) : null;
+    const snapshot = wizardData ? JSON.parse(wizardData) : null;
+    const parsed = snapshot?.state ?? null;
     const teen = parsed?.teens?.[0];
     if (teen && teen.registrationId) {
       const reqs = await prisma.documentRequirement.findMany({
@@ -249,7 +254,7 @@ test.describe("Parent Teen Registration", () => {
     const selects2 = page.locator('select:visible');
     await selects2.nth(0).selectOption("03");
     await selects2.nth(1).selectOption("20");
-    await selects2.nth(2).selectOption("2008");
+    await selects2.nth(2).selectOption("2011"); // in range for the fixture camp's 6-17 age policy
     await page.getByRole("button", { name: "Apply" }).click();
     await page.waitForTimeout(300);
 
