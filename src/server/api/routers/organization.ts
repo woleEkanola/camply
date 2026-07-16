@@ -82,7 +82,7 @@ export const organizationRouter = createTRPCRouter({
       }
       const organization = await prisma.organization.findUnique({
         where: { id: input.id },
-        select: { id: true, name: true, slug: true },
+        select: { id: true, name: true, slug: true, approvalWorkflow: true },
       });
       if (!organization) throw new Error("Organization not found");
       return organization;
@@ -121,6 +121,10 @@ export const organizationRouter = createTRPCRouter({
       }),
       name: z.string().min(2, "Church name must be at least 2 characters").optional(),
       slug: z.string().optional(),
+      // Top-level column, not part of the JSON settings blob — controls whether
+      // a campus rep's approval is final (SINGLE_STEP) or only an endorsement
+      // that requires a subsequent admin approval (TWO_STEP).
+      approvalWorkflow: z.enum(["SINGLE_STEP", "TWO_STEP"]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       // Only allow admins/owners
@@ -144,14 +148,15 @@ export const organizationRouter = createTRPCRouter({
 
       const updated = await prisma.organization.update({
         where: { id: input.organizationId },
-        data: { 
+        data: {
           settings: newSettings,
           ...(input.name ? { name: input.name } : {}),
           ...(input.slug !== undefined ? { slug: input.slug || null } : {}),
+          ...(input.approvalWorkflow ? { approvalWorkflow: input.approvalWorkflow } : {}),
         },
-        select: { settings: true }
+        select: { settings: true, approvalWorkflow: true }
       });
-      return updated.settings;
+      return { settings: updated.settings, approvalWorkflow: updated.approvalWorkflow };
     }),
 
   // Update organization name (Super Admin only)

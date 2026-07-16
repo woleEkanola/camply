@@ -12,6 +12,7 @@ let campId: string;
 let campusId: string;
 let venueId: string;
 let parentId: string;
+let adminId: string;
 
 async function makeCamper(overrides: Partial<{ dateOfBirth: Date }> = {}) {
   const camper = await prisma.camper.create({
@@ -77,6 +78,11 @@ beforeEach(async () => {
     data: { email: `parent-${Date.now()}-${Math.random()}@test.com`, password: "x", role: "PARENT", organizationId: orgId },
   });
   parentId = parent.id;
+
+  const admin = await prisma.user.create({
+    data: { email: `admin-${Date.now()}-${Math.random()}@test.com`, password: "x", role: "ADMIN", organizationId: orgId },
+  });
+  adminId = admin.id;
 });
 
 afterEach(async () => {
@@ -230,5 +236,136 @@ describe("rejection and correction workflow", () => {
     const resubmitted = await engine.resubmitRegistration({ registrationId: requiresAction.id, actorId: parentId });
     expect(resubmitted.status).toBe("PENDING");
     expect(resubmitted.correctionRequest).toBeNull();
+  });
+});
+
+describe("two-step approval workflow", () => {
+  async function makePending() {
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+    return engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
+  }
+
+  async function enableTwoStep() {
+    await prisma.organization.update({ where: { id: orgId }, data: { approvalWorkflow: "TWO_STEP" } });
+  }
+
+  it("blocks a non-admin actor from approving directly in a TWO_STEP org", async () => {
+    await enableTwoStep();
+    const pending = await makePending();
+
+    // parentId is not an org admin — mirrors a campus rep (or the parent
+    // themselves) attempting the final-approve action.
+    await expect(
+      engine.approveRegistration({ registrationId: pending.id, actorId: parentId })
+    ).rejects.toMatchObject({ name: "RegistrationEngineError", code: "ADMIN_APPROVAL_REQUIRED" });
+
+    const reloaded = await prisma.registration.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(reloaded.status).toBe("PENDING");
+  });
+
+  it("lets an admin approve without a prior endorsement, recording it as an override", async () => {
+    await enableTwoStep();
+    const pending = await makePending();
+
+    const approved = await engine.approveRegistration({ registrationId: pending.id, actorId: adminId });
+    expect(approved.status).toBe("APPROVED");
+
+    const auditRow = await prisma.auditLog.findFirst({ where: { registrationId: approved.id, action: "REGISTRATION_APPROVED" } });
+    expect((auditRow?.newValue as any)?.twoStepOverride).toBe(true);
+  });
+
+  it("does not flag an override when the admin approves an endorsed registration", async () => {
+    await enableTwoStep();
+    const pending = await makePending();
+
+    await engine.endorseRegistration({ registrationId: pending.id, actorId: parentId });
+    const approved = await engine.approveRegistration({ registrationId: pending.id, actorId: adminId });
+    expect(approved.status).toBe("APPROVED");
+
+    const auditRow = await prisma.auditLog.findFirst({ where: { registrationId: approved.id, action: "REGISTRATION_APPROVED" } });
+    expect((auditRow?.newValue as any)?.twoStepOverride).toBe(false);
+  });
+
+  it("endorseRegistration records a recommendation without changing status or sending an email", async () => {
+    await enableTwoStep();
+    const pending = await makePending();
+
+    const review = await engine.endorseRegistration({ registrationId: pending.id, actorId: parentId, notes: "Looks good" });
+    expect(review.verificationStatus).toBe("COMPLETED");
+    expect(review.recommendation).toBe("APPROVE");
+    expect(review.verifiedById).toBe(parentId);
+    expect(review.reviewNotes).toBe("Looks good");
+
+    const reloaded = await prisma.registration.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(reloaded.status).toBe("PENDING");
+    expect(reloaded.registrationNumber).toBeNull();
+
+    const sideEffects = await prisma.sideEffect.findMany({ where: { registrationId: pending.id, type: "REGISTRATION_APPROVED" } });
+    expect(sideEffects).toHaveLength(0);
+
+    const auditRows = await prisma.auditLog.findMany({ where: { registrationId: pending.id, action: "REGISTRATION_ENDORSED" } });
+    expect(auditRows).toHaveLength(1);
+  });
+
+  it("endorseRegistration is idempotent — a second call is a no-op with no duplicate audit event", async () => {
+    await enableTwoStep();
+    const pending = await makePending();
+
+    await engine.endorseRegistration({ registrationId: pending.id, actorId: parentId });
+    await engine.endorseRegistration({ registrationId: pending.id, actorId: parentId });
+
+    const auditRows = await prisma.auditLog.findMany({ where: { registrationId: pending.id, action: "REGISTRATION_ENDORSED" } });
+    expect(auditRows).toHaveLength(1);
+  });
+
+  it("endorseRegistration rejects a non-PENDING registration", async () => {
+    await enableTwoStep();
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+
+    await expect(
+      engine.endorseRegistration({ registrationId: draft.id, actorId: parentId })
+    ).rejects.toMatchObject({ name: "RegistrationEngineError", code: "NOT_PENDING" });
+  });
+
+  it("endorseRegistration rejects when the org is not TWO_STEP", async () => {
+    const pending = await makePending();
+
+    await expect(
+      engine.endorseRegistration({ registrationId: pending.id, actorId: parentId })
+    ).rejects.toMatchObject({ name: "RegistrationEngineError", code: "NOT_TWO_STEP" });
+  });
+
+  it("does not auto-approve on submit for an AUTO camp when the org is TWO_STEP", async () => {
+    await enableTwoStep();
+    await prisma.camp.update({ where: { id: campId }, data: { approvalMode: "AUTO" } });
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+
+    const result = await engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
+    expect(result.status).toBe("PENDING");
+  });
+
+  it("resets a stale endorsement when the registration is resubmitted after a correction request", async () => {
+    await enableTwoStep();
+    const pending = await makePending();
+    await engine.endorseRegistration({ registrationId: pending.id, actorId: parentId });
+
+    const requiresAction = await engine.requestCorrection({ registrationId: pending.id, actorId: adminId, message: "Fix the DOB" });
+    expect(requiresAction.status).toBe("REQUIRES_ACTION");
+
+    await engine.resubmitRegistration({ registrationId: requiresAction.id, actorId: parentId });
+
+    const review = await prisma.registrationReview.findUnique({ where: { registrationId: pending.id } });
+    expect(review?.verificationStatus).toBe("NOT_STARTED");
+    expect(review?.recommendation).toBeNull();
+  });
+
+  it("still lets a non-admin approve directly when the org is SINGLE_STEP (regression)", async () => {
+    // org defaults to SINGLE_STEP — no enableTwoStep() call.
+    const pending = await makePending();
+    const approved = await engine.approveRegistration({ registrationId: pending.id, actorId: parentId });
+    expect(approved.status).toBe("APPROVED");
   });
 });

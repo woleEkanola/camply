@@ -6,7 +6,7 @@ import { transitionWithEmailControl } from "../../registration/engine";
 import { RegistrationValidationError } from "../../registration/validation";
 import { IllegalTransitionError } from "../../registration/stateMachine";
 import { runSideEffectsNow } from "../../registration/effects";
-import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
+import { assertOrgAdminOrCampusRep, assertOrgAdmin } from "../trpc/scoping";
 
 function toTRPCError(error: unknown): TRPCError {
   if (error instanceof RegistrationValidationError) {
@@ -16,12 +16,37 @@ function toTRPCError(error: unknown): TRPCError {
       cause: error,
     });
   }
+  if (
+    error instanceof Error &&
+    error.name === "RegistrationEngineError" &&
+    (error as Error & { code?: string }).code === "ADMIN_APPROVAL_REQUIRED"
+  ) {
+    return new TRPCError({ code: "FORBIDDEN", message: error.message });
+  }
   if (error instanceof IllegalTransitionError || (error instanceof Error && error.name === "RegistrationEngineError")) {
     return new TRPCError({ code: "BAD_REQUEST", message: error.message });
   }
   if (error instanceof TRPCError) return error;
   if (error instanceof Error) return new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
   return new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Unknown error" });
+}
+
+// In a TWO_STEP org, only an org admin may give final approval — a campus
+// rep's role there is limited to endorsing (see the `endorse` mutation).
+// SINGLE_STEP orgs keep the existing rep-or-admin approve authorization.
+async function assertApproveAuthorized(
+  ctx: { prisma: any; session: any },
+  organizationId: string,
+  campusId: string
+) {
+  const org = await ctx.prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { approvalWorkflow: true },
+  });
+  if (org?.approvalWorkflow === "TWO_STEP") {
+    return assertOrgAdmin(ctx, organizationId);
+  }
+  return assertOrgAdminOrCampusRep(ctx, organizationId, campusId);
 }
 
 // Check-in duty is also delegated to Registration-department volunteers, on top of admin roles.
@@ -55,10 +80,14 @@ const registrationSchema = z.object({
 });
 
 // Add zod schemas for new fields
+// NOTE: deliberately no `status` field — direct status writes bypass the
+// registration engine's state-machine checks, capacity re-checks, audit
+// trail, and (for TWO_STEP orgs) the endorse-then-approve gate. Every status
+// change must go through an engine-backed mutation below (approve, reject,
+// requestCorrection, waitlist, endorse, transitionWithOptions).
 const registrationUpdateSchema = z.object({
   published: z.boolean().optional(),
   parentConsent: z.string().optional(),
-  status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).optional(),
   notes: z.string().optional(),
 });
 
@@ -454,11 +483,12 @@ export const registrationRouter = createTRPCRouter({
       });
     }),
 
-  // Update a registration
+  // Update a registration. Deliberately omits `status` — see the note on
+  // registrationUpdateSchema above; direct status writes bypass the engine.
   update: protectedProcedure
     .input(z.object({
       id: z.string(),
-      data: registrationSchema.partial()
+      data: registrationSchema.omit({ status: true }).partial()
     }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
@@ -576,64 +606,6 @@ export const registrationRouter = createTRPCRouter({
         where: { id: input.id },
         data: input.data,
         include: { camper: true, campus: true, camp: true },
-      });
-    }),
-
-  // Update registration status
-  updateStatus: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-      status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"])
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const currentUser = ctx.session?.user;
-
-      if (!currentUser) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
-      }
-
-      // Get the registration to update
-      const registration = await ctx.prisma.registration.findUnique({
-        where: { id: input.id },
-        include: { campus: true }
-      });
-
-      if (!registration || registration.deletedAt) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Registration not found" });
-      }
-
-      // Check if user has permission to update status
-      const hasPermission =
-        currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
-        !!(await ctx.prisma.campus.findFirst({
-           where: {
-             id: registration.campusId,
-             reps: {
-               some: {
-                 id: currentUser.id
-               }
-             }
-           }
-         }));
-
-      if (!hasPermission) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Not authorized to update registration status"
-        });
-      }
-
-      // Update the registration status
-      return await ctx.prisma.registration.update({
-        where: { id: input.id },
-        data: { status: input.status },
-        include: {
-          camper: true,
-          campus: true,
-          camp: true
-        }
       });
     }),
 
@@ -768,13 +740,33 @@ export const registrationRouter = createTRPCRouter({
         where: { id: input.registrationId },
         include: { campus: true },
       });
-      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      await assertApproveAuthorized(ctx, registration.campus.organizationId, registration.campusId);
       try {
         const result = await transitionWithEmailControl(
           () => engine.approveRegistration({ registrationId: input.registrationId, actorId: currentUser.id }),
           true
         );
         return result;
+      } catch (error) {
+        throw toTRPCError(error);
+      }
+    }),
+
+  // Campus rep vets a PENDING registration in a TWO_STEP org — records a
+  // recommendation but does not change status or send the acceptance email.
+  // Only a subsequent admin `approve` finalizes it.
+  endorse: protectedProcedure
+    .input(z.object({ registrationId: z.string(), notes: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      try {
+        return await engine.endorseRegistration({ registrationId: input.registrationId, actorId: currentUser.id, notes: input.notes });
       } catch (error) {
         throw toTRPCError(error);
       }
@@ -1072,7 +1064,11 @@ export const registrationRouter = createTRPCRouter({
         where: { id: input.registrationId },
         include: { campus: true },
       });
-      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      if (input.action === "APPROVE") {
+        await assertApproveAuthorized(ctx, registration.campus.organizationId, registration.campusId);
+      } else {
+        await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      }
 
       // Update communication log
       const commKey = input.action === "APPROVE" ? "ACCEPTANCE" : input.action === "REJECT" ? "REJECTION" : input.action === "WAITLIST" ? "WAITLIST" : input.action === "REQUEST_CORRECTION" ? "CORRECTION" : null;
@@ -1135,6 +1131,14 @@ export const registrationRouter = createTRPCRouter({
       });
       await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
 
+      // ACCEPTANCE mail requires the registration to actually be APPROVED —
+      // in a TWO_STEP org a campus rep could otherwise trigger it on a merely
+      // endorsed (still PENDING) registration, which has no qrToken/
+      // registrationNumber yet and would fail deep inside the side-effect.
+      if (input.type === "ACCEPTANCE" && registration.status !== "APPROVED" && registration.status !== "CHECKED_IN") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only an approved registration has an acceptance email to send." });
+      }
+
       const effectType = input.type === "ACCEPTANCE" ? "REGISTRATION_APPROVED" as const
         : input.type === "REJECTION" ? "REGISTRATION_REJECTED" as const
         : input.type === "CORRECTION" ? "CORRECTION_REQUESTED" as const
@@ -1153,7 +1157,26 @@ export const registrationRouter = createTRPCRouter({
   getReview: protectedProcedure
     .input(z.object({ registrationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      return ctx.prisma.registrationReview.findUnique({ where: { registrationId: input.registrationId } });
+      const review = await ctx.prisma.registrationReview.findUnique({ where: { registrationId: input.registrationId } });
+      if (!review) return review;
+      // assignedToId/verifiedById are plain columns, not Prisma relations, so
+      // resolve the display names with a couple of small extra lookups
+      // rather than an `include` (which isn't possible without a schema
+      // change — there was previously no join here at all, so `assignee`/
+      // `verifiedBy` were always undefined on the client).
+      const userIds = [review.assignedToId, review.verifiedById].filter((id): id is string => !!id);
+      const users = userIds.length
+        ? await ctx.prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, firstName: true, lastName: true, email: true },
+          })
+        : [];
+      const byId = new Map(users.map((u) => [u.id, u]));
+      return {
+        ...review,
+        assignee: review.assignedToId ? byId.get(review.assignedToId) ?? null : null,
+        verifiedBy: review.verifiedById ? byId.get(review.verifiedById) ?? null : null,
+      };
     }),
 
   assignVerifier: protectedProcedure
@@ -1200,18 +1223,41 @@ export const registrationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
       const review = await ctx.prisma.registrationReview.findUnique({ where: { registrationId: input.registrationId } });
       if (!review || review.assignedToId !== currentUser.id) {
-        const isRep = await ctx.prisma.campus.findFirst({
-          where: { reps: { some: { id: currentUser.id } } },
-        });
-        if (!isRep && currentUser.role !== "ADMIN" && currentUser.role !== "OWNER") {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Only the assigned verifier can complete verification" });
+        // Not the assigned verifier — fall back to the normal org-admin-or-
+        // this-campus's-rep check (previously checked ANY campus's reps,
+        // letting a rep from campus B complete a review for campus A).
+        await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      }
+
+      // An APPROVE recommendation from a verifier IS an endorsement — route
+      // it through the same engine function the rep-dashboard's Endorse
+      // button uses, so both paths converge on one audit event and one
+      // idempotency/status guard rather than duplicating that logic here.
+      if (input.recommendation === "APPROVE") {
+        try {
+          return await engine.endorseRegistration({ registrationId: input.registrationId, actorId: currentUser.id, notes: input.reviewNotes });
+        } catch (error) {
+          throw toTRPCError(error);
         }
       }
-      return ctx.prisma.registrationReview.update({
+
+      return ctx.prisma.registrationReview.upsert({
         where: { registrationId: input.registrationId },
-        data: {
+        update: {
+          verificationStatus: "COMPLETED",
+          verifiedById: currentUser.id,
+          verifiedAt: new Date(),
+          recommendation: input.recommendation,
+          reviewNotes: input.reviewNotes ?? null,
+        },
+        create: {
+          registrationId: input.registrationId,
           verificationStatus: "COMPLETED",
           verifiedById: currentUser.id,
           verifiedAt: new Date(),
@@ -1228,6 +1274,9 @@ export const registrationRouter = createTRPCRouter({
       campId: z.string().optional(),
       campusId: z.string().optional(),
       status: z.string().optional(),
+      // TWO_STEP-only queue filter: PENDING registrations split into "not yet
+      // endorsed by a rep" vs "endorsed, waiting on an admin's final approve".
+      reviewState: z.enum(["AWAITING_VETTING", "AWAITING_FINAL"]).optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
       limit: z.number().min(1).max(100).default(25),
@@ -1248,12 +1297,17 @@ export const registrationRouter = createTRPCRouter({
         campusFilter = { organizationId: input.organizationId, id: { in: managed.map((c: { id: string }) => c.id) } };
       }
 
+      const endorsedFilter = { review: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } };
+      const notEndorsedFilter = { OR: [{ review: null }, { review: { NOT: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } } }] };
+
       const where: Record<string, unknown> = {
         campus: campusFilter,
         deletedAt: null,
         ...(input.campId && { campId: input.campId }),
         ...(input.campusId && { campusId: input.campusId }),
         ...(input.status && { status: input.status }),
+        ...(input.reviewState === "AWAITING_VETTING" && { status: "PENDING", ...notEndorsedFilter }),
+        ...(input.reviewState === "AWAITING_FINAL" && { status: "PENDING", ...endorsedFilter }),
         ...(input.q && {
           OR: [
             { registrationNumber: { contains: input.q, mode: "insensitive" } },
@@ -1267,7 +1321,12 @@ export const registrationRouter = createTRPCRouter({
 
       const items = await ctx.prisma.registration.findMany({
         where,
-        include: { camper: { include: { user: true } }, campus: true, camp: true },
+        include: {
+          camper: { include: { user: true } },
+          campus: true,
+          camp: true,
+          review: { select: { verificationStatus: true, recommendation: true, verifiedById: true, verifiedAt: true, assignedToId: true } },
+        },
         orderBy: { createdAt: "desc" },
         take: input.limit + 1,
         ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
