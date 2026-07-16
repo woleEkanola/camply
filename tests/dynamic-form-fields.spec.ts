@@ -98,7 +98,7 @@ test.describe("Dynamic admin-driven registration fields + document validation", 
       where: { organizationId, systemKey: `dashboard_test_${stamp}` },
     });
     if (!field) {
-      field = await (prisma as any).formField.create({
+      field = await prisma.formField.create({
         data: {
           organizationId,
           name: `dashboard_test_${stamp}`,
