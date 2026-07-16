@@ -228,8 +228,10 @@ const TEACHER_GROUPS: NavGroup[] = [
   {
     name: "Operations",
     items: [
+      { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
       { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
-      { name: "My Campers", href: "/teacher/campers", icon: UserGroupIcon },
+      { name: "Check-in", href: "/teacher/check-in", icon: QrCodeIcon },
+      { name: "Inbox", href: "/teacher/inbox", icon: MegaphoneIcon },
       { name: "Incidents", href: "/teacher/incidents", icon: ExclamationTriangleIcon },
     ],
   },
@@ -296,10 +298,21 @@ export function getNavGroups(
       break;
   }
   if (hasCampusRepAccess && (area === "teacher" || area === "volunteer")) {
-    const repRegistrationGroup = CAMPUS_REP_GROUPS.find((g) => g.name === "Registration");
-    if (repRegistrationGroup) {
-      groups = [...groups, { ...repRegistrationGroup, name: "My Campus (Rep)" }];
-    }
+    // Inside the unified staff shell, dual-role teachers/volunteers see a single
+    // Registrations link scoped to their managed campuses.
+    groups = [
+      ...groups,
+      {
+        name: "My Campus (Rep)",
+        items: [
+          {
+            name: "Registrations",
+            href: area === "teacher" ? "/teacher/registrations" : "/campus-rep-dashboard/registrations",
+            icon: ClipboardDocumentListIcon,
+          },
+        ],
+      },
+    ];
   }
   return groups;
 }

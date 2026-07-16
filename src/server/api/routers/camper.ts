@@ -142,6 +142,8 @@ export const camperRouter = createTRPCRouter({
       campId: z.string().optional(),
       q: z.string().optional(),
       campusId: z.string().optional(),
+      gender: z.string().optional(),
+      tribeId: z.string().optional(),
       active: z.boolean().optional(),
       status: z.string().optional(),
       limit: z.number().min(1).max(100).default(50),
@@ -156,9 +158,12 @@ export const camperRouter = createTRPCRouter({
 
       // Check if user has permission to view profiles in this organization
       const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      const isCampusRep = (currentUser.managedCampuses?.length ?? 0) > 0;
+      const isStaffOperational = ["TEACHER", "VOLUNTEER"].includes(currentUser.role);
       const hasPermission =
         isOrgAdmin ||
-        ((currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId);
+        isCampusRep ||
+        (isStaffOperational && currentUser.organizationId === input.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -167,19 +172,21 @@ export const camperRouter = createTRPCRouter({
         });
       }
 
+      const registrationWhere: Record<string, any> = {
+        deletedAt: null,
+        ...(input.campId && { campId: input.campId }),
+        ...(input.status && { status: input.status }),
+        ...(input.tribeId && { tribeId: input.tribeId }),
+      };
+
       const where: Record<string, any> = {
         organizationId: input.organizationId,
         deletedAt: null,
         ...(input.campusId && { homeCampusId: input.campusId }),
         ...(input.active !== undefined && { active: input.active }),
-        ...(input.status && {
-          registrations: {
-            some: {
-              deletedAt: null,
-              status: input.status,
-              ...(input.campId && { campId: input.campId }),
-            },
-          },
+        ...(input.gender && { gender: input.gender }),
+        ...((input.status || input.tribeId) && {
+          registrations: { some: registrationWhere },
         }),
         ...(input.q && {
           OR: [
@@ -187,10 +194,11 @@ export const camperRouter = createTRPCRouter({
             { user: { email: { contains: input.q, mode: "insensitive" } } },
             { user: { firstName: { contains: input.q, mode: "insensitive" } } },
             { user: { lastName: { contains: input.q, mode: "insensitive" } } },
+            { registrations: { some: { registrationNumber: { contains: input.q, mode: "insensitive" }, deletedAt: null } } },
           ],
         }),
-        // Scoped views for campus reps
-        ...(!isOrgAdmin && (currentUser.managedCampuses?.length ?? 0) > 0 && {
+        // Scoped views for campus reps only (teachers/volunteers see all campers for the active camp)
+        ...(!isOrgAdmin && !isStaffOperational && isCampusRep && {
           homeCampus: {
             reps: {
               some: {
@@ -219,13 +227,14 @@ export const camperRouter = createTRPCRouter({
             }
           },
           registrations: {
-            where: {
-              deletedAt: null,
-              ...(input.campId && { campId: input.campId }),
+            where: registrationWhere,
+            include: {
+              tribe: { select: { id: true, name: true } },
+              room: { select: { id: true, name: true } },
+              bed: { select: { id: true, label: true } },
+              campus: { select: { id: true, name: true } },
             },
-            select: {
-              status: true,
-            },
+            orderBy: { createdAt: "desc" },
             take: 1,
           },
         },

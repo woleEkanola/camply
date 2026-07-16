@@ -57,9 +57,9 @@ async function assertCanCheckIn(
 ) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (currentUser.role === "VOLUNTEER") {
+  if (["TEACHER", "VOLUNTEER"].includes(currentUser.role)) {
     const profile = await ctx.prisma.staffProfile.findFirst({
-      where: { userId: ctx.userId, status: "APPROVED", volunteerCategory: "Registration" },
+      where: { userId: ctx.userId, status: "APPROVED", deletedAt: null },
     });
     if (profile) return currentUser;
     throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to check in campers" });
@@ -973,14 +973,26 @@ export const registrationRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      // Bonus fix: this procedure was previously unscoped for CAMPUS_REPRESENTATIVE
-      // (any role-list membership, no per-campus re-check). Org admins pass
-      // straight through; campus reps (any primary role) are scoped to their
-      // managed campuses below.
       const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
-      if (!isOrgAdmin && (currentUser.managedCampuses?.length ?? 0) === 0) {
+      const isCampusRep = (currentUser.managedCampuses?.length ?? 0) > 0;
+      const isStaffOperational = ["TEACHER", "VOLUNTEER"].includes(currentUser.role);
+
+      if (!isOrgAdmin && !isCampusRep && !isStaffOperational) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+
+      if (isStaffOperational) {
+        const profile = await ctx.prisma.staffProfile.findFirst({
+          where: { userId: ctx.userId, status: "APPROVED", deletedAt: null },
+        });
+        if (!profile) throw new TRPCError({ code: "FORBIDDEN", message: "Approved staff profile required" });
+      }
+
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { activeCampId: true },
+      });
+      const activeCampId = org?.activeCampId;
 
       const include = {
         camper: { include: { user: true } },
@@ -988,10 +1000,12 @@ export const registrationRouter = createTRPCRouter({
         camp: true,
         venue: true,
         tribe: true,
+        room: { select: { id: true, name: true } },
+        bed: { select: { id: true, label: true } },
       } as const;
 
       let campusFilter: Record<string, unknown> = { organizationId: input.organizationId };
-      if (!isOrgAdmin) {
+      if (!isOrgAdmin && isCampusRep) {
         const managed = await ctx.prisma.campus.findMany({
           where: { organizationId: input.organizationId, reps: { some: { id: currentUser.id } } },
           select: { id: true },
@@ -999,18 +1013,22 @@ export const registrationRouter = createTRPCRouter({
         campusFilter = { organizationId: input.organizationId, id: { in: managed.map((c: { id: string }) => c.id) } };
       }
 
+      const baseWhere: Record<string, any> = {
+        campus: campusFilter,
+        ...(activeCampId && { campId: activeCampId }),
+      };
+
+      let registrations: any[] = [];
       if (input.qrToken) {
         const registration = await ctx.prisma.registration.findFirst({
-          where: { qrToken: input.qrToken, campus: campusFilter },
+          where: { ...baseWhere, qrToken: input.qrToken },
           include,
         });
-        return registration ? [registration] : [];
-      }
-
-      if (input.query) {
-        return ctx.prisma.registration.findMany({
+        registrations = registration ? [registration] : [];
+      } else if (input.query) {
+        registrations = await ctx.prisma.registration.findMany({
           where: {
-            campus: campusFilter,
+            ...baseWhere,
             OR: [
               { registrationNumber: { contains: input.query, mode: "insensitive" } },
               { camper: { name: { contains: input.query, mode: "insensitive" } } },
@@ -1023,7 +1041,29 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
-      return [];
+      const actorIds = [...new Set(registrations.map((r) => r.checkedInById).filter(Boolean))];
+      const actors = actorIds.length > 0
+        ? await ctx.prisma.user.findMany({
+            where: { id: { in: actorIds } },
+            select: { id: true, firstName: true, lastName: true, email: true },
+          })
+        : [];
+      const actorById = Object.fromEntries(actors.map((u) => [u.id, u]));
+
+      return registrations.map((r) => {
+        const warnings: string[] = [];
+        if (activeCampId && r.campId !== activeCampId) {
+          warnings.push("Registration is not for the active camp.");
+        }
+        if (r.status !== "APPROVED" && r.status !== "CHECKED_IN") {
+          warnings.push(`Registration status is ${r.status.replace(/_/g, " ")}.`);
+        }
+        const actor = r.checkedInById ? actorById[r.checkedInById] : null;
+        const checkedInByName = actor
+          ? [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email
+          : null;
+        return { ...r, warnings, checkedInByName };
+      });
     }),
 
   timeline: protectedProcedure
