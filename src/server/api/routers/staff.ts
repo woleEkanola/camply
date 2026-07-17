@@ -6,6 +6,7 @@ import { sendStaffApprovedEmail, sendStaffRejectedEmail } from "../../email/send
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { normalizeEmail } from "../../../lib/email";
+import { isCompleteNigerianPhone } from "../../../lib/phone";
 
 
 async function requireStaffProfile(ctx: { prisma: any; userId: string }) {
@@ -57,7 +58,12 @@ export const staffRouter = createTRPCRouter({
       yearsServing: z.string().optional().nullable(),
       workerStatus: z.string().optional().nullable(),
       emergencyContactName: z.string().optional().nullable(),
-      emergencyContactPhone: z.string().optional().nullable(),
+      emergencyContactPhone: z.string()
+        .refine(val => !val || isCompleteNigerianPhone(val), {
+          message: "Emergency phone number must be a complete 11-digit Nigerian number",
+        })
+        .optional()
+        .nullable(),
       emergencyContactRelationship: z.string().optional().nullable(),
       medicalConditions: z.string().optional().nullable(),
       allergies: z.string().optional().nullable(),

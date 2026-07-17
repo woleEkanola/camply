@@ -3,6 +3,7 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/t
 import bcrypt from "bcryptjs";
 import { softDeleteUser } from "../../trash/userCascade";
 import { normalizeEmail } from "../../../lib/email";
+import { isCompleteNigerianPhone } from "../../../lib/phone";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT";
@@ -327,7 +328,12 @@ export const userRouter = createTRPCRouter({
       z.object({
         firstName: z.string().min(1, "First name is required").optional(),
         lastName: z.string().min(1, "Last name is required").optional(),
-        phone: z.string().optional().nullable(),
+        phone: z.string()
+          .refine(val => !val || isCompleteNigerianPhone(val), {
+            message: "Phone number must be a complete 11-digit Nigerian number",
+          })
+          .optional()
+          .nullable(),
         photoUrl: z.string().optional().nullable(),
         currentPassword: z.string().optional(),
         newPassword: z.string().min(8, "Password must be at least 8 characters").optional(),

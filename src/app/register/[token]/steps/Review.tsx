@@ -235,8 +235,16 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
       if (r.status !== "rejected") return [];
       const teen = state.teens[i];
       const name = teen ? `${teen.firstName} ${teen.lastName}` : "One camper";
-      const message = (r.reason as { message?: string })?.message ?? "Submission failed";
-      return [`${name}: ${message}`];
+      const rawMsg = (r.reason as { message?: string })?.message ?? "Submission failed";
+      if (rawMsg.startsWith("[") && rawMsg.endsWith("]")) {
+        try {
+          const parsed = JSON.parse(rawMsg);
+          if (Array.isArray(parsed)) {
+            return parsed.map((item: any) => `${name}: ${item.message || "Invalid input"}`);
+          }
+        } catch {}
+      }
+      return [`${name}: ${rawMsg}`];
     });
     if (errorMessages.length > 0) {
       setErrors(errorMessages);

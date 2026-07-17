@@ -311,57 +311,191 @@ export default function RegistrationWizardPage() {
   const isEditable = registration.status === "DRAFT" || registration.status === "REQUIRES_ACTION";
 
   if (!isEditable) {
+    // ─── colour palette per status ──────────────────────────────────────
+    const STATUS_THEME: Record<string, { bg: string; border: string; text: string; pill: string; pillText: string; icon: string }> = {
+      APPROVED:        { bg: "bg-emerald-50",  border: "border-emerald-400", text: "text-emerald-900", pill: "bg-emerald-500",  pillText: "text-white", icon: "✅" },
+      CHECKED_IN:      { bg: "bg-emerald-50",  border: "border-emerald-400", text: "text-emerald-900", pill: "bg-emerald-600",  pillText: "text-white", icon: "🏕️" },
+      COMPLETED:       { bg: "bg-emerald-50",  border: "border-emerald-400", text: "text-emerald-900", pill: "bg-emerald-700",  pillText: "text-white", icon: "🎉" },
+      SUBMITTED:       { bg: "bg-blue-50",     border: "border-blue-400",    text: "text-blue-900",    pill: "bg-blue-500",    pillText: "text-white", icon: "📋" },
+      PENDING:         { bg: "bg-blue-50",     border: "border-blue-400",    text: "text-blue-900",    pill: "bg-blue-500",    pillText: "text-white", icon: "⏳" },
+      WAITLISTED:      { bg: "bg-amber-50",    border: "border-amber-400",   text: "text-amber-900",   pill: "bg-amber-500",   pillText: "text-white", icon: "🕐" },
+      REQUIRES_ACTION: { bg: "bg-amber-50",    border: "border-amber-400",   text: "text-amber-900",   pill: "bg-amber-500",   pillText: "text-white", icon: "⚠️" },
+      REJECTED:        { bg: "bg-red-50",      border: "border-red-400",     text: "text-red-900",     pill: "bg-red-500",     pillText: "text-white", icon: "❌" },
+      CANCELLED:       { bg: "bg-neutral-100", border: "border-neutral-400", text: "text-neutral-700", pill: "bg-neutral-500", pillText: "text-white", icon: "🚫" },
+      ARCHIVED:        { bg: "bg-neutral-100", border: "border-neutral-400", text: "text-neutral-700", pill: "bg-neutral-500", pillText: "text-white", icon: "📦" },
+    };
+    const theme = STATUS_THEME[registration.status] ?? STATUS_THEME["ARCHIVED"]!;
+    const statusLabel = parentStatusLabel(registration.status);
+
+    // ─── field value lookup (mirrors wizard Review step logic) ───────────
+    const camper = registration.camper as any;
+    const fieldEntries = visibleFields.map((f: FormFieldDTO) => {
+      const fv = camper?.fieldValues?.find((v: any) => v.fieldId === f.id);
+      let val: string = "";
+      if (fv?.value) {
+        val = fv.value;
+      } else if (f.source === "SYSTEM" && f.systemKey) {
+        const raw = camper?.[f.systemKey];
+        if (raw !== null && raw !== undefined) {
+          val = raw instanceof Date ? raw.toISOString().split("T")[0] : String(raw);
+        }
+      }
+      // Pretty-print dates
+      if (val && f.type === "DATE") {
+        try { val = new Date(val).toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" }); } catch {}
+      }
+      return { label: f.label, value: val, type: f.type };
+    }).filter(e => e.value);
+
+    const photoEntry = fieldEntries.find(e => e.type === "FILE" && /photo|picture|headshot|image/i.test(e.label));
+    const photoUrl = photoEntry?.value ?? camper?.photoUrl ?? null;
+    const displayFields = fieldEntries.filter(e => e.type !== "FILE" || !/photo|picture|headshot|image/i.test(e.label));
+
     return (
       <div className="min-h-screen bg-neutral-50 font-sans">
-        <div className="mx-auto max-w-lg px-4 pb-24 pt-6">
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h1 className="text-xl font-bold mb-2 text-neutral-900">
-              Registration Status: {parentStatusLabel(registration.status)}
-            </h1>
-            <p className="text-neutral-600 mb-4">{STATUS_COPY[registration.status] ?? ""}</p>
-            {registration.registrationNumber && (
-              <p className="mb-2 text-sm text-neutral-700">
-                <span className="font-semibold text-neutral-900">Registration Number:</span>{" "}
-                {registration.registrationNumber}
+        <div className="mx-auto max-w-2xl px-4 pb-16 pt-6 space-y-5">
+
+          {/* ── HUGE STATUS BANNER ──────────────────────────────────────── */}
+          <div className={`rounded-2xl border-2 ${theme.border} ${theme.bg} p-6 shadow-sm`}>
+            <div className="flex flex-col items-center text-center gap-3">
+              <span className="text-5xl">{theme.icon}</span>
+              <span className={`inline-flex items-center rounded-full px-5 py-1.5 text-lg font-bold tracking-wide ${theme.pill} ${theme.pillText} shadow`}>
+                {statusLabel}
+              </span>
+              <p className={`text-base font-medium max-w-sm ${theme.text}`}>
+                {STATUS_COPY[registration.status] ?? ""}
               </p>
-            )}
+              {registration.registrationNumber && (
+                <p className="text-xs font-mono text-neutral-500 bg-white/70 border border-neutral-200 rounded-full px-3 py-1">
+                  Reg № {registration.registrationNumber}
+                </p>
+              )}
+            </div>
+
+            {/* Tribe badge */}
             {registration.tribe && (
-              <p className="mb-2 text-sm text-neutral-700">
-                <span className="font-semibold text-neutral-900">Tribe:</span>{" "}
-                <span className="font-bold" style={{ color: registration.tribe.color ?? "#E67E22" }}>
-                  {registration.tribe.name}
+              <div className="mt-4 flex justify-center">
+                <span
+                  className="inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-bold shadow-sm"
+                  style={{ borderColor: registration.tribe.color ?? "#E67E22", color: registration.tribe.color ?? "#E67E22", background: `${registration.tribe.color ?? "#E67E22"}18` }}
+                >
+                  🏳️ {registration.tribe.name}
                 </span>
-              </p>
+              </div>
             )}
+
+            {/* Rejection reason */}
             {registration.rejectionReason && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm mb-4">
-                <span className="font-semibold">Reason:</span> {registration.rejectionReason}
+              <div className="mt-4 rounded-xl bg-red-100 border border-red-300 p-3 text-sm text-red-800">
+                <span className="font-semibold">Reason: </span>{registration.rejectionReason}
               </div>
             )}
-            {registration.status === "APPROVED" && registration.qrToken && (
-              <div className="mt-4 space-y-4">
-                <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg inline-block">
-                  <QrPreview registrationId={registration.id} />
-                </div>
-                <div>
-                  <a
-                    href={`/api/registrations/${registration.id}/acceptance-letter`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-block bg-accent-600 text-white px-4 py-2 rounded-md hover:bg-accent-700 font-medium text-sm transition shadow-sm"
-                  >
-                    Download Acceptance Letter
-                  </a>
-                </div>
+
+            {/* Correction request */}
+            {registration.correctionRequest && (
+              <div className="mt-4 rounded-xl bg-amber-100 border border-amber-300 p-3 text-sm text-amber-800">
+                <span className="font-semibold">Admin note: </span>{registration.correctionRequest}
               </div>
             )}
-            <button
-              className="mt-6 inline-block text-sm font-semibold text-accent-700 hover:text-accent-800 underline transition"
-              onClick={() => router.push("/dashboard")}
-            >
-              Back to Dashboard
-            </button>
           </div>
+
+          {/* ── QR CODE + ACCEPTANCE LETTER (APPROVED only) ───────────── */}
+          {registration.status === "APPROVED" && registration.qrToken && (
+            <div className="rounded-2xl bg-white border border-neutral-200 shadow-sm p-6 flex flex-col items-center gap-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Camp Check-In QR Code</p>
+              <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl inline-block">
+                <QrPreview registrationId={registration.id} />
+              </div>
+              <a
+                href={`/api/registrations/${registration.id}/acceptance-letter`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent-600 px-6 text-sm font-semibold text-white shadow hover:bg-accent-700 transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Download Acceptance Letter
+              </a>
+            </div>
+          )}
+
+          {/* ── CAMPER DETAILS ──────────────────────────────────────────── */}
+          <div className="rounded-2xl bg-white border border-neutral-200 shadow-sm overflow-hidden">
+            {/* Header row with photo */}
+            <div className="flex items-center gap-4 p-5 border-b border-neutral-100 bg-neutral-50">
+              <div className="h-16 w-16 shrink-0 rounded-2xl overflow-hidden bg-neutral-200 flex items-center justify-center">
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photoUrl} alt="Camper" className="h-full w-full object-cover" />
+                ) : (
+                  <svg className="h-8 w-8 text-neutral-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-neutral-900">
+                  {camper?.firstName ?? ""} {camper?.lastName ?? ""}
+                </h2>
+                <p className="text-sm text-neutral-500">
+                  {registration.camp?.name}
+                  {registration.campus?.name ? ` · ${registration.campus.name}` : ""}
+                </p>
+              </div>
+            </div>
+
+            {/* Field grid */}
+            {displayFields.length > 0 && (
+              <div className="p-5">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-400">Profile Information</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                  {displayFields.map(({ label, value }) => (
+                    <div key={label} className="min-w-0">
+                      <div className="text-xs text-neutral-400 mb-0.5">{label}</div>
+                      <div className="text-sm font-semibold text-neutral-900 break-words [overflow-wrap:anywhere]">{value || "—"}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── DOCUMENTS ───────────────────────────────────────────────── */}
+          {(requirements ?? []).length > 0 && (
+            <div className="rounded-2xl bg-white border border-neutral-200 shadow-sm p-5">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-400">Documents</p>
+              <div className="space-y-2">
+                {(requirements ?? []).map((req: any) => {
+                  const doc = (documents ?? []).find((d: any) => d.requirementId === req.id && d.status !== "REJECTED");
+                  return (
+                    <div key={req.id} className="flex items-center justify-between gap-3 rounded-lg bg-neutral-50 px-3 py-2.5">
+                      <span className="text-sm text-neutral-700 font-medium">{req.name}</span>
+                      {doc ? (
+                        <a href={doc.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-semibold text-accent-600 underline hover:text-accent-700">
+                          View ↗
+                        </a>
+                      ) : (
+                        <span className="shrink-0 text-xs italic text-neutral-400">Not uploaded</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── BACK TO DASHBOARD ───────────────────────────────────────── */}
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="w-full flex h-14 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-white text-base font-bold shadow-lg hover:bg-neutral-800 active:scale-[.98] transition-all"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+            </svg>
+            Back to Dashboard
+          </button>
+
         </div>
       </div>
     );
@@ -426,7 +560,18 @@ export default function RegistrationWizardPage() {
       setStep("documents");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
-      setProfileErrors([err.message || "Failed to update camper profile information."]);
+      const msg = err.message || "";
+      if (msg.startsWith("[") && msg.endsWith("]")) {
+        try {
+          const parsed = JSON.parse(msg);
+          if (Array.isArray(parsed)) {
+            setProfileErrors(parsed.map((item: any) => item.message || "Invalid input"));
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            return;
+          }
+        } catch {}
+      }
+      setProfileErrors([msg || "Failed to update camper profile information."]);
     }
   };
 

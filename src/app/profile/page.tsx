@@ -61,6 +61,28 @@ const compressAndResizeImage = (fileOrBlob: File | Blob): Promise<Blob> => {
   });
 };
 
+function formatErrorMessage(message: string): React.ReactNode {
+  if (message.startsWith("[") && message.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(message);
+      if (Array.isArray(parsed)) {
+        return (
+          <ul className="list-disc list-inside space-y-1">
+            {parsed.map((item: any, i: number) => (
+              <li key={i} className="text-sm font-medium text-red-800">
+                {item.message || "Invalid input"}
+              </li>
+            ))}
+          </ul>
+        );
+      }
+    } catch (e) {
+      // Fallback
+    }
+  }
+  return <p className="text-sm font-medium text-red-800">{message}</p>;
+}
+
 export default function ProfilePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -453,7 +475,7 @@ export default function ProfilePage() {
                 <span className="text-red-500 font-semibold">✕</span>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-red-800">{errorMsg}</p>
+                {formatErrorMessage(errorMsg)}
               </div>
             </div>
           </div>
