@@ -4,8 +4,7 @@ import {
   prisma,
   deleteCamperByEmail,
   resetSystemFieldDefaults,
-  relaxRequiredCustomFields,
-  restoreRequiredCustomFields,
+  getFixtureOrgContext,
   loginWithPassword,
 } from "./helpers";
 
@@ -18,10 +17,8 @@ test.describe("Wizard Hub Routing", () => {
   let campusId: string;
 
   test.beforeAll(async () => {
-    const testUser = await prisma.user.findFirstOrThrow({ where: { role: { in: ["OWNER", "ADMIN"] } } });
-    const org = await prisma.organization.findFirstOrThrow({ where: { id: testUser.organizationId! } });
-    const camp = await prisma.camp.findFirstOrThrow({ where: { organizationId: org.id } });
-    const { organizationId, campId } = { organizationId: org.id, campId: camp.id };
+    const { organizationId, campId } = await getFixtureOrgContext();
+    const camp = await prisma.camp.findUniqueOrThrow({ where: { id: campId } });
     await resetSystemFieldDefaults("CAMPER");
 
     const stamp = Date.now();
@@ -31,7 +28,7 @@ test.describe("Wizard Hub Routing", () => {
     campusId = campus.id;
 
     const token = randomBytes(16).toString("hex");
-    await prisma.signupLink.create({ data: { token, campusId, campId: camp.id, active: true } });
+    await prisma.signupLink.create({ data: { token, campusId, campId, active: true } });
     signupToken = `${campus.slug}_${camp.slug}`;
   });
 

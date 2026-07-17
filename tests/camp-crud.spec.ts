@@ -10,7 +10,7 @@ test.describe("Super Admin/Owner: Camp CRUD and active-camp switching", () => {
   let fixtureOrganizationId: string | undefined;
 
   test.afterAll(async () => {
-    if (campId) {
+    try {
       // Restore whichever camp was active before this test, so later spec
       // files relying on getFixtureOrgContext()'s "active camp" keep working.
       // setActiveCamp deactivates every other camp in the org when activating
@@ -28,7 +28,17 @@ test.describe("Super Admin/Owner: Camp CRUD and active-camp switching", () => {
           data: { active: true },
         });
       }
-      await prisma.camp.deleteMany({ where: { id: campId } });
+    } finally {
+      // Sweep by name prefix, not just the captured id — if the first test fails
+      // before `campId` is captured (or the run is interrupted), a plain
+      // `where: { id: campId }` leaks an inactive "E2E Camp ..." row that later
+      // poisons any spec doing an unfiltered camp lookup (see
+      // wizard-hub-routing.spec.ts, which hit exactly this).
+      if (fixtureOrganizationId) {
+        await prisma.camp.deleteMany({ where: { organizationId: fixtureOrganizationId, name: { startsWith: "E2E Camp " } } });
+      } else if (campId) {
+        await prisma.camp.deleteMany({ where: { id: campId } });
+      }
     }
   });
 
