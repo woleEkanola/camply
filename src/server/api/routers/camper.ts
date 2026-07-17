@@ -718,5 +718,63 @@ export const camperRouter = createTRPCRouter({
         await tx.registration.updateMany({ where: { camperId: input.id, deletedAt: null }, data: { deletedAt: now } });
         return tx.camper.update({ where: { id: input.id }, data: { deletedAt: now } });
       }, { timeout: 15000 });
+    }),
+
+  bulkSoftDelete: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+
+      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      if (!isOrgAdmin && !currentUser.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to bulk delete campers" });
+      }
+
+      type Detail = { id: string; status: "success" | "failed"; error?: string };
+      const details: Detail[] = [];
+      let succeeded = 0;
+      let failed = 0;
+
+      for (const id of input.ids) {
+        const profile = await ctx.prisma.camper.findUnique({
+          where: { id },
+          select: { userId: true, deletedAt: true },
+        });
+
+        if (!profile || profile.deletedAt) {
+          details.push({ id, status: "failed", error: "Camper profile not found" });
+          failed++;
+          continue;
+        }
+
+        const hasPermission =
+          currentUser.id === profile.userId ||
+          currentUser.role === "SUPER_ADMIN" ||
+          currentUser.role === "OWNER" ||
+          currentUser.role === "ADMIN";
+
+        if (!hasPermission) {
+          details.push({ id, status: "failed", error: "Not authorized" });
+          failed++;
+          continue;
+        }
+
+        try {
+          const now = new Date();
+          await ctx.prisma.$transaction(async (tx) => {
+            await tx.registration.updateMany({ where: { camperId: id, deletedAt: null }, data: { deletedAt: now } });
+            return tx.camper.update({ where: { id }, data: { deletedAt: now } });
+          }, { timeout: 15000 });
+          details.push({ id, status: "success" });
+          succeeded++;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          details.push({ id, status: "failed", error: message });
+          failed++;
+        }
+      }
+
+      return { succeeded, failed, details };
     })
 });

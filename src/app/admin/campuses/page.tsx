@@ -5,12 +5,14 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "@/utils/trpc";
+import { cn } from "@/lib/cn";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Table, type Column } from "@/components/ui/Table";
 import { Dialog } from "@/components/ui/Dialog";
+import { Drawer } from "@/components/ui/Drawer";
 import { Input } from "@/components/ui/Input";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
@@ -56,7 +58,7 @@ type CampusWithReps = {
   displayOrder: number;
   createdAt: Date;
   updatedAt: Date;
-  reps?: { id: string; firstName?: string | null; lastName?: string | null }[];
+  reps?: { id: string; email?: string | null; firstName?: string | null; lastName?: string | null }[];
 };
 
 export default function CampusesPage() {
@@ -181,6 +183,7 @@ export default function CampusesPage() {
     quotaFullBehavior: "CLOSE",
   });
   const [selectedCampus, setSelectedCampus] = useState<string | null>(null);
+  const [detailCampus, setDetailCampus] = useState<string | null>(null);
   const [formData, setFormData] = useState<CampusFormData>({
     name: "",
     slug: "",
@@ -613,6 +616,11 @@ export default function CampusesPage() {
     }
   );
 
+  const { data: campusStats, isLoading: isLoadingCampusStats } = api.campus.getStats.useQuery(
+    { campusId: detailCampus ?? "", campId: activeCamp?.id },
+    { enabled: !!detailCampus }
+  );
+
   // Generate signup link mutation
   const generateSignupLinkMutation = api.signupLink.generate.useMutation({
     onSuccess: () => {
@@ -741,7 +749,10 @@ export default function CampusesPage() {
         campus.reps && campus.reps.length > 0 ? (
           <Badge tone="attention">
             {campus.reps
-              .map((a) => ((a.firstName || a.lastName) ? `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim() : a.id))
+              .map((a) => {
+                const name = [a.firstName, a.lastName].filter(Boolean).join(" ").trim();
+                return name || a.email || "Unknown rep";
+              })
               .join(", ")}
           </Badge>
         ) : (
@@ -856,6 +867,7 @@ export default function CampusesPage() {
             data={campuses}
             rowKey={(campus) => campus.id}
             actions={actions}
+            onRowClick={(campus) => setDetailCampus(campus.id)}
             isLoading={isLoadingCampuses}
             emptyTitle="No campuses yet"
             emptyDescription="Add your first campus to start accepting registrations."
@@ -937,6 +949,106 @@ export default function CampusesPage() {
           <Button loading={isSubmitting} onClick={handleSaveAdmins}>Save Reps</Button>
         </div>
       </Dialog>
+
+      {/* Campus Detail Drawer */}
+      <Drawer
+        open={!!detailCampus}
+        onClose={() => setDetailCampus(null)}
+        title={campuses.find((c) => c.id === detailCampus)?.name ?? "Campus Details"}
+        width="lg"
+      >
+        {isLoadingCampusStats || !campusStats ? (
+          <div className="p-4 text-sm text-neutral-500">Loading stats…</div>
+        ) : (
+          <div className="space-y-6">
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-neutral-900">Assigned Representatives</h3>
+              {(() => {
+                const campus = campuses.find((c) => c.id === detailCampus);
+                if (!campus?.reps?.length) return <p className="text-sm text-neutral-500">No rep assigned.</p>;
+                return (
+                  <ul className="space-y-1">
+                    {campus.reps.map((rep) => {
+                      const name = [rep.firstName, rep.lastName].filter(Boolean).join(" ").trim();
+                      return (
+                        <li key={rep.id} className="text-sm text-neutral-700">
+                          {name || rep.email || "Unknown rep"}
+                          {name && rep.email && <span className="text-neutral-400"> · {rep.email}</span>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                );
+              })()}
+            </div>
+
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-neutral-900">Registrations</h3>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  { label: "Draft", key: "DRAFT", tone: "neutral" as const },
+                  { label: "Pending/In Review", key: "PENDING", tone: "warning" as const },
+                  { label: "Requires Action", key: "REQUIRES_ACTION", tone: "attention" as const },
+                  { label: "Approved/Accepted", key: "APPROVED", tone: "success" as const },
+                  { label: "Checked In", key: "CHECKED_IN", tone: "success" as const },
+                  { label: "Rejected", key: "REJECTED", tone: "danger" as const },
+                  { label: "Waitlisted", key: "WAITLISTED", tone: "attention" as const },
+                  { label: "Archived", key: "ARCHIVED", tone: "neutral" as const },
+                ].map((stat) => (
+                  <div key={stat.key} className="rounded-lg border border-neutral-200 bg-white p-3">
+                    <div className="text-xs text-neutral-500">{stat.label}</div>
+                    <div className="mt-1 text-xl font-semibold text-neutral-900">{(campusStats.countsByStatus as Record<string, number>)[stat.key] ?? 0}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-neutral-200 bg-white p-3">
+                <div className="text-xs text-neutral-500">Total Campers</div>
+                <div className="mt-1 text-xl font-semibold text-neutral-900">{campusStats.campersCount}</div>
+              </div>
+              <div className="rounded-lg border border-neutral-200 bg-white p-3">
+                <div className="text-xs text-neutral-500">Total Registrations</div>
+                <div className="mt-1 text-xl font-semibold text-neutral-900">{campusStats.registrationsCount}</div>
+              </div>
+            </div>
+
+            {campusStats.quota !== null && (
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-neutral-900">Quota</h3>
+                <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span className="text-neutral-600">
+                      {campusStats.approvedCount} approved
+                      {campusStats.quota > 0 ? ` of ${campusStats.quota}` : " (no limit)"}
+                    </span>
+                    {campusStats.quota > 0 && (
+                      <span className={cn("font-medium", campusStats.percentUsed >= 100 ? "text-danger-600" : campusStats.percentUsed >= 80 ? "text-warning-600" : "text-success-600")}>
+                        {campusStats.percentUsed}%
+                      </span>
+                    )}
+                  </div>
+                  {campusStats.quota > 0 && (
+                    <div className="h-2 w-full rounded-full bg-neutral-100">
+                      <div
+                        className={cn("h-2 rounded-full", campusStats.percentUsed >= 100 ? "bg-danger-500" : campusStats.percentUsed >= 80 ? "bg-warning-500" : "bg-success-500")}
+                        style={{ width: `${Math.min(100, campusStats.percentUsed)}%` }}
+                      />
+                    </div>
+                  )}
+                  {campusStats.quotaFullBehavior === "WAITLIST" && (
+                    <p className="mt-2 text-xs text-neutral-500">Waitlist mode: excess submissions are accepted but waitlisted at approval.</p>
+                  )}
+                  {campusStats.quota > 0 && campusStats.approvedCount >= campusStats.quota && (
+                    <p className="mt-2 text-xs text-danger-600">Quota reached. New approvals will be blocked or waitlisted depending on the campus setting.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Drawer>
 
       {/* Set Quota Modal */}
       <Dialog open={isQuotaModalOpen} onClose={() => setIsQuotaModalOpen(false)} title="Set Campus Quota" size="sm">

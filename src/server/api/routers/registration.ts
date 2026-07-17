@@ -916,6 +916,153 @@ export const registrationRouter = createTRPCRouter({
       }
     }),
 
+  bulkTransition: protectedProcedure
+    .input(z.object({
+      ids: z.array(z.string()).min(1),
+      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "ARCHIVE"]),
+      reason: z.string().optional(),
+      message: z.string().optional(),
+      sendEmail: z.boolean().default(true),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      type Detail = { id: string; status: "success" | "skipped" | "failed"; error?: string };
+      const details: Detail[] = [];
+      let succeeded = 0;
+      let skipped = 0;
+      let failed = 0;
+
+      for (const id of input.ids) {
+        const registration = await ctx.prisma.registration.findUnique({
+          where: { id },
+          include: { campus: true },
+        });
+
+        if (!registration || registration.deletedAt) {
+          details.push({ id, status: "failed", error: "Registration not found" });
+          failed++;
+          continue;
+        }
+
+        if (input.action === "APPROVE") {
+          try {
+            await assertApproveAuthorized(ctx, registration.campus.organizationId, registration.campusId);
+          } catch (err) {
+            details.push({ id, status: "failed", error: err instanceof Error ? err.message : "Not authorized" });
+            failed++;
+            continue;
+          }
+        } else {
+          try {
+            await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+          } catch (err) {
+            details.push({ id, status: "failed", error: err instanceof Error ? err.message : "Not authorized" });
+            failed++;
+            continue;
+          }
+        }
+
+        const commKey = input.action === "APPROVE" ? "ACCEPTANCE" : input.action === "REJECT" ? "REJECTION" : input.action === "WAITLIST" ? "WAITLIST" : input.action === "REQUEST_CORRECTION" ? "CORRECTION" : null;
+
+        try {
+          switch (input.action) {
+            case "APPROVE":
+              await transitionWithEmailControl(() => engine.approveRegistration({ registrationId: id, actorId: currentUser.id }), input.sendEmail);
+              break;
+            case "REJECT":
+              await transitionWithEmailControl(() => engine.rejectRegistration({ registrationId: id, actorId: currentUser.id, reason: input.reason ?? "" }), input.sendEmail);
+              break;
+            case "WAITLIST":
+              await transitionWithEmailControl(() => engine.waitlistRegistration({ registrationId: id, actorId: currentUser.id }), input.sendEmail);
+              break;
+            case "REQUEST_CORRECTION":
+              await transitionWithEmailControl(() => engine.requestCorrection({ registrationId: id, actorId: currentUser.id, message: input.message ?? "" }), input.sendEmail);
+              break;
+            case "ARCHIVE":
+              await engine.archiveRegistration({ registrationId: id, actorId: currentUser.id });
+              break;
+          }
+
+          if (commKey) {
+            const currentLog = (registration.communicationLog as Record<string, string>) ?? {};
+            await ctx.prisma.registration.update({
+              where: { id },
+              data: { communicationLog: { ...currentLog, [commKey]: input.sendEmail ? "SENT" : "NOT_SENT" } },
+            });
+          }
+
+          await ctx.prisma.registrationReview.upsert({
+            where: { registrationId: id },
+            update: { adminDecision: input.action, decidedById: currentUser.id, decidedAt: new Date() },
+            create: { registrationId: id, adminDecision: input.action, decidedById: currentUser.id, decidedAt: new Date() },
+          });
+
+          details.push({ id, status: "success" });
+          succeeded++;
+        } catch (error) {
+          const trpcErr = toTRPCError(error);
+          details.push({ id, status: "failed", error: trpcErr.message });
+          failed++;
+        }
+      }
+
+      return { succeeded, skipped, failed, details };
+    }),
+
+  bulkSoftDelete: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      type Detail = { id: string; status: "success" | "failed"; error?: string };
+      const details: Detail[] = [];
+      let succeeded = 0;
+      let failed = 0;
+
+      for (const id of input.ids) {
+        const registration = await ctx.prisma.registration.findUnique({
+          where: { id },
+          include: { camper: { include: { user: true } } },
+        });
+
+        if (!registration || registration.deletedAt) {
+          details.push({ id, status: "failed", error: "Registration not found" });
+          failed++;
+          continue;
+        }
+
+        const hasPermission =
+          currentUser.id === registration.camper.userId ||
+          currentUser.role === "SUPER_ADMIN" ||
+          currentUser.role === "OWNER" ||
+          currentUser.role === "ADMIN" ||
+          !!(await ctx.prisma.campus.findFirst({
+            where: { id: registration.campusId, reps: { some: { id: currentUser.id } } },
+          }));
+
+        if (!hasPermission) {
+          details.push({ id, status: "failed", error: "Not authorized" });
+          failed++;
+          continue;
+        }
+
+        try {
+          await ctx.prisma.registration.update({ where: { id }, data: { deletedAt: new Date() } });
+          details.push({ id, status: "success" });
+          succeeded++;
+        } catch (error) {
+          const trpcErr = toTRPCError(error);
+          details.push({ id, status: "failed", error: trpcErr.message });
+          failed++;
+        }
+      }
+
+      return { succeeded, failed, details };
+    }),
+
   checkIn: protectedProcedure
     .input(z.object({ registrationId: z.string() }))
     .mutation(async ({ ctx, input }) => {
