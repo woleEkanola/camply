@@ -30,6 +30,8 @@ interface AssemblerParams {
   bodyContent?: string;
   /** Base64 data URL for QR code image (acceptance emails only) */
   qrDataUrl?: string;
+  /** Optional custom preview text override */
+  previewText?: string;
 }
 
 // ─── Helper: build info rows for registration ───────────────────────────────
@@ -60,7 +62,7 @@ export function buildApprovedEmail(p: AssemblerParams): string {
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: `Approved for ${v.camp_name || "camp"}` });
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Approved for ${v.camp_name || "camp"}` });
 }
 
 // ─── REGISTRATION_SUBMITTED ─────────────────────────────────────────────────
@@ -77,7 +79,7 @@ export function buildSubmittedEmail(p: AssemblerParams): string {
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: `Registration received for ${v.camper_name || "camper"}` });
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Registration received for ${v.camper_name || "camper"}` });
 }
 
 // ─── CORRECTION_REQUESTED ───────────────────────────────────────────────────
@@ -93,7 +95,7 @@ export function buildCorrectionEmail(p: AssemblerParams): string {
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: "Action needed for your registration" });
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || "Action needed for your registration" });
 }
 
 // ─── REGISTRATION_REJECTED ──────────────────────────────────────────────────
@@ -108,7 +110,7 @@ export function buildRejectedEmail(p: AssemblerParams): string {
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: `Update on ${v.camper_name || "your"}'s registration` });
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Update on ${v.camper_name || "your"}'s registration` });
 }
 
 // ─── REGISTRATION_WAITLISTED ────────────────────────────────────────────────
@@ -124,7 +126,7 @@ export function buildWaitlistedEmail(p: AssemblerParams): string {
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: `Waitlisted for ${v.camp_name || "camp"}` });
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Waitlisted for ${v.camp_name || "camp"}` });
 }
 
 // ─── STAFF_APPROVED ─────────────────────────────────────────────────────────
@@ -140,7 +142,7 @@ export function buildStaffApprovedEmail(p: AssemblerParams): string {
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: `Approved as ${v.staff_role || "staff"}` });
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Approved as ${v.staff_role || "staff"}` });
 }
 
 // ─── STAFF_REJECTED ─────────────────────────────────────────────────────────
@@ -155,7 +157,7 @@ export function buildStaffRejectedEmail(p: AssemblerParams): string {
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: `Update on your ${v.staff_role || "staff"} application` });
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Update on your ${v.staff_role || "staff"} application` });
 }
 
 // ─── WELCOME_EMAIL ──────────────────────────────────────────────────────────
@@ -173,7 +175,7 @@ export function buildWelcomeEmail(p: AssemblerParams): string {
     NextSteps({ steps: ["Verify your email address", "Create a camper profile", "Register for a camp"] }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: "Welcome to Camply — verify your email" });
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || "Welcome to Camply — verify your email" });
 }
 
 // ─── OTP_EMAIL ──────────────────────────────────────────────────────────────
@@ -190,5 +192,5 @@ export function buildOtpEmail(p: AssemblerParams): string {
     BodyText({ text: "If you did not request this code, please ignore this email.", align: "center", color: undefined }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: `Your OTP code: ${v.otp_code || ""}` });
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Your OTP code: ${v.otp_code || ""}` });
 }

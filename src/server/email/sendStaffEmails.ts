@@ -1,12 +1,23 @@
 import { Resend } from "resend";
-import { buildFromAddress } from "./fromAddress";
+import { resolveFromAddress } from "./resolveFromAddress";
 
 let resend: Resend | null = null;
 
-export async function sendStaffApprovedEmail(params: { to: string; name: string; campName: string; type: "TEACHER" | "VOLUNTEER"; dashboardUrl: string; orgSlug?: string }) {
+export async function sendStaffApprovedEmail(params: {
+  to: string;
+  name: string;
+  campName: string;
+  type: "TEACHER" | "VOLUNTEER";
+  dashboardUrl: string;
+  orgSlug?: string;
+  organizationId?: string;
+}) {
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
   const role = params.type === "TEACHER" ? "Teacher" : "Volunteer";
-  const from = buildFromAddress({ orgSlug: params.orgSlug });
+  const { from, replyTo } = await resolveFromAddress({
+    organizationId: params.organizationId,
+    event: "STAFF_APPROVED",
+  });
   await resend.emails.send({
     from,
     to: params.to,
@@ -18,17 +29,30 @@ export async function sendStaffApprovedEmail(params: { to: string; name: string;
         <p><a href="${params.dashboardUrl}">Go to your dashboard</a></p>
       </div>
     `,
+    replyTo,
   });
 }
 
-export async function sendStaffRejectedEmail(params: { to: string; name: string; campName: string; type: "TEACHER" | "VOLUNTEER"; reason?: string; orgSlug?: string }) {
+export async function sendStaffRejectedEmail(params: {
+  to: string;
+  name: string;
+  campName: string;
+  type: "TEACHER" | "VOLUNTEER";
+  reason?: string;
+  orgSlug?: string;
+  organizationId?: string;
+}) {
   if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
   const role = params.type === "TEACHER" ? "Teacher" : "Volunteer";
-  const from = buildFromAddress({ orgSlug: params.orgSlug });
+  const { from, replyTo } = await resolveFromAddress({
+    organizationId: params.organizationId,
+    event: "STAFF_REJECTED",
+  });
   await resend.emails.send({
     from,
     to: params.to,
     subject: `Update on your ${role.toLowerCase()} registration for ${params.campName}`,
     html: `<p>Hi ${params.name}, your ${role.toLowerCase()} registration for <strong>${params.campName}</strong> was not approved.</p>${params.reason ? `<p>Reason: ${params.reason}</p>` : ""}`,
+    replyTo,
   });
 }

@@ -264,11 +264,15 @@ function TbBtn({
 // ── Compose Tab ───────────────────────────────────────────────────────────────
 
 function ComposeTab({ onSent }: { onSent: () => void }) {
+  const { data: session } = useSession();
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
   const [audience, setAudience] = useState<"PARENTS" | "TEACHERS" | "VOLUNTEERS" | "ALL">("ALL");
   const [campId, setCampId] = useState("");
   const [campusId, setCampusId] = useState("");
+  const [senderMode, setSenderMode] = useState<string>("ORG_SLUG");
+  const [customFromLocalPart, setCustomFromLocalPart] = useState<string>("");
+  const [replyTo, setReplyTo] = useState<string>("");
   const [showConfirm, setShowConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -295,7 +299,10 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
     },
   });
 
-  // Mutations
+  // Queries & Mutations
+  const { data: branding } = api.communication.brandingGet.useQuery();
+  const { data: configs } = api.communication.eventList.useQuery();
+
   const createMutation = api.communication.broadcastCreate.useMutation();
   const sendMutation = api.communication.broadcastSend.useMutation({
     onSuccess: (data) => {
@@ -304,6 +311,9 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
       setTitle("");
       setSubject("");
       setAudience("ALL");
+      setSenderMode("ORG_SLUG");
+      setCustomFromLocalPart("");
+      setReplyTo("");
       editor?.commands.clearContent();
       onSent();
     },
@@ -313,17 +323,117 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
     },
   });
 
+  const previewEmailMutation = api.communication.previewEmail.useMutation({
+    onSuccess: () => {
+      setToast("Test email successfully sent!");
+      setTimeout(() => setToast(null), 4000);
+    },
+    onError: (err) => {
+      setToast(`Error sending test: ${err.message}`);
+    }
+  });
+
+  // Live variable validation
+  const checkVariables = () => {
+    if (!editor) return [];
+    const used = new Set<string>();
+
+    // Subject variables
+    const subjectTokens = subject.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g) || [];
+    subjectTokens.forEach(t => {
+      used.add(t.replace(/\{\{\s*|\s*\}\}/g, ""));
+    });
+
+    // Editor variables
+    const json = editor.getJSON();
+    function walk(n: any) {
+      if (!n || typeof n !== "object") return;
+      if (n.type === "text" && typeof n.text === "string") {
+        const tokens = n.text.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g) || [];
+        tokens.forEach((t: string) => used.add(t.replace(/\{\{\s*|\s*\}\}/g, "")));
+      }
+      if (n.attrs && typeof n.attrs === "object") {
+        for (const val of Object.values(n.attrs)) {
+          if (typeof val === "string") {
+            const tokens = val.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g) || [];
+            tokens.forEach(t => used.add(t.replace(/\{\{\s*|\s*\}\}/g, "")));
+          }
+        }
+      }
+      if (n.marks && Array.isArray(n.marks)) {
+        for (const mark of n.marks) {
+          if (mark.attrs && typeof mark.attrs === "object") {
+            for (const val of Object.values(mark.attrs)) {
+              if (typeof val === "string") {
+                const tokens = val.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g) || [];
+                tokens.forEach(t => used.add(t.replace(/\{\{\s*|\s*\}\}/g, "")));
+              }
+            }
+          }
+        }
+      }
+      if (n.content && Array.isArray(n.content)) {
+        for (const child of n.content) {
+          walk(child);
+        }
+      }
+    }
+    walk(json);
+
+    const valid = new Set(EMAIL_VARIABLES.map(v => v.key));
+    return Array.from(used).filter(token => !valid.has(token));
+  };
+
+  const unknownVariables = checkVariables();
+
+  // Live sender email resolution
+  const getLivePreview = () => {
+    const senderName = branding?.senderName || "";
+    let email = "donotreply@camply.ng";
+
+    if (senderMode === "DONOTREPLY") {
+      email = "donotreply@camply.ng";
+    } else if (senderMode === "ORG_SLUG") {
+      const orgConfig = configs?.find((c) => c.senderMode === "ORG_SLUG");
+      if (orgConfig) {
+        const match = orgConfig.resolvedFrom?.match(/<(.*?)>$/) || [null, orgConfig.resolvedFrom];
+        email = match[1] || "donotreply@camply.ng";
+      } else {
+        email = "orgslug@camply.ng";
+      }
+    } else if (senderMode === "CUSTOM") {
+      const local = customFromLocalPart.trim() || "localpart";
+      email = `${local.toLowerCase()}@camply.ng`;
+    }
+
+    return senderName ? `${senderName} <${email}>` : email;
+  };
+
   const handleSendTest = () => {
-    // Simplified: just show a toast for MVP
-    setToast("Test email would be sent to your email address.");
-    setTimeout(() => setToast(null), 4000);
+    if (!editor) return;
+    const testTo = window.prompt("Send test email to:", session?.user?.email || "");
+    if (!testTo) return;
+
+    previewEmailMutation.mutate({
+      event: "BROADCAST",
+      tiptapJson: editor.getJSON() as Record<string, unknown>,
+      subject,
+      previewText: "",
+      variables: {},
+      to: testTo,
+      broadcast: {
+        senderMode,
+        customFromLocalPart: customFromLocalPart || null,
+        replyTo: replyTo || null,
+      }
+    });
   };
 
   const handleSendNow = async () => {
     if (!editor) return;
     const body = editor.getJSON();
 
-    // First create the broadcast
+    // Create the broadcast with custom sender options
     const result = await createMutation.mutateAsync({
       title: title || "Untitled Broadcast",
       subject: subject || "No Subject",
@@ -331,9 +441,12 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
       audience,
       campId: campId || undefined,
       campusId: campusId || undefined,
+      senderMode,
+      customFromLocalPart: customFromLocalPart || null,
+      replyTo: replyTo || null,
     });
 
-    // Then send it
+    // Send it
     sendMutation.mutate({ id: result.id });
   };
 
@@ -344,6 +457,17 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
       {toast && (
         <div className="rounded-md bg-accent-50 border border-accent-200 px-4 py-3 text-sm text-accent-800">
           {toast}
+        </div>
+      )}
+
+      {/* Unknown variables warning */}
+      {unknownVariables.length > 0 && (
+        <div className="rounded-md bg-warning-50 border border-warning-200 px-4 py-3 text-sm text-warning-800 space-y-1">
+          <p className="font-semibold">⚠️ Unknown template variables detected:</p>
+          <ul className="list-disc list-inside font-mono text-xs">
+            {unknownVariables.map(v => <li key={v}>{"{{" + v + "}}"}</li>)}
+          </ul>
+          <p className="text-xs text-warning-600 mt-1">Please double check or remove them to prevent leaks.</p>
         </div>
       )}
 
@@ -390,6 +514,47 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
         </CardBody>
       </Card>
 
+      {/* Sender Settings Card */}
+      <Card>
+        <CardBody className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3">
+            <Select
+              label="Sender Address Mode"
+              value={senderMode}
+              onChange={(e) => setSenderMode(e.target.value)}
+            >
+              <option value="ORG_SLUG">Organization Slug (slug@camply.ng)</option>
+              <option value="DONOTREPLY">Do Not Reply (donotreply@camply.ng)</option>
+              <option value="CUSTOM">Custom Address (custom@camply.ng)</option>
+            </Select>
+
+            {senderMode === "CUSTOM" && (
+              <Input
+                label="Custom From Local-part"
+                value={customFromLocalPart}
+                onChange={(e) => setCustomFromLocalPart(e.target.value)}
+                placeholder="e.g. news, events"
+              />
+            )}
+          </div>
+          <div className="space-y-3">
+            <Input
+              label="Reply-To Email Address (Optional)"
+              value={replyTo}
+              onChange={(e) => setReplyTo(e.target.value)}
+              placeholder="e.g. support@mychurch.org"
+            />
+
+            <div>
+              <span className="block text-xs font-semibold text-neutral-500 mb-1">Resolved Sender Preview</span>
+              <div className="rounded bg-neutral-50 px-3 py-2 text-xs font-mono border border-neutral-200 text-neutral-800 break-all">
+                {getLivePreview()}
+              </div>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
       {/* Subject + Title */}
       <Card>
         <CardBody className="space-y-3">
@@ -429,7 +594,7 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
 
       {/* Actions */}
       <div className="flex items-center justify-between">
-        <Button variant="secondary" onClick={handleSendTest}>
+        <Button variant="secondary" onClick={handleSendTest} loading={previewEmailMutation.isPending}>
           Send Test
         </Button>
         <Button

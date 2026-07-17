@@ -16,6 +16,7 @@ import {
   buildWelcomeEmail,
   buildOtpEmail,
 } from "./events/assemblers";
+import { interpolateTipTapJson } from "./interpolate";
 
 export interface Branding {
   logoUrl?: string | null;
@@ -35,8 +36,13 @@ export interface Branding {
 
 // ─── TipTap → HTML ──────────────────────────────────────────────────────────
 
-export function renderTemplateContent(tiptapJson: Record<string, unknown>, variables: Record<string, string>): string {
-  let html = generateHTML(tiptapJson, [
+export function renderTemplateContent(
+  tiptapJson: Record<string, unknown>,
+  variables: Record<string, string>
+): { html: string; unknownTokens: string[] } {
+  const { node: interpolatedJson, unknownTokens } = interpolateTipTapJson(tiptapJson, variables);
+
+  const html = generateHTML(interpolatedJson, [
     StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
     Underline,
     Link.configure({ openOnClick: true }),
@@ -44,11 +50,7 @@ export function renderTemplateContent(tiptapJson: Record<string, unknown>, varia
     EmailButton,
   ]);
 
-  for (const [key, value] of Object.entries(variables)) {
-    html = html.split(`{{${key}}}`).join(value ?? "");
-  }
-
-  return html;
+  return { html, unknownTokens };
 }
 
 // ─── Event-based email rendering (new pipeline) ─────────────────────────────
@@ -69,6 +71,7 @@ const EVENT_ASSEMBLERS: Record<EmailEventKey, (p: {
   branding: Branding | null;
   bodyContent?: string;
   qrDataUrl?: string;
+  previewText?: string;
 }) => string> = {
   REGISTRATION_APPROVED: buildApprovedEmail,
   REGISTRATION_REJECTED: buildRejectedEmail,
@@ -87,13 +90,17 @@ export async function renderEmailWithEvent(params: {
   branding: Branding | null;
   tiptapJson?: Record<string, unknown>;
   qrDataUrl?: string;
-}): Promise<string> {
-  const { eventKey, variables, branding, tiptapJson, qrDataUrl } = params;
+  previewText?: string | null;
+}): Promise<{ html: string; unknownTokens: string[] }> {
+  const { eventKey, variables, branding, tiptapJson, qrDataUrl, previewText } = params;
 
-  // Render TipTap body content (admin-editable rich text portion)
   let bodyContent: string | undefined;
+  let unknownTokens: string[] = [];
+
   if (tiptapJson) {
-    bodyContent = renderTemplateContent(tiptapJson, variables);
+    const contentResult = renderTemplateContent(tiptapJson, variables);
+    bodyContent = contentResult.html;
+    unknownTokens = contentResult.unknownTokens;
   }
 
   const assembler = EVENT_ASSEMBLERS[eventKey];
@@ -104,10 +111,22 @@ export async function renderEmailWithEvent(params: {
       SupportCard({ supportEmail: branding?.supportEmail, supportPhone: branding?.supportPhone, websiteUrl: branding?.websiteUrl }),
       EmailFooter({ branding }),
     ].filter(Boolean).join("\n");
-    return EmailLayout({ content, branding, previewText: "Camply Notification" });
+    return {
+      html: EmailLayout({ content, branding, previewText: previewText || "Camply Notification" }),
+      unknownTokens,
+    };
   }
 
-  return assembler({ variables, branding, bodyContent, qrDataUrl });
+  return {
+    html: assembler({
+      variables,
+      branding,
+      bodyContent,
+      qrDataUrl,
+      previewText: previewText ?? undefined,
+    }),
+    unknownTokens,
+  };
 }
 
 // ─── Legacy renderEmail (backward-compatible) ───────────────────────────────
@@ -116,15 +135,21 @@ export async function renderEmail(params: {
   tiptapJson: Record<string, unknown>;
   variables: Record<string, string>;
   branding: Branding | null;
-}): Promise<string> {
-  const content = renderTemplateContent(params.tiptapJson, params.variables);
+}): Promise<{ html: string; unknownTokens: string[] }> {
+  const { html: content, unknownTokens } = renderTemplateContent(params.tiptapJson, params.variables);
   if (params.branding) {
     const body = [
       Section({ children: content }),
       SupportCard({ supportEmail: params.branding.supportEmail, supportPhone: params.branding.supportPhone, websiteUrl: params.branding.websiteUrl }),
       EmailFooter({ branding: params.branding }),
     ].filter(Boolean).join("\n");
-    return EmailLayout({ content: body, branding: params.branding });
+    return {
+      html: EmailLayout({ content: body, branding: params.branding }),
+      unknownTokens,
+    };
   }
-  return `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:16px;">${content}</body></html>`;
+  return {
+    html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:16px;">${content}</body></html>`,
+    unknownTokens,
+  };
 }

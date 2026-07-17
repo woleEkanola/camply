@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { buildFromAddress } from "./fromAddress";
+import { resolveFromAddress } from "./resolveFromAddress";
 
 let resend: Resend | null = null;
 
@@ -16,6 +16,7 @@ export interface AcceptanceEmailParams {
   tribeName?: string | null;
   tribeColor?: string | null;
   orgSlug?: string;
+  organizationId?: string;
 }
 
 export async function sendAcceptanceEmail(params: AcceptanceEmailParams) {
@@ -23,7 +24,10 @@ export async function sendAcceptanceEmail(params: AcceptanceEmailParams) {
     resend = new Resend(process.env.RESEND_API_KEY);
   }
 
-  const from = buildFromAddress({ orgSlug: params.orgSlug });
+  const { from, replyTo } = await resolveFromAddress({
+    organizationId: params.organizationId,
+    event: "REGISTRATION_APPROVED",
+  });
 
   const html = `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
@@ -44,54 +48,73 @@ export async function sendAcceptanceEmail(params: AcceptanceEmailParams) {
   `;
 
   await resend.emails.send({
-    from: buildFromAddress({ orgSlug: params.orgSlug }),
+    from,
     to: params.to,
     subject: `You're approved for ${params.campName}!`,
     html,
+    replyTo,
   });
 }
 
-export async function sendRejectionEmail(params: { to: string; camperName: string; campName: string; reason: string; orgSlug?: string }) {
+export async function sendRejectionEmail(params: { to: string; camperName: string; campName: string; reason: string; orgSlug?: string; organizationId?: string }) {
   if (!resend) {
     resend = new Resend(process.env.RESEND_API_KEY);
   }
+  const { from, replyTo } = await resolveFromAddress({
+    organizationId: params.organizationId,
+    event: "REGISTRATION_REJECTED",
+  });
   await resend.emails.send({
-    from: buildFromAddress({ orgSlug: params.orgSlug }),
+    from,
     to: params.to,
     subject: `Update on your registration for ${params.campName}`,
     html: `<p>Your registration for <strong>${params.camperName}</strong> to <strong>${params.campName}</strong> was not approved.</p><p>Reason: ${params.reason}</p>`,
+    replyTo,
   });
 }
 
-export async function sendCorrectionEmail(params: { to: string; camperName: string; campName: string; message: string; viewUrl: string; orgSlug?: string }) {
+export async function sendCorrectionEmail(params: { to: string; camperName: string; campName: string; message: string; viewUrl: string; orgSlug?: string; organizationId?: string }) {
   if (!resend) {
     resend = new Resend(process.env.RESEND_API_KEY);
   }
+  const { from, replyTo } = await resolveFromAddress({
+    organizationId: params.organizationId,
+    event: "CORRECTION_REQUESTED",
+  });
   await resend.emails.send({
-    from: buildFromAddress({ orgSlug: params.orgSlug }),
+    from,
     to: params.to,
     subject: `Action needed for ${params.camperName}'s registration`,
     html: `<p>We need a bit more information for <strong>${params.camperName}</strong>'s registration to <strong>${params.campName}</strong>:</p><p>${params.message}</p><p><a href="${params.viewUrl}">Update Registration</a></p>`,
+    replyTo,
   });
 }
 
-export async function sendWaitlistEmail(params: { to: string; camperName: string; campName: string; orgSlug?: string }) {
+export async function sendWaitlistEmail(params: { to: string; camperName: string; campName: string; orgSlug?: string; organizationId?: string }) {
   if (!resend) {
     resend = new Resend(process.env.RESEND_API_KEY);
   }
+  const { from, replyTo } = await resolveFromAddress({
+    organizationId: params.organizationId,
+    event: "REGISTRATION_WAITLISTED",
+  });
   await resend.emails.send({
-    from: buildFromAddress({ orgSlug: params.orgSlug }),
+    from,
     to: params.to,
     subject: `${params.camperName} is on the waitlist for ${params.campName}`,
     html: `<p><strong>${params.camperName}</strong> is currently on the waitlist for <strong>${params.campName}</strong>. We'll notify you if a space opens up.</p>`,
+    replyTo,
   });
 }
 
-export async function sendSubmissionEmail(params: { to: string; camperName: string; campName: string; orgSlug?: string }) {
+export async function sendSubmissionEmail(params: { to: string; camperName: string; campName: string; orgSlug?: string; organizationId?: string }) {
   if (!resend) {
     resend = new Resend(process.env.RESEND_API_KEY);
   }
-  const from = buildFromAddress({ orgSlug: params.orgSlug });
+  const { from, replyTo } = await resolveFromAddress({
+    organizationId: params.organizationId,
+    event: "REGISTRATION_SUBMITTED",
+  });
   await resend.emails.send({
     from,
     to: params.to,
@@ -109,5 +132,6 @@ export async function sendSubmissionEmail(params: { to: string; camperName: stri
         </p>
       </div>
     `,
+    replyTo,
   });
 }

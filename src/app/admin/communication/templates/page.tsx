@@ -10,7 +10,6 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input, Select } from "@/components/ui/Input";
-import { Tabs } from "@/components/ui/Tabs";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/cn";
 
@@ -22,6 +21,19 @@ import Image from "@tiptap/extension-image";
 import { EmailButton } from "@/server/email/buttonExtension";
 import { EMAIL_VARIABLES } from "@/server/email/variables";
 import { ALL_EVENT_KEYS } from "@/server/email/defaults";
+
+import {
+  MagnifyingGlassIcon,
+  TrashIcon,
+  ArrowPathIcon,
+  PaperAirplaneIcon,
+  CheckIcon,
+  PlusIcon,
+  ExclamationTriangleIcon,
+  ComputerDesktopIcon,
+  DevicePhoneMobileIcon,
+  BookOpenIcon
+} from "@heroicons/react/24/outline";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -71,8 +83,8 @@ function ToolbarButton({
       disabled={disabled}
       title={label}
       className={cn(
-        "rounded p-1.5 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",
-        active && "bg-accent-50 text-accent-700",
+        "rounded p-1.5 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 transition-colors",
+        active && "bg-accent-50 text-accent-700 font-bold",
         disabled && "opacity-40 cursor-not-allowed"
       )}
     >
@@ -81,7 +93,7 @@ function ToolbarButton({
   );
 }
 
-// ── Toolbar ───────────────────────────────────────────────────────────────────
+// ── Editor Toolbar ─────────────────────────────────────────────────────────────
 
 function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
   if (!editor) return null;
@@ -89,15 +101,7 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
   const addLink = () => {
     const url = window.prompt("Link URL:");
     if (url) {
-      const { state } = editor;
-      const { from, to } = state.selection;
-      const text = state.doc.textBetween(from, to, " ");
-      editor
-        .chain()
-        .focus()
-        .extendMarkRange("link")
-        .setLink({ href: url })
-        .run();
+      editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
     }
   };
 
@@ -117,15 +121,13 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-neutral-200 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-1 border-b border-neutral-200 bg-neutral-50 px-3 py-2 sticky top-0 z-10">
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBold().run()}
         active={editor.isActive("bold")}
         label="Bold"
       >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z" />
-        </svg>
+        <span className="font-bold text-sm px-0.5">B</span>
       </ToolbarButton>
 
       <ToolbarButton
@@ -133,9 +135,7 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
         active={editor.isActive("italic")}
         label="Italic"
       >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4h-8z" />
-        </svg>
+        <span className="italic text-sm px-0.5">I</span>
       </ToolbarButton>
 
       <ToolbarButton
@@ -143,9 +143,7 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
         active={editor.isActive("underline")}
         label="Underline"
       >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z" />
-        </svg>
+        <span className="underline text-sm px-0.5">U</span>
       </ToolbarButton>
 
       <div className="mx-1 w-px self-stretch bg-neutral-200" />
@@ -181,9 +179,7 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
         active={editor.isActive("bulletList")}
         label="Bullet List"
       >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z" />
-        </svg>
+        <span className="text-sm font-bold">• List</span>
       </ToolbarButton>
 
       <ToolbarButton
@@ -191,38 +187,28 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
         active={editor.isActive("orderedList")}
         label="Ordered List"
       >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z" />
-        </svg>
+        <span className="text-sm font-bold">1. List</span>
       </ToolbarButton>
 
       <div className="mx-1 w-px self-stretch bg-neutral-200" />
 
       <ToolbarButton onClick={addLink} active={editor.isActive("link")} label="Link">
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />
-        </svg>
+        <span className="text-xs font-semibold">Link</span>
       </ToolbarButton>
 
       <ToolbarButton onClick={addImage} label="Image">
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
-        </svg>
+        <span className="text-xs font-semibold">Image</span>
       </ToolbarButton>
 
       <ToolbarButton onClick={addButton} label="Insert Button">
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M22 9v6c0 1.1-.9 2-2 2h-1v-2h1V9H4v6h6v2H4c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2zm-7.5 8.25c0 .41.34.75.75.75.41 0 .75-.34.75-.75V13l1.1 1.1c.15.15.34.22.55.22s.4-.07.55-.22c.3-.3.3-.77 0-1.07l-2.3-2.3c-.3-.3-.77-.3-1.07 0l-2.3 2.3c-.3.3-.3.77 0 1.07.3.3.77.3 1.07 0l1.1-1.1v4.25z" />
-        </svg>
+        <span className="text-xs font-semibold px-1 rounded bg-neutral-200 hover:bg-neutral-300">Button</span>
       </ToolbarButton>
 
       <ToolbarButton
         onClick={() => editor.chain().focus().setHorizontalRule().run()}
         label="Divider"
       >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M4 11h16v2H4z" />
-        </svg>
+        <span className="text-xs font-semibold">— Divider</span>
       </ToolbarButton>
     </div>
   );
@@ -231,340 +217,46 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
 // ── Variables Panel ───────────────────────────────────────────────────────────
 
 function VariablesPanel({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  const [collapsed, setCollapsed] = useState(false);
-
-  if (!editor) return null;
-
   const categories = Array.from(new Set(EMAIL_VARIABLES.map((v) => v.category)));
 
   const insertVariable = (key: string) => {
+    if (!editor) return;
     editor.chain().focus().insertContent(`{{${key}}}`).run();
   };
 
   return (
-    <div className="shrink-0">
-      <button
-        type="button"
-        onClick={() => setCollapsed(!collapsed)}
-        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:bg-neutral-50"
-      >
-        Variables
-        <svg
-          className={cn("h-4 w-4 transition-transform", collapsed && "-rotate-90")}
-          viewBox="0 0 24 24"
-          fill="currentColor"
-        >
-          <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
-        </svg>
-      </button>
-      {!collapsed && (
-        <div className="space-y-3 px-3 pb-3">
-          {categories.map((cat) => (
-            <div key={cat}>
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
-                {cat}
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {EMAIL_VARIABLES.filter((v) => v.category === cat).map((v) => (
-                  <button
-                    key={v.key}
-                    type="button"
-                    onClick={() => insertVariable(v.key)}
-                    title={`${v.label} — example: ${v.sampleValue}`}
-                    className="rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-[11px] text-neutral-600 hover:border-accent-300 hover:bg-accent-50 hover:text-accent-700 transition-colors"
-                  >
-                    {v.label}
-                  </button>
-                ))}
-              </div>
+    <div className="space-y-4">
+      <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1">
+        <BookOpenIcon className="h-4 w-4" /> Variable Registry
+      </h3>
+      <p className="text-xs text-neutral-500">Click a variable to insert it at your cursor location.</p>
+      <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+        {categories.map((cat) => (
+          <div key={cat} className="space-y-1.5">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 pb-0.5">
+              {cat}
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Preview ───────────────────────────────────────────────────────────────────
-
-function PreviewPanel({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  const [previewHtml, setPreviewHtml] = useState<string>("");
-  const previewQuery = api.communication.previewRender.useQuery(
-    {
-      tiptapJson: (editor?.getJSON() ?? {}) as Record<string, unknown>,
-    },
-    {
-      enabled: false,
-      refetchOnWindowFocus: false,
-    }
-  );
-
-  const refreshPreview = useCallback(async () => {
-    if (!editor) return;
-    const json = editor.getJSON();
-    const result = await previewQuery.refetch({ cancelRefetch: true });
-    if (result.data) {
-      setPreviewHtml(result.data);
-    }
-  }, [editor, previewQuery]);
-
-  return (
-    <div className="mt-4">
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="text-sm font-medium text-neutral-700">Preview</h4>
-        <Button size="sm" variant="secondary" onClick={refreshPreview} loading={previewQuery.isFetching}>
-          Refresh Preview
-        </Button>
-      </div>
-      <Tabs
-        tabs={[
-          {
-            label: "Desktop",
-            content: (
-              <div className="flex justify-center">
-                <div
-                  className="w-[480px] rounded-lg border border-neutral-200 bg-white shadow-sm overflow-hidden"
+            <div className="flex flex-wrap gap-1">
+              {EMAIL_VARIABLES.filter((v) => v.category === cat).map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  onClick={() => insertVariable(v.key)}
+                  title={`${v.label} — example: ${v.sampleValue}`}
+                  className="rounded border border-neutral-200 bg-white px-2 py-0.5 text-[11px] text-neutral-600 hover:border-accent-300 hover:bg-accent-50 hover:text-accent-700 transition-all shadow-2xs active:scale-95"
                 >
-                  {previewHtml ? (
-                    <iframe
-                      srcDoc={previewHtml}
-                      className="w-full h-[600px]"
-                      title="Desktop preview"
-                      sandbox="allow-same-origin"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-40 text-sm text-neutral-400">
-                      Click &quot;Refresh Preview&quot; to render
-                    </div>
-                  )}
-                </div>
-              </div>
-            ),
-          },
-          {
-            label: "Mobile",
-            content: (
-              <div className="flex justify-center">
-                <div
-                  className="w-[320px] rounded-lg border border-neutral-200 bg-white shadow-sm overflow-hidden"
-                >
-                  {previewHtml ? (
-                    <iframe
-                      srcDoc={previewHtml}
-                      className="w-full h-[600px]"
-                      title="Mobile preview"
-                      sandbox="allow-same-origin"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-40 text-sm text-neutral-400">
-                      Click &quot;Refresh Preview&quot; to render
-                    </div>
-                  )}
-                </div>
-              </div>
-            ),
-          },
-        ]}
-      />
-    </div>
-  );
-}
-
-// ── Template Editor ───────────────────────────────────────────────────────────
-
-function TemplateEditor({
-  template,
-  onSave,
-  onDelete,
-  onReset,
-  savePending,
-  deletePending,
-  resetPending,
-}: {
-  template: TemplateFull;
-  onSave: (data: {
-    name: string;
-    subject: string;
-    previewText: string;
-    content: Record<string, unknown>;
-  }) => void;
-  onDelete: () => void;
-  onReset: () => void;
-  savePending: boolean;
-  deletePending: boolean;
-  resetPending: boolean;
-}) {
-  const [name, setName] = useState(template.name);
-  const [subject, setSubject] = useState(template.subject);
-  const [previewText, setPreviewText] = useState(template.previewText ?? "");
-  const [dirty, setDirty] = useState(false);
-
-  const editor = useEditor({
-    extensions: [StarterKit, Underline, Link, Image, EmailButton],
-    content: template.content as never,
-    onUpdate: () => setDirty(true),
-  });
-
-  // Sync editor content when template changes
-  useEffect(() => {
-    if (editor && template.content) {
-      editor.commands.setContent(template.content as never);
-    }
-    setName(template.name);
-    setSubject(template.subject);
-    setPreviewText(template.previewText ?? "");
-    setDirty(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [template.id]);
-
-  const handleSave = () => {
-    if (!editor) return;
-    onSave({
-      name,
-      subject,
-      previewText,
-      content: editor.getJSON() as Record<string, unknown>,
-    });
-    setDirty(false);
-  };
-
-  return (
-    <div className="flex flex-1 flex-col">
-      {/* Header row */}
-      <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Input
-            value={name}
-            onChange={(e) => { setName(e.target.value); setDirty(true); }}
-            placeholder="Template name"
-            containerClassName="mb-0"
-            className="!border-0 !px-2 !py-1 text-sm font-semibold focus:!ring-0 bg-transparent hover:bg-neutral-50 rounded w-60"
-          />
-          {template.isDefault && <Badge tone="info">Default</Badge>}
-          {!template.active && <Badge tone="neutral">Inactive</Badge>}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={onReset}
-            loading={resetPending}
-          >
-            Reset to Default
-          </Button>
-          <Button
-            size="sm"
-            variant="danger"
-            onClick={onDelete}
-            loading={deletePending}
-          >
-            Delete
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleSave}
-            loading={savePending}
-            disabled={!dirty && !savePending}
-          >
-            {dirty ? "Save" : "Saved"}
-          </Button>
-        </div>
-      </div>
-
-      {/* Subject + Preview Text */}
-      <div className="space-y-3 px-4 py-3 border-b border-neutral-100">
-        <Input
-          label="Subject"
-          value={subject}
-          onChange={(e) => { setSubject(e.target.value); setDirty(true); }}
-          placeholder="Email subject line"
-        />
-        <Input
-          label="Preview Text"
-          value={previewText}
-          onChange={(e) => { setPreviewText(e.target.value); setDirty(true); }}
-          placeholder="Brief preview text shown in inbox (optional)"
-        />
-      </div>
-
-      {/* Editor area */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <EditorToolbar editor={editor} />
-          <div className="flex-1 overflow-auto bg-white">
-            <EditorContent
-              editor={editor}
-              className="prose prose-sm max-w-none min-h-[300px] px-6 py-4 focus:outline-none"
-            />
+                  {v.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Variables sidebar */}
-        <div className="w-56 border-l border-neutral-200 bg-neutral-50 overflow-auto">
-          <VariablesPanel editor={editor} />
-        </div>
-      </div>
-
-      {/* Preview */}
-      <div className="border-t border-neutral-200 px-4 py-4">
-        <PreviewPanel editor={editor} />
-      </div>
-    </div>
-  );
-}
-
-// ── Template List ─────────────────────────────────────────────────────────────
-
-function TemplateList({
-  templates,
-  selectedId,
-  onSelect,
-  onNew,
-}: {
-  templates: TemplateListItem[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  onNew: () => void;
-}) {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="p-3">
-        <Button size="sm" className="w-full" onClick={onNew}>
-          + New Template
-        </Button>
-      </div>
-      <div className="flex-1 overflow-auto">
-        {templates.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => onSelect(t.id)}
-            className={cn(
-              "w-full text-left px-3 py-2.5 border-b border-neutral-100 hover:bg-neutral-50 transition-colors",
-              selectedId === t.id && "bg-accent-50 border-l-2 border-l-accent-600"
-            )}
-          >
-            <div className="text-sm font-medium text-neutral-900 truncate">
-              {t.name}
-            </div>
-            <div className="text-xs text-neutral-500 truncate mt-0.5">
-              {t.subject}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1">
-              {t.isDefault && <Badge tone="info">Default</Badge>}
-              {!t.active && <Badge tone="neutral">Inactive</Badge>}
-            </div>
-          </button>
         ))}
-        {templates.length === 0 && (
-          <p className="px-3 py-4 text-sm text-neutral-400">No templates yet.</p>
-        )}
       </div>
     </div>
   );
 }
 
-// ── Confirm Dialog (inline) ───────────────────────────────────────────────────
+// ── Confirm Dialog ─────────────────────────────────────────────────────────────
 
 function ConfirmDialog({
   open,
@@ -586,8 +278,8 @@ function ConfirmDialog({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-neutral-900/40" onClick={onCancel} />
-      <div className="relative z-10 w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-6 shadow-xl">
+      <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs" onClick={onCancel} />
+      <div className="relative z-10 w-full max-w-sm rounded-xl border border-neutral-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
         <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
         {message && <p className="mt-1 text-sm text-neutral-600">{message}</p>}
         {children}
@@ -596,7 +288,7 @@ function ConfirmDialog({
             Cancel
           </Button>
           <Button size="sm" variant="danger" onClick={onConfirm} loading={loading}>
-            Reset
+            Confirm Action
           </Button>
         </div>
       </div>
@@ -624,26 +316,47 @@ export default function TemplatesPage() {
     }
   }, [session, status, router]);
 
+  // UI State
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetEvent, setResetEvent] = useState<string>(ALL_EVENT_KEYS[0]);
+  const [editorCounter, setEditorCounter] = useState(0);
 
-  // Queries
-  const { data: templates = [], refetch: refetchList } =
-    api.communication.templateList.useQuery();
+  // Editor states
+  const [name, setName] = useState("");
+  const [subject, setSubject] = useState("");
+  const [previewText, setPreviewText] = useState("");
+  const [dirty, setDirty] = useState(false);
 
-  const { data: selectedTemplate, refetch: refetchSelected } =
-    api.communication.templateGetById.useQuery(
-      { id: selectedId ?? "" },
-      { enabled: !!selectedId }
-    );
+  // Preview / Validation states
+  const [previewWidth, setPreviewWidth] = useState<"desktop" | "mobile">("desktop");
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [resolvedSender, setResolvedSender] = useState("");
+  const [resolvedReplyTo, setResolvedReplyTo] = useState("");
+  const [unknownTokens, setUnknownTokens] = useState<string[]>([]);
+  const [previewEvent, setPreviewEvent] = useState<string>("REGISTRATION_APPROVED");
+  const [testEmailAddress, setTestEmailAddress] = useState("");
+  const [testSendToast, setTestSendToast] = useState<string | null>(null);
 
-  // Mutations
+  // Responsive panel controls (for mobile views)
+  const [mobileTab, setMobileTab] = useState<"editor" | "preview" | "list">("editor");
+
+  // Queries & Mutations
+  const { data: templates = [], refetch: refetchList } = api.communication.templateList.useQuery();
+  const { data: configs } = api.communication.eventList.useQuery();
+
+  const { data: selectedTemplate, refetch: refetchSelected } = api.communication.templateGetById.useQuery(
+    { id: selectedId ?? "" },
+    { enabled: !!selectedId }
+  );
+
   const createMutation = api.communication.templateCreate.useMutation({
     onSuccess: (newTemplate) => {
       refetchList();
       setSelectedId(newTemplate.id);
+      setMobileTab("editor");
     },
   });
 
@@ -651,6 +364,7 @@ export default function TemplatesPage() {
     onSuccess: () => {
       refetchList();
       refetchSelected();
+      setDirty(false);
     },
   });
 
@@ -670,104 +384,470 @@ export default function TemplatesPage() {
     },
   });
 
+  const previewEmailMutation = api.communication.previewEmail.useMutation();
+
+  // TipTap Editor instance
+  const editor = useEditor({
+    extensions: [StarterKit, Underline, Link, Image, EmailButton],
+    content: "",
+    onUpdate: () => {
+      setDirty(true);
+      setEditorCounter((prev) => prev + 1);
+    },
+  });
+
+  // Sync editor content when loaded template changes
+  useEffect(() => {
+    if (selectedTemplate) {
+      setName(selectedTemplate.name);
+      setSubject(selectedTemplate.subject);
+      setPreviewText(selectedTemplate.previewText ?? "");
+      if (editor) {
+        editor.commands.setContent((selectedTemplate.content as any) || "");
+      }
+      // Determine a suitable preview event context based on what events use this template
+      const boundConfig = configs?.find((c) => c.templateId === selectedTemplate.id);
+      if (boundConfig) {
+        setPreviewEvent(boundConfig.event);
+      } else {
+        setPreviewEvent("REGISTRATION_APPROVED");
+      }
+      setDirty(false);
+    }
+  }, [selectedTemplate, editor, configs]);
+
+  // Debounced live preview generation
+  const runLivePreview = useCallback(() => {
+    if (!editor) return;
+    const json = editor.getJSON();
+    previewEmailMutation.mutate(
+      {
+        event: previewEvent,
+        tiptapJson: json as Record<string, unknown>,
+        subject,
+        previewText: previewText || null,
+        variables: {}, // defaults to backend sample values
+      },
+      {
+        onSuccess: (data) => {
+          setPreviewHtml(data.html);
+          setResolvedSender(data.from);
+          setResolvedReplyTo(data.replyTo || "");
+          setUnknownTokens(data.unknownTokens);
+        },
+      }
+    );
+  }, [editor, subject, previewText, previewEvent, previewEmailMutation]);
+
+  useEffect(() => {
+    if (selectedId && editor) {
+      const timer = setTimeout(() => {
+        runLivePreview();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [editorCounter, subject, previewText, previewEvent, selectedId, editor]);
+
+  // Handler methods
   const handleNew = () => {
     createMutation.mutate({
-      name: "New Template",
-      subject: "New Subject",
+      name: "Untitled Template",
+      subject: "No Subject",
       content: {
         type: "doc",
-        content: [{ type: "paragraph", content: [{ type: "text", text: "Start writing your email template here..." }] }],
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Start composing your email template here..." }] }],
       },
     });
   };
 
-  const handleSave = (data: {
-    name: string;
-    subject: string;
-    previewText: string;
-    content: Record<string, unknown>;
-  }) => {
-    if (!selectedId) return;
-    updateMutation.mutate({ id: selectedId, ...data });
+  const handleSave = () => {
+    if (!selectedId || !editor) return;
+    updateMutation.mutate({
+      id: selectedId,
+      name,
+      subject,
+      previewText: previewText || null,
+      content: editor.getJSON() as Record<string, unknown>,
+    });
   };
+
+  const handleTestSend = () => {
+    if (!editor || !selectedId) return;
+    const defaultTo = testEmailAddress || session?.user?.email || "";
+    const testTo = window.prompt("Enter recipient email address to send a real test email:", defaultTo);
+    if (!testTo) return;
+    setTestEmailAddress(testTo);
+
+    previewEmailMutation.mutate(
+      {
+        event: previewEvent,
+        tiptapJson: editor.getJSON() as Record<string, unknown>,
+        subject,
+        previewText: previewText || null,
+        variables: {},
+        to: testTo,
+      },
+      {
+        onSuccess: () => {
+          setTestSendToast("Test email successfully sent!");
+          setTimeout(() => setTestSendToast(null), 4000);
+        },
+        onError: (err) => {
+          alert(`Failed to send test email: ${err.message}`);
+        },
+      }
+    );
+  };
+
+  // Filter templates list by search query
+  const filteredTemplates = templates.filter(
+    (t) =>
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.subject.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <AppShell area="admin">
-      <div className="flex flex-col h-full -m-6">
-        <div className="px-6 pt-6 pb-2">
-          <PageHeader
-            title="Email Templates"
-            description="Create and manage reusable email templates with TipTap"
-          />
+      <h1 className="sr-only">Email Templates</h1>
+      <div className="flex flex-col h-[calc(100vh-100px)] -m-6 overflow-hidden">
+        {/* Responsive Mobile Tabs Header */}
+        <div className="md:hidden flex border-b border-neutral-200 bg-white">
+          <button
+            onClick={() => setMobileTab("list")}
+            className={cn("flex-1 py-3 text-center text-xs font-semibold border-b-2", mobileTab === "list" ? "border-accent-600 text-accent-700 bg-accent-50/20" : "border-transparent text-neutral-600")}
+          >
+            Templates ({filteredTemplates.length})
+          </button>
+          <button
+            onClick={() => setMobileTab("editor")}
+            className={cn("flex-1 py-3 text-center text-xs font-semibold border-b-2", mobileTab === "editor" ? "border-accent-600 text-accent-700 bg-accent-50/20" : "border-transparent text-neutral-600")}
+          >
+            Compose
+          </button>
+          <button
+            onClick={() => setMobileTab("preview")}
+            className={cn("flex-1 py-3 text-center text-xs font-semibold border-b-2", mobileTab === "preview" ? "border-accent-600 text-accent-700 bg-accent-50/20" : "border-transparent text-neutral-600")}
+          >
+            Preview
+          </button>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left sidebar */}
-          <div className="w-64 shrink-0 border-r border-neutral-200 bg-white overflow-hidden flex flex-col">
-            <TemplateList
-              templates={templates}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onNew={handleNew}
-            />
+        <div className="flex flex-1 overflow-hidden h-full">
+          
+          {/* ═══ COLUMN 1: TEMPLATE LIST SIDEBAR ═══ */}
+          <div
+            className={cn(
+              "w-80 shrink-0 border-r border-neutral-200 bg-white flex flex-col h-full overflow-hidden",
+              mobileTab !== "list" && "hidden md:flex"
+            )}
+          >
+            {/* Search and New Template Header */}
+            <div className="p-3 border-b border-neutral-100 space-y-2">
+              <Button size="sm" className="w-full flex items-center justify-center gap-1.5" onClick={handleNew} loading={createMutation.isPending}>
+                + New Template
+              </Button>
+              <div className="relative">
+                <MagnifyingGlassIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
+                <input
+                  type="text"
+                  placeholder="Search templates..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-md border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-accent-500 focus:border-accent-500"
+                />
+              </div>
+            </div>
+
+            {/* Template Buttons List */}
+            <div className="flex-1 overflow-y-auto divide-y divide-neutral-100">
+              {filteredTemplates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(t.id);
+                    setMobileTab("editor");
+                  }}
+                  className={cn(
+                    "w-full text-left px-4 py-3 hover:bg-neutral-50/50 transition-all border-l-3",
+                    selectedId === t.id
+                      ? "bg-accent-50/30 border-l-accent-600"
+                      : "border-l-transparent"
+                  )}
+                >
+                  <div className="flex justify-between items-start gap-1">
+                    <span className="text-xs font-semibold text-neutral-900 truncate">{t.name}</span>
+                    <div className="flex gap-1 shrink-0">
+                      {t.isDefault && <Badge tone="info" className="text-[9px] px-1 py-0">Def</Badge>}
+                      {!t.active && <Badge tone="neutral" className="text-[9px] px-1 py-0">Inact</Badge>}
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-neutral-500 truncate mt-0.5">{t.subject}</div>
+                  <div className="text-[10px] text-neutral-400 mt-1">
+                    Updated: {new Date(t.updatedAt).toLocaleDateString()}
+                  </div>
+                </button>
+              ))}
+              {filteredTemplates.length === 0 && (
+                <p className="px-4 py-6 text-center text-xs text-neutral-400">No templates found.</p>
+              )}
+            </div>
           </div>
 
-          {/* Main editor area */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          {/* ═══ COLUMN 2: WORKSPACE EDITOR PANEL ═══ */}
+          <div
+            className={cn(
+              "flex-1 flex flex-col h-full bg-white overflow-hidden border-r border-neutral-200",
+              mobileTab !== "editor" && "hidden md:flex"
+            )}
+          >
+            {!selectedId ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-neutral-50/30">
+                <BookOpenIcon className="h-12 w-12 text-neutral-300 mb-2" />
+                <p className="text-sm font-medium text-neutral-500">Select a template to begin editing</p>
+                <p className="text-xs text-neutral-400 mt-1">Choose from the left sidebar or create a new template.</p>
+              </div>
+            ) : selectedId && !selectedTemplate ? (
+              <div className="flex-1 p-6 space-y-4">
+                <Skeleton className="h-8 w-60" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-[250px] w-full" />
+              </div>
+            ) : (
+              <div className="flex flex-col flex-1 overflow-hidden h-full">
+                {/* Sticky Editor Header */}
+                <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 bg-white shrink-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => {
+                        setName(e.target.value);
+                        setDirty(true);
+                      }}
+                      placeholder="Template name"
+                      className="text-sm font-semibold text-neutral-900 border-0 border-b border-transparent hover:border-neutral-200 focus:border-accent-500 focus:outline-none bg-transparent px-1 py-0.5 rounded w-48 md:w-64 transition-all"
+                    />
+                    {selectedTemplate?.isDefault && <Badge tone="info" className="text-[10px]">Default</Badge>}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setConfirmReset(true)}
+                      icon={<ArrowPathIcon className="h-3.5 w-3.5" />}
+                    >
+                      Reset
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => setConfirmDelete(true)}
+                      icon={<TrashIcon className="h-3.5 w-3.5" />}
+                    >
+                      Delete
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSave}
+                      loading={updateMutation.isPending}
+                      disabled={!dirty && !updateMutation.isPending}
+                      icon={<CheckIcon className="h-3.5 w-3.5" />}
+                    >
+                      {dirty ? "Save" : "Saved"}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Form fields (Subject / Preview) */}
+                <div className="p-4 border-b border-neutral-100 space-y-3 shrink-0 bg-white">
+                  <Input
+                    label="Email Subject"
+                    value={subject}
+                    onChange={(e) => {
+                      setSubject(e.target.value);
+                      setDirty(true);
+                    }}
+                    placeholder="Enter subject line..."
+                  />
+                  <Input
+                    label="Inbox Preview Text (Optional)"
+                    value={previewText}
+                    onChange={(e) => {
+                      setPreviewText(e.target.value);
+                      setDirty(true);
+                    }}
+                    placeholder="Short snippet visible next to subject in email client..."
+                  />
+                </div>
+
+                {/* Editor canvas */}
+                <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                  <EditorToolbar editor={editor} />
+                  <div className="flex-1 overflow-y-auto px-6 py-4 prose prose-sm max-w-none focus:outline-none min-h-[200px]">
+                    <EditorContent editor={editor} className="min-h-full" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ═══ COLUMN 3: PREVIEW / INSPECT PANEL ═══ */}
+          <div
+            className={cn(
+              "w-[400px] shrink-0 bg-neutral-50 flex flex-col h-full overflow-y-auto p-4 border-l border-neutral-200 space-y-5",
+              mobileTab !== "preview" && "hidden md:flex"
+            )}
+          >
+            {/* Context / Preview Configuration */}
+            {selectedId && (
+              <div className="space-y-4">
+                {/* Header */}
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+                    Live Rendering Preview
+                  </h3>
+                  <Button size="sm" variant="secondary" onClick={handleTestSend} icon={<PaperAirplaneIcon className="h-3 w-3" />}>
+                    Test Send
+                  </Button>
+                </div>
+
+                {testSendToast && (
+                  <div className="rounded-md bg-accent-50 border border-accent-200 px-3 py-2 text-xs text-accent-700 animate-pulse">
+                    {testSendToast}
+                  </div>
+                )}
+
+                {/* Preview Event selection */}
+                <div>
+                  <Select
+                    label="Preview Event Context"
+                    value={previewEvent}
+                    onChange={(e) => setPreviewEvent(e.target.value)}
+                    helpText="Preview template dynamically using this email event's variables and sender policies."
+                  >
+                    {ALL_EVENT_KEYS.map((key) => (
+                      <option key={key} value={key}>
+                        {key.replace(/_/g, " ")}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Sender Preview Block */}
+                <div className="rounded-lg border border-neutral-200 bg-white p-3 space-y-1.5 shadow-2xs">
+                  <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Sender Headers</div>
+                  <div className="text-xs break-all">
+                    <span className="font-semibold text-neutral-600">From: </span>
+                    <code className="text-neutral-900 font-mono text-[11px]">{resolvedSender || "donotreply@camply.ng"}</code>
+                  </div>
+                  {resolvedReplyTo && (
+                    <div className="text-xs break-all border-t border-neutral-100 pt-1.5">
+                      <span className="font-semibold text-neutral-600">Reply-To: </span>
+                      <code className="text-neutral-900 font-mono text-[11px]">{resolvedReplyTo}</code>
+                    </div>
+                  )}
+                </div>
+
+                {/* Unknown Variables Alert */}
+                {unknownTokens.length > 0 && (
+                  <div className="rounded-lg border border-warning-200 bg-warning-50/50 p-3 space-y-1">
+                    <span className="flex items-center gap-1 text-xs font-semibold text-warning-800">
+                      <ExclamationTriangleIcon className="h-4 w-4" /> Unknown Variables Leak Warn
+                    </span>
+                    <p className="text-[11px] text-warning-700">These will render as blank space in actual sends:</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {unknownTokens.map((t) => (
+                        <span key={t} className="px-1 py-0.5 rounded bg-warning-100 text-warning-800 font-mono text-[10px]">
+                          {"{{" + t + "}}"}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Desktop/Mobile Size Selector */}
+                <div className="flex items-center justify-between border-t border-neutral-200 pt-4">
+                  <span className="text-xs font-medium text-neutral-500">Layout Size</span>
+                  <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5">
+                    <button
+                      onClick={() => setPreviewWidth("desktop")}
+                      className={cn(
+                        "p-1 rounded-md transition-colors",
+                        previewWidth === "desktop" ? "bg-accent-100 text-accent-700" : "text-neutral-400 hover:text-neutral-600"
+                      )}
+                      title="Desktop Layout (480px)"
+                    >
+                      <ComputerDesktopIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setPreviewWidth("mobile")}
+                      className={cn(
+                        "p-1 rounded-md transition-colors",
+                        previewWidth === "mobile" ? "bg-accent-100 text-accent-700" : "text-neutral-400 hover:text-neutral-600"
+                      )}
+                      title="Mobile Layout (320px)"
+                    >
+                      <DevicePhoneMobileIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* IFrame Preview Canvas */}
+                <div className="flex justify-center border-t border-neutral-200 pt-3">
+                  <div
+                    className={cn(
+                      "rounded-xl border border-neutral-200 bg-white shadow-lg overflow-hidden transition-all duration-300",
+                      previewWidth === "desktop" ? "w-[480px]" : "w-[320px]"
+                    )}
+                  >
+                    {previewHtml ? (
+                      <iframe
+                        srcDoc={previewHtml}
+                        className="w-full h-[550px]"
+                        title="Live email render preview"
+                        sandbox="allow-same-origin"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-48 text-neutral-400 bg-white">
+                        <ArrowPathIcon className="h-8 w-8 animate-spin mb-1 text-neutral-300" />
+                        <span className="text-xs">Rendering preview...</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Variables Reference Panel */}
+                <div className="border-t border-neutral-200 pt-4">
+                  <VariablesPanel editor={editor} />
+                </div>
+              </div>
+            )}
             {!selectedId && (
-              <div className="flex flex-1 items-center justify-center text-sm text-neutral-400">
-                Select a template from the list or create a new one
-              </div>
-            )}
-
-            {selectedId && !selectedTemplate && (
-              <div className="flex-1 p-6">
-                <Skeleton className="h-8 w-60 mb-4" />
-                <Skeleton className="h-10 w-full mb-2" />
-                <Skeleton className="h-10 w-full mb-4" />
-                <Skeleton className="h-[300px] w-full" />
-              </div>
-            )}
-
-            {selectedId && selectedTemplate && (
-              <TemplateEditor
-                template={selectedTemplate as unknown as TemplateFull}
-                onSave={handleSave}
-                onDelete={() => setConfirmDelete(true)}
-                onReset={() => setConfirmReset(true)}
-                savePending={updateMutation.isPending}
-                deletePending={deleteMutation.isPending}
-                resetPending={resetMutation.isPending}
-              />
+              <p className="text-center text-xs text-neutral-400 py-12">No template context available.</p>
             )}
           </div>
+
         </div>
       </div>
 
-      <ConfirmDialog
-        open={confirmDelete}
-        title="Delete Template"
-        message="Are you sure you want to delete this template? This cannot be undone."
-        onConfirm={() => {
-          if (selectedId) deleteMutation.mutate({ id: selectedId });
-        }}
-        onCancel={() => setConfirmDelete(false)}
-        loading={deleteMutation.isPending}
-      />
-
+      {/* Reset Modal */}
       <ConfirmDialog
         open={confirmReset}
-        title="Reset to Default"
-        message="Pick an event to reset this template to its default content. All current changes will be lost."
+        title="Reset to Default template"
+        message="Are you sure you want to reset this template? Select which default event layout to seed from. Your current workspace updates will be discarded."
         onConfirm={() => {
-          if (selectedId) resetMutation.mutate({ id: selectedId, event: resetEvent as (typeof ALL_EVENT_KEYS)[number] });
+          if (selectedId) {
+            resetMutation.mutate({ id: selectedId, event: resetEvent as any });
+          }
         }}
         onCancel={() => setConfirmReset(false)}
         loading={resetMutation.isPending}
       >
         <div className="mt-3">
           <Select
-            label="Select event template"
+            label="Template Source"
             value={resetEvent}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setResetEvent(e.target.value)}
           >
@@ -779,6 +859,20 @@ export default function TemplatesPage() {
           </Select>
         </div>
       </ConfirmDialog>
+
+      {/* Delete Modal */}
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete Template"
+        message="Are you sure you want to delete this template? Any event configs using this template will automatically fallback to default system layouts. This action is irreversible."
+        onConfirm={() => {
+          if (selectedId) {
+            deleteMutation.mutate({ id: selectedId });
+          }
+        }}
+        onCancel={() => setConfirmDelete(false)}
+        loading={deleteMutation.isPending}
+      />
     </AppShell>
   );
 }
