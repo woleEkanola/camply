@@ -3,16 +3,16 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
-import { CheckInShell } from "@/components/staff/shared/CheckInShell";
+import { CheckOutShell } from "@/components/staff/shared/CheckOutShell";
 
-export default function AdminCheckInPage() {
+export default function AdminCheckOutPage() {
   const router = useRouter();
   const { data: session } = useSession({ required: true, onUnauthenticated: () => router.push("/login") });
   const organizationId = (session?.user as any)?.organizationId ?? "";
 
   return (
     <AppShell area="admin">
-      <CheckInShell organizationId={organizationId} title="Admin Check-in Workspace" />
+      <CheckOutShell organizationId={organizationId} title="Admin Check-out Workspace" />
     </AppShell>
   );
 }

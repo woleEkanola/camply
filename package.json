@@ -39,6 +39,7 @@
     "bcryptjs": "^3.0.2",
     "date-fns": "^4.1.0",
     "happy-dom": "^20.10.6",
+    "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.2",
     "next": "^16.2.10",
     "next-auth": "^4.24.14",

@@ -1081,7 +1081,14 @@ export const registrationRouter = createTRPCRouter({
     }),
 
   checkOut: protectedProcedure
-    .input(z.object({ registrationId: z.string() }))
+    .input(
+      z.object({
+        registrationId: z.string(),
+        collectorName: z.string().optional(),
+        collectorRelationship: z.string().optional(),
+        details: z.any().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -1091,10 +1098,163 @@ export const registrationRouter = createTRPCRouter({
       });
       await assertCanCheckIn(ctx, registration.campus.organizationId, registration.campusId);
       try {
-        return await engine.checkOutRegistration({ registrationId: input.registrationId, actorId: currentUser.id });
+        return await engine.checkOutRegistration({
+          registrationId: input.registrationId,
+          actorId: currentUser.id,
+          collectorName: input.collectorName,
+          collectorRelationship: input.collectorRelationship,
+          details: input.details,
+        });
       } catch (error) {
         throw toTRPCError(error);
       }
+    }),
+
+  undoCheckIn: protectedProcedure
+    .input(z.object({ registrationId: z.string(), reason: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+
+      if (!registration.checkedInAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Camper is not checked in." });
+      }
+      const timeDiffSeconds = (Date.now() - new Date(registration.checkedInAt).getTime()) / 1000;
+      if (timeDiffSeconds > 30 && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Check-in can only be undone within 30 seconds of check-in.",
+        });
+      }
+
+      try {
+        return await engine.undoCheckIn({
+          registrationId: input.registrationId,
+          actorId: currentUser.id,
+          reason: input.reason,
+        });
+      } catch (error) {
+        throw toTRPCError(error);
+      }
+    }),
+
+  bulkCheckIn: protectedProcedure
+    .input(z.object({ registrationIds: z.array(z.string()) }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const successes: string[] = [];
+      const failures: { id: string; error: string }[] = [];
+
+      for (const id of input.registrationIds) {
+        try {
+          const registration = await ctx.prisma.registration.findUniqueOrThrow({
+            where: { id },
+            include: { campus: true },
+          });
+          await assertCanCheckIn(ctx, registration.campus.organizationId, registration.campusId);
+          await engine.checkInRegistration({ registrationId: id, actorId: currentUser.id });
+          successes.push(id);
+        } catch (error: any) {
+          failures.push({ id, error: error?.message || "Failed to check in" });
+        }
+      }
+
+      return { successes, failures };
+    }),
+
+  getCheckInStats: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      let campId = input.campId;
+      if (!campId) {
+        const org = await ctx.prisma.organization.findUnique({
+          where: { id: input.organizationId },
+          select: { activeCampId: true },
+        });
+        campId = org?.activeCampId || undefined;
+      }
+
+      if (!campId) {
+        return { approved: 0, checkedIn: 0, remaining: 0, percentage: 0, avgProcessingTime: 0 };
+      }
+
+      let campusFilter: Record<string, unknown> = {};
+      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      if (!isOrgAdmin && (currentUser.managedCampuses?.length ?? 0) > 0) {
+        const managed = await ctx.prisma.campus.findMany({
+          where: { organizationId: input.organizationId, reps: { some: { id: currentUser.id } } },
+          select: { id: true },
+        });
+        campusFilter = { id: { in: managed.map((c) => c.id) } };
+      }
+
+      const baseWhere = {
+        campId,
+        deletedAt: null,
+        campus: {
+          organizationId: input.organizationId,
+          ...campusFilter,
+        },
+      };
+
+      const [approved, checkedIn] = await Promise.all([
+        ctx.prisma.registration.count({
+          where: {
+            ...baseWhere,
+            status: { in: ["APPROVED", "CHECKED_IN"] },
+          },
+        }),
+        ctx.prisma.registration.count({
+          where: {
+            ...baseWhere,
+            status: "CHECKED_IN",
+          },
+        }),
+      ]);
+
+      const checkedInToday = await ctx.prisma.registration.findMany({
+        where: {
+          ...baseWhere,
+          status: "CHECKED_IN",
+          checkedInAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+          },
+        },
+        select: { checkedInAt: true },
+        orderBy: { checkedInAt: "asc" },
+      });
+
+      let avgProcessingTime = 12;
+      if (checkedInToday.length > 1) {
+        let totalGap = 0;
+        for (let i = 1; i < checkedInToday.length; i++) {
+          const gap = (new Date(checkedInToday[i].checkedInAt!).getTime() - new Date(checkedInToday[i - 1].checkedInAt!).getTime()) / 1000;
+          totalGap += Math.min(gap, 300);
+        }
+        avgProcessingTime = Math.round(totalGap / (checkedInToday.length - 1));
+        if (avgProcessingTime < 3) avgProcessingTime = 5;
+      }
+
+      const remaining = Math.max(0, approved - checkedIn);
+      const percentage = approved > 0 ? Math.round((checkedIn / approved) * 100) : 0;
+
+      return {
+        approved,
+        checkedIn,
+        remaining,
+        percentage,
+        avgProcessingTime,
+      };
     }),
 
   regenerateQr: protectedProcedure
