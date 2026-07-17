@@ -132,8 +132,13 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
       sortable: true,
     },
     {
-      header: "Parent Consent",
-      accessor: (reg: Registration) => <Badge tone={reg.parentConsent ? "success" : "danger"}>{reg.parentConsent ? "True" : "False"}</Badge>,
+      header: "Consent Form",
+      accessor: (reg: Registration) =>
+        reg.parentConsent ? (
+          <Badge tone="success">Uploaded</Badge>
+        ) : (
+          <Badge tone="danger">Missing</Badge>
+        ),
     },
     {
       header: "Actions",
@@ -227,10 +232,10 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             <option value="CANCELLED">Cancelled</option>
           </Select>
 
-          <Select label="Parent Consent" containerClassName="w-40" value={consentFilter} onChange={(e) => setConsentFilter(e.target.value as any)}>
+          <Select label="Consent Form" containerClassName="w-40" value={consentFilter} onChange={(e) => setConsentFilter(e.target.value as any)}>
             <option value="ALL">All</option>
             <option value="UPLOADED">Uploaded</option>
-            <option value="NOT_UPLOADED">Not Uploaded</option>
+            <option value="NOT_UPLOADED">Missing</option>
           </Select>
 
           {isTwoStep && (

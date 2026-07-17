@@ -139,7 +139,7 @@ const CampusRepRegistrations: React.FC<{ profileId: string; campusId: string }> 
         <tr>
           <th className="px-2 py-1 border-b">Camp</th>
           <th className="px-2 py-1 border-b">Campus</th>
-          <th className="px-2 py-1 border-b">Parent Consent</th>
+          <th className="px-2 py-1 border-b">Consent Form</th>
           <th className="px-2 py-1 border-b">Published</th>
         </tr>
       </thead>
@@ -149,11 +149,16 @@ const CampusRepRegistrations: React.FC<{ profileId: string; campusId: string }> 
             <td className="px-2 py-1 border-b">{reg.camp?.name}</td>
             <td className="px-2 py-1 border-b">{reg.campus?.name}</td>
             <td className="px-2 py-1 border-b text-center">
-              <input
-                type="checkbox"
-                checked={!!reg.parentConsent}
-                onChange={() => regUpdateMutation.mutate({ id: reg.id, data: { parentConsent: (!reg.parentConsent).toString() } })}
-              />
+              <label className="inline-flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={!!reg.parentConsent}
+                  onChange={() => regUpdateMutation.mutate({ id: reg.id, data: { parentConsent: (!reg.parentConsent).toString() } })}
+                />
+                <span className={reg.parentConsent ? "text-success-700" : "text-danger-600"}>
+                  {reg.parentConsent ? "Uploaded" : "Missing"}
+                </span>
+              </label>
             </td>
             <td className="px-2 py-1 border-b text-center">
               <input

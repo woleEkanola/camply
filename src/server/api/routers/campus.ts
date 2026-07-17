@@ -210,24 +210,71 @@ export const campusRouter = createTRPCRouter({
       });
     }),
 
-  // Get statistics for a campus (registrations, campers, trend)
+  // Get statistics for a campus (registrations, campers, trend, status counts, quota)
   getStats: protectedProcedure
-    .input(z.object({ campusId: z.string() }))
+    .input(z.object({ campusId: z.string(), campId: z.string().optional() }))
     .query(async ({ input, ctx }) => {
-      const campus = await prisma.campus.findUnique({ where: { id: input.campusId } });
+      const campus = await prisma.campus.findUnique({
+        where: { id: input.campusId },
+        include: { organization: { select: { activeCampId: true } } },
+      });
       if (!campus || campus.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }
       await assertOrgAdminOrCampusRep(ctx, campus.organizationId, campus.id);
 
-      const registrationsCount = await prisma.registration.count({
-        where: { campusId: input.campusId, deletedAt: null },
-      });
+      const activeCampId = input.campId || campus.organization.activeCampId || undefined;
+      const baseWhere: Record<string, unknown> = { campusId: input.campusId, deletedAt: null };
+      if (activeCampId) baseWhere.campId = activeCampId;
+
+      const registrationsCount = await prisma.registration.count({ where: baseWhere });
       const uniqueCampers = await prisma.registration.findMany({
-        where: { campusId: input.campusId, deletedAt: null },
+        where: baseWhere,
         select: { camperId: true },
       });
       const campersCount = new Set(uniqueCampers.map((r) => r.camperId)).size;
+
+      const statusCounts = await prisma.registration.groupBy({
+        by: ["status"],
+        where: baseWhere,
+        _count: { _all: true },
+      });
+      const countsByStatus = Object.fromEntries(statusCounts.map((s) => [s.status, s._count._all]));
+
+      let quota: number | null = null;
+      let quotaFullBehavior = "CLOSE";
+      let usedCount = 0;
+      let approvedCount = 0;
+      let percentUsed = 0;
+
+      if (activeCampId) {
+        const signupLink = await prisma.signupLink.findUnique({
+          where: { campusId_campId: { campusId: input.campusId, campId: activeCampId } },
+        });
+        if (signupLink) {
+          quota = signupLink.quota;
+          quotaFullBehavior = signupLink.quotaFullBehavior;
+          usedCount = await prisma.registration.count({
+            where: {
+              campusId: input.campusId,
+              campId: activeCampId,
+              deletedAt: null,
+              status: { in: ["SUBMITTED", "PENDING", "APPROVED"] },
+            },
+          });
+          approvedCount = await prisma.registration.count({
+            where: {
+              campusId: input.campusId,
+              campId: activeCampId,
+              deletedAt: null,
+              status: "APPROVED",
+            },
+          });
+          if (quota > 0) {
+            percentUsed = Math.min(100, Math.round((approvedCount / quota) * 100));
+          }
+        }
+      }
 
       const now = new Date();
       const trend = [];
@@ -236,14 +283,23 @@ export const campusRouter = createTRPCRouter({
         const to = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
         const count = await prisma.registration.count({
           where: {
-            campusId: input.campusId,
-            deletedAt: null,
+            ...baseWhere,
             createdAt: { gte: from, lt: to },
           },
         });
         trend.push({ month: from.toISOString().slice(0, 7), count });
       }
 
-      return { registrationsCount, campersCount, trend };
+      return {
+        registrationsCount,
+        campersCount,
+        countsByStatus,
+        quota,
+        quotaFullBehavior,
+        usedCount,
+        approvedCount,
+        percentUsed,
+        trend,
+      };
     }),
 });

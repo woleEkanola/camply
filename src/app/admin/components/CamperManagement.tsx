@@ -7,7 +7,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { Table, type Column } from "@/components/ui/Table";
 import { Dialog } from "@/components/ui/Dialog";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { Select } from "@/components/ui/Input";
+import { Select, Textarea } from "@/components/ui/Input";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -53,6 +53,10 @@ interface CamperType {
   }>;
   dobApproved: boolean;
   birthCert: string | null;
+  registrations: Array<{
+    id: string;
+    status: string;
+  }>;
 }
 
 interface CamperManagementProps {
@@ -89,6 +93,9 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<"REJECT_REG" | "DELETE" | null>(null);
+  const [bulkReason, setBulkReason] = useState("");
 
   // Pagination states
   const [cursor, setCursor] = useState<string | undefined>(undefined);
@@ -167,6 +174,28 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     },
   });
 
+  const bulkDeleteCampers = api.camper.bulkSoftDelete.useMutation({
+    onSuccess: (res) => {
+      setSuccess(`Deleted ${res.succeeded} camper${res.succeeded === 1 ? "" : "s"}${res.failed > 0 ? `; ${res.failed} failed` : ""}.`);
+      setSelectedIds([]);
+      setCursor(undefined);
+      setAllCampers([]);
+      void refetchProfiles();
+    },
+    onError: (err) => setError(`Error deleting campers: ${err.message}`),
+  });
+
+  const bulkTransition = api.registration.bulkTransition.useMutation({
+    onSuccess: (res) => {
+      setSuccess(`Bulk action complete: ${res.succeeded} succeeded${res.skipped > 0 ? `, ${res.skipped} skipped` : ""}${res.failed > 0 ? `, ${res.failed} failed` : ""}.`);
+      setSelectedIds([]);
+      setCursor(undefined);
+      setAllCampers([]);
+      void refetchProfiles();
+    },
+    onError: (err) => setError(`Error acting on registrations: ${err.message}`),
+  });
+
   // Handle mutation errors
   useEffect(() => {
     if (deleteCamperMutation.error) {
@@ -183,6 +212,43 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   const openDeleteModal = (profileId: string) => {
     setSelectedProfile(profileId);
     setIsDeleteModalOpen(true);
+  };
+
+  const resolveActiveRegistrationIds = (camperIds: string[]) => {
+    const camperById = new Map(allCampers.map((c) => [c.id, c]));
+    const registrationIds: string[] = [];
+    const skippedIds: string[] = [];
+    for (const id of camperIds) {
+      const camper = camperById.get(id);
+      const reg = camper?.registrations?.[0];
+      if (reg?.id) {
+        registrationIds.push(reg.id);
+      } else {
+        skippedIds.push(id);
+      }
+    }
+    return { registrationIds, skippedIds };
+  };
+
+  const handleBulkTransition = (action: "APPROVE" | "WAITLIST" | "ARCHIVE" | "REJECT") => {
+    const { registrationIds, skippedIds } = resolveActiveRegistrationIds(selectedIds);
+    if (registrationIds.length === 0) {
+      setError(`No active registrations found for the selected camper${selectedIds.length === 1 ? "" : "s"}.`);
+      return;
+    }
+    const input: any = { ids: registrationIds, action };
+    if (action === "REJECT") {
+      input.reason = bulkReason;
+    }
+    bulkTransition.mutate(input, {
+      onSuccess: (res) => {
+        if (skippedIds.length > 0) {
+          setTimeout(() => {
+            setSuccess(`${skippedIds.length} camper${skippedIds.length === 1 ? "" : "s"} had no active registration.`);
+          }, 0);
+        }
+      },
+    });
   };
 
   const columns: Column<CamperType>[] = [
@@ -265,6 +331,28 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         />
       )}
 
+      {selectedIds.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-accent-200 bg-accent-50 px-3 py-2">
+          <Badge tone="info">{selectedIds.length} selected</Badge>
+          <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"} onClick={() => handleBulkTransition("APPROVE")}>
+            Approve Reg
+          </Button>
+          <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"} onClick={() => handleBulkTransition("WAITLIST")}>
+            Waitlist Reg
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT_REG"); setBulkReason(""); }}>
+            Reject Reg
+          </Button>
+          <Button size="sm" variant="secondary" loading={bulkTransition.isPending && bulkTransition.variables?.action === "ARCHIVE"} onClick={() => handleBulkTransition("ARCHIVE")}>
+            Archive Reg
+          </Button>
+          <Button size="sm" variant="danger" data-testid="bulk-delete-button" onClick={() => setBulkAction("DELETE")}>
+            Delete
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>Clear</Button>
+        </div>
+      )}
+
       {/* Filters and Search */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-1 flex-wrap items-center gap-3">
@@ -306,6 +394,9 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         data={allCampers}
         rowKey={(profile) => profile.id}
         actions={actions}
+        selectable
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
         isLoading={isLoading && allCampers.length === 0}
         emptyTitle="No campers found"
         emptyDescription="Try adjusting your search or filters."
@@ -330,6 +421,63 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
           <Button variant="danger" onClick={handleDeleteProfile}>Delete Profile</Button>
+        </div>
+      </Dialog>
+
+      {/* Bulk Reject Registration Modal */}
+      <Dialog
+        open={bulkAction === "REJECT_REG"}
+        onClose={() => { setBulkAction(null); setBulkReason(""); }}
+        title={`Reject registrations for ${selectedIds.length} camper${selectedIds.length === 1 ? "" : "s"}`}
+        size="sm"
+      >
+        <p className="text-sm text-neutral-500">This reason will be shared with the parent for every selected camper&apos;s active registration.</p>
+        <Textarea
+          className="mt-3"
+          value={bulkReason}
+          onChange={(e) => setBulkReason(e.target.value)}
+          placeholder="Reason for rejection"
+          rows={4}
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => { setBulkAction(null); setBulkReason(""); }}>Cancel</Button>
+          <Button
+            variant="danger"
+            disabled={!bulkReason.trim()}
+            loading={bulkTransition.isPending}
+            onClick={() => {
+              handleBulkTransition("REJECT");
+              setBulkAction(null);
+              setBulkReason("");
+            }}
+          >
+            Reject
+          </Button>
+        </div>
+      </Dialog>
+
+      {/* Bulk Delete Campers Modal */}
+      <Dialog
+        open={bulkAction === "DELETE"}
+        onClose={() => setBulkAction(null)}
+        title={`Delete ${selectedIds.length} camper${selectedIds.length === 1 ? "" : "s"}`}
+        size="sm"
+      >
+        <p className="text-sm text-neutral-500">
+          These camper profiles and their live registrations will be moved to Trash. They can be restored within 60 days.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setBulkAction(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={bulkDeleteCampers.isPending}
+            onClick={() => {
+              bulkDeleteCampers.mutate({ ids: selectedIds });
+              setBulkAction(null);
+            }}
+          >
+            Delete
+          </Button>
         </div>
       </Dialog>
     </div>

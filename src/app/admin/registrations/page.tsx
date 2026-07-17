@@ -4,16 +4,18 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "@/utils/trpc";
+import { cn } from "@/lib/cn";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, type Column } from "@/components/ui/Table";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { Select } from "@/components/ui/Input";
+import { Select, Textarea } from "@/components/ui/Input";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { Tabs } from "@/components/ui/Tabs";
+import { Dialog } from "@/components/ui/Dialog";
 import { StatusDialog } from "./components/StatusDialog";
 import { CommunicationCard } from "./components/CommunicationCard";
 import { DecisionHistory } from "./components/DecisionHistory";
@@ -97,6 +99,10 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
   const overviewTab = (
     <div className="space-y-6">
       {actionError && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{actionError}</div>}
+
+      <div className="rounded-md bg-info-50 p-3 text-sm text-info-700">
+        <strong>Consent Form</strong> means the parent authorization document attached to this registration. It is tracked separately from other required documents.
+      </div>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <div><span className="text-neutral-500">Camp</span><div className="font-medium text-neutral-900">{registration.camp?.name}</div></div>
@@ -272,6 +278,10 @@ export default function RegistrationsPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<"REJECT" | "REQUEST_CORRECTION" | "DELETE" | null>(null);
+  const [bulkReason, setBulkReason] = useState("");
+  const [bulkResult, setBulkResult] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const { data: session, status } = useSession({
     required: true,
@@ -291,10 +301,38 @@ export default function RegistrationsPage() {
 
   const organizationId = (session?.user as ExtendedUser)?.organizationId || "";
 
+  const utils = api.useUtils();
   const { data: campuses = [] } = api.campus.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
   const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
   const { data: org } = api.organization.getById.useQuery({ id: organizationId }, { enabled: !!organizationId });
   const isTwoStep = (org as any)?.approvalWorkflow === "TWO_STEP";
+
+  const invalidateRegistrations = () => {
+    setSelectedIds([]);
+    void utils.registration.adminList.invalidate();
+  };
+
+  const bulkTransition = api.registration.bulkTransition.useMutation({
+    onSuccess: (res) => {
+      const msg = `Bulk action complete: ${res.succeeded} succeeded${res.skipped > 0 ? `, ${res.skipped} skipped` : ""}${res.failed > 0 ? `, ${res.failed} failed` : ""}.`;
+      setBulkResult({ message: msg, type: res.failed > 0 ? "error" : "success" });
+      invalidateRegistrations();
+    },
+    onError: (err) => {
+      setBulkResult({ message: err.message, type: "error" });
+    },
+  });
+
+  const bulkSoftDelete = api.registration.bulkSoftDelete.useMutation({
+    onSuccess: (res) => {
+      const msg = `Deleted ${res.succeeded} registration${res.succeeded === 1 ? "" : "s"}${res.failed > 0 ? `; ${res.failed} failed` : ""}.`;
+      setBulkResult({ message: msg, type: res.failed > 0 ? "error" : "success" });
+      invalidateRegistrations();
+    },
+    onError: (err) => {
+      setBulkResult({ message: err.message, type: "error" });
+    },
+  });
 
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
@@ -371,7 +409,7 @@ export default function RegistrationsPage() {
             />
           </>
         )}
-        {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN"].map((s) => (
+        {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"].map((s) => (
           <StatCard
             key={s}
             label={s === "PENDING" && isTwoStep ? "Waiting Decision" : s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
@@ -385,6 +423,42 @@ export default function RegistrationsPage() {
         ))}
       </div>
 
+      {bulkResult && (
+        <div className={cn("mb-4 rounded-md p-3 text-sm", bulkResult.type === "success" ? "bg-success-50 text-success-700" : "bg-danger-50 text-danger-700")}>
+          <span>{bulkResult.message}</span>
+          <button onClick={() => setBulkResult(null)} className="ml-3 text-xs underline">Dismiss</button>
+        </div>
+      )}
+
+      {selectedIds.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-accent-200 bg-accent-50 px-3 py-2">
+          <Badge tone="info">{selectedIds.length} selected</Badge>
+          <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}>
+            Approve
+          </Button>
+          <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "WAITLIST" })}>
+            Waitlist
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT"); setBulkReason(""); }}>
+            Reject
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REQUEST_CORRECTION"); setBulkReason(""); }}>
+            Request Correction
+          </Button>
+          <Button size="sm" variant="secondary" loading={bulkTransition.isPending && bulkTransition.variables?.action === "ARCHIVE"} onClick={() => {
+            if (window.confirm(`Archive ${selectedIds.length} selected registration${selectedIds.length === 1 ? "" : "s"}?`)) {
+              bulkTransition.mutate({ ids: selectedIds, action: "ARCHIVE" });
+            }
+          }}>
+            Archive
+          </Button>
+          <Button size="sm" variant="danger" data-testid="bulk-delete-button" loading={bulkSoftDelete.isPending} onClick={() => setBulkAction("DELETE")}>
+            Delete
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>Clear</Button>
+        </div>
+      )}
+
       <div className="mb-4 grid gap-3 md:grid-cols-3">
         <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         <Select value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
@@ -393,7 +467,7 @@ export default function RegistrationsPage() {
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </Select>
-        <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+        <Select data-testid="registration-status-filter" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
           <option value="">All Statuses</option>
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
@@ -408,6 +482,9 @@ export default function RegistrationsPage() {
         data={registrations}
         rowKey={(row) => row.id}
         onRowClick={(row) => setSelectedRegistration(row.id)}
+        selectable
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
         isLoading={isLoading}
         emptyTitle="No registrations match your filters"
         emptyDescription="Try adjusting search, centre, or status filters."
@@ -416,6 +493,72 @@ export default function RegistrationsPage() {
       {selectedRegistration && (
         <RegistrationDetail registrationId={selectedRegistration} onClose={() => setSelectedRegistration(null)} />
       )}
+
+      <Dialog
+        open={bulkAction === "REJECT" || bulkAction === "REQUEST_CORRECTION"}
+        onClose={() => { setBulkAction(null); setBulkReason(""); }}
+        title={bulkAction === "REJECT" ? `Reject ${selectedIds.length} registration${selectedIds.length === 1 ? "" : "s"}` : `Request correction for ${selectedIds.length} registration${selectedIds.length === 1 ? "" : "s"}`}
+        size="sm"
+      >
+        <p className="text-sm text-neutral-500">
+          {bulkAction === "REJECT"
+            ? "This reason will be shared with the parent for every selected registration."
+            : "This message will be sent to the parent for every selected registration."}
+        </p>
+        <Textarea
+          className="mt-3"
+          value={bulkReason}
+          onChange={(e) => setBulkReason(e.target.value)}
+          placeholder={bulkAction === "REJECT" ? "Reason for rejection" : "Describe the required correction"}
+          rows={4}
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => { setBulkAction(null); setBulkReason(""); }}>Cancel</Button>
+          <Button
+            disabled={!bulkReason.trim()}
+            loading={bulkTransition.isPending}
+            variant={bulkAction === "REJECT" ? "danger" : "primary"}
+            onClick={() => {
+              if (bulkAction === "REJECT" || bulkAction === "REQUEST_CORRECTION") {
+                bulkTransition.mutate({
+                  ids: selectedIds,
+                  action: bulkAction,
+                  reason: bulkAction === "REJECT" ? bulkReason : undefined,
+                  message: bulkAction === "REQUEST_CORRECTION" ? bulkReason : undefined,
+                });
+              }
+              setBulkAction(null);
+              setBulkReason("");
+            }}
+          >
+            {bulkAction === "REJECT" ? "Reject" : "Request Correction"}
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={bulkAction === "DELETE"}
+        onClose={() => setBulkAction(null)}
+        title={`Delete ${selectedIds.length} registration${selectedIds.length === 1 ? "" : "s"}`}
+        size="sm"
+      >
+        <p className="text-sm text-neutral-500">
+          These registrations will be moved to Trash. They can be restored within 60 days.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setBulkAction(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={bulkSoftDelete.isPending}
+            onClick={() => {
+              bulkSoftDelete.mutate({ ids: selectedIds });
+              setBulkAction(null);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </Dialog>
     </AppShell>
   );
 }
