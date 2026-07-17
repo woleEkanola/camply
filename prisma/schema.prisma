@@ -1089,6 +1089,9 @@ model EmailEventConfig {
   template       EmailTemplate? @relation(fields: [templateId], references: [id])
   channels       Json           @default("[\"EMAIL\", \"IN_APP\"]")
   recipients     Json           @default("[\"PARENT\"]")
+  senderMode     String         @default("ORG_SLUG")
+  customFromLocalPart String?
+  replyTo        String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -1146,6 +1149,9 @@ model Broadcast {
   campId         String?
   campusId       String?
   status         String                @default("DRAFT") // DRAFT | SENDING | COMPLETED | FAILED
+  senderMode     String                @default("ORG_SLUG")
+  customFromLocalPart String?
+  replyTo        String?
   createdById    String
   sentAt         DateTime?
   completedAt    DateTime?

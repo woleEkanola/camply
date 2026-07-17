@@ -2,8 +2,11 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { DEFAULT_TEMPLATES, ALL_EVENT_KEYS } from "../../email/defaults";
-import { renderEmail, type Branding } from "../../email/renderer";
+import { renderEmail, renderEmailWithEvent, type Branding } from "../../email/renderer";
 import { getSampleData } from "../../email/variables";
+import { resolveFromAddress } from "../../email/resolveFromAddress";
+import { interpolateSubject } from "../../email/interpolate";
+import { validateTemplate } from "../../email/validateTemplate";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -74,7 +77,29 @@ export const communicationRouter = createTRPCRouter({
       });
     }
 
-    return configs;
+    const org = await ctx.prisma.organization.findUnique({
+      where: { id: oid },
+      include: { branding: true },
+    });
+
+    const configsWithResolved = await Promise.all(
+      configs.map(async (c) => {
+        const { from } = await resolveFromAddress({
+          organizationId: oid,
+          event: c.event,
+          senderName: org?.branding?.senderName,
+          senderMode: c.senderMode,
+          customFromLocalPart: c.customFromLocalPart,
+          replyTo: c.replyTo,
+        });
+        return {
+          ...c,
+          resolvedFrom: from,
+        };
+      })
+    );
+
+    return configsWithResolved;
   }),
 
   eventUpdate: protectedProcedure
@@ -85,6 +110,9 @@ export const communicationRouter = createTRPCRouter({
         templateId: z.string().nullable().optional(),
         channels: z.array(z.string()).optional(),
         recipients: z.array(z.string()).optional(),
+        senderMode: z.string().optional(),
+        customFromLocalPart: z.string().nullable().optional(),
+        replyTo: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -103,6 +131,9 @@ export const communicationRouter = createTRPCRouter({
           ...(input.templateId !== undefined && { templateId: input.templateId }),
           ...(input.channels && { channels: input.channels }),
           ...(input.recipients && { recipients: input.recipients }),
+          ...(input.senderMode !== undefined && { senderMode: input.senderMode }),
+          ...(input.customFromLocalPart !== undefined && { customFromLocalPart: input.customFromLocalPart }),
+          ...(input.replyTo !== undefined && { replyTo: input.replyTo }),
         },
       });
     }),
@@ -302,6 +333,9 @@ export const communicationRouter = createTRPCRouter({
         audience: z.enum(["PARENTS", "TEACHERS", "VOLUNTEERS", "ALL"]),
         campId: z.string().optional(),
         campusId: z.string().optional(),
+        senderMode: z.string().optional(),
+        customFromLocalPart: z.string().nullable().optional(),
+        replyTo: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -363,7 +397,37 @@ export const communicationRouter = createTRPCRouter({
       if (userIds.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "No recipients found" });
 
       // Create BroadcastRecipient rows + SideEffect jobs
-      const branding = await ctx.prisma.organizationBranding.findUnique({ where: { organizationId: oid } });
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: oid },
+        include: { branding: true },
+      });
+
+      let campName = "";
+      if (broadcast.campId) {
+        const camp = await ctx.prisma.camp.findUnique({ where: { id: broadcast.campId } });
+        if (camp) campName = camp.name;
+      }
+
+      const branding = org?.branding;
+
+      // Compile generic variables for broadcasts
+      const variables = {
+        organization_name: org?.name ?? "",
+        camp_name: campName,
+        support_email: branding?.supportEmail ?? "",
+        support_phone: branding?.supportPhone ?? "",
+        sender_name: branding?.senderName ?? "",
+        dashboard_url: `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/dashboard`,
+      };
+
+      // Resolve from-address and replyTo for this broadcast
+      const { from, replyTo } = await resolveFromAddress({
+        organizationId: oid,
+        broadcast,
+        senderName: branding?.senderName,
+      });
+
+      const { text: interpolatedSubject } = interpolateSubject(broadcast.subject, variables);
 
       await Promise.all(
         userIds.map(async (user) => {
@@ -400,9 +464,8 @@ export const communicationRouter = createTRPCRouter({
           });
           if (!recipient) continue;
 
-          // Render personalized email
-          const variables = { ...getSampleData() }; // base sample data, can be personalized later
-          const html = await renderEmail({
+          // Render generic/personalized email
+          const { html } = await renderEmail({
             tiptapJson: broadcast.body as Record<string, unknown>,
             variables,
             branding: branding
@@ -427,10 +490,11 @@ export const communicationRouter = createTRPCRouter({
           const { Resend } = await import("resend");
           const resend = new Resend(process.env.RESEND_API_KEY);
           await resend.emails.send({
-            from: "donotreply@camply.ng",
+            from,
             to: recipient.email,
-            subject: broadcast.subject,
+            subject: interpolatedSubject,
             html,
+            replyTo,
           });
 
           await ctx.prisma.broadcastRecipient.update({
@@ -518,7 +582,119 @@ export const communicationRouter = createTRPCRouter({
         instagramUrl: input.branding?.instagramUrl ?? null,
         address: input.branding?.address ?? null,
       };
-      return renderEmail({ tiptapJson: input.tiptapJson, variables, branding });
+      return (await renderEmail({ tiptapJson: input.tiptapJson, variables, branding })).html;
+    }),
+
+  previewEmail: protectedProcedure
+    .input(
+      z.object({
+        event: z.string(),
+        tiptapJson: z.record(z.unknown()),
+        subject: z.string(),
+        previewText: z.string().nullable().optional(),
+        variables: z.record(z.string()).optional(),
+        to: z.string().email().optional(),
+        broadcast: z
+          .object({
+            senderMode: z.string(),
+            customFromLocalPart: z.string().nullable().optional(),
+            replyTo: z.string().nullable().optional(),
+          })
+          .optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const oid = orgId(ctx);
+
+      const variables = { ...getSampleData(), ...input.variables };
+
+      const { unknownTokens } = validateTemplate({
+        subject: input.subject,
+        previewText: input.previewText,
+        tiptapJson: input.tiptapJson,
+      });
+
+      const branding = await ctx.prisma.organizationBranding.findUnique({
+        where: { organizationId: oid },
+      });
+
+      const { from, replyTo } = await resolveFromAddress({
+        organizationId: oid,
+        event: input.event,
+        senderName: branding?.senderName,
+        senderMode: input.broadcast?.senderMode,
+        customFromLocalPart: input.broadcast?.customFromLocalPart,
+        replyTo: input.broadcast?.replyTo,
+        broadcast: input.broadcast,
+      });
+
+      const { text: interpolatedSubject } = interpolateSubject(input.subject, variables);
+      const { text: interpolatedPreviewText } = interpolateSubject(input.previewText ?? "", variables);
+
+      let html = "";
+      const brandingParams = branding ? {
+        logoUrl: branding.logoUrl,
+        primaryColor: branding.primaryColor,
+        accentColor: branding.accentColor,
+        buttonColor: branding.buttonColor,
+        headerImageUrl: branding.headerImageUrl,
+        senderName: branding.senderName,
+        footerText: branding.footerText,
+        supportEmail: branding.supportEmail,
+        supportPhone: branding.supportPhone,
+        websiteUrl: branding.websiteUrl,
+        facebookUrl: branding.facebookUrl,
+        instagramUrl: branding.instagramUrl,
+        address: branding.address,
+      } : null;
+
+      const isEventKey = ALL_EVENT_KEYS.includes(input.event as any);
+
+      if (isEventKey) {
+        let qrDataUrl: string | undefined;
+        if (input.event === "REGISTRATION_APPROVED") {
+          qrDataUrl = variables.qr_code ?? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        }
+
+        const renderResult = await renderEmailWithEvent({
+          eventKey: input.event as any,
+          tiptapJson: input.tiptapJson,
+          variables,
+          branding: brandingParams,
+          qrDataUrl,
+          previewText: interpolatedPreviewText,
+        });
+        html = renderResult.html;
+      } else {
+        const renderResult = await renderEmail({
+          tiptapJson: input.tiptapJson,
+          variables,
+          branding: brandingParams,
+        });
+        html = renderResult.html;
+      }
+
+      if (input.to) {
+        const { Resend } = await import("resend");
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        await resend.emails.send({
+          from,
+          to: input.to,
+          subject: interpolatedSubject,
+          html,
+          replyTo,
+        });
+      }
+
+      return {
+        html,
+        subject: interpolatedSubject,
+        from,
+        replyTo,
+        unknownTokens,
+      };
     }),
 
   // ═══ Inbox (staff/parent broadcast read/unread + pin) ═══════════════════════

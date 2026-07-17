@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Input";
+import { Input, Select } from "@/components/ui/Input";
 import { Drawer } from "@/components/ui/Drawer";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { api } from "@/utils/trpc";
@@ -23,6 +23,10 @@ interface EventConfig {
   channels: string[];
   recipients: string[];
   template: { id: string; name: string } | null;
+  senderMode: string;
+  customFromLocalPart: string | null;
+  replyTo: string | null;
+  resolvedFrom?: string;
 }
 
 interface TemplateOption {
@@ -105,12 +109,18 @@ export default function EmailEventsPage() {
   const [editTemplateId, setEditTemplateId] = useState<string>("");
   const [editRecipients, setEditRecipients] = useState<string[]>([]);
   const [editChannels, setEditChannels] = useState<string[]>([]);
+  const [editSenderMode, setEditSenderMode] = useState<string>("ORG_SLUG");
+  const [editCustomFromLocalPart, setEditCustomFromLocalPart] = useState<string>("");
+  const [editReplyTo, setEditReplyTo] = useState<string>("");
 
   const openDrawer = (config: EventConfig) => {
     setEditingEvent(config.event);
     setEditTemplateId(config.templateId ?? "");
     setEditRecipients(config.recipients ?? []);
     setEditChannels(config.channels ?? []);
+    setEditSenderMode(config.senderMode ?? "ORG_SLUG");
+    setEditCustomFromLocalPart(config.customFromLocalPart ?? "");
+    setEditReplyTo(config.replyTo ?? "");
     setDrawerOpen(true);
   };
 
@@ -128,6 +138,9 @@ export default function EmailEventsPage() {
       templateId: editTemplateId || null,
       recipients: editRecipients,
       channels: editChannels,
+      senderMode: editSenderMode,
+      customFromLocalPart: editCustomFromLocalPart || null,
+      replyTo: editReplyTo || null,
     });
   };
 
@@ -158,6 +171,33 @@ export default function EmailEventsPage() {
   const currentConfig = editingEvent
     ? configs?.find((c) => c.event === editingEvent)
     : null;
+
+  // Compute live preview of resolved sender email
+  const getLivePreview = () => {
+    if (editingEvent === "OTP_EMAIL") return "donotreply@camply.ng";
+
+    const baseResolved = configs?.find((c) => c.resolvedFrom)?.resolvedFrom || "";
+    const nameMatch = baseResolved.match(/^(.*?) <(.*?)>$/);
+    const senderName = nameMatch ? nameMatch[1] : "";
+
+    let email = "donotreply@camply.ng";
+    if (editSenderMode === "DONOTREPLY") {
+      email = "donotreply@camply.ng";
+    } else if (editSenderMode === "ORG_SLUG") {
+      const orgConfig = configs?.find((c) => c.senderMode === "ORG_SLUG");
+      if (orgConfig) {
+        const match = orgConfig.resolvedFrom?.match(/<(.*?)>$/) || [null, orgConfig.resolvedFrom];
+        email = match[1] || "donotreply@camply.ng";
+      } else {
+        email = "organization-slug@camply.ng";
+      }
+    } else if (editSenderMode === "CUSTOM") {
+      const local = editCustomFromLocalPart.trim() || "localpart";
+      email = `${local.toLowerCase()}@camply.ng`;
+    }
+
+    return senderName ? `${senderName} <${email}>` : email;
+  };
 
   return (
     <AppShell area="admin">
@@ -216,12 +256,17 @@ export default function EmailEventsPage() {
                     <Card key={ev.id} className="rounded-xl">
                       <CardBody className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <h3 className="text-sm font-semibold text-neutral-900">
                               {ev.title}
                             </h3>
                             {ev.template && (
                               <Badge tone="info">{ev.template.name}</Badge>
+                            )}
+                            {ev.resolvedFrom && (
+                              <span className="text-[11px] text-neutral-400 font-mono truncate">
+                                From: {ev.resolvedFrom}
+                              </span>
                             )}
                           </div>
                           <p className="mt-1 text-xs text-neutral-500">
@@ -293,6 +338,56 @@ export default function EmailEventsPage() {
               </Select>
             </div>
 
+            {/* Sender Policy */}
+            <div className="space-y-4 rounded-lg bg-neutral-50 p-4 border border-neutral-200">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-neutral-500">Sender Settings</h4>
+              
+              <div>
+                <Select
+                  label="Sender Address Mode"
+                  value={editSenderMode}
+                  disabled={editingEvent === "OTP_EMAIL"}
+                  onChange={(e) => setEditSenderMode(e.target.value)}
+                  helpText={editingEvent === "OTP_EMAIL" ? "OTP emails are strictly locked to donotreply@camply.ng for security." : undefined}
+                >
+                  <option value="ORG_SLUG">Organization Slug (slug@camply.ng)</option>
+                  <option value="DONOTREPLY">Do Not Reply (donotreply@camply.ng)</option>
+                  <option value="CUSTOM">Custom Address (custom@camply.ng)</option>
+                </Select>
+              </div>
+
+              {editSenderMode === "CUSTOM" && editingEvent !== "OTP_EMAIL" && (
+                <div>
+                  <Input
+                    label="Custom From Local-part"
+                    value={editCustomFromLocalPart}
+                    onChange={(e) => setEditCustomFromLocalPart(e.target.value)}
+                    placeholder="e.g. registration, info"
+                    helpText="Allowed characters: lowercase letters, numbers, dots, hyphens, underscores."
+                  />
+                </div>
+              )}
+
+              {editingEvent !== "OTP_EMAIL" && (
+                <div>
+                  <Input
+                    label="Reply-To Email Address (Optional)"
+                    value={editReplyTo}
+                    onChange={(e) => setEditReplyTo(e.target.value)}
+                    placeholder="e.g. contact@mychurch.org"
+                    helpText="If provided, user replies will route to this address."
+                  />
+                </div>
+              )}
+
+              <div>
+                <span className="block text-xs font-semibold text-neutral-500 mb-1">Resolved Sender Preview</span>
+                <div className="rounded bg-white px-3 py-2 text-xs font-mono border border-neutral-200 text-neutral-800 break-all select-all">
+                  {getLivePreview()}
+                </div>
+              </div>
+            </div>
+
             {/* Recipients */}
             <fieldset>
               <legend className="mb-2 block text-sm font-medium text-neutral-700">
@@ -309,7 +404,7 @@ export default function EmailEventsPage() {
                       className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
                       checked={editRecipients.includes(opt.value)}
                       onChange={() =>
-                        toggleCheckbox(opt.value, editRecipients, setEditRecipients)
+                         toggleCheckbox(opt.value, editRecipients, setEditRecipients)
                       }
                     />
                     {opt.label}

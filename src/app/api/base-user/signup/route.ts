@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Send welcome email with verification link (non-blocking)
-    sendWelcomeEmail(email, firstName || email.split("@")[0], emailVerifyToken).catch(() => {});
+    sendWelcomeEmail(email, firstName || email.split("@")[0], emailVerifyToken, organizationId).catch(() => {});
 
     return NextResponse.json({ success: true, userId: user.id, verifyToken: emailVerifyToken });
   } catch (error) {

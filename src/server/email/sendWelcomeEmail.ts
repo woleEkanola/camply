@@ -1,9 +1,9 @@
 import { Resend } from 'resend';
-import { buildFromAddress } from './fromAddress';
+import { resolveFromAddress } from './resolveFromAddress';
 
 let resend: Resend | null = null;
 
-export async function sendWelcomeEmail(email: string, firstName: string, verifyToken: string, orgSlug?: string) {
+export async function sendWelcomeEmail(email: string, firstName: string, verifyToken: string, organizationId?: string) {
   if (!resend) {
     if (!process.env.RESEND_API_KEY) {
       console.log("[RESEND] No API key configured — skipping welcome email");
@@ -11,7 +11,7 @@ export async function sendWelcomeEmail(email: string, firstName: string, verifyT
     }
     resend = new Resend(process.env.RESEND_API_KEY);
   }
-  const from = buildFromAddress({ orgSlug });
+  const { from, replyTo } = await resolveFromAddress({ organizationId, event: "WELCOME_EMAIL" });
   const verifyUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3001'}/api/auth/verify-email?token=${verifyToken}`;
   
   try {
@@ -27,6 +27,7 @@ export async function sendWelcomeEmail(email: string, firstName: string, verifyT
         <p>${verifyUrl}</p>
         <p>Once verified, you'll be able to complete your camper's registration.</p>
       `,
+      replyTo,
     });
     console.log("[RESEND] Welcome email result", result.error ? `Error: ${result.error.message}` : `OK id=${result.data?.id}`);
   } catch (err) {

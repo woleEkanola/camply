@@ -10,7 +10,8 @@ import {
 } from "../email/sendAcceptanceEmail";
 import { loadTemplateForEvent } from "../email/templateLoader";
 import { renderEmail, renderEmailWithEvent } from "../email/renderer";
-import { buildFromAddress } from "../email/fromAddress";
+import { resolveFromAddress } from "../email/resolveFromAddress";
+import { interpolateSubject } from "../email/interpolate";
 
 let resend: Resend | null = null;
 function getResend() {
@@ -62,20 +63,37 @@ async function runEffect(registrationId: string, type: SideEffectType) {
     if (!loaded || !loaded.channels.includes("EMAIL")) { await hardcodedFn(); return; }
 
     try {
-      // Use the new component-based renderer with event key for proper layout
       const qrCode = variables.qr_code?.startsWith("data:image") ? variables.qr_code : undefined;
-      const html = await renderEmailWithEvent({
+      
+      // Resolve from-address and replyTo
+      const { from, replyTo } = await resolveFromAddress({
+        organizationId: orgId,
+        event: eventKey,
+        senderName: loaded.branding?.senderName,
+        senderMode: loaded.senderMode,
+        customFromLocalPart: loaded.customFromLocalPart,
+        replyTo: loaded.replyTo,
+      });
+
+      // Safe interpolation for subject and preview text
+      const { text: interpolatedSubject } = interpolateSubject(loaded.subject, variables);
+      const { text: interpolatedPreviewText } = interpolateSubject(loaded.previewText ?? "", variables);
+
+      const { html } = await renderEmailWithEvent({
         eventKey: eventKey as any,
         tiptapJson: loaded.tiptapJson,
         variables,
         branding: loaded.branding,
         qrDataUrl: qrCode,
+        previewText: interpolatedPreviewText,
       });
+
       await getResend().emails.send({
-        from: buildFromAddress({ orgSlug, senderName: loaded.branding?.senderName ?? undefined }),
+        from,
         to: parentEmail,
-        subject: loaded.subject,
+        subject: interpolatedSubject,
         html: html,
+        replyTo,
       });
     } catch (err) {
       console.error(`[effects] Template email failed for ${eventKey}, falling back to hardcoded:`, err);
@@ -265,26 +283,64 @@ async function processBroadcastEffect(effectId: string) {
   const recipient = await prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: effect.broadcastRecipientId! } });
   const broadcast = await prisma.broadcast.findUniqueOrThrow({ where: { id: recipient.broadcastId } });
 
-  const branding = await prisma.organizationBranding.findUnique({ where: { organizationId: broadcast.organizationId } });
+  const org = await prisma.organization.findUnique({
+    where: { id: broadcast.organizationId },
+    include: { branding: true },
+  });
 
-  const html = await renderEmail({
+  let campName = "";
+  if (broadcast.campId) {
+    const camp = await prisma.camp.findUnique({ where: { id: broadcast.campId } });
+    if (camp) campName = camp.name;
+  }
+
+  const branding = org?.branding;
+
+  // Build generic variables for broadcasts
+  const variables = {
+    organization_name: org?.name ?? "",
+    camp_name: campName,
+    support_email: branding?.supportEmail ?? "",
+    support_phone: branding?.supportPhone ?? "",
+    sender_name: branding?.senderName ?? "",
+    dashboard_url: `${APP_URL}/dashboard`,
+  };
+
+  // Resolve from-address and replyTo for this broadcast
+  const { from, replyTo } = await resolveFromAddress({
+    organizationId: broadcast.organizationId,
+    broadcast,
+    senderName: branding?.senderName,
+  });
+
+  const { text: interpolatedSubject } = interpolateSubject(broadcast.subject, variables);
+
+  const { html } = await renderEmail({
     tiptapJson: broadcast.body as Record<string, unknown>,
-    variables: {},
+    variables,
     branding: branding ? {
-      logoUrl: branding.logoUrl, primaryColor: branding.primaryColor,
-      accentColor: branding.accentColor, buttonColor: branding.buttonColor,
-      headerImageUrl: branding.headerImageUrl, footerText: branding.footerText,
-      supportEmail: branding.supportEmail, supportPhone: branding.supportPhone,
-      websiteUrl: branding.websiteUrl, facebookUrl: branding.facebookUrl,
-      instagramUrl: branding.instagramUrl, address: branding.address,
+      logoUrl: branding.logoUrl,
+      primaryColor: branding.primaryColor,
+      accentColor: branding.accentColor,
+      buttonColor: branding.buttonColor,
+      headerImageUrl: branding.headerImageUrl,
+      senderName: branding.senderName,
+      footerText: branding.footerText,
+      supportEmail: branding.supportEmail,
+      supportPhone: branding.supportPhone,
+      websiteUrl: branding.websiteUrl,
+      facebookUrl: branding.facebookUrl,
+      instagramUrl: branding.instagramUrl,
+      address: branding.address,
     } : null,
   });
 
   await getResend().emails.send({
-    from: buildFromAddress({ senderName: branding?.senderName ?? undefined }),
+    from,
     to: recipient.email,
-    subject: broadcast.subject,
+    subject: interpolatedSubject,
     html,
+    replyTo,
   });
 
   await prisma.broadcastRecipient.update({

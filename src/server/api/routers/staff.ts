@@ -234,7 +234,7 @@ export const staffRouter = createTRPCRouter({
           ctx.prisma.organization.findUnique({ where: { id: profile.organizationId }, select: { slug: true } }),
         ]);
         const dashboardUrl = `${process.env.NEXTAUTH_URL ?? ""}${profile.type === "TEACHER" ? "/teacher" : "/volunteer"}`;
-        await sendStaffApprovedEmail({ to: profile.email, name: profile.firstName, campName: camp?.name ?? "camp", type: profile.type, dashboardUrl, orgSlug: org?.slug ?? undefined });
+        await sendStaffApprovedEmail({ to: profile.email, name: profile.firstName, campName: camp?.name ?? "camp", type: profile.type, dashboardUrl, orgSlug: org?.slug ?? undefined, organizationId: profile.organizationId });
       } catch (e) {
         console.error("[staff.approve] Failed to send welcome email", e);
       }
@@ -269,7 +269,7 @@ export const staffRouter = createTRPCRouter({
           ctx.prisma.camp.findUnique({ where: { id: profile.campId } }),
           ctx.prisma.organization.findUnique({ where: { id: profile.organizationId }, select: { slug: true } }),
         ]);
-        await sendStaffRejectedEmail({ to: profile.email, name: profile.firstName, campName: camp?.name ?? "camp", type: profile.type, reason: input.reason, orgSlug: org?.slug ?? undefined });
+        await sendStaffRejectedEmail({ to: profile.email, name: profile.firstName, campName: camp?.name ?? "camp", type: profile.type, reason: input.reason, orgSlug: org?.slug ?? undefined, organizationId: profile.organizationId });
       } catch (e) {
         console.error("[staff.reject] Failed to send rejection email", e);
       }

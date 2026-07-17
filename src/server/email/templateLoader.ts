@@ -1,12 +1,17 @@
 import { prisma } from "../db";
 import type { Branding } from "./renderer";
+import { DEFAULT_TEMPLATES } from "./defaults";
 
 export interface LoadedTemplate {
   subject: string;
+  previewText: string | null;
   tiptapJson: Record<string, unknown>;
   branding: Branding | null;
   enabled: boolean;
   channels: string[];
+  senderMode: string;
+  customFromLocalPart: string | null;
+  replyTo: string | null;
 }
 
 /**
@@ -30,6 +35,7 @@ export async function loadTemplateForEvent(
 
   return {
     subject: config.template?.subject ?? getDefaultSubject(event),
+    previewText: config.template?.previewText ?? DEFAULT_TEMPLATES[event]?.previewText ?? null,
     tiptapJson: (config.template?.content as Record<string, unknown>) ?? getDefaultContent(event),
     branding: branding
       ? {
@@ -50,6 +56,9 @@ export async function loadTemplateForEvent(
       : null,
     enabled: config.enabled,
     channels: config.channels as string[],
+    senderMode: config.senderMode,
+    customFromLocalPart: config.customFromLocalPart,
+    replyTo: config.replyTo,
   };
 }
 
