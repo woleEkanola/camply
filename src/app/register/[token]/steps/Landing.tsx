@@ -163,11 +163,6 @@ export function StepLanding({ campData, onBegin }: StepLandingProps) {
           One registration per teen
         </span>
       </div>
-      <div className="mt-6 text-center">
-        <a href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-600 underline">
-          Go to Dashboard
-        </a>
-      </div>
     </div>
   );
 }
