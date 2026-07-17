@@ -342,6 +342,17 @@ export const camperRouter = createTRPCRouter({
         include: {
           user: true,
           homeCampus: true,
+          registrations: {
+            where: { deletedAt: null },
+            include: {
+              tribe: { select: { id: true, name: true } },
+              room: { select: { id: true, name: true } },
+              bed: { select: { id: true, label: true } },
+              campus: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
           fieldValues: {
             include: {
               field: true
@@ -355,12 +366,8 @@ export const camperRouter = createTRPCRouter({
       }
 
       // Check if user has permission to view this profile
-      const hasPermission =
-        currentUser.id === profile.user?.id ||
-        currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
-        !!(profile.homeCampusId &&
+      const isStaffOperational = ["TEACHER", "VOLUNTEER"].includes(currentUser.role);
+      const isCampusRep = !!(profile.homeCampusId &&
          await ctx.prisma.campus.findFirst({
            where: {
              id: profile.homeCampusId,
@@ -371,6 +378,13 @@ export const camperRouter = createTRPCRouter({
              }
            }
          }));
+      const hasPermission =
+        currentUser.id === profile.user?.id ||
+        currentUser.role === "SUPER_ADMIN" ||
+        currentUser.role === "OWNER" ||
+        currentUser.role === "ADMIN" ||
+        isCampusRep ||
+        (isStaffOperational && currentUser.organizationId === profile.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({

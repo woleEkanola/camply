@@ -1168,8 +1168,12 @@ model BroadcastRecipient {
   sentAt      DateTime?
   failedAt    DateTime?
   error       String?
+  readAt      DateTime?
+  pinned      Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@index([broadcastId, status])
+  @@index([recipientId, readAt])
+  @@index([recipientId, pinned])
 }

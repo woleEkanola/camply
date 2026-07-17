@@ -520,4 +520,80 @@ export const communicationRouter = createTRPCRouter({
       };
       return renderEmail({ tiptapJson: input.tiptapJson, variables, branding });
     }),
+
+  // ═══ Inbox (staff/parent broadcast read/unread + pin) ═══════════════════════
+
+  inboxMine: protectedProcedure
+    .input(z.object({ unreadOnly: z.boolean().default(false), pinnedOnly: z.boolean().default(false) }).optional())
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const where: Record<string, unknown> = { recipientId: currentUser.id };
+      if (input?.unreadOnly) where.readAt = null;
+      if (input?.pinnedOnly) where.pinned = true;
+
+      const items = await ctx.prisma.broadcastRecipient.findMany({
+        where,
+        include: {
+          broadcast: {
+            select: {
+              id: true,
+              title: true,
+              subject: true,
+              body: true,
+              audience: true,
+              campId: true,
+              campusId: true,
+              sentAt: true,
+              createdById: true,
+            },
+          },
+        },
+        orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
+        take: 100,
+      });
+
+      return items;
+    }),
+
+  markInboxRead: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const item = await ctx.prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: input.id } });
+      if (item.recipientId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
+      return ctx.prisma.broadcastRecipient.update({ where: { id: input.id }, data: { readAt: new Date() } });
+    }),
+
+  markInboxUnread: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const item = await ctx.prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: input.id } });
+      if (item.recipientId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
+      return ctx.prisma.broadcastRecipient.update({ where: { id: input.id }, data: { readAt: null } });
+    }),
+
+  pinInboxItem: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const item = await ctx.prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: input.id } });
+      if (item.recipientId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
+      return ctx.prisma.broadcastRecipient.update({ where: { id: input.id }, data: { pinned: true } });
+    }),
+
+  unpinInboxItem: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const item = await ctx.prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: input.id } });
+      if (item.recipientId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
+      return ctx.prisma.broadcastRecipient.update({ where: { id: input.id }, data: { pinned: false } });
+    }),
 });

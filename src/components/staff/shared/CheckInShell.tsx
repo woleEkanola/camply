@@ -10,8 +10,30 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Dialog } from "@/components/ui/Dialog";
+import { AuditTimeline } from "@/components/staff/shared/AuditTimeline";
 
 type ExtendedUser = { id: string; role: string; organizationId?: string };
+
+function CopyContact({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div>
+      <span className="text-neutral-500">{label}:</span>{" "}
+      <span className="font-medium text-neutral-900">{value}</span>{" "}
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+        className="text-xs text-accent-700 hover:underline"
+      >
+        {copied ? "Copied!" : "Copy"}
+      </button>
+    </div>
+  );
+}
 
 function outcomeFor(registration: any): { label: string; tone: BadgeTone; canCheckIn: boolean; canCheckOut: boolean } {
   if (registration.status === "CANCELLED") return { label: "Registration Cancelled", tone: "danger", canCheckIn: false, canCheckOut: false };
@@ -30,9 +52,16 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
   const [searchQuery, setSearchQuery] = useState("");
   const [activeQuery, setActiveQuery] = useState<{ qrToken?: string; query?: string } | null>(null);
 
+  const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
+
   const { data: results, refetch } = api.registration.lookupForCheckIn.useQuery(
     { organizationId, ...(activeQuery ?? {}) },
     { enabled: !!organizationId && !!activeQuery }
+  );
+
+  const { data: timeline } = api.registration.timeline.useQuery(
+    { registrationId: selectedRegistrationId ?? "" },
+    { enabled: !!selectedRegistrationId }
   );
 
   const utils = api.useUtils();
@@ -135,8 +164,33 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
               )}
 
               {hasMedicalAlert && (
-                <div className="rounded-lg border border-danger-300 bg-danger-50 p-3 font-medium text-danger-800">
-                  ⚠ Medical Alert: {registration.camper.allergies} {registration.camper.medicalConditions}
+                <div className="space-y-2 rounded-lg border border-danger-300 bg-danger-50 p-3">
+                  <div className="font-semibold text-danger-800">⚠ Medical Alert</div>
+                  <div className="flex flex-wrap gap-2">
+                    {registration.camper.allergies && <Badge tone="danger">Allergies: {registration.camper.allergies}</Badge>}
+                    {registration.camper.medicalConditions && <Badge tone="danger">Conditions: {registration.camper.medicalConditions}</Badge>}
+                    {registration.camper.medications && <Badge tone="danger">Meds: {registration.camper.medications}</Badge>}
+                    {registration.camper.dietaryRestrictions && <Badge tone="danger">Diet: {registration.camper.dietaryRestrictions}</Badge>}
+                  </div>
+                </div>
+              )}
+
+              {(registration.camper?.emergencyContactName || registration.camper?.emergencyContactPhone || registration.camper?.parentPhone || registration.camper?.teenPhone) && (
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">
+                  <div className="mb-1 font-medium text-neutral-700">Emergency / Contact</div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {registration.camper.emergencyContactName && (
+                      <div>
+                        <span className="text-neutral-500">{registration.camper.relationship ?? "Emergency"}:</span>{" "}
+                        <span className="font-medium text-neutral-900">{registration.camper.emergencyContactName}</span>
+                      </div>
+                    )}
+                    {registration.camper.emergencyContactPhone && (
+                      <CopyContact label="Emergency Phone" value={registration.camper.emergencyContactPhone} />
+                    )}
+                    {registration.camper.parentPhone && <CopyContact label="Parent Phone" value={registration.camper.parentPhone} />}
+                    {registration.camper.teenPhone && <CopyContact label="Teen Phone" value={registration.camper.teenPhone} />}
+                  </div>
                 </div>
               )}
 
@@ -157,7 +211,7 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
                 </div>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {outcome.canCheckIn && (
                   <Button className="bg-success-600 text-white hover:bg-success-700" loading={checkIn.isPending} onClick={() => checkIn.mutate({ registrationId: registration.id })}>
                     Check In
@@ -168,11 +222,18 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
                     {registration.checkedOutAt ? "Checked Out" : "Check Out"}
                   </Button>
                 )}
+                <Button size="sm" variant="secondary" onClick={() => setSelectedRegistrationId(registration.id)}>
+                  View Timeline
+                </Button>
               </div>
             </CardBody>
           </Card>
         );
       })}
+
+      <Dialog open={!!selectedRegistrationId} onClose={() => setSelectedRegistrationId(null)} title="Registration Timeline">
+        <AuditTimeline events={timeline ?? []} />
+      </Dialog>
     </div>
   );
 }

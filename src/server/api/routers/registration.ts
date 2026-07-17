@@ -995,7 +995,25 @@ export const registrationRouter = createTRPCRouter({
       const activeCampId = org?.activeCampId;
 
       const include = {
-        camper: { include: { user: true } },
+        camper: {
+          select: {
+            id: true,
+            name: true,
+            gender: true,
+            dateOfBirth: true,
+            photoUrl: true,
+            allergies: true,
+            medicalConditions: true,
+            medications: true,
+            dietaryRestrictions: true,
+            emergencyContactName: true,
+            emergencyContactPhone: true,
+            relationship: true,
+            parentPhone: true,
+            teenPhone: true,
+            user: true,
+          },
+        },
         campus: true,
         camp: true,
         venue: true,

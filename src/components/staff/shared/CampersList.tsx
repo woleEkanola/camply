@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Card, CardBody } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
 import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 
 function age(dob: string | Date | null | undefined) {
@@ -82,6 +83,7 @@ export function CampersList({
   const [tribeFilter, setTribeFilter] = useState("");
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allItems, setAllItems] = useState<StaffCamperItem[]>([]);
+  const [profileCamperId, setProfileCamperId] = useState<string | null>(null);
 
   const { data: campusesData } = api.campus.getByOrganization.useQuery(
     { organizationId },
@@ -317,6 +319,10 @@ export function CampersList({
           rowKey={(item) => item.id}
           isLoading={isLoading}
           toolbar={toolbar}
+          onRowClick={(item) => setProfileCamperId(item.id)}
+          actions={(item) => (
+            <Button size="sm" variant="secondary" onClick={() => setProfileCamperId(item.id)}>View</Button>
+          )}
           footer={
             responseData?.nextCursor ? (
               <div className="flex justify-center pt-4">
@@ -327,6 +333,7 @@ export function CampersList({
           emptyTitle={emptyTitle}
           emptyDescription={emptyDescription}
         />
+        <CamperQuickProfileDrawer camperId={profileCamperId} open={!!profileCamperId} onClose={() => setProfileCamperId(null)} />
       </CardBody>
     </Card>
   );
