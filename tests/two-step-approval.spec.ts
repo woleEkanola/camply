@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import bcrypt from "bcryptjs";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, relaxRequiredCustomFields, restoreRequiredCustomFields } from "./helpers";
 
 /**
  * Exercises the two-layer registration approval workflow: with
@@ -22,6 +22,10 @@ test.describe("Two-step registration approval", () => {
   const parentEmailC = `e2e-twostep-parent-c-${stamp}@camply.test`;
   const parentEmailD = `e2e-twostep-parent-d-${stamp}@camply.test`;
 
+  const repEmail2 = `e2e-twostep-rep2-${stamp}@camply.test`;
+  const parentEmailE = `e2e-twostep-parent-e-${stamp}@camply.test`;
+  const parentEmailF = `e2e-twostep-parent-f-${stamp}@camply.test`;
+
   let organizationId: string;
   let campId: string;
   let originalApprovalWorkflow: string;
@@ -31,6 +35,10 @@ test.describe("Two-step registration approval", () => {
   let registrationRejectId: string; // rep rejects directly
   let registrationOverrideId: string; // admin approves without endorsement
   let registrationSingleStepId: string; // used once flipped back to SINGLE_STEP
+  let registrationNotifyId: string; // endorsement notification test
+  let registrationResubmitId: string; // correction + resubmit resets endorsement
+  let campusId2: string; // second campus, for cross-campus scoping test
+  let repId2: string;
   const camperIds: string[] = [];
   const parentIds: string[] = [];
 
@@ -71,13 +79,36 @@ test.describe("Two-step registration approval", () => {
     registrationRejectId = await makePendingRegistration(parentEmailB);
     registrationOverrideId = await makePendingRegistration(parentEmailC);
     registrationSingleStepId = await makePendingRegistration(parentEmailD);
+    registrationNotifyId = await makePendingRegistration(parentEmailE);
+    registrationResubmitId = await makePendingRegistration(parentEmailF);
+    // resubmitRegistration() runs the full validateSubmission pipeline, which
+    // requires firstName/lastName/dateOfBirth/gender (SYSTEM fields) — the
+    // other fixtures above never resubmit, so `name` alone was enough for them.
+    const resubmitCamper = await prisma.registration
+      .findUniqueOrThrow({ where: { id: registrationResubmitId } })
+      .then((r) => r.camperId);
+    await prisma.camper.update({
+      where: { id: resubmitCamper },
+      data: { firstName: "E2E", lastName: "TwoStep", dateOfBirth: new Date("2012-01-01"), gender: "Male" },
+    });
+
+    const campus2 = await prisma.campus.create({
+      data: { name: `E2E TwoStep Campus2 ${stamp}`, slug: `e2e-twostep-campus2-${stamp}`, address: "2 Test St", city: "Testville", country: "Testland", organizationId },
+    });
+    campusId2 = campus2.id;
+    const rep2 = await prisma.user.create({
+      data: { email: repEmail2, password, role: "CAMPUS_REPRESENTATIVE", organizationId, managedCampuses: { connect: { id: campusId2 } } },
+    });
+    repId2 = rep2.id;
   });
 
   test.afterAll(async () => {
     await prisma.registration.deleteMany({ where: { camperId: { in: camperIds } } });
     await prisma.camper.deleteMany({ where: { id: { in: camperIds } } });
-    await prisma.user.deleteMany({ where: { id: { in: [...parentIds, repId] } } });
+    await prisma.notification.deleteMany({ where: { registrationId: { in: [registrationNotifyId] } } });
+    await prisma.user.deleteMany({ where: { id: { in: [...parentIds, repId, repId2] } } });
     if (campusId) await prisma.campus.deleteMany({ where: { id: campusId } });
+    if (campusId2) await prisma.campus.deleteMany({ where: { id: campusId2 } });
     await prisma.organization.update({ where: { id: organizationId }, data: { approvalWorkflow: originalApprovalWorkflow } });
   });
 
@@ -203,5 +234,83 @@ test.describe("Two-step registration approval", () => {
     } finally {
       await prisma.organization.update({ where: { id: organizationId }, data: { approvalWorkflow: "TWO_STEP" } });
     }
+  });
+
+  test("endorsing a registration notifies org admins in-app", async ({ page }) => {
+    await loginWithPassword(page, repEmail, "password123");
+    await page.goto("/campus-rep-dashboard/registrations");
+
+    const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailE}` });
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.getByRole("button", { name: "Endorse" }).click();
+    await expect(row.getByText("Endorsed ✓ awaiting admin")).toBeVisible({ timeout: 10000 });
+
+    const admins = await prisma.user.findMany({
+      where: { organizationId, role: { in: ["SUPER_ADMIN", "OWNER", "ADMIN"] }, deletedAt: null },
+      select: { id: true },
+    });
+    await expect(async () => {
+      const notifications = await prisma.notification.findMany({
+        where: { registrationId: registrationNotifyId, channel: "IN_APP" },
+      });
+      expect(notifications.length).toBeGreaterThanOrEqual(admins.length);
+      expect(notifications.every((n) => n.title === "Registration endorsed")).toBe(true);
+    }).toPass({ timeout: 10000 });
+  });
+
+  test("resubmission after a correction request resets a stale endorsement", async ({ page }) => {
+    const { endorseRegistration, requestCorrection, resubmitRegistration } = await import("../src/server/registration/engine");
+
+    // Relax the fixture camp's required document/custom-field gates so
+    // resubmitRegistration's full validateSubmission pass doesn't fail on
+    // unrelated fixture-org state — this test only cares about the review reset.
+    const requiredDocs = await prisma.documentRequirement.findMany({ where: { campId, required: true, deletedAt: null } });
+    if (requiredDocs.length > 0) {
+      await prisma.documentRequirement.updateMany({ where: { id: { in: requiredDocs.map((d) => d.id) } }, data: { required: false } });
+    }
+    const customFieldSnapshot = await relaxRequiredCustomFields("CAMPER");
+
+    try {
+      await endorseRegistration({ registrationId: registrationResubmitId, actorId: repId });
+      let review = await prisma.registrationReview.findUnique({ where: { registrationId: registrationResubmitId } });
+      expect(review?.verificationStatus).toBe("COMPLETED");
+
+      const resubmitParent = parentIds[parentIds.length - 1];
+      await requestCorrection({ registrationId: registrationResubmitId, actorId: repId, message: "Please fix the DOB" });
+      await resubmitRegistration({ registrationId: registrationResubmitId, actorId: resubmitParent });
+    } finally {
+      if (requiredDocs.length > 0) {
+        await prisma.documentRequirement.updateMany({ where: { id: { in: requiredDocs.map((d) => d.id) } }, data: { required: true } });
+      }
+      await restoreRequiredCustomFields(customFieldSnapshot);
+    }
+
+    const review = await prisma.registrationReview.findUnique({ where: { registrationId: registrationResubmitId } });
+    expect(review?.verificationStatus).toBe("NOT_STARTED");
+    expect(review?.recommendation).toBeNull();
+
+    const registration = await prisma.registration.findUniqueOrThrow({ where: { id: registrationResubmitId } });
+    expect(registration.status).toBe("PENDING");
+
+    await loginWithPassword(page, repEmail, "password123");
+    await page.goto("/campus-rep-dashboard/registrations");
+    const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailF}` });
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await expect(row.getByRole("button", { name: "Endorse" })).toBeVisible({ timeout: 10000 });
+    await expect(row.getByText("Endorsed ✓ awaiting admin")).toHaveCount(0);
+  });
+
+  test("a campus rep cannot see or endorse another campus's registration", async ({ page }) => {
+    await loginWithPassword(page, repEmail2, "password123");
+    await page.goto("/campus-rep-dashboard/registrations");
+
+    const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailA}` });
+    await expect(row).toHaveCount(0);
+
+    const res = await page.request.post("/api/trpc/registration.endorse?batch=1", {
+      data: { "0": { json: { registrationId: registrationEndorseId } } },
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status()).toBe(403);
   });
 });
