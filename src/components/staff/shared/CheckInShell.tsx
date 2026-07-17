@@ -8,55 +8,63 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { AuditTimeline } from "@/components/staff/shared/AuditTimeline";
+import { CameraScanner } from "./CameraScanner";
+import { SuccessOverlay, ErrorOverlay, MedicalOverlay } from "./OperationalFeedback";
+import { QrCodeIcon, MagnifyingGlassIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 
 type ExtendedUser = { id: string; role: string; organizationId?: string };
 
-function CopyContact({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div>
-      <span className="text-neutral-500">{label}:</span>{" "}
-      <span className="font-medium text-neutral-900">{value}</span>{" "}
-      <button
-        onClick={() => {
-          navigator.clipboard.writeText(value);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }}
-        className="text-xs text-accent-700 hover:underline"
-      >
-        {copied ? "Copied!" : "Copy"}
-      </button>
-    </div>
-  );
-}
-
-function outcomeFor(registration: any): { label: string; tone: BadgeTone; canCheckIn: boolean; canCheckOut: boolean } {
-  if (registration.status === "CANCELLED") return { label: "Registration Cancelled", tone: "danger", canCheckIn: false, canCheckOut: false };
-  if (registration.status === "REJECTED") return { label: "Registration Rejected", tone: "danger", canCheckIn: false, canCheckOut: false };
-  if (registration.status === "CHECKED_IN") return { label: "Already Checked In", tone: "info", canCheckIn: false, canCheckOut: true };
-  if (registration.status !== "APPROVED") return { label: `Not Ready (${registration.status.replace(/_/g, " ")})`, tone: "neutral", canCheckIn: false, canCheckOut: false };
-  return { label: "Ready for Check-in", tone: "success", canCheckIn: true, canCheckOut: false };
+interface RecentScan {
+  registrationId: string;
+  name: string;
+  registrationNumber: string;
+  timestamp: number;
 }
 
 export function CheckInShell({ organizationId, title = "Check-in" }: { organizationId: string; title?: string }) {
   const router = useRouter();
   const { data: session } = useSession({ required: true, onUnauthenticated: () => router.push("/login") });
-  const tokenInputRef = useRef<HTMLInputElement>(null);
+  const currentUserRole = (session?.user as ExtendedUser)?.role || "";
+  const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUserRole);
+  const isCampusRep = currentUserRole === "CAMPUS_REPRESENTATIVE";
+  const isTeacher = currentUserRole === "TEACHER";
+  const isVolunteer = currentUserRole === "VOLUNTEER";
 
-  const [tokenInput, setTokenInput] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [activeQuery, setActiveQuery] = useState<{ qrToken?: string; query?: string } | null>(null);
+  const [scannerActive, setScannerActive] = useState(false);
 
+  // Overlays State
+  const [successData, setSuccessData] = useState<any>(null);
+  const [errorData, setErrorData] = useState<string | null>(null);
+  const [medicalData, setMedicalData] = useState<any>(null);
+
+  // Recent scans for undo capability (stored locally in state)
+  const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
+  const [timeTick, setTimeTick] = useState(Date.now());
+
+  // Dialog Timeline State
   const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
 
-  const { data: results, refetch } = api.registration.lookupForCheckIn.useQuery(
+  // Queries & Mutations
+  const { data: stats, refetch: refetchStats } = api.registration.getCheckInStats.useQuery(
+    { organizationId },
+    { enabled: !!organizationId && (isOrgAdmin || isCampusRep) }
+  );
+
+  const { data: results, refetch: refetchResults } = api.registration.lookupForCheckIn.useQuery(
     { organizationId, ...(activeQuery ?? {}) },
-    { enabled: !!organizationId && !!activeQuery }
+    { enabled: !!organizationId && !!activeQuery && !isVolunteer }
+  );
+
+  const { data: volunteerResults, refetch: refetchVolunteerResults } = api.staff.lookupCamper.useQuery(
+    { organizationId, ...(activeQuery ?? {}) },
+    { enabled: !!organizationId && !!activeQuery && isVolunteer }
   );
 
   const { data: timeline } = api.registration.timeline.useQuery(
@@ -65,24 +73,186 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
   );
 
   const utils = api.useUtils();
+
   const checkIn = api.registration.checkIn.useMutation({
-    onSuccess: () => {
-      refetch();
+    onSuccess: (data: any) => {
+      refetchStats?.();
       utils.registration.lookupForCheckIn.invalidate();
-      setTokenInput("");
-      tokenInputRef.current?.focus();
+      refetchResults?.();
+      refetchVolunteerResults?.();
+      
+      // Add to recent scans list
+      const name = data.camper?.name || "Camper";
+      const regNo = data.registrationNumber || "REG-NUM";
+      
+      setRecentScans((prev) => [
+        {
+          registrationId: data.id,
+          name,
+          registrationNumber: regNo,
+          timestamp: Date.now(),
+        },
+        ...prev.slice(0, 9), // Keep last 10
+      ]);
+
+      // Show large green success feedback card
+      setSuccessData({
+        camperName: name,
+        regNumber: regNo,
+        tribe: data.tribe?.name,
+        room: data.room?.name,
+        bed: data.bed?.label,
+        hostel: data.room?.hostel?.name || data.room?.hostelName,
+        teacherName: data.teacher?.name,
+      });
+    },
+    onError: (err) => {
+      setErrorData(err.message);
     },
   });
-  const checkOut = api.registration.checkOut.useMutation({ onSuccess: () => refetch() });
 
+  const checkOut = api.registration.checkOut.useMutation({
+    onSuccess: () => {
+      refetchStats?.();
+      refetchResults?.();
+      refetchVolunteerResults?.();
+    },
+  });
+
+  const undoCheckInMutation = api.registration.undoCheckIn.useMutation({
+    onSuccess: (_, variables) => {
+      refetchStats?.();
+      refetchResults?.();
+      refetchVolunteerResults?.();
+      setRecentScans((prev) => prev.filter((s) => s.registrationId !== variables.registrationId));
+    },
+    onError: (err) => {
+      alert(`Failed to undo check-in: ${err.message}`);
+    },
+  });
+
+  // Clock tick to update the Undo button availability timer (30 seconds)
   useEffect(() => {
-    tokenInputRef.current?.focus();
+    const timer = setInterval(() => {
+      setTimeTick(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  const handleTokenSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tokenInput.trim()) return;
-    setActiveQuery({ qrToken: tokenInput.trim() });
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Focus search input on "/"
+      if (e.key === "/" && document.activeElement !== searchInputRef.current) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      // Toggle scanner on "Space" (if not inside an input field)
+      if (e.key === " " && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        setScannerActive((prev) => !prev);
+      }
+      // Close active overlay on "Escape"
+      if (e.key === "Escape") {
+        setSuccessData(null);
+        setErrorData(null);
+        setMedicalData(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Auto-focused search input on mount
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
+  // Process QR Scanning Decode Success
+  const handleScanSuccess = async (qrToken: string) => {
+    setScannerActive(false); // Close camera temporarily during validation
+    
+    // Look up camper details
+    try {
+      if (isVolunteer) {
+        const lookupResult = await utils.client.staff.lookupCamper.query({
+          organizationId,
+          qrToken,
+        });
+        if (lookupResult && lookupResult.length > 0) {
+          const camper = lookupResult[0];
+          
+          if (camper.status !== "APPROVED") {
+            setErrorData(`Registration status is ${camper.status}. Only approved campers can be checked in.`);
+            return;
+          }
+          
+          if (camper.checkedInAt) {
+            setErrorData(`${camper.name} is already checked in today.`);
+            return;
+          }
+
+          // Medical check
+          if (camper.allergies || camper.medicalConditions) {
+            setMedicalData({
+              registrationId: camper.registrationId,
+              camperName: camper.name,
+              allergies: camper.allergies,
+              medicalConditions: camper.medicalConditions,
+              dietaryRestrictions: camper.dietaryRestrictions,
+            });
+            return;
+          }
+
+          // Auto Check-in
+          checkIn.mutate({ registrationId: camper.registrationId });
+        } else {
+          setErrorData("QR Code not recognized. Please scan a valid camper QR code.");
+        }
+      } else {
+        const lookupResult = await utils.client.registration.lookupForCheckIn.query({
+          organizationId,
+          qrToken,
+        });
+        if (lookupResult && lookupResult.length > 0) {
+          const camper = lookupResult[0];
+          
+          if (camper.status !== "APPROVED") {
+            setErrorData(`Registration status is ${camper.status}. Only approved campers can be checked in.`);
+            return;
+          }
+          
+          if (camper.status === "CHECKED_IN") {
+            setErrorData(`${camper.camper?.name} is already checked in.`);
+            return;
+          }
+
+          // Medical check
+          if (camper.camper?.allergies || camper.camper?.medicalConditions) {
+            setMedicalData({
+              registrationId: camper.id,
+              camperName: camper.camper?.name,
+              allergies: camper.camper?.allergies,
+              medicalConditions: camper.camper?.medicalConditions,
+              dietaryRestrictions: camper.camper?.dietaryRestrictions,
+              emergencyContactName: camper.camper?.emergencyContactName,
+              emergencyContactPhone: camper.camper?.emergencyContactPhone,
+              relationship: camper.camper?.relationship,
+              parentPhone: camper.camper?.parentPhone,
+              teenPhone: camper.camper?.teenPhone,
+            });
+            return;
+          }
+
+          // Auto Check-in
+          checkIn.mutate({ registrationId: camper.id });
+        } else {
+          setErrorData("QR Code not recognized. Please scan a valid camper QR code.");
+        }
+      }
+    } catch (err: any) {
+      setErrorData(err.message || "Failed to parse camper QR code.");
+    }
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -91,145 +261,355 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
     setActiveQuery({ query: searchQuery.trim() });
   };
 
-  const clear = () => {
-    setActiveQuery(null);
-    setTokenInput("");
+  const clearQuery = () => {
     setSearchQuery("");
+    setActiveQuery(null);
   };
 
+  const handleManualCheckIn = (registrationId: string, hasMedical: boolean, camperObj: any) => {
+    if (hasMedical) {
+      setMedicalData({
+        registrationId,
+        camperName: camperObj.name || camperObj.camper?.name,
+        allergies: camperObj.allergies || camperObj.camper?.allergies,
+        medicalConditions: camperObj.medicalConditions || camperObj.camper?.medicalConditions,
+        dietaryRestrictions: camperObj.dietaryRestrictions || camperObj.camper?.dietaryRestrictions,
+        emergencyContactName: camperObj.emergencyContactName || camperObj.camper?.emergencyContactName,
+        emergencyContactPhone: camperObj.emergencyContactPhone || camperObj.camper?.emergencyContactPhone,
+        relationship: camperObj.relationship || camperObj.camper?.relationship,
+        parentPhone: camperObj.parentPhone || camperObj.camper?.parentPhone,
+        teenPhone: camperObj.teenPhone || camperObj.camper?.teenPhone,
+      });
+    } else {
+      checkIn.mutate({ registrationId });
+    }
+  };
+
+  const currentResults = isVolunteer ? volunteerResults : results;
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader title={title} />
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="flex items-center justify-between">
+        <PageHeader title={title} />
+        {isOrgAdmin && (
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<ArrowPathIcon className="h-4 w-4" />}
+            onClick={() => refetchStats?.()}
+          >
+            Refresh Stats
+          </Button>
+        )}
+      </div>
 
-      <Card>
-        <CardBody>
-          <h2 className="mb-2 text-sm font-medium text-neutral-700">Scan QR (USB scanner or paste token)</h2>
-          <form onSubmit={handleTokenSubmit} className="flex gap-2">
-            <Input
-              ref={tokenInputRef}
-              containerClassName="flex-1"
-              placeholder="Scan or paste QR token..."
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              autoFocus
-            />
-            <Button type="submit">Lookup</Button>
-          </form>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardBody>
-          <h2 className="mb-2 text-sm font-medium text-neutral-700">Manual Search</h2>
-          <form onSubmit={handleSearchSubmit} className="flex gap-2">
-            <Input
-              containerClassName="flex-1"
-              placeholder="Registration #, camper name, email, or phone"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <Button type="submit">Search</Button>
-          </form>
-        </CardBody>
-      </Card>
-
-      {activeQuery && (results ?? []).length === 0 && (
-        <div className="rounded-lg bg-warning-50 p-4 text-sm text-warning-700">
-          QR Code Not Recognized / No results found.
-          <button onClick={clear} className="ml-3 text-xs underline">Clear</button>
+      {/* ═══ STEP 1: DASHBOARD PROGRESS WIDGET (HIDES FOR VOLUNTEER) ═══ */}
+      {!isVolunteer && stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <Card className="bg-white border-neutral-200">
+            <CardBody className="p-4 text-center">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Approved</span>
+              <span className="text-2xl font-black text-neutral-900">{stats.approved}</span>
+            </CardBody>
+          </Card>
+          <Card className="bg-white border-neutral-200">
+            <CardBody className="p-4 text-center">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Checked In</span>
+              <span className="text-2xl font-black text-emerald-600">{stats.checkedIn}</span>
+            </CardBody>
+          </Card>
+          <Card className="bg-white border-neutral-200">
+            <CardBody className="p-4 text-center">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Remaining</span>
+              <span className="text-2xl font-black text-neutral-900">{stats.remaining}</span>
+            </CardBody>
+          </Card>
+          <Card className="bg-white border-neutral-200">
+            <CardBody className="p-4 text-center">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Progress</span>
+              <span className="text-2xl font-black text-accent-600">{stats.percentage}%</span>
+            </CardBody>
+          </Card>
         </div>
       )}
 
-      {(results ?? []).map((registration: any) => {
-        const outcome = outcomeFor(registration);
-        const hasMedicalAlert = registration.camper?.allergies || registration.camper?.medicalConditions;
+      {/* ═══ STEP 2: SCANNER & WEBCAM INTERFACE ═══ */}
+      <Card className="overflow-hidden border-neutral-200">
+        <CardBody className="p-6 text-center space-y-4">
+          <div className="max-w-md mx-auto">
+            <Button
+              size="lg"
+              className="w-full flex items-center justify-center gap-2 h-14 text-lg font-bold shadow-md bg-accent-600 hover:bg-accent-700 text-white"
+              onClick={() => setScannerActive((prev) => !prev)}
+            >
+              <QrCodeIcon className="h-6 w-6" />
+              {scannerActive ? "Close Camera Scanner" : "Scan Camper QR Code"}
+            </Button>
+            <p className="mt-1.5 text-xs text-neutral-400">Press [Space] on your keyboard to toggle camera scanner</p>
+          </div>
+
+          {scannerActive && (
+            <div className="pt-2 animate-fade-in">
+              <CameraScanner
+                active={scannerActive}
+                onScanSuccess={handleScanSuccess}
+                onScanFailure={(err) => console.log("Scanner idle / error:", err)}
+              />
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* ═══ STEP 3: UNIVERSAL MANUAL SEARCH ═══ */}
+      <Card className="border-neutral-200">
+        <CardBody className="p-6">
+          <form onSubmit={handleSearchSubmit} className="flex gap-3">
+            <div className="relative flex-1">
+              <MagnifyingGlassIcon className="absolute left-3 top-3 h-5 w-5 text-neutral-400" />
+              <Input
+                ref={searchInputRef}
+                containerClassName="w-full"
+                className="pl-10 h-11 text-sm rounded-lg"
+                placeholder={isVolunteer ? "Registration #, camper name" : "Registration #, camper name, email, or phone"}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span className="absolute right-3 top-3.5 text-xs text-neutral-400 pointer-events-none hidden md:inline">
+                Press [/] to focus
+              </span>
+            </div>
+            <Button type="submit" size="lg" className="h-11">Search</Button>
+            {activeQuery && (
+              <Button type="button" size="lg" variant="secondary" onClick={clearQuery}>Clear</Button>
+            )}
+          </form>
+        </CardBody>
+      </Card>
+
+      {/* ═══ STEP 4: SEARCH RESULTS WORKSPACE ═══ */}
+      {activeQuery && (currentResults ?? []).length === 0 && (
+        <div className="rounded-xl bg-warning-50 p-4 border border-warning-100 text-sm text-warning-700 flex justify-between items-center animate-fade-in">
+          <span>No matching camper found. Please check spelling or verify registration number.</span>
+          <button onClick={clearQuery} className="text-xs font-bold underline hover:no-underline">Dismiss</button>
+        </div>
+      )}
+
+      {(currentResults ?? []).map((r: any) => {
+        // Normalize fields for volunteer vs admin/teacher
+        const regId = r.registrationId || r.id;
+        const regNo = r.registrationNumber;
+        const camperName = r.name || r.camper?.name;
+        const photo = r.photoUrl || r.camper?.photoUrl;
+        const gender = r.gender || r.camper?.gender;
+        const dob = r.dateOfBirth || r.camper?.dateOfBirth;
+        
+        const isCheckedIn = !!r.checkedInAt;
+        const isApproved = r.status === "APPROVED";
+        const hasMedical = !!(r.allergies || r.medicalConditions || r.camper?.allergies || r.camper?.medicalConditions);
+        
         return (
-          <Card key={registration.id}>
-            <CardBody className="space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-lg font-semibold text-neutral-900">{registration.camper?.name}</div>
-                  <div className="text-sm text-neutral-500">{registration.registrationNumber}</div>
+          <Card key={regId} className="border-neutral-200 hover:shadow-md transition-shadow animate-fade-in">
+            <CardBody className="p-6 space-y-4">
+              <div className="flex items-start gap-4">
+                {photo ? (
+                  <img src={photo} alt={camperName} className="h-16 w-16 rounded-xl object-cover border border-neutral-200 shadow-sm" />
+                ) : (
+                  <div className="h-16 w-16 rounded-xl bg-accent-50 border border-accent-100 text-accent-700 font-bold flex items-center justify-center text-xl shadow-sm">
+                    {camperName?.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-bold text-neutral-900 truncate">{camperName}</h2>
+                    <Badge tone={isCheckedIn ? "info" : isApproved ? "success" : "neutral"}>
+                      {isCheckedIn ? "Already Checked In" : isApproved ? "Ready for Check-in" : r.status}
+                    </Badge>
+                  </div>
+                  <p className="text-sm font-semibold text-neutral-500 uppercase tracking-wider">{regNo}</p>
+                  {isCheckedIn && (
+                    <p className="text-xs text-neutral-500 mt-1">
+                      Checked in: {r.checkedInByName || "Staff"}
+                    </p>
+                  )}
                 </div>
-                <Badge tone={outcome.tone}>{outcome.label}</Badge>
               </div>
 
-              {registration.warnings?.length > 0 && (
-                <div className="rounded-lg border border-warning-300 bg-warning-50 p-3 text-sm text-warning-800">
-                  <div className="font-medium">Check-in warnings</div>
-                  <ul className="mt-1 list-disc pl-4">
-                    {registration.warnings.map((w: string, i: number) => <li key={i}>{w}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              {hasMedicalAlert && (
-                <div className="space-y-2 rounded-lg border border-danger-300 bg-danger-50 p-3">
-                  <div className="font-semibold text-danger-800">⚠ Medical Alert</div>
+              {/* Medical Block */}
+              {hasMedical && (
+                <div className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-danger-800 space-y-2">
+                  <span className="block text-xs font-black uppercase tracking-wider text-danger-600">⚠ Medical Alert</span>
                   <div className="flex flex-wrap gap-2">
-                    {registration.camper.allergies && <Badge tone="danger">Allergies: {registration.camper.allergies}</Badge>}
-                    {registration.camper.medicalConditions && <Badge tone="danger">Conditions: {registration.camper.medicalConditions}</Badge>}
-                    {registration.camper.medications && <Badge tone="danger">Meds: {registration.camper.medications}</Badge>}
-                    {registration.camper.dietaryRestrictions && <Badge tone="danger">Diet: {registration.camper.dietaryRestrictions}</Badge>}
+                    {(r.allergies || r.camper?.allergies) && (
+                      <Badge tone="danger">Allergies: {r.allergies || r.camper?.allergies}</Badge>
+                    )}
+                    {(r.medicalConditions || r.camper?.medicalConditions) && (
+                      <Badge tone="danger">Conditions: {r.medicalConditions || r.camper?.medicalConditions}</Badge>
+                    )}
                   </div>
                 </div>
               )}
 
-              {(registration.camper?.emergencyContactName || registration.camper?.emergencyContactPhone || registration.camper?.parentPhone || registration.camper?.teenPhone) && (
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">
-                  <div className="mb-1 font-medium text-neutral-700">Emergency / Contact</div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {registration.camper.emergencyContactName && (
-                      <div>
-                        <span className="text-neutral-500">{registration.camper.relationship ?? "Emergency"}:</span>{" "}
-                        <span className="font-medium text-neutral-900">{registration.camper.emergencyContactName}</span>
-                      </div>
-                    )}
-                    {registration.camper.emergencyContactPhone && (
-                      <CopyContact label="Emergency Phone" value={registration.camper.emergencyContactPhone} />
-                    )}
-                    {registration.camper.parentPhone && <CopyContact label="Parent Phone" value={registration.camper.parentPhone} />}
-                    {registration.camper.teenPhone && <CopyContact label="Teen Phone" value={registration.camper.teenPhone} />}
+              {/* Dynamic details for non-volunteers */}
+              {!isVolunteer && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm border-t border-neutral-100 pt-3">
+                  <div>
+                    <span className="block text-xs text-neutral-400 uppercase font-semibold">Camp</span>
+                    <span className="font-semibold text-neutral-800">{r.camp?.name || r.year?.name || "—"}</span>
                   </div>
+                  <div>
+                    <span className="block text-xs text-neutral-400 uppercase font-semibold">Campus</span>
+                    <span className="font-semibold text-neutral-800">{r.campus?.name || r.centreName || "—"}</span>
+                  </div>
+                  {r.tribe && (
+                    <div>
+                      <span className="block text-xs text-neutral-400 uppercase font-semibold">Tribe</span>
+                      <span className="font-semibold text-neutral-800">{r.tribe?.name || "—"}</span>
+                    </div>
+                  )}
+                  {r.room && (
+                    <div>
+                      <span className="block text-xs text-neutral-400 uppercase font-semibold">Room & Bed</span>
+                      <span className="font-semibold text-neutral-800">{r.room?.name} / {r.bed?.label || "—"}</span>
+                    </div>
+                  )}
+                  {gender && (
+                    <div>
+                      <span className="block text-xs text-neutral-400 uppercase font-semibold">Gender</span>
+                      <span className="font-semibold text-neutral-800">{gender}</span>
+                    </div>
+                  )}
+                  {dob && (
+                    <div>
+                      <span className="block text-xs text-neutral-400 uppercase font-semibold">DOB</span>
+                      <span className="font-semibold text-neutral-800">{new Date(dob).toLocaleDateString()}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="font-medium text-neutral-700">Camp:</span> {registration.camp?.name}</div>
-                <div><span className="font-medium text-neutral-700">Centre:</span> {registration.campus?.name}</div>
-                {registration.tribe && <div><span className="font-medium text-neutral-700">Tribe:</span> {registration.tribe.name}</div>}
-                {registration.room && <div><span className="font-medium text-neutral-700">Room:</span> {registration.room.name}</div>}
-                {registration.bed && <div><span className="font-medium text-neutral-700">Bed:</span> {registration.bed.label}</div>}
-                <div><span className="font-medium text-neutral-700">Gender:</span> {registration.camper?.gender || "—"}</div>
-                <div><span className="font-medium text-neutral-700">DOB:</span> {registration.camper?.dateOfBirth ? new Date(registration.camper.dateOfBirth).toLocaleDateString() : "—"}</div>
-              </div>
-
-              {registration.checkedInAt && (
-                <div className="text-xs text-neutral-500">
-                  Checked in: {new Date(registration.checkedInAt).toLocaleString()}
-                  {registration.checkedInByName && ` by ${registration.checkedInByName}`}
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                {outcome.canCheckIn && (
-                  <Button className="bg-success-600 text-white hover:bg-success-700" loading={checkIn.isPending} onClick={() => checkIn.mutate({ registrationId: registration.id })}>
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-3 pt-2">
+                {!isCheckedIn && isApproved && (
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 rounded-md"
+                    loading={checkIn.isPending}
+                    onClick={() => handleManualCheckIn(regId, hasMedical, r)}
+                  >
                     Check In
                   </Button>
                 )}
-                {outcome.canCheckOut && (
-                  <Button variant="secondary" disabled={!!registration.checkedOutAt} loading={checkOut.isPending} onClick={() => checkOut.mutate({ registrationId: registration.id })}>
-                    {registration.checkedOutAt ? "Checked Out" : "Check Out"}
+                {isCheckedIn && (
+                  <Button
+                    variant="secondary"
+                    className="h-10 px-6 rounded-md"
+                    loading={checkOut.isPending}
+                    onClick={() => checkOut.mutate({ registrationId: regId })}
+                  >
+                    Check Out
                   </Button>
                 )}
-                <Button size="sm" variant="secondary" onClick={() => setSelectedRegistrationId(registration.id)}>
-                  View Timeline
-                </Button>
+                {!isVolunteer && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-10 px-6 rounded-md"
+                    onClick={() => setSelectedRegistrationId(regId)}
+                  >
+                    View Timeline
+                  </Button>
+                )}
               </div>
             </CardBody>
           </Card>
         );
       })}
+
+      {/* ═══ STEP 5: RECENT ACTIVITY & UNDO LIST ═══ */}
+      {recentScans.length > 0 && (
+        <Card className="border-neutral-200">
+          <CardBody className="p-6 space-y-4">
+            <h2 className="text-xs font-black uppercase tracking-wider text-neutral-400">Recent Activity</h2>
+            <div className="divide-y divide-neutral-100">
+              {recentScans.map((scan) => {
+                const elapsedSeconds = Math.floor((timeTick - scan.timestamp) / 1000);
+                const isUndoable = elapsedSeconds < 30;
+                const remainingSeconds = 30 - elapsedSeconds;
+
+                return (
+                  <div key={scan.registrationId} className="py-3 flex items-center justify-between text-sm">
+                    <div>
+                      <span className="font-bold text-neutral-900 block">{scan.name}</span>
+                      <span className="text-xs text-neutral-500">{scan.registrationNumber} · Checked In at {new Date(scan.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    {isUndoable && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="bg-neutral-100 hover:bg-rose-50 text-rose-600 hover:text-rose-700 border-none font-bold"
+                        loading={undoCheckInMutation.isPending}
+                        onClick={() => undoCheckInMutation.mutate({ registrationId: scan.registrationId, reason: "Accidental scan / Operator error" })}
+                      >
+                        Undo ({remainingSeconds}s)
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* ═══ STEP 6: OPERATIONAL FEEDBACK FULLSCREEN OVERLAYS ═══ */}
+      {successData && (
+        <SuccessOverlay
+          camperName={successData.camperName}
+          regNumber={successData.regNumber}
+          tribe={successData.tribe}
+          room={successData.room}
+          bed={successData.bed}
+          hostel={successData.hostel}
+          teacherName={successData.teacherName}
+          onDismiss={() => {
+            setSuccessData(null);
+            // Re-open camera after brief overlay if scanner was active
+            setScannerActive(true);
+          }}
+        />
+      )}
+
+      {errorData && (
+        <ErrorOverlay
+          message={errorData}
+          onDismiss={() => {
+            setErrorData(null);
+            setScannerActive(true);
+          }}
+        />
+      )}
+
+      {medicalData && (
+        <MedicalOverlay
+          camperName={medicalData.camperName}
+          allergies={medicalData.allergies}
+          medicalConditions={medicalData.medicalConditions}
+          medications={medicalData.medications}
+          dietaryRestrictions={medicalData.dietaryRestrictions}
+          emergencyContactName={medicalData.emergencyContactName}
+          emergencyContactPhone={medicalData.emergencyContactPhone}
+          relationship={medicalData.relationship}
+          parentPhone={medicalData.parentPhone}
+          teenPhone={medicalData.teenPhone}
+          onAcknowledge={() => {
+            setMedicalData(null);
+            checkIn.mutate({ registrationId: medicalData.registrationId });
+          }}
+          onCancel={() => {
+            setMedicalData(null);
+            setScannerActive(true);
+          }}
+        />
+      )}
 
       <Dialog open={!!selectedRegistrationId} onClose={() => setSelectedRegistrationId(null)} title="Registration Timeline">
         <AuditTimeline events={timeline ?? []} />

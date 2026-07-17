@@ -102,6 +102,9 @@ test.describe("Teacher check-in", () => {
 
     // Check in.
     await page.locator('button:visible', { hasText: "Check In" }).click();
+    await page.getByRole("button", { name: "Acknowledge & Confirm Check-in" }).click();
+    // Dismiss the green success overlay
+    await page.getByRole("heading", { name: "✓ Checked In" }).click();
     await expect(page.getByText("Already Checked In")).toBeVisible();
     await expect(page.getByText(/Checked in:/)).toBeVisible();
 

@@ -802,7 +802,13 @@ export async function checkInRegistration(params: { registrationId: string; acto
   });
 }
 
-export async function checkOutRegistration(params: { registrationId: string; actorId: string }) {
+export async function checkOutRegistration(params: {
+  registrationId: string;
+  actorId: string;
+  collectorName?: string;
+  collectorRelationship?: string;
+  details?: any;
+}) {
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
@@ -814,7 +820,13 @@ export async function checkOutRegistration(params: { registrationId: string; act
 
     const updated = await tx.registration.update({
       where: { id: registration.id },
-      data: { checkedOutAt: new Date() },
+      data: {
+        checkedOutAt: new Date(),
+        checkedOutById: params.actorId,
+        checkoutCollectorName: params.collectorName || null,
+        checkoutCollectorRelationship: params.collectorRelationship || null,
+        checkoutDetails: params.details || null,
+      },
     });
 
     await logEvent(tx, {
@@ -822,7 +834,48 @@ export async function checkOutRegistration(params: { registrationId: string; act
       registrationId: registration.id,
       actorId: params.actorId,
       action: "CHECK_OUT_COMPLETED",
-      newValue: { checkedOutAt: updated.checkedOutAt },
+      newValue: {
+        checkedOutAt: updated.checkedOutAt,
+        checkedOutById: params.actorId,
+        collectorName: params.collectorName,
+        collectorRelationship: params.collectorRelationship,
+      },
+    });
+
+    return updated;
+  });
+}
+
+export async function undoCheckIn(params: {
+  registrationId: string;
+  actorId: string;
+  reason: string;
+}) {
+  return prisma.$transaction(async (tx) => {
+    const registration = await tx.registration.findUniqueOrThrow({
+      where: { id: params.registrationId },
+      include: { camper: true },
+    });
+    if (registration.status !== "CHECKED_IN") {
+      throw new RegistrationEngineError("NOT_CHECKED_IN", "Camper is not checked in.");
+    }
+
+    const updated = await tx.registration.update({
+      where: { id: registration.id },
+      data: {
+        status: "APPROVED",
+        checkedInAt: null,
+        checkedInById: null,
+      },
+    });
+
+    await logEvent(tx, {
+      organizationId: registration.camper.organizationId,
+      registrationId: registration.id,
+      actorId: params.actorId,
+      action: "CHECK_IN_UNDONE",
+      previousValue: { status: "CHECKED_IN" },
+      newValue: { status: "APPROVED", reason: params.reason },
     });
 
     return updated;

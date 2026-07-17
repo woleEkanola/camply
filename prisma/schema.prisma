@@ -437,6 +437,10 @@ model Registration {
   checkedInAt        DateTime?
   checkedInById      String?
   checkedOutAt       DateTime?
+  checkedOutById     String?
+  checkoutCollectorName String?
+  checkoutCollectorRelationship String?
+  checkoutDetails    Json?
   internalNotes      Json? // [{authorId, text, at}]
   communicationLog   Json? // {"ACCEPTANCE":"SENT"|"NOT_SENT","REJECTION":"SENT"|"NOT_SENT","CORRECTION":"SENT"|"NOT_SENT","WAITLIST":"SENT"|"NOT_SENT"}
   fieldChangeLog     Json? // [{field, previousValue, newValue, changedAt, changedById}]

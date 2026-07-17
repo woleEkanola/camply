@@ -74,6 +74,12 @@ const ADMIN_GROUPS: NavGroup[] = [
         icon: QrCodeIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
+      {
+        name: "Check-out",
+        href: "/admin/check-out",
+        icon: QrCodeIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
+      },
     ],
   },
   {
@@ -231,6 +237,7 @@ const TEACHER_GROUPS: NavGroup[] = [
       { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
       { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
       { name: "Check-in", href: "/teacher/check-in", icon: QrCodeIcon },
+      { name: "Check-out", href: "/teacher/check-out", icon: QrCodeIcon },
       { name: "Inbox", href: "/teacher/inbox", icon: MegaphoneIcon },
       { name: "Incidents", href: "/teacher/incidents", icon: ExclamationTriangleIcon },
     ],
@@ -249,6 +256,7 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     name: "Operations",
     items: [
       { name: "Check-in", href: "/volunteer/check-in", icon: QrCodeIcon },
+      { name: "Check-out", href: "/volunteer/check-out", icon: QrCodeIcon },
       { name: "Medical", href: "/volunteer/medical", icon: HeartIcon },
       { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
       { name: "Incidents", href: "/volunteer/incidents", icon: ExclamationTriangleIcon },
