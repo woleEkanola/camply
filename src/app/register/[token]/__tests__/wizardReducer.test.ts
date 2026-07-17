@@ -90,4 +90,41 @@ describe("wizardReducer", () => {
       expect(next.step).toBe("LANDING");
     });
   });
+
+  describe("START_ANOTHER", () => {
+    it("resets teens/activeTeenId/declarations/returnTo but keeps campData/email/name and goes to HUB", () => {
+      const campData = {
+        campId: "camp-1",
+        campName: "Summer Camp",
+        campusId: "campus-1",
+        campusName: "Main Campus",
+        organizationId: "org-1",
+        organizationName: "Org",
+        year: 2026,
+        status: "ACTIVE",
+      };
+      const state: WizardState = {
+        ...createInitialState(TOKEN),
+        step: "CONFIRMATION",
+        campData,
+        email: "parent@example.com",
+        firstName: "Ada",
+        lastName: "Lovelace",
+        teens: [teen()],
+        activeTeenId: "camper-1",
+        declarations: [{ id: "d1", checked: true }],
+        returnTo: "REVIEW",
+      };
+      const next = wizardReducer(state, { type: "START_ANOTHER" });
+
+      expect(next.step).toBe("HUB");
+      expect(next.teens).toEqual([]);
+      expect(next.activeTeenId).toBeNull();
+      expect(next.declarations).toEqual([]);
+      expect(next.returnTo).toBeUndefined();
+      expect(next.campData).toEqual(campData);
+      expect(next.email).toBe("parent@example.com");
+      expect(next.firstName).toBe("Ada");
+    });
+  });
 });

@@ -122,7 +122,15 @@ export function StepTeens({ state, dispatch }: StepTeensProps) {
         <button
           type="button"
           onClick={() => {
-            dispatch({ type: "SET_ACTIVE_TEEN", camperId: state.teens[0]?.camperId ?? null });
+            // Preserve whichever teen is already active — ADD_TEEN sets this
+            // to the teen just added, and a TeenCard click sets it to
+            // whichever one the parent picked. Only fall back to the first
+            // teen if activeTeenId is unset or no longer in the list (e.g.
+            // that teen was removed).
+            const target = state.teens.some((t) => t.camperId === state.activeTeenId)
+              ? state.activeTeenId
+              : state.teens[0]?.camperId ?? null;
+            dispatch({ type: "SET_ACTIVE_TEEN", camperId: target });
             dispatch({ type: "GO_TO", step: "DETAILS" });
           }}
           className="mt-6 flex h-12 w-full items-center justify-center rounded-xl bg-accent-600 text-base font-medium text-white transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2"

@@ -115,6 +115,21 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
       return { ...state, step: state.previousStep ?? "LANDING", error: null };
     case "RESTORE":
       return { ...state, ...action.state, token: state.token };
+    case "START_ANOTHER":
+      // "Add Another Camper" from Confirmation. Keep campData/email/name/auth
+      // (still the same parent, same camp) but reset everything scoped to the
+      // just-submitted registration — otherwise the completed teens resurface
+      // in the next pass and Review would resubmit already-SUBMITTED ones.
+      return {
+        ...state,
+        teens: [],
+        activeTeenId: null,
+        declarations: [],
+        returnTo: undefined,
+        previousStep: state.step,
+        step: "HUB",
+        direction: "forward",
+      };
     default:
       return state;
   }

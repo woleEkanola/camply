@@ -5,7 +5,6 @@ import { api } from "@/utils/trpc";
 import { uploadFiles } from "@/utils/uploadthing-hook";
 import { compressImage } from "@/lib/compressImage";
 import type { WizardState, WizardAction } from "../types";
-import { TeenSwitcher } from "../components/TeenSwitcher";
 
 interface StepDocumentsProps {
   state: WizardState;
@@ -66,7 +65,7 @@ function DocumentRow({
     setUploadingState(true);
 
     try {
-      const compressed = await compressImage(file);
+      const compressed = await compressImage(file, maxBytes);
       const res = await uploadFiles("documentUploader", {
         files: [compressed],
       });
@@ -209,11 +208,6 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
   return (
     <div>
       <div className="mb-6">
-        <TeenSwitcher
-          teens={state.teens}
-          activeTeenId={state.activeTeenId}
-          onChange={(id) => dispatch({ type: "SET_ACTIVE_TEEN", camperId: id })}
-        />
         <h1 className="text-xl font-bold text-neutral-900">Documents</h1>
         <p className="mt-1 text-sm text-neutral-500">
           {activeTeen ? `Upload required documents for ${activeTeen.firstName}.` : "Upload required documents."}

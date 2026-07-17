@@ -3,19 +3,25 @@ const TARGET_BYTES = 500 * 1024;
 const MAX_DIMENSION = 1920;
 
 export class FileTooLargeError extends Error {
-  constructor() {
-    super("File exceeds maximum upload size of 3MB");
+  constructor(maxBytes: number) {
+    super(`File exceeds maximum upload size of ${Math.round(maxBytes / (1024 * 1024))}MB`);
     this.name = "FileTooLargeError";
   }
 }
 
-export async function compressImage(file: File): Promise<File> {
+/**
+ * @param maxBytes Ceiling checked before compression. Defaults to the
+ * original fixed 3MB for callers with no per-field/requirement config; the
+ * wizard's Documents step passes the admin-configured DocumentRequirement
+ * limit instead so the enforced ceiling always matches what's displayed.
+ */
+export async function compressImage(file: File, maxBytes: number = MAX_UPLOAD_BYTES): Promise<File> {
   if (!file.type.startsWith("image/")) {
     return file;
   }
 
-  if (file.size > MAX_UPLOAD_BYTES) {
-    throw new FileTooLargeError();
+  if (file.size > maxBytes) {
+    throw new FileTooLargeError(maxBytes);
   }
 
   if (file.size <= TARGET_BYTES) {

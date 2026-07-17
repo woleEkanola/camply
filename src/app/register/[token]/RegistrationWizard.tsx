@@ -124,13 +124,28 @@ export function RegistrationWizard({ token }: { token: string }) {
     }
   }, [signupData]);
 
-  // If ?step=hub is in the URL, route directly to hub after token validation
+  // If ?step=hub is in the URL, route directly to hub after token validation —
+  // but only ONCE. The param is never stripped from the URL, and next-auth's
+  // default refetchOnWindowFocus means returning to this tab (e.g. after the
+  // mobile camera/file picker for a Details-step photo upload backgrounds it)
+  // produces a new `session` object — without a one-shot guard that re-ran
+  // this effect and clobbered an in-progress DETAILS step back to HUB. Also
+  // skipped if a localStorage restore already advanced past HUB, so a stale
+  // `?step=hub` can never override a deeper in-progress step. Sign-in success
+  // inside IDENTITY (NewAccountForm/ReturningUserForm) dispatches GO_TO HUB
+  // directly and does not depend on this effect, so latching it after the
+  // first decision is safe.
   const searchParams = useSearchParams();
   const shouldGoToHub = searchParams.get("step") === "hub";
   const { data: session, status: sessionStatus } = useSession();
+  const hubHandledRef = useRef(false);
 
   useEffect(() => {
-    if (!shouldGoToHub || !signupData) return;
+    if (hubHandledRef.current || !shouldGoToHub || !signupData) return;
+    if (sessionStatus === "loading") return; // wait for the definitive initial session state
+    hubHandledRef.current = true;
+    const PAST_HUB: WizardState["step"][] = ["TEENS", "DETAILS", "DOCUMENTS", "REVIEW"];
+    if (PAST_HUB.includes(state.step)) return;
     if (session?.user?.email) {
       dispatch({ type: "SET_EMAIL", email: session.user.email });
       dispatch({ type: "GO_TO", step: "HUB" });
@@ -138,7 +153,7 @@ export function RegistrationWizard({ token }: { token: string }) {
       // Not logged in — route through identity which will then go to HUB
       dispatch({ type: "GO_TO", step: "IDENTITY" });
     }
-  }, [shouldGoToHub, signupData, session]);
+  }, [shouldGoToHub, signupData, session, sessionStatus, state.step]);
 
   useEffect(() => {
     if (validationError && state.step === "LOADING") {
@@ -228,7 +243,7 @@ export function RegistrationWizard({ token }: { token: string }) {
       )}
 
       {state.step === "CONFIRMATION" && (
-        <StepConfirmation campName={state.campData?.campName ?? "Camp"} teens={state.teens} token={token} />
+        <StepConfirmation campName={state.campData?.campName ?? "Camp"} teens={state.teens} dispatch={dispatch} />
       )}
     </div>
   );

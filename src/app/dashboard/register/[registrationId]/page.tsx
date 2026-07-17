@@ -7,6 +7,8 @@ import { api } from "@/utils/trpc";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 import type { FormFieldDTO } from "@/components/forms/types";
 import { Button } from "@/components/ui/Button";
+import { uploadFiles } from "@/utils/uploadthing-hook";
+import { compressImage } from "@/lib/compressImage";
 
 const STATUS_COPY: Record<string, string> = {
   DRAFT: "You haven't submitted this registration yet.",
@@ -78,27 +80,28 @@ function DocumentUploader({
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        setLocalError(data.error || "Upload failed.");
+      const compressed = await compressImage(file, maxBytes);
+      const uploaded = await uploadFiles("documentUploader", { files: [compressed] });
+      const result = uploaded[0];
+      if (!result) {
+        setLocalError("Upload failed.");
         return;
       }
       const payload = {
         requirementId: requirement.id,
         registrationId,
-        url: data.url,
-        fileName: file.name,
-        fileType: file.type || "application/octet-stream",
-        fileSize: file.size,
+        url: result.ufsUrl ?? result.url,
+        fileName: result.name,
+        fileType: result.type ?? "application/octet-stream",
+        fileSize: result.size,
       };
       if (activeAction && doc) {
         replaceMutation.mutate({ ...payload, replacingDocumentId: doc.id });
       } else {
         uploadMutation.mutate(payload);
       }
+    } catch (err: any) {
+      setLocalError(err.message || "Upload failed.");
     } finally {
       setUploading(false);
     }

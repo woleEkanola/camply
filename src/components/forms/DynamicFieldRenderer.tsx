@@ -1,6 +1,7 @@
 "use client";
 
 import { Input, Textarea, Select } from "@/components/ui/Input";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import FileUpload from "@/components/file-upload";
 import { parseFieldOptions } from "@/lib/formFieldOptions";
 import type { FormFieldDTO } from "./types";
@@ -27,7 +28,23 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
   const fieldId = field.id;
 
   switch (field.type) {
-    case "TEXT":
+    case "TEXT": {
+      const PHONE_SYSTEM_KEYS = new Set(["parentPhone", "teenPhone", "emergencyContactPhone", "phone"]);
+      const isPhoneField = (field.systemKey && PHONE_SYSTEM_KEYS.has(field.systemKey)) || /phone/i.test(field.label);
+      if (isPhoneField) {
+        return (
+          <PhoneInput
+            id={fieldId}
+            label={field.label}
+            required={field.required}
+            helpText={field.helpText ?? undefined}
+            value={(value as string) ?? ""}
+            onChange={onChange}
+            disabled={disabled}
+            error={error}
+          />
+        );
+      }
       return (
         <Input
           id={fieldId}
@@ -41,6 +58,7 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           error={error}
         />
       );
+    }
 
     case "LONG_TEXT":
       return (
@@ -219,7 +237,13 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
       );
     }
 
-    case "FILE":
+    case "FILE": {
+      // The always-visible avatar placeholder isn't just for the system
+      // photoUrl field — an admin-defined custom field named e.g. "Camper
+      // Picture" is just as much a photo upload and should get the same
+      // placeholder rather than the plain default variant (no placeholder
+      // until something is uploaded).
+      const isPhotoField = field.systemKey === "photoUrl" || /photo|picture|headshot|image/i.test(field.label);
       return (
         <div>
           <FileUpload
@@ -228,11 +252,12 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
             onChange={(url) => onChange(url)}
             disabled={disabled}
             onUploadingChange={onUploadingChange}
-            variant={field.systemKey === "photoUrl" ? "avatar" : "default"}
+            variant={isPhotoField ? "avatar" : "default"}
           />
           {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
         </div>
       );
+    }
 
     default:
       return null;

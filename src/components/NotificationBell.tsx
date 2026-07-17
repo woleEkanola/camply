@@ -1,17 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/utils/trpc";
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const utils = api.useUtils();
   const { data: unreadCount } = api.notification.unreadCount.useQuery(undefined, { refetchInterval: 30000 });
   const { data: notifications, refetch } = api.notification.listMine.useQuery(undefined, { enabled: open });
-  const markRead = api.notification.markRead.useMutation({ onSuccess: () => refetch() });
-  const markAllRead = api.notification.markAllRead.useMutation({ onSuccess: () => refetch() });
+
+  function onReadMutated() {
+    refetch();
+    utils.notification.unreadCount.invalidate();
+  }
+  const markRead = api.notification.markRead.useMutation({ onSuccess: onReadMutated });
+  const markAllRead = api.notification.markAllRead.useMutation({ onSuccess: onReadMutated });
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button onClick={() => setOpen((o) => !o)} className="relative p-2 rounded-full hover:bg-gray-100">
         🔔
         {!!unreadCount && unreadCount > 0 && (
