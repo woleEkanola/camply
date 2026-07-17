@@ -28,9 +28,10 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
   const fieldId = field.id;
 
   switch (field.type) {
+    case "PHONE":
     case "TEXT": {
       const PHONE_SYSTEM_KEYS = new Set(["parentPhone", "teenPhone", "emergencyContactPhone", "phone"]);
-      const isPhoneField = (field.systemKey && PHONE_SYSTEM_KEYS.has(field.systemKey)) || /phone/i.test(field.label);
+      const isPhoneField = field.type === "PHONE" || (field.systemKey && PHONE_SYSTEM_KEYS.has(field.systemKey)) || /phone/i.test(field.label);
       if (isPhoneField) {
         return (
           <PhoneInput

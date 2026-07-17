@@ -10,7 +10,8 @@ export type FormFieldType =
   | "SELECT"
   | "MULTI_SELECT"
   | "RADIO"
-  | "FILE";
+  | "FILE"
+  | "PHONE";
 
 export interface FormFieldDTO {
   id: string;

@@ -6,7 +6,7 @@ import { ensureSystemFields } from "../../registration/systemFieldRegistry";
 import { getDepartmentAvailability } from "../../staff/departmentCapacity";
 
 const audienceEnum = z.enum(["CAMPER", "TEACHER", "VOLUNTEER"]);
-const typeEnum = z.enum(["TEXT", "LONG_TEXT", "NUMBER", "DATE", "BOOLEAN", "CHECKBOX", "SELECT", "MULTI_SELECT", "RADIO", "FILE"]);
+const typeEnum = z.enum(["TEXT", "LONG_TEXT", "NUMBER", "DATE", "BOOLEAN", "CHECKBOX", "SELECT", "MULTI_SELECT", "RADIO", "FILE", "PHONE"]);
 
 // systemKeys whose SELECT options come from a live DB list rather than stored config —
 // kept out of the admin Form Editor's manual Options input (see FormFieldEditor.tsx).

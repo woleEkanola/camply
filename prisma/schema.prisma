@@ -40,6 +40,7 @@ enum ProfileFieldType {
   MULTI_SELECT
   RADIO
   FILE
+  PHONE
 }
 
 enum FormFieldAudience {

@@ -20,6 +20,7 @@ const ALL_TYPES: { value: FormFieldType; label: string }[] = [
   { value: "MULTI_SELECT", label: "Multi-select" },
   { value: "RADIO", label: "Radio Buttons" },
   { value: "FILE", label: "File Upload" },
+  { value: "PHONE", label: "Nigerian Phone Number" },
 ];
 
 const HAS_OPTIONS: FormFieldType[] = ["SELECT", "MULTI_SELECT", "RADIO"];
