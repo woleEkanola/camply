@@ -229,4 +229,37 @@ test.describe("Wizard upload gating and retry-safe submit", () => {
     });
     expect(submittedEvents).toHaveLength(1);
   });
+
+  test("a custom FILE field with a photo-like label also gets the avatar placeholder, not just the system photoUrl field", async ({ page }) => {
+    test.setTimeout(60000);
+    const customField = await prisma.formField.create({
+      data: {
+        organizationId,
+        audience: "CAMPER",
+        source: "CUSTOM",
+        name: `camper-picture-${Date.now()}`,
+        label: "Camper Picture",
+        type: "FILE",
+        required: false,
+        visible: true,
+        groupLabel: "Camper Information",
+        sortOrder: 91,
+      },
+    });
+
+    try {
+      await signUpAndAddTeen(page, "CustomPhoto", "Teen");
+
+      const label = page.getByText("Camper Picture", { exact: true });
+      await expect(label).toBeVisible({ timeout: 10000 });
+      // Same always-visible h-20 w-20 avatar box the system photoUrl field
+      // gets — not the plain "no placeholder until uploaded" default variant.
+      const placeholderBox = label.locator("xpath=following-sibling::div[1]//div[contains(@class,'h-20') and contains(@class,'w-20')]");
+      await expect(placeholderBox).toBeVisible();
+      await expect(placeholderBox.locator("img")).toHaveCount(0);
+    } finally {
+      await prisma.profileFieldValue.deleteMany({ where: { fieldId: customField.id } });
+      await prisma.formField.delete({ where: { id: customField.id } });
+    }
+  });
 });

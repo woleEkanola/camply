@@ -94,13 +94,8 @@ test.describe("Review step attributes submit errors to the correct teen", () => 
     await page.getByRole("button", { name: "Add Teen" }).click();
     await expect(page.getByText(`${firstName} ${lastName}`)).toBeVisible({ timeout: 5000 });
     await page.getByRole("button", { name: "Continue to Registration" }).click();
-    // With more than one teen, Details opens on whichever was already active
-    // (not necessarily the one just added) — the ChildSwitcher tab bar lets
-    // us select the right one explicitly.
-    const switcherTab = page.getByRole("tab", { name: new RegExp(`^${firstName}\\b`) });
-    if (await switcherTab.isVisible().catch(() => false)) {
-      await switcherTab.click();
-    }
+    // ADD_TEEN sets activeTeenId to the teen just added, so Details opens on
+    // this one directly.
     await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible({ timeout: 10000 });
   }
 
@@ -189,8 +184,12 @@ test.describe("Review step attributes submit errors to the correct teen", () => 
     await seedDocsForActiveTeen(page);
     await page.getByRole("button", { name: "← Back" }).click();
     await expect(page.getByRole("heading", { name: "Bob Failer" })).toBeVisible({ timeout: 5000 });
+    // Two teens are now in wizard state (Alice + Bob) — the removed
+    // TeenSwitcher used to render a tab bar exactly under this condition.
+    await expect(page.getByRole("tab")).toHaveCount(0);
     await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("tab")).toHaveCount(0);
 
     // Force Bob's registration into an illegal pre-submit state — DRAFT is the
     // only status assertTransition allows into SUBMITTED, so this deterministically

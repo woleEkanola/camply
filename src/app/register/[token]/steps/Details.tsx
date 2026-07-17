@@ -3,10 +3,15 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { api } from "@/utils/trpc";
 import type { WizardState, WizardAction } from "../types";
-import { TeenSwitcher } from "../components/TeenSwitcher";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 import type { FormFieldDTO } from "@/components/forms/types";
 import { AutoSaveIndicator } from "../components/AutoSaveIndicator";
+import { isCompleteNigerianPhone } from "@/lib/phone";
+
+const PHONE_SYSTEM_KEYS = new Set(["parentPhone", "teenPhone", "emergencyContactPhone", "phone"]);
+function isPhoneField(f: FormFieldDTO) {
+  return f.type === "TEXT" && ((!!f.systemKey && PHONE_SYSTEM_KEYS.has(f.systemKey)) || /phone/i.test(f.label));
+}
 
 interface StepDetailsProps {
   state: WizardState;
@@ -134,21 +139,36 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
   async function handleNext() {
     if (!activeTeen) return;
     if (isUploading) return;
+    // StepDetails remounts fresh every time the wizard leaves and returns to
+    // DETAILS (switching teens, going back from Documents, etc.), so `values`
+    // starts empty until this teen's camper.getById query resolves and the
+    // load effect above populates it. Clicking Next inside that window would
+    // validate against the still-empty values and falsely reject fields the
+    // teen already has data for.
+    if (!loaded) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    // Validate required fields
+    // Validate required fields + phone completeness
     const errors: Record<string, string> = {};
     for (const f of visibleFields) {
-      if (!f.required) continue;
       const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
       const val = values[key];
-      if (
+      const isEmpty =
         val === undefined ||
         val === null ||
         String(val).trim() === "" ||
-        (Array.isArray(val) && val.length === 0)
-      ) {
+        (Array.isArray(val) && val.length === 0);
+
+      if (f.required && isEmpty) {
         errors[key] = `${f.label} is required`;
+        continue;
+      }
+      // A phone field with something typed must be a complete 11-digit
+      // number — e.g. "0" alone shouldn't silently pass as a valid contact
+      // number just because it isn't empty. Optional + genuinely empty is
+      // still fine (no error).
+      if (!isEmpty && isPhoneField(f) && !isCompleteNigerianPhone(String(val))) {
+        errors[key] = `${f.label} must be a complete 11-digit Nigerian number`;
       }
     }
 
@@ -201,11 +221,6 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
   return (
     <div>
       <div className="mb-6">
-        <TeenSwitcher
-          teens={state.teens}
-          activeTeenId={state.activeTeenId}
-          onChange={(id) => dispatch({ type: "SET_ACTIVE_TEEN", camperId: id })}
-        />
         <h1 className="text-xl font-bold text-neutral-900">{activeTeen.firstName} {activeTeen.lastName}</h1>
       </div>
 
@@ -246,7 +261,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
               </button>
               <button
                 type="button"
-                disabled={isUploading}
+                disabled={isUploading || !loaded}
                 onClick={handleNext}
                 className="flex h-12 items-center gap-1 rounded-xl bg-accent-600 px-6 text-sm font-medium text-white transition-colors hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent-600"
               >

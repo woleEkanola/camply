@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 
-import type { TeenRegistration } from "../types";
+import type { TeenRegistration, WizardAction } from "../types";
 
 interface StepConfirmationProps {
   campName: string;
   teens: TeenRegistration[];
-  token: string;
+  dispatch: React.Dispatch<WizardAction>;
 }
 
-export function StepConfirmation({ campName, teens, token }: StepConfirmationProps) {
+export function StepConfirmation({ campName, teens, dispatch }: StepConfirmationProps) {
   return (
     <div>
       <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
@@ -59,12 +59,13 @@ export function StepConfirmation({ campName, teens, token }: StepConfirmationPro
           >
             Go to Dashboard
           </Link>
-          <Link
-            href={`/register/${token}?step=hub`}
+          <button
+            type="button"
+            onClick={() => dispatch({ type: "START_ANOTHER" })}
             className="inline-flex h-12 items-center justify-center rounded-xl border border-neutral-300 bg-white px-6 text-base font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
           >
             Add Another Camper
-          </Link>
+          </button>
         </div>
       </div>
     </div>

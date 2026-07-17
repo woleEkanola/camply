@@ -27,20 +27,34 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   icon?: React.ReactNode;
 }
 
+/**
+ * Button's visual classes, exported so a non-<button> element that must
+ * look like a button (e.g. a next/link <Link>, which already renders its
+ * own <a>) can match it without nesting a real <button> inside that <a> —
+ * invalid HTML that's fragile for click-through/hydration.
+ */
+export function buttonClassName({
+  variant = "primary",
+  size = "md",
+  className,
+}: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}) {
+  return cn(
+    "inline-flex items-center justify-center rounded-md font-medium transition-colors",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2",
+    "disabled:cursor-not-allowed",
+    variantClasses[variant],
+    sizeClasses[size],
+    className
+  );
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = "primary", size = "md", loading, icon, className, children, disabled, ...props }, ref) => {
     return (
       <button
         ref={ref}
         disabled={disabled || loading}
-        className={cn(
-          "inline-flex items-center justify-center rounded-md font-medium transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2",
-          "disabled:cursor-not-allowed",
-          variantClasses[variant],
-          sizeClasses[size],
-          className
-        )}
+        className={buttonClassName({ variant, size, className })}
         {...props}
       >
         {loading ? (

@@ -23,6 +23,13 @@ export function DocumentRequirementsEditor({ organizationId }: Props) {
     maxSizeMb: 2,
   });
   const [deleteReqTarget, setDeleteReqTarget] = useState<{ id: string; name: string } | null>(null);
+  const [editReq, setEditReq] = useState<{
+    id: string;
+    name: string;
+    description: string;
+    acceptedFormats: string;
+    maxSizeMb: number;
+  } | null>(null);
 
   const { data: activeCamp } = api.camp.getActiveCamp.useQuery(
     { organizationId },
@@ -54,6 +61,13 @@ export function DocumentRequirementsEditor({ organizationId }: Props) {
 
   const toggleRequirement = api.documentRequirement.update.useMutation({
     onSuccess: () => refetchRequirements(),
+  });
+
+  const updateRequirement = api.documentRequirement.update.useMutation({
+    onSuccess: () => {
+      setEditReq(null);
+      refetchRequirements();
+    },
   });
 
   if (!activeCamp) {
@@ -91,6 +105,20 @@ export function DocumentRequirementsEditor({ organizationId }: Props) {
                 </div>
               </div>
               <div className="flex gap-3 text-sm">
+                <button
+                  className="text-neutral-700 hover:underline"
+                  onClick={() =>
+                    setEditReq({
+                      id: req.id,
+                      name: req.name,
+                      description: req.description ?? "",
+                      acceptedFormats: req.acceptedFormats,
+                      maxSizeMb: req.maxSizeMb,
+                    })
+                  }
+                >
+                  Edit
+                </button>
                 <button
                   className="text-accent-700 hover:underline"
                   onClick={() => toggleRequirement.mutate({ id: req.id, data: { required: !req.required } })}
@@ -150,6 +178,66 @@ export function DocumentRequirementsEditor({ organizationId }: Props) {
             Add
           </Button>
         </div>
+
+        {/* Edit requirement */}
+        {editReq && (
+          <Dialog open onClose={() => setEditReq(null)}>
+            <div className="p-4">
+              <h3 className="text-lg font-semibold">Edit Document Requirement</h3>
+              <div className="mt-4 space-y-3">
+                <Input
+                  label="Document Name"
+                  value={editReq.name}
+                  onChange={(e) => setEditReq({ ...editReq, name: e.target.value })}
+                />
+                <Input
+                  label="Description"
+                  value={editReq.description}
+                  onChange={(e) => setEditReq({ ...editReq, description: e.target.value })}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Formats"
+                    value={editReq.acceptedFormats}
+                    onChange={(e) => setEditReq({ ...editReq, acceptedFormats: e.target.value })}
+                    placeholder="jpg,png"
+                  />
+                  <Input
+                    label="Max Size (MB)"
+                    type="number"
+                    value={editReq.maxSizeMb || ""}
+                    onChange={(e) =>
+                      setEditReq({ ...editReq, maxSizeMb: e.target.value === "" ? 0 : Number(e.target.value) })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setEditReq(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!editReq.name || !editReq.maxSizeMb}
+                  loading={updateRequirement.isPending}
+                  onClick={() =>
+                    updateRequirement.mutate({
+                      id: editReq.id,
+                      data: {
+                        name: editReq.name,
+                        description: editReq.description,
+                        acceptedFormats: editReq.acceptedFormats,
+                        maxSizeMb: editReq.maxSizeMb,
+                      },
+                    })
+                  }
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </Dialog>
+        )}
 
         {/* Delete confirmation */}
         {deleteReqTarget && (

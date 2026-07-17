@@ -82,7 +82,7 @@ export async function POST(request: Request) {
         lastName: result.data.lastName,
         userId: parent!.id,
         organizationId,
-        homeCampusId: parent!.homeCampusId, // Always use campus from parent account
+        homeCampusId: signupLink.campusId, // Campus of the link the parent is registering through, not the parent's earlier campus
         dateOfBirth: dob ? new Date(dob) : undefined, // Ensure ISO DateTime
         gender,
         active: true,

@@ -9,7 +9,7 @@ import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClassName } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 // Parents see "In Review" instead of the internal "Pending"/"Submitted"
@@ -120,8 +120,8 @@ function UserDashboard() {
             <PageHeader title="Family Dashboard" />
             <p className="-mt-2 text-sm text-neutral-500">{session.user.email}</p>
           </div>
-          <Link href={wizardUrl || "/dashboard/profiles/new"}>
-            <Button size="sm">+ Add Camper</Button>
+          <Link href={wizardUrl || "/dashboard/profiles/new"} className={buttonClassName({ size: "sm" })}>
+            + Add Camper
           </Link>
         </div>
 
@@ -184,7 +184,7 @@ function UserDashboard() {
                             <span className="shrink-0 rounded-full bg-warning-100 px-2 py-0.5 text-xs font-medium text-warning-700">Incomplete</span>
                           )}
                         </div>
-                        <p className="text-xs text-neutral-500">{camper.homeCampus?.name ?? "No campus"}</p>
+                        <p className="text-xs text-neutral-500">{activeReg?.campus?.name ?? camper.homeCampus?.name ?? "No campus"}</p>
                         {activeReg ? (
                           <div className="mt-1 flex items-center gap-2">
                             <span className="text-xs text-neutral-500">{activeReg.camp?.name}</span>
@@ -195,10 +195,11 @@ function UserDashboard() {
                         )}
                       </div>
                       <div className="shrink-0 flex items-center gap-2">
-                        <Link href={action.href}>
-                          <Button size="sm" variant={action.variant === "primary" ? "primary" : "secondary"}>
-                            {action.label}
-                          </Button>
+                        <Link
+                          href={action.href}
+                          className={buttonClassName({ size: "sm", variant: action.variant === "primary" ? "primary" : "secondary" })}
+                        >
+                          {action.label}
                         </Link>
                         <button
                           type="button"
