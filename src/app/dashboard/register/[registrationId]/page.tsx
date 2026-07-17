@@ -50,9 +50,14 @@ function DocumentUploader({
     onSuccess: onUploaded,
     onError: (e) => setLocalError(e.message),
   });
+  const replaceMutation = api.document.replaceForRegistration.useMutation({
+    onSuccess: onUploaded,
+    onError: (e) => setLocalError(e.message),
+  });
   const deleteMutation = api.document.delete.useMutation({ onSuccess: onUploaded });
 
   const doc = existingDocs.find((d) => d.requirementId === requirement.id && d.status !== "REJECTED");
+  const activeAction = doc?.documentActions?.[0]?.status === "REQUIRES_ACTION" ? doc.documentActions[0] : null;
   const acceptedFormats = (requirement.acceptedFormats as string).split(",").map((f) => `.${f.trim()}`).join(",");
 
   const handleFile = async (file: File) => {
@@ -81,33 +86,44 @@ function DocumentUploader({
         setLocalError(data.error || "Upload failed.");
         return;
       }
-      uploadMutation.mutate({
+      const payload = {
         requirementId: requirement.id,
         registrationId,
         url: data.url,
         fileName: file.name,
         fileType: file.type || "application/octet-stream",
         fileSize: file.size,
-      });
+      };
+      if (activeAction && doc) {
+        replaceMutation.mutate({ ...payload, replacingDocumentId: doc.id });
+      } else {
+        uploadMutation.mutate(payload);
+      }
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4 flex items-center justify-between gap-4">
-      <div>
+    <div className={`rounded-xl border bg-white p-4 flex items-center justify-between gap-4 ${activeAction ? "border-warning-300 bg-warning-50" : "border-neutral-200"}`}>
+      <div className="min-w-0">
         <div className="font-medium">
           {requirement.name} {requirement.required && <span className="text-xs text-red-600">Required</span>}
+          {activeAction && <span className="ml-2 text-xs font-semibold text-warning-700">Action Required</span>}
         </div>
         {requirement.description && <div className="text-sm text-gray-500">{requirement.description}</div>}
         <div className="text-xs text-gray-400">
           {(requirement.acceptedFormats as string).split(",").map((f: string) => f.trim()).join(" or ")}. Up to {requirement.maxSizeMb} MB
         </div>
+        {activeAction && (
+          <div className="mt-2 text-sm text-warning-800">
+            <span className="font-semibold">Reviewer message:</span> {activeAction.reason}
+          </div>
+        )}
         {localError && <div className="text-sm text-red-600 mt-1">{localError}</div>}
       </div>
       <div className="flex-shrink-0">
-        {doc ? (
+        {doc && !activeAction ? (
           <div className="flex items-center gap-2">
             <span className="text-green-700 text-sm">✓ Uploaded</span>
             <a href={doc.url} target="_blank" rel="noreferrer" className="text-blue-600 text-sm underline">
@@ -119,7 +135,7 @@ function DocumentUploader({
           </div>
         ) : (
           <label className="cursor-pointer inline-flex items-center rounded-lg bg-accent-50 px-3 py-1.5 text-xs font-medium text-accent-700 hover:bg-accent-100">
-            {uploading ? "Uploading..." : "Upload"}
+            {uploading ? "Uploading..." : activeAction ? "Replace Document" : "Upload"}
             <input
               type="file"
               accept={acceptedFormats}
@@ -584,13 +600,21 @@ export default function RegistrationWizardPage() {
                   <div className="space-y-2 text-sm">
                     {(requirements ?? []).map((req) => {
                       const doc = (documents ?? []).find((d) => d.requirementId === req.id && d.status !== "REJECTED");
+                      const activeAction = doc?.documentActions?.[0]?.status === "REQUIRES_ACTION" ? doc.documentActions[0] : null;
                       return (
                         <div key={req.id} className="flex items-center justify-between">
                           <span className="text-neutral-500">{req.name}:</span>
                           {doc ? (
-                            <a href={doc.url} target="_blank" rel="noreferrer" className="text-accent-700 hover:text-accent-800 underline font-medium">
-                              View uploaded document
-                            </a>
+                            <div className="flex items-center gap-2">
+                              <a href={doc.url} target="_blank" rel="noreferrer" className="text-accent-700 hover:text-accent-800 underline font-medium">
+                                View uploaded document
+                              </a>
+                              {activeAction && (
+                                <span className="text-xs font-medium text-warning-700" title={activeAction.reason}>
+                                  Action required
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-neutral-400 italic">Not uploaded</span>
                           )}

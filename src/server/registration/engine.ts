@@ -575,6 +575,72 @@ export async function requestCorrection(params: { registrationId: string; actorI
   return updated;
 }
 
+/**
+ * Flags a specific document as needing replacement/action. Creates a
+ * DocumentAction record, updates the registration's correction message, and
+ * moves the registration to REQUIRES_ACTION so the parent sees the exact issue.
+ */
+export async function flagDocumentRequiresAction(params: {
+  documentId: string;
+  registrationId: string;
+  actorId: string;
+  reason: string;
+}) {
+  return prisma.$transaction(async (tx) => {
+    const registration = await tx.registration.findUniqueOrThrow({
+      where: { id: params.registrationId },
+      include: { camper: true },
+    });
+
+    const document = await tx.document.findUniqueOrThrow({
+      where: { id: params.documentId },
+      include: { requirement: true },
+    });
+
+    if (document.registrationId !== registration.id) {
+      throw new RegistrationEngineError("DOCUMENT_REGISTRATION_MISMATCH", "Document does not belong to this registration.");
+    }
+
+    if (registration.status !== "REQUIRES_ACTION") {
+      assertTransition(registration.status, "REQUIRES_ACTION");
+    }
+
+    const requirementName = document.requirement?.name ?? "Required document";
+    const correctionMessage = `${requirementName} needs action: ${params.reason}`;
+
+    // Resolve any previous active action for this document before creating a new one.
+    await tx.documentAction.updateMany({
+      where: { documentId: document.id, status: "REQUIRES_ACTION" },
+      data: { status: "RESOLVED", resolvedAt: new Date(), resolvedById: params.actorId, resolutionType: "ADMIN_OVERRIDE" },
+    });
+
+    await tx.documentAction.create({
+      data: {
+        documentId: document.id,
+        status: "REQUIRES_ACTION",
+        reason: params.reason,
+        requestedById: params.actorId,
+      },
+    });
+
+    const updated = await tx.registration.update({
+      where: { id: registration.id },
+      data: { status: "REQUIRES_ACTION", correctionRequest: correctionMessage },
+    });
+
+    await logEvent(tx, {
+      organizationId: registration.camper.organizationId,
+      registrationId: registration.id,
+      actorId: params.actorId,
+      action: "DOCUMENT_FLAGGED_REQUIRES_ACTION",
+      previousValue: { status: registration.status, correctionRequest: registration.correctionRequest },
+      newValue: { status: "REQUIRES_ACTION", correctionRequest: correctionMessage, documentId: document.id },
+    });
+
+    return updated;
+  });
+}
+
 /** Parent resubmits after a correction request or a rejection (if allowed). */
 export async function resubmitRegistration(params: { registrationId: string; actorId: string }) {
   const result = await prisma.$transaction(async (tx) => {
@@ -627,6 +693,38 @@ export async function resubmitRegistration(params: { registrationId: string; act
 
   await runSideEffectsNow(result.id, "REGISTRATION_SUBMITTED");
   return result;
+}
+
+/**
+ * Reviewer advances a registration out of REQUIRES_ACTION back to PENDING
+ * after verifying replacements. This is the explicit reviewer path; parents
+ * use resubmitRegistration instead.
+ */
+export async function advanceFromRequiresAction(params: { registrationId: string; actorId: string }) {
+  return prisma.$transaction(async (tx) => {
+    const registration = await tx.registration.findUniqueOrThrow({
+      where: { id: params.registrationId },
+      include: { camper: true },
+    });
+
+    assertTransition(registration.status, "PENDING");
+
+    const updated = await tx.registration.update({
+      where: { id: registration.id },
+      data: { status: "PENDING", correctionRequest: null },
+    });
+
+    await logEvent(tx, {
+      organizationId: registration.camper.organizationId,
+      registrationId: registration.id,
+      actorId: params.actorId,
+      action: "REGISTRATION_ADVANCED_FROM_REQUIRES_ACTION",
+      previousValue: { status: registration.status },
+      newValue: { status: "PENDING" },
+    });
+
+    return updated;
+  });
 }
 
 export async function cancelRegistration(params: { registrationId: string; actorId: string; reason?: string }) {

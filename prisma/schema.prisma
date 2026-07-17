@@ -540,8 +540,29 @@ model Document {
   deletedAt       DateTime?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
+  documentActions DocumentAction[]
 
   @@index([deletedAt])
+}
+
+model DocumentAction {
+  id              String   @id @default(cuid())
+  documentId      String
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  status          String   @default("REQUIRES_ACTION") // REQUIRES_ACTION | RESOLVED
+  reason          String
+  requestedById   String
+  requestedAt     DateTime @default(now())
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolutionType  String? // PARENT_UPLOAD | REP_UPLOAD | ADMIN_OVERRIDE
+  replacementForId String? // links to the document this action replaced, for history
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([documentId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model AuditLog {
@@ -1147,8 +1168,12 @@ model BroadcastRecipient {
   sentAt      DateTime?
   failedAt    DateTime?
   error       String?
+  readAt      DateTime?
+  pinned      Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@index([broadcastId, status])
+  @@index([recipientId, readAt])
+  @@index([recipientId, pinned])
 }

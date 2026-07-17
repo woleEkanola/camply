@@ -22,6 +22,7 @@ import VerifierAssignment from "./components/VerifierAssignment";
 import ChangesSinceReview from "./components/ChangesSinceReview";
 import { Badge } from "@/components/ui/Badge";
 import { isEndorsed } from "@/server/registration/endorsement";
+import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
 
 type ExtendedUser = {
   id: string;
@@ -83,11 +84,11 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
   const addNote = api.registration.addInternalNote.useMutation({ onSuccess: () => { setNote(""); invalidate(); }, onError: onErr });
   const archive = api.registration.archive.useMutation({ onSuccess: invalidate, onError: onErr });
   const cancelReg = api.registration.cancelMine.useMutation({ onSuccess: invalidate, onError: onErr });
-  const reviewDoc = api.document.review.useMutation({ onSuccess: () => utils.document.listForRegistration.invalidate({ registrationId }) });
   const assignTribe = api.tribe.assign.useMutation({ onSuccess: invalidate, onError: onErr });
   const clearTribe = api.tribe.clear.useMutation({ onSuccess: invalidate, onError: onErr });
   const transitionWithOptions = api.registration.transitionWithOptions.useMutation({ onSuccess: invalidate, onError: onErr });
   const sendCommunication = api.registration.sendCommunication.useMutation({ onSuccess: invalidate, onError: onErr });
+  const advanceFromRequiresAction = api.registration.advanceFromRequiresAction.useMutation({ onSuccess: invalidate, onError: onErr });
 
   if (!registration) {
     return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
@@ -151,6 +152,11 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
         <div className="mb-3 flex flex-wrap gap-2">
           <Button variant="primary" size="sm" loading={approve.isPending} onClick={() => approve.mutate({ registrationId })}>Approve</Button>
           <Button size="sm" className="bg-attention-600 text-white hover:bg-attention-700" loading={waitlist.isPending} onClick={() => waitlist.mutate({ registrationId })}>Waitlist</Button>
+          {registration.status === "REQUIRES_ACTION" && (
+            <Button size="sm" className="bg-warning-600 text-white hover:bg-warning-700" loading={advanceFromRequiresAction.isPending} onClick={() => advanceFromRequiresAction.mutate({ registrationId })}>
+              Advance to Review
+            </Button>
+          )}
           <Button variant="secondary" size="sm" loading={cancelReg.isPending} onClick={() => cancelReg.mutate({ registrationId })}>Cancel</Button>
           <Button variant="secondary" size="sm" loading={archive.isPending} onClick={() => archive.mutate({ registrationId })}>Archive</Button>
         </div>
@@ -181,29 +187,7 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
     </div>
   );
 
-  const documentsTab = (
-    <div className="space-y-2">
-      {(documents ?? []).map((doc: any) => (
-        <div key={doc.id} className="flex items-center justify-between rounded-md border border-neutral-200 p-2 text-sm">
-          <a href={doc.url} target="_blank" rel="noreferrer" className="text-accent-700 underline">{doc.fileName}</a>
-          <div className="flex items-center gap-2">
-            <span className={doc.status === "REJECTED" ? "text-danger-600" : doc.status === "APPROVED" ? "text-success-600" : "text-neutral-500"}>{doc.status}</span>
-            <button className="text-xs text-success-600 hover:underline" onClick={() => reviewDoc.mutate({ id: doc.id, status: "APPROVED" })}>Approve</button>
-            <button
-              className="text-xs text-danger-600 hover:underline"
-              onClick={() => {
-                const reason = window.prompt("Rejection reason?") || "";
-                reviewDoc.mutate({ id: doc.id, status: "REJECTED", rejectionReason: reason });
-              }}
-            >
-              Reject
-            </button>
-          </div>
-        </div>
-      ))}
-      {(documents ?? []).length === 0 && <p className="text-sm text-neutral-500">No documents uploaded.</p>}
-    </div>
-  );
+  const documentsTab = <RegistrationDocumentPanel registrationId={registrationId} />;
 
   const timelineTab = (
     <ul className="space-y-2 text-sm">
@@ -287,7 +271,7 @@ export default function RegistrationsPage() {
   const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL">("");
+  const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("");
 
   const { data: session, status } = useSession({
     required: true,
