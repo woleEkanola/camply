@@ -13,6 +13,7 @@ const bodySchema = z.object({
   role: z.enum(["PARENT", "TEACHER", "VOLUNTEER"]),
   token: z.string().optional(),
   firstName: z.string().optional(),
+  lastName: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ message: parsed.error.errors[0]?.message || "Invalid input data" }, { status: 400 });
     }
-    const { email: rawEmail, password, role, token, firstName } = parsed.data;
+    const { email: rawEmail, password, role, token, firstName, lastName } = parsed.data;
     const email = normalizeEmail(rawEmail);
 
     // Check if user already exists
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
         homeCampusId,
         active: true,
         firstName,
+        lastName,
         emailVerifyToken,
       },
     });

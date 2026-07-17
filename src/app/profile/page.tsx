@@ -8,6 +8,7 @@ import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Button } from "@/components/ui/Button";
 import { CameraIcon, PhotoIcon, KeyIcon, UserIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 import { Dialog } from "@/components/ui/Dialog";
@@ -544,10 +545,10 @@ export default function ProfilePage() {
                         disabled
                         helpText="Email addresses cannot be modified directly for tenant security."
                       />
-                      <Input
+                      <PhoneInput
                         label="Phone Number"
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
+                        onChange={(v) => setPhone(v)}
                       />
                     </div>
 
@@ -836,10 +837,10 @@ export default function ProfilePage() {
                         value={emergencyContactName}
                         onChange={(e) => setEmergencyContactName(e.target.value)}
                       />
-                      <Input
+                      <PhoneInput
                         label="Emergency Phone"
                         value={emergencyContactPhone}
-                        onChange={(e) => setEmergencyContactPhone(e.target.value)}
+                        onChange={(v) => setEmergencyContactPhone(v)}
                       />
                       <Input
                         label="Relationship"

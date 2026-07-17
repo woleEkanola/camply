@@ -69,7 +69,7 @@ export function NewAccountForm({
         const res = await fetch("/api/base-user/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim().toLowerCase(), password, role: "PARENT", token }),
+          body: JSON.stringify({ email: email.trim().toLowerCase(), password, role: "PARENT", token, firstName: firstName.trim(), lastName: lastName.trim() }),
         });
         const data = await res.json();
         if (!res.ok) {

@@ -10,7 +10,10 @@ import { isCompleteNigerianPhone } from "@/lib/phone";
 
 const PHONE_SYSTEM_KEYS = new Set(["parentPhone", "teenPhone", "emergencyContactPhone", "phone"]);
 function isPhoneField(f: FormFieldDTO) {
-  return f.type === "TEXT" && ((!!f.systemKey && PHONE_SYSTEM_KEYS.has(f.systemKey)) || /phone/i.test(f.label));
+  return (
+    f.type === "PHONE" ||
+    (f.type === "TEXT" && ((!!f.systemKey && PHONE_SYSTEM_KEYS.has(f.systemKey)) || /phone/i.test(f.label)))
+  );
 }
 
 interface StepDetailsProps {
