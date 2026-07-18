@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, deleteStaffByEmail, fieldByLabel } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, deleteStaffByEmail, fieldByLabel, visibleText } from "./helpers";
 
 test.describe("Admin: staff approval and assignment", () => {
   test.describe.configure({ mode: "serial" });
@@ -113,7 +113,7 @@ test.describe("Admin: staff approval and assignment", () => {
       await loginWithPassword(page, "owner@camply.com", "password123");
       await page.goto("/admin/volunteers");
 
-      await page.getByText("Reject TargetE2E").click();
+      await visibleText(page, "Reject TargetE2E").click();
       const dialog = page.getByRole("dialog");
       await dialog.getByPlaceholder("Rejection reason").fill("E2E test rejection");
       await dialog.getByRole("button", { name: "Reject", exact: true }).click();

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { api } from "@/utils/trpc";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { Table, type Column } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -84,6 +85,7 @@ export function CampersList({
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allItems, setAllItems] = useState<StaffCamperItem[]>([]);
   const [profileCamperId, setProfileCamperId] = useState<string | null>(null);
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
   const { data: campusesData } = api.campus.getByOrganization.useQuery(
     { organizationId },
@@ -98,7 +100,7 @@ export function CampersList({
     {
       organizationId,
       campId: campId || undefined,
-      q: searchTerm || undefined,
+      q: debouncedSearchTerm || undefined,
       campusId: campusFilter !== "all" ? campusFilter : undefined,
       gender: genderFilter || undefined,
       tribeId: tribeFilter || undefined,
@@ -112,7 +114,7 @@ export function CampersList({
   useEffect(() => {
     setCursor(undefined);
     setAllItems([]);
-  }, [searchTerm, campusFilter, statusFilter, genderFilter, tribeFilter, campId]);
+  }, [debouncedSearchTerm, campusFilter, statusFilter, genderFilter, tribeFilter, campId]);
 
   useEffect(() => {
     if (responseData?.items) {
@@ -278,6 +280,7 @@ export function CampersList({
           placeholder="Search name, email, or registration #"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          onClear={() => setSearchTerm("")}
           className="w-full sm:w-72"
         />
         <Select

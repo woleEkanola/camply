@@ -25,6 +25,7 @@ import ChangesSinceReview from "./components/ChangesSinceReview";
 import { Badge } from "@/components/ui/Badge";
 import { isEndorsed } from "@/server/registration/endorsement";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 type ExtendedUser = {
   id: string;
@@ -334,6 +335,8 @@ export default function RegistrationsPage() {
     },
   });
 
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
+
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
       organizationId,
@@ -341,7 +344,7 @@ export default function RegistrationsPage() {
       campusId: filterCampus || undefined,
       status: filterStatus || undefined,
       reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
-      q: searchQuery || undefined,
+      q: debouncedSearchQuery || undefined,
       limit: 50,
     },
     { enabled: !!organizationId }
@@ -460,7 +463,7 @@ export default function RegistrationsPage() {
       )}
 
       <div className="mb-4 grid gap-3 md:grid-cols-3">
-        <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
         <Select value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
           <option value="">All Campuses</option>
           {campuses.map((c: any) => (

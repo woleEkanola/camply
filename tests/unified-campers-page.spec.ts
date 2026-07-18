@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithOtp, deleteCamperByEmail, deleteStaffByEmail } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithOtp, deleteCamperByEmail, deleteStaffByEmail, onlyVisible, visibleText } from "./helpers";
 
 /**
  * Phase 2: unified teacher campers page. Teachers see all campers for the
@@ -89,22 +89,22 @@ test.describe("Unified teacher campers page", () => {
     await expect(page.getByRole("heading", { name: "Campers", exact: true })).toBeVisible();
 
     // Camper name appears in the list.
-    await expect(page.getByText("Unified Camper Alpha")).toBeVisible();
+    await expect(visibleText(page, "Unified Camper Alpha")).toBeVisible();
     // Medical alert chip.
     await expect(page.getByText("Alert").first()).toBeVisible();
 
     // Search filters to the camper.
     await page.locator('input[placeholder*="Search name, email, or registration #"]').fill("Alpha");
-    await expect(page.getByText("Unified Camper Alpha")).toBeVisible();
+    await expect(visibleText(page, "Unified Camper Alpha")).toBeVisible();
     await expect(page.getByText("Unified Camper Beta")).not.toBeVisible(); // doesn't exist
 
     // Status filter keeps approved camper visible.
-    await page.getByLabel("Filter by Registration").selectOption("APPROVED");
-    await expect(page.getByText("Unified Camper Alpha")).toBeVisible();
+    await onlyVisible(page.getByLabel("Filter by Registration")).selectOption("APPROVED");
+    await expect(visibleText(page, "Unified Camper Alpha")).toBeVisible();
 
     // Gender filter.
-    await page.getByLabel("Filter by Gender").selectOption("Male");
-    await expect(page.getByText("Unified Camper Alpha")).toBeVisible();
+    await onlyVisible(page.getByLabel("Filter by Gender")).selectOption("Male");
+    await expect(visibleText(page, "Unified Camper Alpha")).toBeVisible();
 
     // Export CSV button is present.
     await expect(page.getByRole("button", { name: "Export CSV" })).toBeVisible();

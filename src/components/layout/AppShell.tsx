@@ -8,8 +8,9 @@ import { ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, UserIcon } from "@hero
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import NotificationBell from "@/components/NotificationBell";
-import { getNavGroups, type Role } from "./navConfig";
+import { getNavGroups, getBottomNavItems, type Role } from "./navConfig";
 import { CommandPalette } from "./CommandPalette";
+import { BottomNav } from "./BottomNav";
 import { Menu, Transition } from "@headlessui/react";
 
 export interface AppShellProps {
@@ -44,6 +45,7 @@ export default function AppShell({ area, children }: AppShellProps) {
   const role = session?.user?.role as Role | undefined;
   const managedCampuses = (session?.user as { managedCampuses?: string[] } | undefined)?.managedCampuses ?? [];
   const groups = getNavGroups(role, area, managedCampuses.length > 0);
+  const bottomNavItems = getBottomNavItems(role, area);
 
   const handleLogout = async () => {
     await signOut({ redirect: false });
@@ -137,7 +139,7 @@ export default function AppShell({ area, children }: AppShellProps) {
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 pt-[env(safe-area-inset-top)]">
           <button
             onClick={() => setMobileOpen(true)}
             className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 md:hidden"
@@ -223,11 +225,12 @@ export default function AppShell({ area, children }: AppShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto scrollbar-hide p-6">
+        <main className="flex-1 overflow-auto scrollbar-hide px-6 pt-6 pb-20 md:pb-6">
           {children}
         </main>
       </div>
 
+      <BottomNav items={bottomNavItems} onMoreClick={() => setMobileOpen(true)} />
       <CommandPalette area={area} />
     </div>
   );

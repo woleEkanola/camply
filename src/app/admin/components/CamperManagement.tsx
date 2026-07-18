@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "@/utils/trpc";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import EditCamperModal from "./EditCamperModal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -100,6 +101,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   // Pagination states
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allCampers, setAllCampers] = useState<CamperType[]>([]);
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
   // Get active camp to fetch registrations
   const { data: activeYear } = api.camp.getActiveCamp.useQuery(
@@ -112,14 +114,14 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   useEffect(() => {
     setCursor(undefined);
     setAllCampers([]);
-  }, [searchTerm, campusFilter, statusFilter, campId]);
+  }, [debouncedSearchTerm, campusFilter, statusFilter, campId]);
 
   // Get campers
   const { data: responseData, refetch: refetchProfiles, error: profilesError, isLoading } = api.camper.adminList.useQuery(
     {
       organizationId,
       campId: campId || undefined,
-      q: searchTerm || undefined,
+      q: debouncedSearchTerm || undefined,
       campusId: campusFilter !== "all" ? campusFilter : undefined,
       status: statusFilter || undefined,
       limit: 50,
@@ -356,7 +358,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       {/* Filters and Search */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-1 flex-wrap items-center gap-3">
-          <SearchBar containerClassName="w-64" placeholder="Search campers..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <SearchBar containerClassName="w-64" placeholder="Search campers..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onClear={() => setSearchTerm("")} />
           <Select
             containerClassName="w-48"
             value={campusFilter}

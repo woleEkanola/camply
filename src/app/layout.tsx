@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { TRPCProvider } from "./providers";
 import { AuthProvider } from "./auth-provider";
+import { ToastProvider } from "@/components/ui/Toast";
 import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
 import { extractRouterConfig } from "uploadthing/server";
 import { ourFileRouter } from "./api/uploadthing/core";
@@ -12,8 +13,19 @@ const geistSans = { variable: "font-sans" };
 const geistMono = { variable: "font-mono" };
 
 export const metadata: Metadata = {
-  title: "Appointment App",
-  description: "A full-stack appointment scheduling application",
+  title: "Camply",
+  description: "Camp management platform for registration, check-in, and staff operations",
+};
+
+// viewportFit: "cover" lets fixed mobile chrome (bottom nav, bottom-sheet
+// dialogs) paint under the notch/home-indicator and pad it back in with
+// env(safe-area-inset-*); userScalable/maximumScale are deliberately left
+// unset so pinch-zoom stays available (WCAG 1.4.4).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#e67e22",
 };
 
 export default function RootLayout({
@@ -32,7 +44,7 @@ export default function RootLayout({
             <Suspense>
               <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
             </Suspense>
-            {children}
+            <ToastProvider>{children}</ToastProvider>
             <Analytics />
           </TRPCProvider>
         </AuthProvider>

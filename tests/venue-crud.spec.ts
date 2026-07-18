@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, visibleText } from "./helpers";
 
 test.describe("Admin: Venue CRUD scoped to a Camp", () => {
   test.describe.configure({ mode: "serial" });
@@ -26,7 +26,7 @@ test.describe("Admin: Venue CRUD scoped to a Camp", () => {
     await dialog.getByLabel("Registration Quota").fill("100");
     await dialog.getByRole("button", { name: "Add Venue", exact: true }).click();
 
-    await expect(page.getByText(venueName)).toBeVisible({ timeout: 10000 });
+    await expect(visibleText(page, venueName)).toBeVisible({ timeout: 10000 });
 
     const venue = await prisma.venue.findFirstOrThrow({ where: { name: venueName } });
     venueId = venue.id;

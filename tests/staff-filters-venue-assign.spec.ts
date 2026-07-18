@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows, onlyVisible } from "./helpers";
 
 test.describe("Teachers page: Campus column, filters, venue assignment", () => {
   test.describe.configure({ mode: "serial" });
@@ -81,7 +81,7 @@ test.describe("Teachers page: Campus column, filters, venue assignment", () => {
     await expect(row).toContainText(campusName);
 
     // Filter by this teacher's campus to confirm the column filter narrows the list.
-    await page.getByLabel("Filter by Campus").selectOption({ label: campusName });
+    await onlyVisible(page.getByLabel("Filter by Campus")).selectOption({ label: campusName });
     await expect(page.locator("tr", { hasText: "FilterTeacher" })).toBeVisible({ timeout: 10000 });
   });
 

@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { api } from "@/utils/trpc";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -63,12 +64,13 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [addEmail, setAddEmail] = useState("");
   const [addFormValues, setAddFormValues] = useState<Record<string, any>>({});
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
 
   // Reset pagination when filters change
   useEffect(() => {
     setCursor(undefined);
     setAllLoadedItems([]);
-  }, [searchQuery, statusFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter]);
+  }, [debouncedSearchQuery, statusFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter]);
 
   const { data: stats } = api.staff.stats.useQuery({ organizationId, campId, type }, { enabled: !!organizationId && !!campId });
   const { data, isLoading } = api.staff.adminList.useQuery(
@@ -77,7 +79,7 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       campId,
       type,
       status: statusFilter || undefined,
-      q: searchQuery || undefined,
+      q: debouncedSearchQuery || undefined,
       campusId: campusFilter || undefined,
       venueId: venueFilter || undefined,
       gender: genderFilter || undefined,
@@ -322,7 +324,7 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       </div>
 
       <div className="mb-4 grid gap-3 md:grid-cols-2">
-        <SearchBar placeholder="Name, email, or phone" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <SearchBar placeholder="Name, email, or phone" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All Statuses</option>
           <option value="PENDING">Pending</option>
