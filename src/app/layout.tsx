@@ -6,6 +6,7 @@ import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
 import { extractRouterConfig } from "uploadthing/server";
 import { ourFileRouter } from "./api/uploadthing/core";
 import { Suspense } from "react";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = { variable: "font-sans" };
 const geistMono = { variable: "font-mono" };
@@ -32,6 +33,7 @@ export default function RootLayout({
               <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
             </Suspense>
             {children}
+            <Analytics />
           </TRPCProvider>
         </AuthProvider>
       </body>
