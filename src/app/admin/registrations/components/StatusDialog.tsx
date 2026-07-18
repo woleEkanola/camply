@@ -72,7 +72,7 @@ export function StatusDialog({ open, onClose, registration, onSubmit, isTwoStep,
           <div className="space-y-4">
             {isTwoStep && !isEndorsed(review) && (
               <div className="rounded-md bg-attention-50 p-3 text-sm text-attention-700">
-                This registration has not been endorsed by a campus rep. Approving now is an admin override.
+                This registration has not been recommended by a campus rep. Approving now is an admin override.
               </div>
             )}
             {venues.length > 0 && (

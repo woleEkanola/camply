@@ -88,9 +88,9 @@ test.describe("Two-step registration approval", () => {
     const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailA}` });
     await expect(row).toBeVisible({ timeout: 10000 });
     await expect(row.getByRole("button", { name: "Approve" })).toHaveCount(0);
-    await row.getByRole("button", { name: "Endorse" }).click();
+    await row.getByRole("button", { name: "Recommend" }).click();
 
-    await expect(row.getByText("Endorsed ✓ awaiting admin")).toBeVisible({ timeout: 10000 });
+    await expect(row.getByText("Recommended ✓ awaiting admin approval")).toBeVisible({ timeout: 10000 });
 
     const review = await prisma.registrationReview.findUnique({ where: { registrationId: registrationEndorseId } });
     expect(review?.verificationStatus).toBe("COMPLETED");
@@ -173,7 +173,7 @@ test.describe("Two-step registration approval", () => {
 
     await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible({ timeout: 5000 });
     await page.getByRole("button", { name: "Change Status" }).click();
-    await expect(page.getByText("This registration has not been endorsed by a campus rep")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("This registration has not been recommended by a campus rep")).toBeVisible({ timeout: 5000 });
     await page.getByRole("button", { name: "Approve Registration" }).click();
 
     await expect(async () => {
@@ -193,7 +193,7 @@ test.describe("Two-step registration approval", () => {
 
       const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailD}` });
       await expect(row).toBeVisible({ timeout: 10000 });
-      await expect(row.getByRole("button", { name: "Endorse" })).toHaveCount(0);
+      await expect(row.getByRole("button", { name: "Recommend" })).toHaveCount(0);
       await row.getByRole("button", { name: "Approve" }).click();
 
       await expect(async () => {

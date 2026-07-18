@@ -383,7 +383,7 @@ export default function RegistrationsPage() {
         <div className="flex flex-col gap-1">
           <StatusBadge status={row.status} />
           {isTwoStep && row.status === "PENDING" && isEndorsed(row.review) && (
-            <Badge tone="info">Endorsed</Badge>
+            <Badge tone="info">Recommended</Badge>
           )}
         </div>
       ),

@@ -126,7 +126,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         <div className="flex flex-col gap-1">
           <Badge tone={STATUS_TONE[reg.status] ?? "neutral"}>{reg.status}</Badge>
           {isTwoStep && reg.status === "PENDING" && isEndorsed(reg.review) && (
-            <Badge tone="info">Endorsed ✓ awaiting admin</Badge>
+            <Badge tone="info">Recommended ✓ awaiting admin approval</Badge>
           )}
         </div>
       ),
@@ -156,7 +156,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         </Button>
         {reg.status === "PENDING" && isTwoStep && !endorsed && (
           <Button size="sm" loading={endorseMutation.isPending} onClick={() => endorseMutation.mutate({ registrationId: reg.id })}>
-            Endorse
+            Recommend
           </Button>
         )}
         {reg.status === "PENDING" && !isTwoStep && (
@@ -208,7 +208,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         title="Registrations"
         description={
           isTwoStep
-            ? "Endorse registrations for your campus — an organization admin gives final approval and the acceptance email is sent then."
+            ? "Recommend registrations for your campus — an organization admin gives final approval and the acceptance email is sent then."
             : undefined
         }
       />
