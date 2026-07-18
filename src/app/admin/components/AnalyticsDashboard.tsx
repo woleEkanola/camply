@@ -45,7 +45,7 @@ export default function AnalyticsDashboard() {
     <div className="w-full">
       <PageHeader title="Dashboard" description="Live overview of your organization." />
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Parents" value={usersLoading ? "…" : usersData?.length ?? 0} />
         <StatCard label="Admins" value={adminsLoading ? "…" : adminsData?.length ?? 0} />
         <StatCard label="Campers" value={campersLoading ? "…" : campersData?.length ?? 0} />

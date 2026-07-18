@@ -443,7 +443,7 @@ export default function SuperAdminDashboard() {
       {activeTab === "overview" && (
         <div className="space-y-6">
           {/* Key Metrics Grid */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
             <Card className="bg-gradient-to-br from-accent-50/20 to-transparent">
               <CardBody className="flex items-center gap-4">
                 <span className="p-3 bg-accent-100 text-accent-600 rounded-lg">
