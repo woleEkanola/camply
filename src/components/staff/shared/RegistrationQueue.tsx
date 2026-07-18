@@ -105,6 +105,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const columns = [
     {
       header: "Name",
+      primary: true,
       accessor: (reg: Registration) => reg.camper?.name || "-",
       searchable: true,
       sortable: true,
@@ -140,40 +141,42 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
           <Badge tone="danger">Missing</Badge>
         ),
     },
-    {
-      header: "Actions",
-      accessor: (reg: Registration) => {
-        const endorsed = isEndorsed(reg.review);
-        return (
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setDocumentRegId(reg.id)}>
-              Documents
-            </Button>
-            {reg.status === "PENDING" && isTwoStep && !endorsed && (
-              <Button size="sm" loading={endorseMutation.isPending} onClick={() => endorseMutation.mutate({ registrationId: reg.id })}>
-                Endorse
-              </Button>
-            )}
-            {reg.status === "PENDING" && !isTwoStep && (
-              <Button size="sm" loading={approveMutation.isPending} onClick={() => approveMutation.mutate({ registrationId: reg.id })}>
-                Approve
-              </Button>
-            )}
-            {(reg.status === "PENDING" || reg.status === "REQUIRES_ACTION") && (
-              <>
-                <Button size="sm" variant="secondary" loading={requestCorrectionMutation.isPending} onClick={() => handleRequestCorrection(reg)}>
-                  Request Correction
-                </Button>
-                <Button size="sm" variant="danger" loading={rejectMutation.isPending} onClick={() => handleReject(reg)}>
-                  Reject
-                </Button>
-              </>
-            )}
-          </div>
-        );
-      },
-    },
   ];
+
+  // Rendered via the Table's dedicated `actions` prop (a right-aligned
+  // footer row on desktop, a full-width footer row on the mobile card)
+  // rather than as a regular column — action buttons crammed into the
+  // mobile card's label/value body grid read poorly.
+  const rowActions = (reg: Registration) => {
+    const endorsed = isEndorsed(reg.review);
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="secondary" onClick={() => setDocumentRegId(reg.id)}>
+          Documents
+        </Button>
+        {reg.status === "PENDING" && isTwoStep && !endorsed && (
+          <Button size="sm" loading={endorseMutation.isPending} onClick={() => endorseMutation.mutate({ registrationId: reg.id })}>
+            Endorse
+          </Button>
+        )}
+        {reg.status === "PENDING" && !isTwoStep && (
+          <Button size="sm" loading={approveMutation.isPending} onClick={() => approveMutation.mutate({ registrationId: reg.id })}>
+            Approve
+          </Button>
+        )}
+        {(reg.status === "PENDING" || reg.status === "REQUIRES_ACTION") && (
+          <>
+            <Button size="sm" variant="secondary" loading={requestCorrectionMutation.isPending} onClick={() => handleRequestCorrection(reg)}>
+              Request Correction
+            </Button>
+            <Button size="sm" variant="danger" loading={rejectMutation.isPending} onClick={() => handleReject(reg)}>
+              Reject
+            </Button>
+          </>
+        )}
+      </div>
+    );
+  };
 
   const allRegs: Registration[] = (adminListData?.items || []).map((reg: any) => ({
     ...reg,
@@ -257,6 +260,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         columns={columns}
         data={filteredRegs}
         rowKey={(reg) => reg.id}
+        actions={rowActions}
         isLoading={isLoading}
         emptyTitle="No registrations found"
         emptyDescription="No registrations match your current filters."

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, visibleText } from "./helpers";
 
 test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", () => {
   test.describe.configure({ mode: "serial" });
@@ -116,7 +116,9 @@ test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", 
       .not.toBeNull();
 
     await page.goto("/admin/trash");
-    await expect(page.getByText(dept.name)).toBeVisible({ timeout: 10000 });
+    // Table.tsx dual-renders a desktop <td> and a mobile card <dd> from the
+    // same data — scope to whichever copy is actually visible at this viewport.
+    await expect(visibleText(page, dept.name)).toBeVisible({ timeout: 10000 });
   });
 
   test("deleting a hostel with an occupied bed is blocked; unassigning then deleting cascades to its room and bed", async ({ page }) => {

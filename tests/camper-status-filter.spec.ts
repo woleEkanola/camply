@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows, onlyVisible } from "./helpers";
 
 test.describe("Campers page: Registration Status filter replaces Active/Inactive", () => {
   test.describe.configure({ mode: "serial" });
@@ -56,11 +56,14 @@ test.describe("Campers page: Registration Status filter replaces Active/Inactive
     await expect(row).toBeVisible({ timeout: 10000 });
     await expect(row).toContainText("APPROVED");
 
-    // The new Registration Status dropdown (toolbar) shows the full status list and filters correctly.
-    await page.getByLabel("Registration Status", { exact: true }).selectOption("APPROVED");
+    // The Registration Status column filter (Table's own per-column filter,
+    // desktop header row at this viewport) shows the full status list and
+    // filters correctly. Not "toolbar" anymore — the page no longer
+    // duplicates this control outside the table.
+    await onlyVisible(page.getByLabel("Filter by Registration Status")).selectOption("APPROVED");
     await expect(page.locator("tr", { hasText: "StatusFilter Camper" })).toBeVisible({ timeout: 10000 });
 
-    await page.getByLabel("Registration Status", { exact: true }).selectOption("REJECTED");
+    await onlyVisible(page.getByLabel("Filter by Registration Status")).selectOption("REJECTED");
     await expect(page.locator("tr", { hasText: "StatusFilter Camper" })).toHaveCount(0);
   });
 });

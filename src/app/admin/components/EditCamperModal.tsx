@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { api } from "@/utils/trpc";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input, Select } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 interface EditCamperModalProps {
   profileId: string | null;
@@ -46,6 +49,7 @@ const EditCamperModal: React.FC<EditCamperModalProps> = ({
   const [gender, setGender] = useState("");
   const [userId, setUserId] = useState("");
   const [error, setError] = useState("");
+  const [parentError, setParentError] = useState("");
 
   useEffect(() => {
     if (isEdit && profile) {
@@ -63,11 +67,14 @@ const EditCamperModal: React.FC<EditCamperModalProps> = ({
       setGender("");
       setUserId("");
     }
-  }, [profile, isEdit]);
+    setError("");
+    setParentError("");
+  }, [profile, isEdit, isOpen]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setParentError("");
 
     try {
       if (isEdit && profileId) {
@@ -83,7 +90,7 @@ const EditCamperModal: React.FC<EditCamperModalProps> = ({
         });
       } else {
         if (!userId) {
-          setError("Please select a parent user");
+          setParentError("Please select a parent user");
           return;
         }
         await createMutation.mutateAsync({
@@ -106,134 +113,105 @@ const EditCamperModal: React.FC<EditCamperModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   const isLoading = isEdit && isProfileLoading;
   const isSaving = updateMutation.status === "pending" || createMutation.status === "pending";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-bold mb-4">
-          {isEdit ? "Edit Camper" : "Add Camper"}
-        </h2>
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      title={isEdit ? "Edit Camper" : "Add Camper"}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button type="submit" form="edit-camper-form" loading={isSaving}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      {error && (
+        <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">
+          {error}
+        </div>
+      )}
 
-        {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
-            {error}
+      {isLoading ? (
+        <div className="py-4 text-center text-sm text-neutral-500">Loading...</div>
+      ) : (
+        <form id="edit-camper-form" onSubmit={handleSave} className="space-y-4">
+          <Input
+            label="Name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Camper's Full Name"
+          />
+
+          {!isEdit && (
+            <Select
+              label="Parent"
+              required
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              error={parentError}
+            >
+              <option value="">Select a Parent</option>
+              {parents?.map((u: any) => (
+                <option key={u.id} value={u.id}>
+                  {u.firstName} {u.lastName} ({u.email})
+                </option>
+              ))}
+            </Select>
+          )}
+
+          <Select
+            label="Home Campus"
+            helpText="Optional"
+            value={homeCampusId ?? ""}
+            onChange={(e) => setHomeCampusId(e.target.value || null)}
+          >
+            <option value="">Select a Campus</option>
+            {campuses?.map((c: any) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Date of Birth"
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+            />
+
+            <Select
+              label="Gender"
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+            >
+              <option value="">Select Gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </Select>
           </div>
-        )}
 
-        {isLoading ? (
-          <div className="py-4 text-center text-sm text-neutral-500">Loading...</div>
-        ) : (
-          <form onSubmit={handleSave} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Name *</label>
-              <input
-                type="text"
-                className="w-full rounded border px-3 py-2 text-sm"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                placeholder="Camper's Full Name"
-              />
-            </div>
-
-            {!isEdit && (
-              <div>
-                <label className="block text-sm font-medium mb-1">Parent *</label>
-                <select
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
-                  required
-                >
-                  <option value="">Select a Parent</option>
-                  {parents?.map((u: any) => (
-                    <option key={u.id} value={u.id}>
-                      {u.firstName} {u.lastName} ({u.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Home Campus</label>
-              <select
-                className="w-full rounded border px-3 py-2 text-sm"
-                value={homeCampusId ?? ""}
-                onChange={(e) => setHomeCampusId(e.target.value || null)}
-              >
-                <option value="">Select a Campus (Optional)</option>
-                {campuses?.map((c: any) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Date of Birth</label>
-                <input
-                  type="date"
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  value={dateOfBirth}
-                  onChange={(e) => setDateOfBirth(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Gender</label>
-                <select
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  value={gender}
-                  onChange={(e) => setGender(e.target.value)}
-                >
-                  <option value="">Select Gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Status</label>
-              <select
-                className="w-full rounded border px-3 py-2 text-sm"
-                value={active ? "active" : "inactive"}
-                onChange={(e) => setActive(e.target.value === "active")}
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
-
-            <div className="flex justify-end mt-6 gap-2 pt-2 border-t border-neutral-100">
-              <button
-                type="button"
-                className="rounded bg-gray-200 px-4 py-2 text-sm font-medium hover:bg-gray-300"
-                onClick={onClose}
-                disabled={isSaving}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                disabled={isSaving}
-              >
-                {isSaving ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
+          <Select
+            label="Status"
+            value={active ? "active" : "inactive"}
+            onChange={(e) => setActive(e.target.value === "active")}
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </Select>
+        </form>
+      )}
+    </Dialog>
   );
 };
 

@@ -60,7 +60,10 @@ test.describe("Parent dashboard shows 'In Review' for PENDING/SUBMITTED registra
     await loginWithPassword(page, parentEmail, parentPassword);
     await page.goto(`/dashboard/register/${registrationId}`);
 
-    await expect(page.getByText(/Registration Status: In Review/i)).toBeVisible({ timeout: 10000 });
+    // STATUS_THEME renders an icon + label pill ("⏳ In Review"), not a
+    // "Registration Status:"-prefixed line — pre-existing on origin/master,
+    // unrelated to this branch; the assertion text was just stale.
+    await expect(page.getByText(/In Review/i).first()).toBeVisible({ timeout: 10000 });
   });
 
   test("admin registrations page still shows the raw 'PENDING' status (unaffected)", async ({ page }) => {

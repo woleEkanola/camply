@@ -45,6 +45,7 @@ export function Dialog({ open, onClose, title, children, footer, size = "md" }: 
             leaveTo="opacity-0 translate-y-full md:translate-y-0 md:scale-95"
           >
             <HeadlessDialog.Panel
+              data-testid="dialog-panel"
               className={cn(
                 "flex max-h-[90vh] w-full flex-col bg-white shadow-lg",
                 "rounded-t-2xl pb-[env(safe-area-inset-bottom)] md:max-h-[85vh] md:rounded-lg md:pb-0",

@@ -169,6 +169,7 @@ export function CampersList({
     () => [
       {
         header: "Camper",
+        primary: true,
         accessor: (item) => (
           <div className="flex items-center gap-3">
             {item.photoUrl ? (
@@ -262,9 +263,13 @@ export function CampersList({
       },
       {
         header: "Medical",
+        // Promoted to the card subtitle (right under the camper's name) —
+        // an allergy/condition flag is safety-relevant enough that staff
+        // walking around camp shouldn't have to scroll a card to see it.
+        secondary: true,
         accessor: (item) =>
           item.allergies || item.medicalConditions ? (
-            <Badge tone="danger">Alert</Badge>
+            <Badge tone="danger">⚠ Medical Alert</Badge>
           ) : (
             <span className="text-sm text-neutral-400">—</span>
           ),
@@ -300,9 +305,9 @@ export function CampersList({
           ))}
         </Select>
       </div>
-      <Button size="sm" variant="secondary" onClick={exportCsv}>
-        <ArrowDownTrayIcon className="mr-1 h-4 w-4" />
-        Export CSV
+      <Button size="sm" variant="secondary" onClick={exportCsv} aria-label="Export CSV">
+        <ArrowDownTrayIcon className="h-4 w-4 md:mr-1" />
+        <span className="hidden md:inline">Export CSV</span>
       </Button>
     </div>
   );

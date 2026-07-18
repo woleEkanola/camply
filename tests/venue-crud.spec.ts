@@ -84,7 +84,11 @@ test.describe("Admin: Venue CRUD scoped to a Camp", () => {
     await row.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
 
-    await expect(page.getByText(venueName)).not.toBeVisible({ timeout: 10000 });
+    // visibleText, not a raw getByText — Table.tsx dual-renders a desktop <td>
+    // and a mobile card <div> from the same data; while the delete mutation's
+    // refetch is still in flight both stale copies are briefly in the DOM at
+    // once, which strict-mode-violates a bare (not.)toBeVisible() check.
+    await expect(visibleText(page, venueName)).not.toBeVisible({ timeout: 10000 });
 
     const deletedVenue = await prisma.venue.findUniqueOrThrow({ where: { id: venueId! } });
     expect(deletedVenue.deletedAt).not.toBeNull();

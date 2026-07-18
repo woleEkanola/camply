@@ -126,7 +126,9 @@ test.describe("Teachers page: Campus column, filters, venue assignment", () => {
     const row = page.locator("tr", { hasText: "SoleVenueTeacher" });
     await expect(row).toBeVisible({ timeout: 10000 });
     await row.locator('input[type="checkbox"]').click();
-    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    // Scoped to the bulk-actions toolbar — the row itself also has an inline
+    // "Approve" action now, so an unscoped query is ambiguous once selected.
+    await page.getByRole("toolbar", { name: "Bulk actions" }).getByRole("button", { name: "Approve", exact: true }).click();
 
     await expect
       .poll(async () => (await prisma.staffProfile.findUniqueOrThrow({ where: { id: pendingProfileId! } })).assignedVenueId, { timeout: 10000 })

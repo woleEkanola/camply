@@ -1,20 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { Menu, Transition } from "@headlessui/react";
+import { EllipsisVerticalIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { api } from "@/utils/trpc";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { cn } from "@/lib/cn";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, type Column } from "@/components/ui/Table";
+import { BulkActionBar } from "@/components/ui/BulkActionBar";
+import { Fab } from "@/components/ui/Fab";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Select, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { StaffDetailDrawer } from "@/components/staff/StaffDetailDrawer";
 import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
@@ -174,6 +178,7 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const columns: Column<any>[] = [
     {
       header: type === "TEACHER" ? "Teacher" : "Volunteer",
+      primary: true,
       accessor: (row) => (
         <div className="flex items-center gap-2">
           {row.photoUrl ? (
@@ -248,12 +253,21 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   ];
 
   const actions = (row: any) => (
-    <button
-      className="text-danger-600 hover:underline"
-      onClick={() => setDeleteTarget({ id: row.id, name: `${row.firstName} ${row.lastName}` })}
-    >
-      Delete
-    </button>
+    <div className="flex flex-wrap justify-end gap-2">
+      {row.status === "PENDING" && (
+        <>
+          <Button size="sm" loading={bulkApprove.isPending && bulkApprove.variables?.ids?.length === 1 && bulkApprove.variables.ids[0] === row.id} onClick={() => bulkApprove.mutate({ ids: [row.id] })}>
+            Approve
+          </Button>
+          <Button size="sm" variant="secondary" loading={bulkReject.isPending && bulkReject.variables?.ids?.length === 1 && bulkReject.variables.ids[0] === row.id} onClick={() => bulkReject.mutate({ ids: [row.id] })}>
+            Reject
+          </Button>
+        </>
+      )}
+      <Button size="sm" variant="danger" onClick={() => setDeleteTarget({ id: row.id, name: `${row.firstName} ${row.lastName}` })}>
+        Delete
+      </Button>
+    </div>
   );
 
   return (
@@ -262,9 +276,10 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         title={type === "TEACHER" ? "Teachers" : "Volunteers"}
         description={activeYear ? `For ${activeYear.name}` : undefined}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
+            {/* Desktop: both Auto Assign buttons inline, unchanged. */}
             {type === "TEACHER" && (
-              <>
+              <div className="hidden items-center gap-2 md:flex">
                 <Button
                   variant="secondary"
                   size="sm"
@@ -289,14 +304,68 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 >
                   Auto Assign Depts
                 </Button>
-              </>
+              </div>
             )}
-            <Button size="sm" onClick={() => setIsAddOpen(true)}>
+            {/* Mobile: same two actions collapse into one overflow menu so the
+                header never overflows horizontally (it was overflowing before —
+                three+ inline buttons don't fit a phone-width header). "+ Add"
+                moves to a FAB on mobile instead of a header button. */}
+            {type === "TEACHER" && (
+              <Menu as="div" className="relative md:hidden">
+                <Menu.Button className="flex h-11 w-11 items-center justify-center rounded-md border border-neutral-300 text-neutral-600 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500">
+                  <EllipsisVerticalIcon className="h-5 w-5" />
+                  <span className="sr-only">More actions</span>
+                </Menu.Button>
+                <Transition
+                  as={Fragment}
+                  enter="transition ease-out duration-100"
+                  enterFrom="transform opacity-0 scale-95"
+                  enterTo="transform opacity-100 scale-100"
+                  leave="transition ease-in duration-75"
+                  leaveFrom="transform opacity-100 scale-100"
+                  leaveTo="transform opacity-0 scale-95"
+                >
+                  <Menu.Items className="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-100 bg-white py-1 shadow-lg focus:outline-none">
+                    <Menu.Item>
+                      {({ active }) => (
+                        <button
+                          className={cn("flex w-full items-center px-4 py-2.5 text-left text-sm", active ? "bg-neutral-50 text-neutral-900" : "text-neutral-700")}
+                          onClick={() => {
+                            if (window.confirm("Auto assign all teachers to tribes based on gender & quota?")) {
+                              autoAssignToTribes.mutate({ organizationId, campId });
+                            }
+                          }}
+                        >
+                          Auto Assign Tribes
+                        </button>
+                      )}
+                    </Menu.Item>
+                    <Menu.Item>
+                      {({ active }) => (
+                        <button
+                          className={cn("flex w-full items-center px-4 py-2.5 text-left text-sm", active ? "bg-neutral-50 text-neutral-900" : "text-neutral-700")}
+                          onClick={() => {
+                            if (window.confirm("Auto assign all teachers to departments with gender-mixed leaders?")) {
+                              autoAssignToDepartments.mutate({ organizationId, campId });
+                            }
+                          }}
+                        >
+                          Auto Assign Depts
+                        </button>
+                      )}
+                    </Menu.Item>
+                  </Menu.Items>
+                </Transition>
+              </Menu>
+            )}
+            <Button size="sm" className="hidden md:inline-flex" onClick={() => setIsAddOpen(true)}>
               + Add {type === "TEACHER" ? "Teacher" : "Volunteer"}
             </Button>
           </div>
         }
       />
+
+      <Fab icon={<PlusIcon className="h-6 w-6" />} label={`Add ${type === "TEACHER" ? "teacher" : "volunteer"}`} onClick={() => setIsAddOpen(true)} />
 
       {error && (
         <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
@@ -334,43 +403,39 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         </Select>
       </div>
 
-      {selectedIds.length > 0 && (
-        <div className="mb-3 flex items-center gap-2 rounded-md border border-accent-200 bg-accent-50 px-3 py-2">
-          <Badge tone="info">{selectedIds.length} selected</Badge>
-          <Button size="sm" loading={bulkApprove.isPending} onClick={() => bulkApprove.mutate({ ids: selectedIds })}>Approve</Button>
-          <Button size="sm" variant="danger" loading={bulkReject.isPending} onClick={() => bulkReject.mutate({ ids: selectedIds })}>Reject</Button>
-          <Select
-            value={bulkVenueId}
-            onChange={(e) => setBulkVenueId(e.target.value)}
-            className="w-auto text-sm"
-          >
-            <option value="">Assign to venue…</option>
-            {filterVenues.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </Select>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!bulkVenueId}
-            loading={bulkAssignVenue.isPending}
-            onClick={() => bulkAssignVenue.mutate({ ids: selectedIds, venueId: bulkVenueId })}
-          >
-            Assign
-          </Button>
-          <Button
-            size="sm"
-            variant="danger"
-            loading={bulkDelete.isPending}
-            onClick={() => {
-              if (window.confirm("Permanently delete selected profiles?")) {
-                bulkDelete.mutate({ ids: selectedIds });
-              }
-            }}
-          >
-            Delete
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>Clear</Button>
-        </div>
-      )}
+      <BulkActionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
+        <Button size="sm" loading={bulkApprove.isPending} onClick={() => bulkApprove.mutate({ ids: selectedIds })}>Approve</Button>
+        <Button size="sm" variant="danger" loading={bulkReject.isPending} onClick={() => bulkReject.mutate({ ids: selectedIds })}>Reject</Button>
+        <Select
+          value={bulkVenueId}
+          onChange={(e) => setBulkVenueId(e.target.value)}
+          className="w-auto text-sm"
+        >
+          <option value="">Assign to venue…</option>
+          {filterVenues.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </Select>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={!bulkVenueId}
+          loading={bulkAssignVenue.isPending}
+          onClick={() => bulkAssignVenue.mutate({ ids: selectedIds, venueId: bulkVenueId })}
+        >
+          Assign
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          loading={bulkDelete.isPending}
+          onClick={() => {
+            if (window.confirm("Permanently delete selected profiles?")) {
+              bulkDelete.mutate({ ids: selectedIds });
+            }
+          }}
+        >
+          Delete
+        </Button>
+      </BulkActionBar>
 
       <Table
         mode="controlled"

@@ -70,6 +70,9 @@ test.describe("Dashboard: View Registration button actually navigates", () => {
     await viewButton.click();
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/register/${registrationId}$`), { timeout: 10000 });
-    await expect(page.getByText(/Registration Status: In Review/i)).toBeVisible({ timeout: 10000 });
+    // STATUS_THEME renders an icon + label pill ("⏳ In Review"), not a
+    // "Registration Status:"-prefixed line — pre-existing on origin/master,
+    // unrelated to this branch; the assertion text was just stale.
+    await expect(page.getByText(/In Review/i).first()).toBeVisible({ timeout: 10000 });
   });
 });
