@@ -15,3 +15,4 @@ export * from "./Table";
 export * from "./Toast";
 export * from "./Fab";
 export * from "./BulkActionBar";
+export * from "./ProgressBar";
