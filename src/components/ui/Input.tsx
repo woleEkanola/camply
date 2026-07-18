@@ -3,8 +3,11 @@
 import { forwardRef } from "react";
 import { cn } from "@/lib/cn";
 
+// text-base (16px) on mobile stops iOS Safari's zoom-on-focus; md:text-sm
+// restores the original 14px desktop size. min-h-[44px] hits the touch-
+// target guideline on mobile; md:min-h-0 lets desktop's py-2 set the height.
 export const fieldBase =
-  "block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 " +
+  "block w-full min-h-[44px] rounded-md border border-neutral-300 bg-white px-3 py-2.5 text-base text-neutral-900 placeholder-neutral-400 md:min-h-0 md:py-2 md:text-sm " +
   "focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500 disabled:bg-neutral-50 disabled:text-neutral-400";
 
 export interface FieldProps {

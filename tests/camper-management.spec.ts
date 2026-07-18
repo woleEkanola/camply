@@ -53,7 +53,8 @@ test.describe("Admin: Camper edit (campus reassignment) and delete", () => {
     const row = page.locator("tr", { hasText: camper.name });
     await row.getByRole("button", { name: "Edit" }).click();
 
-    const modal = page.getByRole("heading", { name: "Edit Camper" }).locator("xpath=..");
+    const modal = page.getByRole("dialog");
+    await expect(modal.getByRole("heading", { name: "Edit Camper" })).toBeVisible();
     // First <select> in the modal is Home Campus (no Parent select shown when editing).
     await modal.locator("select").first().selectOption(campusBId);
     await modal.getByRole("button", { name: "Save" }).click();

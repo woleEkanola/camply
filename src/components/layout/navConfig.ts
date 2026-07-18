@@ -324,3 +324,50 @@ export function getNavGroups(
   }
   return groups;
 }
+
+/**
+ * Curated 3-4 item subset of the full nav for the mobile bottom tab bar —
+ * the destinations staff actually reach for while walking around camp
+ * (check-in, registrations, campers), not the full sidebar. Areas with only
+ * one real destination today (parent dashboard, super-admin) return an
+ * empty array; BottomNav renders nothing below 2 items and those areas keep
+ * relying on the hamburger drawer alone.
+ */
+export function getBottomNavItems(
+  role: Role | undefined,
+  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer"
+): NavItem[] {
+  if (!role) return [];
+  switch (area) {
+    case "admin":
+      return [
+        { name: "Dashboard", href: "/admin", icon: HomeIcon },
+        { name: "Registrations", href: "/admin/registrations", icon: ClipboardDocumentListIcon },
+        { name: "Check-in", href: "/admin/check-in", icon: QrCodeIcon },
+        { name: "Campers", href: "/admin/campers", icon: UserGroupIcon },
+      ];
+    case "teacher":
+      return [
+        { name: "Home", href: "/teacher", icon: HomeIcon },
+        { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
+        { name: "Check-in", href: "/teacher/check-in", icon: QrCodeIcon },
+        { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
+      ];
+    case "volunteer":
+      return [
+        { name: "Home", href: "/volunteer", icon: HomeIcon },
+        { name: "Check-in", href: "/volunteer/check-in", icon: QrCodeIcon },
+        { name: "Medical", href: "/volunteer/medical", icon: HeartIcon },
+        { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
+      ];
+    case "campus-rep":
+      return [
+        { name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon },
+        { name: "Registrations", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon },
+        { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
+      ];
+    case "dashboard":
+    case "super-admin":
+      return [];
+  }
+}

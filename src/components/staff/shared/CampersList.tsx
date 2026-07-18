@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { api } from "@/utils/trpc";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { Table, type Column } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -84,6 +85,7 @@ export function CampersList({
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allItems, setAllItems] = useState<StaffCamperItem[]>([]);
   const [profileCamperId, setProfileCamperId] = useState<string | null>(null);
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
   const { data: campusesData } = api.campus.getByOrganization.useQuery(
     { organizationId },
@@ -98,7 +100,7 @@ export function CampersList({
     {
       organizationId,
       campId: campId || undefined,
-      q: searchTerm || undefined,
+      q: debouncedSearchTerm || undefined,
       campusId: campusFilter !== "all" ? campusFilter : undefined,
       gender: genderFilter || undefined,
       tribeId: tribeFilter || undefined,
@@ -112,7 +114,7 @@ export function CampersList({
   useEffect(() => {
     setCursor(undefined);
     setAllItems([]);
-  }, [searchTerm, campusFilter, statusFilter, genderFilter, tribeFilter, campId]);
+  }, [debouncedSearchTerm, campusFilter, statusFilter, genderFilter, tribeFilter, campId]);
 
   useEffect(() => {
     if (responseData?.items) {
@@ -167,6 +169,7 @@ export function CampersList({
     () => [
       {
         header: "Camper",
+        primary: true,
         accessor: (item) => (
           <div className="flex items-center gap-3">
             {item.photoUrl ? (
@@ -260,9 +263,13 @@ export function CampersList({
       },
       {
         header: "Medical",
+        // Promoted to the card subtitle (right under the camper's name) —
+        // an allergy/condition flag is safety-relevant enough that staff
+        // walking around camp shouldn't have to scroll a card to see it.
+        secondary: true,
         accessor: (item) =>
           item.allergies || item.medicalConditions ? (
-            <Badge tone="danger">Alert</Badge>
+            <Badge tone="danger">⚠ Medical Alert</Badge>
           ) : (
             <span className="text-sm text-neutral-400">—</span>
           ),
@@ -278,6 +285,7 @@ export function CampersList({
           placeholder="Search name, email, or registration #"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          onClear={() => setSearchTerm("")}
           className="w-full sm:w-72"
         />
         <Select
@@ -297,9 +305,9 @@ export function CampersList({
           ))}
         </Select>
       </div>
-      <Button size="sm" variant="secondary" onClick={exportCsv}>
-        <ArrowDownTrayIcon className="mr-1 h-4 w-4" />
-        Export CSV
+      <Button size="sm" variant="secondary" onClick={exportCsv} aria-label="Export CSV">
+        <ArrowDownTrayIcon className="h-4 w-4 md:mr-1" />
+        <span className="hidden md:inline">Export CSV</span>
       </Button>
     </div>
   );

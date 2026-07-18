@@ -14,10 +14,12 @@ const variantClasses: Record<ButtonVariant, string> = {
   danger: "bg-danger-600 text-white hover:bg-danger-700 disabled:bg-danger-300",
 };
 
+// Mobile heights hit the ~44-48px touch-target guideline; `md:` reverts to
+// the original desktop sizing where pointer precision makes it unnecessary.
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-sm gap-1.5",
-  md: "h-10 px-4 text-sm gap-2",
-  lg: "h-11 px-5 text-base gap-2",
+  sm: "h-9 px-3 text-sm gap-1.5 md:h-8",
+  md: "h-11 px-4 text-sm gap-2 md:h-10",
+  lg: "h-12 px-5 text-base gap-2 md:h-11",
 };
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -39,7 +41,7 @@ export function buttonClassName({
   className,
 }: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}) {
   return cn(
-    "inline-flex items-center justify-center rounded-md font-medium transition-colors",
+    "inline-flex items-center justify-center rounded-md font-medium transition-colors touch-manipulation",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2",
     "disabled:cursor-not-allowed",
     variantClasses[variant],

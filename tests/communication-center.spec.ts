@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { onlyVisible } from "./helpers";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -29,13 +30,17 @@ test.describe("Communication Center", () => {
   });
 
   test("P1: Communication nav group renders all 5 items", async ({ page }) => {
+    // Scoped to the visible <nav> — BottomNav (src/components/layout/BottomNav.tsx)
+    // adds a second, always-mounted <nav aria-label="Primary"> (CSS-hidden below
+    // md via `md:hidden`), so a bare `page.locator('nav')` is ambiguous now.
+    const nav = onlyVisible(page.locator('nav'));
     // Verify the Communication nav group exists with all 5 items
-    await expect(page.locator('nav')).toContainText("Communication");
-    await expect(page.locator('nav')).toContainText("Overview");
-    await expect(page.locator('nav')).toContainText("Email Events");
-    await expect(page.locator('nav')).toContainText("Templates");
-    await expect(page.locator('nav')).toContainText("Broadcast");
-    await expect(page.locator('nav')).toContainText("Branding");
+    await expect(nav).toContainText("Communication");
+    await expect(nav).toContainText("Overview");
+    await expect(nav).toContainText("Email Events");
+    await expect(nav).toContainText("Templates");
+    await expect(nav).toContainText("Broadcast");
+    await expect(nav).toContainText("Branding");
   });
 
   test("P2: Overview page loads with 4 cards and recent activity", async ({ page }) => {

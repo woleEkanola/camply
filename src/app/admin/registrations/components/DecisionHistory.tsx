@@ -14,7 +14,7 @@ const STATUS_CHANGE_ACTIONS = [
 ];
 
 const STATUS_LABELS: Record<string, string> = {
-  REGISTRATION_ENDORSED: "Endorsed",
+  REGISTRATION_ENDORSED: "Recommended",
   REGISTRATION_APPROVED: "Approved",
   REGISTRATION_REJECTED: "Rejected",
   WAITLISTED: "Waitlisted",
@@ -61,7 +61,7 @@ export function DecisionHistory({ timeline }: DecisionHistoryProps) {
             const isLast = index === statusChanges.length - 1;
             const isOverride = event.action === "REGISTRATION_APPROVED" && event.newValue?.twoStepOverride === true;
             const label = isOverride
-              ? "Approved (admin override — no endorsement)"
+              ? "Approved (admin override — no recommendation)"
               : (STATUS_LABELS[event.action] ?? event.action.replace(/_/g, " "));
             const colorClass = STATUS_COLORS[event.action] ?? "bg-neutral-100 text-neutral-700 border-neutral-300";
 

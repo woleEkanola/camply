@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
+import { Fab } from "@/components/ui/Fab";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { AuditTimeline } from "@/components/staff/shared/AuditTimeline";
 import { CameraScanner } from "./CameraScanner";
 import { CheckoutSignaturePad } from "./CheckoutSignaturePad";
@@ -29,6 +31,8 @@ export function CheckOutShell({ organizationId, title = "Check-out" }: { organiz
   const isVolunteer = currentUserRole === "VOLUNTEER";
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
+  const autoLaunchedRef = useRef(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeQuery, setActiveQuery] = useState<{ qrToken?: string; query?: string } | null>(null);
@@ -86,10 +90,19 @@ export function CheckOutShell({ organizationId, title = "Check-out" }: { organiz
     },
   });
 
-  // Clock tick / cleanup
+  // Auto-focus search on desktop only — see CheckInShell for why mobile skips this.
   useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
+    if (!isMobile) searchInputRef.current?.focus();
+  }, [isMobile]);
+
+  // Scanning is the primary mobile action — launch the camera immediately,
+  // once per visit, so closing it manually sticks.
+  useEffect(() => {
+    if (isMobile && !autoLaunchedRef.current) {
+      autoLaunchedRef.current = true;
+      setScannerActive(true);
+    }
+  }, [isMobile]);
 
   const handleScanSuccess = async (qrToken: string) => {
     setScannerActive(false);
@@ -316,7 +329,7 @@ export function CheckOutShell({ organizationId, title = "Check-out" }: { organiz
       {checkoutSuccessCamper && (
         <div
           onClick={() => setCheckoutSuccessCamper(null)}
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-600 text-white p-6 cursor-pointer animate-fade-in"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-600 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-white cursor-pointer animate-fade-in"
         >
           <div className="flex flex-col items-center max-w-md text-center space-y-4">
             <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
@@ -341,6 +354,10 @@ export function CheckOutShell({ organizationId, title = "Check-out" }: { organiz
       <Dialog open={!!selectedRegistrationId} onClose={() => setSelectedRegistrationId(null)} title="Registration Timeline">
         <AuditTimeline events={timeline ?? []} />
       </Dialog>
+
+      {!scannerActive && !checkoutSuccessCamper && !errorData && (
+        <Fab icon={<QrCodeIcon className="h-6 w-6" />} label="Scan camper QR code" onClick={() => setScannerActive(true)} />
+      )}
     </div>
   );
 }

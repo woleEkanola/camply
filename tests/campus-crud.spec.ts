@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows, visibleText } from "./helpers";
 
 test.describe("Admin: Campus CRUD and signup link generation", () => {
   test.describe.configure({ mode: "serial" });
@@ -30,7 +30,7 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     // This shared fixture org has accumulated many campuses across prior e2e
     // sessions — the newly-created row can land off the default 10-row page.
     await showAllRows(page);
-    await expect(page.getByText(campusName)).toBeVisible({ timeout: 10000 });
+    await expect(visibleText(page, campusName)).toBeVisible({ timeout: 10000 });
 
     const campus = await prisma.campus.findFirstOrThrow({ where: { name: campusName } });
     campusId = campus.id;
@@ -85,7 +85,7 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     await page.goto("/admin/campuses");
     await showAllRows(page);
 
-    await expect(page.getByText(campusName)).toBeVisible({ timeout: 10000 });
+    await expect(visibleText(page, campusName)).toBeVisible({ timeout: 10000 });
 
     const allCampusesForOrg = await prisma.campus.findMany({ where: { organizationId } });
     expect(allCampusesForOrg.some((c) => c.name === campusName)).toBe(true);
@@ -112,7 +112,7 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
       await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
 
       await expect(page.getByText("Campus deleted successfully")).toBeVisible({ timeout: 10000 });
-      await expect(page.getByText(campusName)).not.toBeVisible();
+      await expect(visibleText(page, campusName)).not.toBeVisible();
 
       // Soft-deleted, not gone — and the cascade must have reached the registration too.
       await expect
@@ -122,7 +122,7 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
       expect(reloadedRegistration.deletedAt).not.toBeNull();
 
       await page.goto("/admin/trash");
-      await expect(page.getByText(campusName)).toBeVisible({ timeout: 10000 });
+      await expect(visibleText(page, campusName)).toBeVisible({ timeout: 10000 });
     } finally {
       await prisma.registration.deleteMany({ where: { id: registration.id } });
       await prisma.camper.deleteMany({ where: { id: camper.id } });

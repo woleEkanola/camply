@@ -10,6 +10,9 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
+import { Fab } from "@/components/ui/Fab";
+import { useToast } from "@/components/ui/Toast";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { AuditTimeline } from "@/components/staff/shared/AuditTimeline";
 import { CameraScanner } from "./CameraScanner";
 import { SuccessOverlay, ErrorOverlay, MedicalOverlay } from "./OperationalFeedback";
@@ -34,6 +37,9 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
   const isVolunteer = currentUserRole === "VOLUNTEER";
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
+  const isMobile = useIsMobile();
+  const autoLaunchedRef = useRef(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeQuery, setActiveQuery] = useState<{ qrToken?: string; query?: string } | null>(null);
@@ -116,6 +122,10 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
       refetchStats?.();
       refetchResults?.();
       refetchVolunteerResults?.();
+      toast.success("Camper checked out");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to check out camper");
     },
   });
 
@@ -125,9 +135,10 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
       refetchResults?.();
       refetchVolunteerResults?.();
       setRecentScans((prev) => prev.filter((s) => s.registrationId !== variables.registrationId));
+      toast.success("Check-in undone");
     },
     onError: (err) => {
-      alert(`Failed to undo check-in: ${err.message}`);
+      toast.error(`Failed to undo check-in: ${err.message}`);
     },
   });
 
@@ -163,10 +174,22 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Auto-focused search input on mount
+  // Auto-focused search input on mount — desktop only. On mobile this would
+  // pop the on-screen keyboard immediately, fighting with the camera-launch
+  // effect below and obscuring the page before the user's asked for either.
   useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
+    if (!isMobile) searchInputRef.current?.focus();
+  }, [isMobile]);
+
+  // Scanning is the primary mobile action (walking around camp, checking
+  // campers in one after another) — launch the camera immediately instead of
+  // waiting for a tap, but only once per visit so closing it manually sticks.
+  useEffect(() => {
+    if (isMobile && !autoLaunchedRef.current) {
+      autoLaunchedRef.current = true;
+      setScannerActive(true);
+    }
+  }, [isMobile]);
 
   // Process QR Scanning Decode Success
   const handleScanSuccess = async (qrToken: string) => {
@@ -614,6 +637,13 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
       <Dialog open={!!selectedRegistrationId} onClose={() => setSelectedRegistrationId(null)} title="Registration Timeline">
         <AuditTimeline events={timeline ?? []} />
       </Dialog>
+
+      {/* Re-open scanning without scrolling back up — hidden while the
+          camera itself is open (the big "Close Camera Scanner" button above
+          already covers that) or an overlay is covering the screen. */}
+      {!scannerActive && !successData && !errorData && !medicalData && (
+        <Fab icon={<QrCodeIcon className="h-6 w-6" />} label="Scan camper QR code" onClick={() => setScannerActive(true)} />
+      )}
     </div>
   );
 }

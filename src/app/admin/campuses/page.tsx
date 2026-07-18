@@ -732,8 +732,9 @@ export default function CampusesPage() {
         />
       ),
       className: "w-8",
+      mobileHidden: true,
     },
-    { header: "Name", accessor: "name", searchable: true },
+    { header: "Name", accessor: "name", searchable: true, primary: true },
     { header: "Code", accessor: (campus) => campus.campusCode || "-" },
     { header: "Order", accessor: (campus) => campus.displayOrder?.toString() ?? "0" },
     {
