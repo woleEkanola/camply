@@ -66,6 +66,25 @@ export async function POST(request: Request) {
     if (!parent) {
       return NextResponse.json({ message: 'User account not found' }, { status: 400 });
     }
+
+    // A family is locked to one campus: every camper under a parent must share the
+    // same homeCampus. Look up any existing (non-deleted) camper for this parent and
+    // reject if the link being used points at a different campus. First-ever child →
+    // no sibling → allowed (and seeds the campus anchor via the update below).
+    const sibling = await prisma.camper.findFirst({
+      where: { userId: parent.id, deletedAt: null, homeCampusId: { not: null } },
+      select: { homeCampusId: true, homeCampus: { select: { name: true } } },
+    });
+    if (sibling?.homeCampusId && sibling.homeCampusId !== signupLink.campusId) {
+      return NextResponse.json(
+        {
+          message: `Your family is already registered at ${sibling.homeCampus?.name ?? 'another campus'}. All of your children must be registered at the same campus — please use that campus's signup link to add another child.`,
+          code: 'CAMPUS_MISMATCH',
+        },
+        { status: 409 }
+      );
+    }
+
     if (!parent.organizationId || !parent.homeCampusId) {
       parent = await prisma.user.update({
         where: { id: parent.id },
