@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE "OTP" ADD COLUMN     "attempts" INTEGER NOT NULL DEFAULT 0;
