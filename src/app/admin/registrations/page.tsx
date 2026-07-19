@@ -97,6 +97,12 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
   const transitionWithOptions = api.registration.transitionWithOptions.useMutation({ onSuccess: invalidate, onError: onErr });
   const sendCommunication = api.registration.sendCommunication.useMutation({ onSuccess: invalidate, onError: onErr });
   const advanceFromRequiresAction = api.registration.advanceFromRequiresAction.useMutation({ onSuccess: invalidate, onError: onErr });
+  const { data: campusesData } = api.campus.getByOrganization.useQuery(
+    { organizationId: orgId ?? "" },
+    { enabled: !!orgId }
+  );
+  const campuses = campusesData ?? [];
+  const reassignCampus = api.registration.reassignCampus.useMutation({ onSuccess: invalidate, onError: onErr });
 
   if (!registration) {
     return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
@@ -112,7 +118,29 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-neutral-100 pb-3">
         <div><span className="text-neutral-500">Camp</span><div className="font-medium text-neutral-900">{registration.camp?.name}</div></div>
-        <div><span className="text-neutral-500">Campus</span><div className="font-medium text-neutral-900">{registration.campus?.name}</div></div>
+        <div>
+          <span className="text-neutral-500">Campus</span>
+          {campuses.length > 0 ? (
+            <Select
+              containerClassName="mt-1"
+              value={registration.campusId}
+              onChange={(e) => {
+                if (e.target.value) {
+                  reassignCampus.mutate({ registrationId, newCampusId: e.target.value });
+                }
+              }}
+              disabled={reassignCampus.isPending}
+            >
+              {campuses.map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <div className="font-medium text-neutral-900">{registration.campus?.name}</div>
+          )}
+        </div>
       </div>
 
       <CamperProfileView camper={registration.camper as any} />
@@ -343,6 +371,22 @@ export default function RegistrationsPage() {
     },
   });
 
+  const [bulkReassignOpen, setBulkReassignOpen] = useState(false);
+  const [selectedBulkCampusId, setSelectedBulkCampusId] = useState("");
+  const bulkReassignCampus = api.registration.bulkReassignCampus.useMutation({
+    onSuccess: (res) => {
+      setBulkResult({ message: `Reassigned ${res.count} registration${res.count === 1 ? "" : "s"} successfully.`, type: "success" });
+      setBulkReassignOpen(false);
+      setSelectedBulkCampusId("");
+      invalidateRegistrations();
+    },
+    onError: (err) => {
+      setBulkResult({ message: err.message, type: "error" });
+      setBulkReassignOpen(false);
+      setSelectedBulkCampusId("");
+    },
+  });
+
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
 
   const [cursor, setCursor] = useState<string | undefined>(undefined);
@@ -423,6 +467,7 @@ export default function RegistrationsPage() {
   const kpi = statsData?.countsByStatus ?? {};
   const awaitingVettingCount = statsData?.awaitingVetting ?? 0;
   const awaitingFinalCount = statsData?.awaitingFinal ?? 0;
+  const statsTotalCount = statsData?.totalCount ?? 0;
 
   const registrations = accumulatedItems;
 
@@ -465,7 +510,16 @@ export default function RegistrationsPage() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
+        <StatCard
+          label="Total Registrations"
+          value={statsTotalCount}
+          selected={filterStatus === "" && reviewStateFilter === ""}
+          onClick={() => {
+            setReviewStateFilter("");
+            setFilterStatus("");
+          }}
+        />
         {isTwoStep && (
           <>
             <StatCard
@@ -528,6 +582,9 @@ export default function RegistrationsPage() {
           }
         }}>
           Archive
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setBulkReassignOpen(true)}>
+          Reassign Campus
         </Button>
         <Button size="sm" variant="danger" data-testid="bulk-delete-button" loading={bulkSoftDelete.isPending} onClick={() => setBulkAction("DELETE")}>
           Delete
@@ -648,7 +705,11 @@ export default function RegistrationsPage() {
 
       <Table
         mode="controlled"
-        toolbar={<span className="text-xs text-neutral-400">{registrations.length} registration{registrations.length === 1 ? "" : "s"}</span>}
+        toolbar={
+          <span className="text-xs text-neutral-400">
+            Showing {registrations.length} of {data?.totalCount ?? 0} registration{(data?.totalCount ?? 0) === 1 ? "" : "s"}
+          </span>
+        }
         columns={tableColumns}
         data={registrations}
         rowKey={(row) => row.id}
@@ -761,6 +822,44 @@ export default function RegistrationsPage() {
             }}
           >
             Delete
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={bulkReassignOpen}
+        onClose={() => { setBulkReassignOpen(false); setSelectedBulkCampusId(""); }}
+        title={`Reassign Campus for ${selectedIds.length} registration${selectedIds.length === 1 ? "" : "s"}`}
+        size="sm"
+      >
+        <p className="text-sm text-neutral-500">
+          Select the new campus to assign the selected registrations to:
+        </p>
+        <Select
+          containerClassName="mt-3"
+          value={selectedBulkCampusId}
+          onChange={(e) => setSelectedBulkCampusId(e.target.value)}
+        >
+          <option value="">Choose a campus...</option>
+          {campuses.map((c: any) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => { setBulkReassignOpen(false); setSelectedBulkCampusId(""); }}>Cancel</Button>
+          <Button
+            disabled={!selectedBulkCampusId}
+            loading={bulkReassignCampus.isPending}
+            onClick={() => {
+              bulkReassignCampus.mutate({
+                ids: selectedIds,
+                newCampusId: selectedBulkCampusId,
+              });
+            }}
+          >
+            Reassign
           </Button>
         </div>
       </Dialog>
