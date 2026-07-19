@@ -5,7 +5,7 @@ import type { Branding } from "../renderer";
 
 // ─── QRCodeCard ─────────────────────────────────────────────────────────────
 
-export function QRCodeCard(params: { qrDataUrl: string; registrationNumber: string }): string {
+export function QRCodeCard(params: { qrSrc: string; registrationNumber: string }): string {
   const t = theme;
   return `
 <table width="100%" cellpadding="0" cellspacing="0" style="background:${t.color.surface}; border-radius:${t.radius.lg}; overflow:hidden; margin:${t.spacing.lg} 0; box-shadow:${t.shadow.card};">
@@ -18,7 +18,7 @@ export function QRCodeCard(params: { qrDataUrl: string; registrationNumber: stri
   <!-- QR Code -->
   <tr>
     <td align="center" style="padding:${t.spacing.md} ${t.spacing.xl};">
-      <img src="${escapeHtml(params.qrDataUrl)}" alt="QR Code" width="220" height="220" style="display:block;width:220px;height:220px;background:#FFFFFF;image-rendering:crisp-edges;" />
+      <img src="${escapeHtml(params.qrSrc)}" alt="QR Code" width="220" height="220" style="display:block;width:220px;height:220px;background:#FFFFFF;image-rendering:crisp-edges;" />
     </td>
   </tr>
   <!-- Registration Number -->

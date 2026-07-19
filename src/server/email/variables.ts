@@ -26,7 +26,7 @@ export const EMAIL_VARIABLES: EmailVariable[] = [
   // Registration
   { key: "registration_number", label: "Registration Number", category: "registration", sampleValue: "TC26-LEK-0042" },
   { key: "registration_url", label: "Registration URL", category: "registration", sampleValue: "https://app.camply.ng/dashboard/register/abc123" },
-  { key: "qr_code", label: "QR Code", category: "registration", sampleValue: "[QR Code Image]" },
+  { key: "qr_code", label: "QR Code", category: "registration", sampleValue: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHQAAAB0CAYAAABUmhYnAAAAAklEQVR4AewaftIAAAKbSURBVO3BQW7sWAwEwSxC979yjpdcPaAhqb/NYUT8wRqjWKMUa5RijVKsUYo1SrFGKdYoxRqlWKMUa5RijVKsUYo1SrFGKdYoFzcl4ZtU7kjCiUqXhG9SuaNYoxRrlGKNcvEwlScl4RNJeJPKk5LwpGKNUqxRijXKxcuS8AmVTyThEypPSsInVN5UrFGKNUqxRrkYRqVLwv9JsUYp1ijFGuVimCScJOFE5S8r1ijFGqVYo1y8TOVfUjlJwh0qv0mxRinWKMUa5eJhSfiXVLokdCp3JOE3K9YoxRqlWKNc3KTymyShU+mS8AmVv6RYoxRrlGKNcnFTEjqVLglPUulUuiR0SehUuiScJOFJKm8q1ijFGqVYo1z8MionSfgmlS4JncpJErokdCpPKtYoxRqlWKNcfJnKJ5LQqZwk4SQJncokxRqlWKMUa5SLl6l0SehUTlROktCpdEnoVD6RhE7lJAmdykkSOpU7ijVKsUYp1ijxBy9KQqfSJaFT6ZLQqXwiCScqb0pCp/KmYo1SrFGKNUr8wR+WhCepfCIJnUqXhBOVJxVrlGKNUqxR4g9uSMI3qZwkoVM5ScKJSpeETqVLwh0qdxRrlGKNUqxRLh6m8qQknCShU+mS8AmVE5UuCScqJ0l4UrFGKdYoxRrl4mVJ+ITKHUnoVE6ScIdKl4QuCScqTyrWKMUapVijXAyj0iWhU3mTSpeETuVNxRqlWKMUa5SLYZJwkoRO5U0q31SsUYo1SrFGuXiZyptUTpLQqdyRhE7ljiR0KncUa5RijVKsUS4eloRvSkKncpKETuUTKidJOFHpVJ5UrFGKNUqxRok/WGMUa5RijVKsUYo1SrFGKdYoxRqlWKMUa5RijVKsUYo1SrFGKdYoxRrlP11s+OUgUk8xAAAAAElFTkSuQmCC" },
 
   // Approval / Rejection
   { key: "approval_reason", label: "Approval Reason", category: "registration", sampleValue: "All documents verified" },

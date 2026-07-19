@@ -151,9 +151,13 @@ export function interpolateTipTapJson(node: any, variables: Record<string, strin
 
     // 4. Recurse content
     if (n.content && Array.isArray(n.content)) {
-      for (const child of n.content) {
+      n.content = n.content.filter((child: any) => {
         walk(child);
-      }
+        if (child && child.type === "text" && child.text === "") {
+          return false;
+        }
+        return true;
+      });
     }
   }
 

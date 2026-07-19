@@ -10,7 +10,7 @@ export interface AcceptanceEmailParams {
   centreName: string;
   registrationNumber: string;
   reportingDate?: string;
-  qrDataUrl: string;
+  qrSrc: string;
   viewUrl: string;
   remindersHtml?: string | null;
   tribeName?: string | null;
@@ -41,7 +41,7 @@ export async function sendAcceptanceEmail(params: AcceptanceEmailParams) {
          ${params.reportingDate ? `<br/><strong>Reporting Date:</strong> ${params.reportingDate}` : ""}
       </p>
       <p>Please present the QR code below during check-in.</p>
-      <img src="${params.qrDataUrl}" alt="QR Code" width="180" height="180" />
+      <img src="${params.qrSrc}" alt="QR Code" width="180" height="180" />
       <p><a href="${params.viewUrl}">View Registration</a></p>
       ${params.remindersHtml ? `<div>${params.remindersHtml}</div>` : ""}
     </div>
