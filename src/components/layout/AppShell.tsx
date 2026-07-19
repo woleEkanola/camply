@@ -30,12 +30,22 @@ export default function AppShell({ area, children }: AppShellProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const activeRef = useRef<HTMLAnchorElement>(null);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (activeRef.current) {
+    const savedScrollPos = typeof window !== "undefined" ? sessionStorage.getItem("sidebar-scroll-position") : null;
+    if (savedScrollPos && navRef.current) {
+      navRef.current.scrollTop = parseInt(savedScrollPos, 10);
+    } else if (activeRef.current) {
       activeRef.current.scrollIntoView({ block: "nearest" });
     }
   }, [pathname]);
+
+  const handleScroll = () => {
+    if (navRef.current && typeof window !== "undefined") {
+      sessionStorage.setItem("sidebar-scroll-position", navRef.current.scrollTop.toString());
+    }
+  };
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -81,7 +91,11 @@ export default function AppShell({ area, children }: AppShellProps) {
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto scrollbar-hide px-2 py-2">
+      <nav
+        ref={navRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto scrollbar-hide px-2 py-2"
+      >
         {groups.map((group) => (
           <div key={group.name} className="mb-4">
             <div className={cn("mb-1 px-3 text-xs font-semibold uppercase tracking-wide text-neutral-400", !sidebarOpen && "hidden")}>
