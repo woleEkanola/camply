@@ -23,6 +23,27 @@ function orgId(ctx: { session?: { user?: { organizationId?: string } } | null })
   return id;
 }
 
+/**
+ * QR image source for the REGISTRATION_APPROVED template preview/test-send.
+ * A real test send goes out via Resend to a real inbox — email clients strip
+ * data: URIs, the same bug as the real acceptance email. No real registration
+ * exists yet to build a token URL from, so a real send uses the fixed hosted
+ * sample QR; the in-app preview iframe (same origin, no email client
+ * involved) keeps using the sample data: URI.
+ */
+export function resolveApprovedQrSrc(params: { qrCode?: string; isRealSend: boolean; appUrl: string }): string {
+  const { qrCode, isRealSend, appUrl } = params;
+  if (qrCode?.startsWith("http://") || qrCode?.startsWith("https://")) {
+    return qrCode;
+  }
+  if (isRealSend) {
+    return `${appUrl}/api/qr/sample`;
+  }
+  return qrCode?.startsWith("data:image")
+    ? qrCode
+    : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+}
+
 // ─── Router ─────────────────────────────────────────────────────────────────
 
 export const communicationRouter = createTRPCRouter({
@@ -655,9 +676,11 @@ export const communicationRouter = createTRPCRouter({
       if (isEventKey) {
         let qrDataUrl: string | undefined;
         if (input.event === "REGISTRATION_APPROVED") {
-          qrDataUrl = variables.qr_code?.startsWith("data:image")
-            ? variables.qr_code
-            : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+          qrDataUrl = resolveApprovedQrSrc({
+            qrCode: variables.qr_code,
+            isRealSend: !!input.to,
+            appUrl: process.env.NEXTAUTH_URL ?? "http://localhost:3001",
+          });
         }
 
         const renderResult = await renderEmailWithEvent({

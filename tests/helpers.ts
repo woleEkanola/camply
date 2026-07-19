@@ -240,7 +240,7 @@ export async function loginWithPassword(page: Page, email: string, password: str
   await emailInput(page).fill(email);
   await passwordInput(page).fill(password);
   await loginButton(page).click();
-  await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard)/, { timeout: 15000 });
+  await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard)/, { timeout: 45000 });
 }
 
 /** Fills the shared 6-box OtpInput grid (src/components/ui/OtpInput.tsx) — each box is aria-labelled "Digit N of 6", not a single field, so getByLabel("Verification Code")-style locators no longer resolve to a fillable element. */

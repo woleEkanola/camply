@@ -221,11 +221,11 @@ export default function ProfilePage() {
   // Initialize fields once profile loads
   useEffect(() => {
     if (profile) {
-      setFirstName(profile.firstName ?? "");
-      setLastName(profile.lastName ?? "");
+      setFirstName(profile.firstName || staffProfile?.firstName || "");
+      setLastName(profile.lastName || staffProfile?.lastName || "");
       setPhone(profile.phone ?? "");
     }
-  }, [profile]);
+  }, [profile, staffProfile]);
 
   // Initialize staff fields
   useEffect(() => {

@@ -133,6 +133,7 @@ export const DEFAULT_TEMPLATES: Record<string, DefaultTemplate> = {
           { type: "text", text: "." },
         ] },
         { type: "paragraph", content: [{ type: "text", text: "Please note that this registration is currently pending review and approval by our camp administration. We will verify the details and documents shortly and notify you via email once a decision has been made." }] },
+        { type: "paragraph", content: [{ type: "text", text: "We will review your registration and notify you of the outcome within 3–5 business days." }] },
         { type: "paragraph", content: [{ type: "text", text: "If we require any changes or additional information, we will send you a correction request with instructions." }] },
         { type: "paragraph" },
         { type: "emailButton", attrs: { label: "View Registration", href: "{{registration_url}}" } },

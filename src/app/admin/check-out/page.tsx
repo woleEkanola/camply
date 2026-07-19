@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
-import { CheckOutShell } from "@/components/staff/shared/CheckOutShell";
+import { ScanCenterShell } from "@/components/staff/shared/ScanCenterShell";
 
 export default function AdminCheckOutPage() {
   const router = useRouter();
@@ -12,7 +12,7 @@ export default function AdminCheckOutPage() {
 
   return (
     <AppShell area="admin">
-      <CheckOutShell organizationId={organizationId} title="Admin Check-out Workspace" />
+      <ScanCenterShell organizationId={organizationId} defaultStationId="CHECKOUT" />
     </AppShell>
   );
 }

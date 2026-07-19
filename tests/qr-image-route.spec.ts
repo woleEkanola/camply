@@ -61,3 +61,22 @@ test.describe("Public QR image route", () => {
     expect(response.status()).toBe(404);
   });
 });
+
+test.describe("Public sample QR image route (template-editor test sends)", () => {
+  // No fixture data needed — this route never touches the DB.
+  test("serves a fixed PNG with no session/cookies", async ({ request }) => {
+    const response = await request.get("/api/qr/sample");
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toBe("image/png");
+
+    const body = await response.body();
+    expect(Array.from(body.subarray(0, 4))).toEqual(PNG_MAGIC);
+  });
+
+  // The literal /sample path must win over the [token] dynamic route rather
+  // than falling through to a DB lookup for the literal string "sample".
+  test("does not 404 or attempt a qrToken lookup", async ({ request }) => {
+    const response = await request.get("/api/qr/sample");
+    expect(response.status()).not.toBe(404);
+  });
+});

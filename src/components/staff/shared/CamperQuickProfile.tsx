@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { api } from "@/utils/trpc";
 import { Drawer } from "@/components/ui/Drawer";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardBody } from "@/components/ui/Card";
+import { Dialog } from "@/components/ui/Dialog";
 
 function age(dob: string | Date | null | undefined) {
   if (!dob) return null;
@@ -17,6 +19,7 @@ function formatDate(dob: string | Date | null | undefined) {
 }
 
 export function CamperQuickProfileDrawer({ camperId, open, onClose }: { camperId: string | null; open: boolean; onClose: () => void }) {
+  const [isPhotoOpen, setIsPhotoOpen] = useState(false);
   const { data: camper } = api.camper.getById.useQuery(
     { id: camperId ?? "" },
     { enabled: !!camperId }
@@ -33,7 +36,12 @@ export function CamperQuickProfileDrawer({ camperId, open, onClose }: { camperId
               <div className="flex items-center gap-3">
                 {camper.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={camper.photoUrl} alt="" className="h-14 w-14 rounded-full object-cover" />
+                  <img
+                    src={camper.photoUrl}
+                    alt=""
+                    className="h-14 w-14 rounded-full object-cover cursor-pointer border border-neutral-200 hover:scale-105 transition-transform"
+                    onClick={() => setIsPhotoOpen(true)}
+                  />
                 ) : (
                   <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-100 text-lg font-medium text-accent-700">
                     {camper.name?.[0]}
@@ -90,6 +98,32 @@ export function CamperQuickProfileDrawer({ camperId, open, onClose }: { camperId
               </div>
             </CardBody>
           </Card>
+
+          {camper.fieldValues && camper.fieldValues.length > 0 && (
+            <Card>
+              <CardBody>
+                <h4 className="mb-2 text-sm font-semibold text-neutral-900">Custom Profile Details</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {camper.fieldValues.map((fv: any) => (
+                    <div key={fv.id}>
+                      <span className="text-neutral-500 block text-[11px] uppercase font-semibold">{fv.field?.label || fv.field?.name || "Field"}:</span>
+                      <span className="text-neutral-800 font-medium">{fv.value || "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardBody>
+            </Card>
+          )}
+
+          <Dialog open={isPhotoOpen} onClose={() => setIsPhotoOpen(false)} title="Full Teen Photo">
+            <div className="flex justify-center p-2 bg-neutral-900 rounded-lg overflow-hidden border border-neutral-800">
+              <img
+                src={camper.photoUrl || undefined}
+                alt={camper.name || ""}
+                className="max-h-[70vh] max-w-full object-contain rounded-md"
+              />
+            </div>
+          </Dialog>
         </div>
       )}
     </Drawer>

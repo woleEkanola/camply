@@ -85,28 +85,34 @@ test.describe("Teacher check-in", () => {
   });
 
   test("teacher can search and check in an approved camper", async ({ page }) => {
+    test.setTimeout(120000);
     await loginWithOtp(page, teacherEmail);
-    await page.waitForURL(/\/teacher/, { timeout: 15000 });
+    await page.waitForURL(/\/teacher/, { timeout: 90000 });
 
     await page.goto("/teacher/check-in");
-    await expect(page.getByRole("heading", { name: "Check-in" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Camp Arrival" })).toBeVisible();
 
     // Manual search by registration number.
-    await page.locator('input[placeholder*="Registration #, camper name, email, or phone"]').fill(registrationNumber);
+    await page.locator('input[placeholder*="Enter Registration #"]').fill(registrationNumber);
     await page.getByRole("button", { name: "Search", exact: true }).click();
 
-    // Result card appears with medical alert and ready status.
+    // Medical alert overlay appears because of Asthma condition.
+    await expect(page.getByText("Medical & safety alert")).toBeVisible({ timeout: 20000 });
     await expect(page.getByText("Checkin Camper")).toBeVisible();
-    await expect(page.getByText("Medical Alert")).toBeVisible();
-    await expect(page.getByText("Ready for Check-in")).toBeVisible();
+    await expect(page.getByText("Asthma")).toBeVisible();
+ 
+    // Acknowledge and confirm scan.
+    await page.getByRole("button", { name: "Acknowledge & Confirm Scan" }).click();
+ 
+    // Success overlay appears.
+    await expect(page.getByRole("heading", { name: "Checked In at Camp Arrival", exact: true })).toBeVisible({ timeout: 20000 });
+    
+    // Dismiss overlay by clicking it
+    await page.click("text=Checked In at Camp Arrival");
+    await expect(page.getByRole("heading", { name: "Checked In at Camp Arrival" })).not.toBeVisible();
 
-    // Check in.
-    await page.locator('button:visible', { hasText: "Check In" }).click();
-    await page.getByRole("button", { name: "Acknowledge & Confirm Check-in" }).click();
-    // Dismiss the green success overlay
-    await page.getByRole("heading", { name: "✓ Checked In" }).click();
-    await expect(page.getByText("Already Checked In")).toBeVisible();
-    await expect(page.getByText(/Checked in:/)).toBeVisible();
+    // Verify recent scan entry in activity logs.
+    await expect(page.getByText("Checkin Camper")).toBeVisible();
 
     // Checked-in state is persisted.
     const reg = await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } });

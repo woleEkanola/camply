@@ -66,7 +66,6 @@ export function buildSubmittedEmail(p: AssemblerParams): string {
     StatusBanner({ type: "info", title: "Registration Received", subtitle: "Your registration has been received and is pending review." }),
     InfoCard({ rows: regInfoRows(v).filter(r => ["Camper", "Camp", "Registration #"].includes(r.label)) }),
     p.bodyContent ? Section({ children: p.bodyContent }) : "",
-    BodyText({ text: "We will review your registration and notify you of the outcome within 3–5 business days.", align: "center", color: undefined }),
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
