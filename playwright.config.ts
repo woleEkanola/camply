@@ -26,7 +26,16 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    // Mobile-viewport assertions live in dedicated tests/mobile-*.spec.ts
+    // files, run only under "Mobile Chrome" below — most existing specs
+    // assume desktop layout (e.g. clicking a <tr> that's `hidden` below
+    // `md` via Table's dual-render) and would fail en masse if run here too.
+    { name: "chromium", testIgnore: /mobile-.*\.spec\.ts$/, use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "Mobile Chrome",
+      testMatch: /mobile-.*\.spec\.ts$/,
+      use: { ...devices["Pixel 5"] },
+    },
   ],
   // The Systems Rule protocol boots the server itself (clean build -> start -> poll)
   // before invoking `playwright test`, so no webServer block here — it would

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import bcrypt from "bcryptjs";
-import { prisma, getFixtureOrgContext, loginWithPassword, emailInput, nextButton, passwordInput, loginButton } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, emailInput, nextButton, passwordInput, loginButton, visibleText } from "./helpers";
 
 test.describe("Admin: User soft-delete blocks login and lands in Trash", () => {
   test.describe.configure({ mode: "serial" });
@@ -49,6 +49,6 @@ test.describe("Admin: User soft-delete blocks login and lands in Trash", () => {
 
     // Deleted user shows up in Trash for the org admin.
     await page.goto("/admin/trash");
-    await expect(page.getByText(repEmail)).toBeVisible({ timeout: 10000 });
+    await expect(visibleText(page, repEmail)).toBeVisible({ timeout: 10000 });
   });
 });

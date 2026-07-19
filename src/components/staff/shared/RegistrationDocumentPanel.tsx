@@ -11,6 +11,7 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
   const utils = api.useUtils();
   const { data: documents, refetch } = api.document.listForRegistration.useQuery({ registrationId });
   const [actionError, setActionError] = useState("");
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null);
 
   const reviewDoc = api.document.review.useMutation({
     onSuccess: () => refetch(),
@@ -33,13 +34,19 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
         return (
           <div key={doc.id} className={`rounded-md border p-3 text-sm ${activeAction ? "border-warning-300 bg-warning-50" : "border-neutral-200"}`}>
             <div className="flex items-center justify-between">
-              <a href={doc.url} target="_blank" rel="noreferrer" className="text-accent-700 underline truncate pr-2">
+              <span className="text-neutral-700 font-medium truncate pr-2">
                 {doc.fileName}
-              </a>
+              </span>
               <div className="flex items-center gap-2 shrink-0">
                 <span className={doc.status === "REJECTED" ? "text-danger-600" : doc.status === "APPROVED" ? "text-success-600" : "text-neutral-500"}>
                   {doc.status}
                 </span>
+                <button
+                  className="text-xs text-accent-600 hover:underline font-medium"
+                  onClick={() => setPreviewDocId(previewDocId === doc.id ? null : doc.id)}
+                >
+                  View
+                </button>
                 <button className="text-xs text-success-600 hover:underline" onClick={() => reviewDoc.mutate({ id: doc.id, status: "APPROVED" })}>
                   Approve
                 </button>
@@ -54,6 +61,19 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
                 </button>
               </div>
             </div>
+            {previewDocId === doc.id && (
+              <div className="mt-3 flex justify-center bg-neutral-50 p-2 rounded-md border border-neutral-200">
+                {doc.fileType?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(doc.url || "") ? (
+                  <img
+                    src={doc.url}
+                    alt={doc.fileName}
+                    className="max-h-85 max-w-full object-contain rounded-md shadow-sm border border-neutral-200 bg-white"
+                  />
+                ) : (
+                  <iframe src={doc.url} className="h-85 w-full rounded-md border border-neutral-200 bg-white" title={doc.fileName} />
+                )}
+              </div>
+            )}
             {activeAction && (
               <div className="mt-2 text-xs text-warning-800">
                 <span className="font-semibold">Action required:</span> {activeAction.reason}

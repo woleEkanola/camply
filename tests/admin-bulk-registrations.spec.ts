@@ -77,7 +77,10 @@ test.describe("Admin: bulk registration actions", () => {
     await expect(row).toBeVisible({ timeout: 10000 });
     await row.locator('input[type="checkbox"]').first().click();
 
-    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    // Scoped to the bulk-actions toolbar — the row itself also has an inline
+    // "Approve" action now (for quick single-row approval without selecting
+    // it), so an unscoped query would be ambiguous once a row is selected.
+    await page.getByRole("toolbar", { name: "Bulk actions" }).getByRole("button", { name: "Approve", exact: true }).click();
 
     await expect.poll(async () => {
       const reg = await prisma.registration.findUnique({ where: { id: registrationId } });

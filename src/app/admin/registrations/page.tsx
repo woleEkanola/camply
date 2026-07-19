@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, type Column } from "@/components/ui/Table";
+import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Select, Textarea } from "@/components/ui/Input";
 import { Drawer } from "@/components/ui/Drawer";
@@ -25,6 +26,9 @@ import ChangesSinceReview from "./components/ChangesSinceReview";
 import { Badge } from "@/components/ui/Badge";
 import { isEndorsed } from "@/server/registration/endorsement";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useIsMobile } from "@/hooks/useMediaQuery";
+import { FunnelIcon } from "@heroicons/react/24/outline";
 
 type ExtendedUser = {
   id: string;
@@ -273,6 +277,8 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
 
 export default function RegistrationsPage() {
   const router = useRouter();
+  const isMobile = useIsMobile();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedRegistration, setSelectedRegistration] = useState<string | null>(null);
   const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -334,6 +340,8 @@ export default function RegistrationsPage() {
     },
   });
 
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
+
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
       organizationId,
@@ -341,7 +349,7 @@ export default function RegistrationsPage() {
       campusId: filterCampus || undefined,
       status: filterStatus || undefined,
       reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
-      q: searchQuery || undefined,
+      q: debouncedSearchQuery || undefined,
       limit: 50,
     },
     { enabled: !!organizationId }
@@ -359,6 +367,7 @@ export default function RegistrationsPage() {
   const tableColumns: Column<any>[] = [
     {
       header: "Camper",
+      primary: true,
       accessor: (row) => (
         <div>
           <div className="font-medium text-neutral-900">{row.camper?.name}</div>
@@ -374,7 +383,7 @@ export default function RegistrationsPage() {
         <div className="flex flex-col gap-1">
           <StatusBadge status={row.status} />
           {isTwoStep && row.status === "PENDING" && isEndorsed(row.review) && (
-            <Badge tone="info">Endorsed</Badge>
+            <Badge tone="info">Recommended</Badge>
           )}
         </div>
       ),
@@ -430,50 +439,103 @@ export default function RegistrationsPage() {
         </div>
       )}
 
-      {selectedIds.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-accent-200 bg-accent-50 px-3 py-2">
-          <Badge tone="info">{selectedIds.length} selected</Badge>
-          <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}>
-            Approve
-          </Button>
-          <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "WAITLIST" })}>
-            Waitlist
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT"); setBulkReason(""); }}>
-            Reject
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REQUEST_CORRECTION"); setBulkReason(""); }}>
-            Request Correction
-          </Button>
-          <Button size="sm" variant="secondary" loading={bulkTransition.isPending && bulkTransition.variables?.action === "ARCHIVE"} onClick={() => {
-            if (window.confirm(`Archive ${selectedIds.length} selected registration${selectedIds.length === 1 ? "" : "s"}?`)) {
-              bulkTransition.mutate({ ids: selectedIds, action: "ARCHIVE" });
-            }
-          }}>
-            Archive
-          </Button>
-          <Button size="sm" variant="danger" data-testid="bulk-delete-button" loading={bulkSoftDelete.isPending} onClick={() => setBulkAction("DELETE")}>
-            Delete
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>Clear</Button>
-        </div>
-      )}
+      <BulkActionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
+        <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}>
+          Approve
+        </Button>
+        <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "WAITLIST" })}>
+          Waitlist
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT"); setBulkReason(""); }}>
+          Reject
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REQUEST_CORRECTION"); setBulkReason(""); }}>
+          Request Correction
+        </Button>
+        <Button size="sm" variant="secondary" loading={bulkTransition.isPending && bulkTransition.variables?.action === "ARCHIVE"} onClick={() => {
+          if (window.confirm(`Archive ${selectedIds.length} selected registration${selectedIds.length === 1 ? "" : "s"}?`)) {
+            bulkTransition.mutate({ ids: selectedIds, action: "ARCHIVE" });
+          }
+        }}>
+          Archive
+        </Button>
+        <Button size="sm" variant="danger" data-testid="bulk-delete-button" loading={bulkSoftDelete.isPending} onClick={() => setBulkAction("DELETE")}>
+          Delete
+        </Button>
+      </BulkActionBar>
 
       <div className="mb-4 grid gap-3 md:grid-cols-3">
-        <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-        <Select value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
-          <option value="">All Campuses</option>
-          {campuses.map((c: any) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </Select>
-        <Select data-testid="registration-status-filter" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="">All Statuses</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-          ))}
-        </Select>
+        <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
+        {isMobile ? (
+          <Button
+            variant="secondary"
+            icon={<FunnelIcon className="h-4 w-4" />}
+            onClick={() => setFiltersOpen(true)}
+          >
+            {/* flex-1 alone (without overriding the button's own
+                justify-center) is enough to push the badge to the end —
+                cn() doesn't resolve two justify-* utilities predictably. */}
+            <span className="flex-1 text-left">Filters</span>
+            {(filterCampus || filterStatus) && (
+              <Badge tone="info">{[filterCampus, filterStatus].filter(Boolean).length}</Badge>
+            )}
+          </Button>
+        ) : (
+          <>
+            <Select value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
+              <option value="">All Campuses</option>
+              {campuses.map((c: any) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </Select>
+            <Select data-testid="registration-status-filter" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="">All Statuses</option>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+              ))}
+            </Select>
+          </>
+        )}
       </div>
+
+      {/* Filter bottom-sheet — mobile only (see the "Filters" button above);
+          same filterCampus/filterStatus state as the desktop inline selects. */}
+      <Dialog
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        title="Filters"
+        footer={
+          <div className="flex w-full gap-2">
+            {(filterCampus || filterStatus) && (
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => { setFilterCampus(""); setFilterStatus(""); }}
+              >
+                Clear filters
+              </Button>
+            )}
+            <Button className="flex-1" onClick={() => setFiltersOpen(false)}>
+              Show results
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <Select label="Campus" value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
+            <option value="">All Campuses</option>
+            {campuses.map((c: any) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </Select>
+          <Select label="Status" data-testid="registration-status-filter" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+            ))}
+          </Select>
+        </div>
+      </Dialog>
 
       <Table
         mode="controlled"
@@ -488,6 +550,26 @@ export default function RegistrationsPage() {
         isLoading={isLoading}
         emptyTitle="No registrations match your filters"
         emptyDescription="Try adjusting search, centre, or status filters."
+        actions={(row) =>
+          row.status === "PENDING" ? (
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                size="sm"
+                loading={bulkTransition.isPending && bulkTransition.variables?.ids?.length === 1 && bulkTransition.variables.ids[0] === row.id && bulkTransition.variables.action === "APPROVE"}
+                onClick={() => bulkTransition.mutate({ ids: [row.id], action: "APPROVE" })}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
+              >
+                Reject
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       {selectedRegistration && (

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { api } from "@/utils/trpc";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import EditCamperModal from "./EditCamperModal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { StatCard } from "@/components/ui/StatCard";
+import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { Table, type Column } from "@/components/ui/Table";
 import { Dialog } from "@/components/ui/Dialog";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { Select, Textarea } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Input";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -100,6 +102,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   // Pagination states
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allCampers, setAllCampers] = useState<CamperType[]>([]);
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
   // Get active camp to fetch registrations
   const { data: activeYear } = api.camp.getActiveCamp.useQuery(
@@ -112,14 +115,14 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   useEffect(() => {
     setCursor(undefined);
     setAllCampers([]);
-  }, [searchTerm, campusFilter, statusFilter, campId]);
+  }, [debouncedSearchTerm, campusFilter, statusFilter, campId]);
 
   // Get campers
   const { data: responseData, refetch: refetchProfiles, error: profilesError, isLoading } = api.camper.adminList.useQuery(
     {
       organizationId,
       campId: campId || undefined,
-      q: searchTerm || undefined,
+      q: debouncedSearchTerm || undefined,
       campusId: campusFilter !== "all" ? campusFilter : undefined,
       status: statusFilter || undefined,
       limit: 50,
@@ -254,6 +257,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   const columns: Column<CamperType>[] = [
     {
       header: "Name",
+      primary: true,
       accessor: (profile) => (
         <a href={`/admin/camper-profile/${profile.id}`} className="font-medium text-neutral-900 hover:text-accent-700 hover:underline">
           {profile.name}
@@ -262,11 +266,15 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     },
     {
       header: "Parent",
+      secondary: true,
+      // Inline spans (not stacked divs) so this stays one line and truncates
+      // cleanly in the mobile card's subtitle slot, while keeping the same
+      // name/muted-email visual distinction in the desktop table cell.
       accessor: (profile) => (
-        <div>
-          <div>{profile.user.firstName} {profile.user.lastName}</div>
-          <div className="text-xs text-neutral-400">{profile.user.email}</div>
-        </div>
+        <span>
+          {profile.user.firstName} {profile.user.lastName}{" "}
+          <span className="text-neutral-400">· {profile.user.email}</span>
+        </span>
       ),
     },
     {
@@ -300,85 +308,60 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
 
   const actions = (profile: CamperType) =>
     canManageCampers ? (
-      <div className="flex justify-end gap-3 text-sm">
-        <button
+      <div className="flex justify-end gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
           onClick={() => { setSelectedProfile(profile.id); setIsModalOpen(true); }}
-          className="text-accent-700 hover:underline"
         >
           Edit
-        </button>
-        <button onClick={() => openDeleteModal(profile.id)} className="text-danger-600 hover:underline">
+        </Button>
+        <Button size="sm" variant="danger" onClick={() => openDeleteModal(profile.id)}>
           Delete
-        </button>
+        </Button>
       </div>
     ) : null;
 
   return (
     <div>
-      {/* Edit/Add Camper Modal */}
-      {isModalOpen && (
-        <EditCamperModal
-          profileId={selectedProfile}
-          organizationId={organizationId}
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onSuccess={() => {
-            setSuccess(selectedProfile ? "Camper profile updated successfully" : "Camper profile created successfully");
-            setCursor(undefined);
-            setAllCampers([]);
-            void refetchProfiles();
-          }}
-        />
-      )}
+      {/* Edit/Add Camper Modal — always mounted so Dialog's own close transition
+          (slide-down on mobile) gets to play; its queries already gate on `isOpen`. */}
+      <EditCamperModal
+        profileId={selectedProfile}
+        organizationId={organizationId}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => {
+          setSuccess(selectedProfile ? "Camper profile updated successfully" : "Camper profile created successfully");
+          setCursor(undefined);
+          setAllCampers([]);
+          void refetchProfiles();
+        }}
+      />
 
-      {selectedIds.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-accent-200 bg-accent-50 px-3 py-2">
-          <Badge tone="info">{selectedIds.length} selected</Badge>
-          <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"} onClick={() => handleBulkTransition("APPROVE")}>
-            Approve Reg
-          </Button>
-          <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"} onClick={() => handleBulkTransition("WAITLIST")}>
-            Waitlist Reg
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT_REG"); setBulkReason(""); }}>
-            Reject Reg
-          </Button>
-          <Button size="sm" variant="secondary" loading={bulkTransition.isPending && bulkTransition.variables?.action === "ARCHIVE"} onClick={() => handleBulkTransition("ARCHIVE")}>
-            Archive Reg
-          </Button>
-          <Button size="sm" variant="danger" data-testid="bulk-delete-button" onClick={() => setBulkAction("DELETE")}>
-            Delete
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>Clear</Button>
-        </div>
-      )}
+      <BulkActionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
+        <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"} onClick={() => handleBulkTransition("APPROVE")}>
+          Approve Reg
+        </Button>
+        <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"} onClick={() => handleBulkTransition("WAITLIST")}>
+          Waitlist Reg
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT_REG"); setBulkReason(""); }}>
+          Reject Reg
+        </Button>
+        <Button size="sm" variant="secondary" loading={bulkTransition.isPending && bulkTransition.variables?.action === "ARCHIVE"} onClick={() => handleBulkTransition("ARCHIVE")}>
+          Archive Reg
+        </Button>
+        <Button size="sm" variant="danger" data-testid="bulk-delete-button" onClick={() => setBulkAction("DELETE")}>
+          Delete
+        </Button>
+      </BulkActionBar>
 
-      {/* Filters and Search */}
+      {/* Search — Campus/Status filtering lives on the Table's own per-column
+          filters below (desktop header row + mobile filter strip), so it
+          isn't duplicated here. */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-1 flex-wrap items-center gap-3">
-          <SearchBar containerClassName="w-64" placeholder="Search campers..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-          <Select
-            containerClassName="w-48"
-            value={campusFilter}
-            onChange={(e) => setCampusFilter(e.target.value === "all" ? "all" : e.target.value)}
-          >
-            <option value="all">All Campuses</option>
-            {campusesData?.map((campus: { id: string; name: string }) => (
-              <option key={campus.id} value={campus.id}>{campus.name}</option>
-            ))}
-          </Select>
-          <Select
-            aria-label="Registration Status"
-            containerClassName="w-48"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="">All Statuses</option>
-            {REGISTRATION_STATUSES.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </Select>
-        </div>
+        <SearchBar containerClassName="w-full sm:w-64" placeholder="Search campers..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onClear={() => setSearchTerm("")} />
         <Button onClick={() => { setSelectedProfile(null); setIsModalOpen(true); }}>Add Camper</Button>
       </div>
 

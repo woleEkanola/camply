@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "crypto";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { ensureSystemFields, SYSTEM_FIELD_REGISTRY } from "../src/server/registration/systemFieldRegistry";
 
 // Shared across specs — Playwright runs each test file in its own worker
@@ -172,6 +172,28 @@ export async function deleteStaffByEmail(email: string) {
   if (!user) return;
   await prisma.staffProfile.deleteMany({ where: { userId: user.id } });
   await prisma.user.delete({ where: { id: user.id } });
+}
+
+/**
+ * The shared `Table` component (src/components/ui/Table.tsx) dual-renders:
+ * a `<table>` gated `hidden md:block` and a card `<ul>` gated `md:hidden`
+ * both mount in the DOM at once, CSS deciding which one is visible. A plain
+ * `getByText`/`getByLabel`/`getByRole` match against table-row content or a
+ * per-column filter control resolves to both copies (the mobile filter
+ * strip intentionally reuses the same `aria-label` as its desktop
+ * counterpart, since it's the same logical control) and throws a strict-
+ * mode violation even though only one copy is ever visible — same class of
+ * duplicate-DOM issue as the login page's mobile/desktop OTP grids. Narrow
+ * any locator down to whichever copy is actually visible at the current
+ * viewport.
+ */
+export function onlyVisible(locator: Locator): Locator {
+  return locator.and(locator.page().locator(":visible"));
+}
+
+/** `onlyVisible(page.getByText(text))` — see `onlyVisible` for why this is needed. */
+export function visibleText(page: Page, text: string | RegExp) {
+  return onlyVisible(page.getByText(text));
 }
 
 export function emailInput(page: Page) {

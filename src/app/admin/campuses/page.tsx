@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
+import { useIsMobile } from "@/hooks/useMediaQuery";
+import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -14,6 +16,7 @@ import { Table, type Column } from "@/components/ui/Table";
 import { Dialog } from "@/components/ui/Dialog";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input } from "@/components/ui/Input";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -60,6 +63,36 @@ type CampusWithReps = {
   updatedAt: Date;
   reps?: { id: string; email?: string | null; firstName?: string | null; lastName?: string | null }[];
 };
+
+// Desktop's table cell has room for the full address inline (already wraps via the
+// column's `wrap: true`); on mobile it's the single biggest reason cards run long, so it
+// collapses behind a toggle there instead of always rendering 2-3 lines.
+function AddressCell({ address }: { address: string }) {
+  const isMobile = useIsMobile();
+  const [expanded, setExpanded] = useState(false);
+
+  if (!address) return <span className="text-neutral-400">—</span>;
+  if (!isMobile) return <>{address}</>;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={(e) => {
+          // The card's onRowClick opens the detail drawer — don't let the toggle trigger it.
+          e.stopPropagation();
+          setExpanded((v) => !v);
+        }}
+        className="inline-flex min-h-[32px] items-center gap-1 text-sm font-medium text-accent-700"
+        aria-expanded={expanded}
+      >
+        {expanded ? "Hide address" : "Show address"}
+        <ChevronDownIcon className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+      </button>
+      {expanded && <p className="mt-1 text-sm text-neutral-700">{address}</p>}
+    </div>
+  );
+}
 
 export default function CampusesPage() {
   // tRPC mutation hooks for bulk actions
@@ -732,14 +765,18 @@ export default function CampusesPage() {
         />
       ),
       className: "w-8",
+      mobileHidden: true,
     },
-    { header: "Name", accessor: "name", searchable: true },
+    { header: "Name", accessor: "name", searchable: true, primary: true },
     { header: "Code", accessor: (campus) => campus.campusCode || "-" },
     { header: "Order", accessor: (campus) => campus.displayOrder?.toString() ?? "0" },
     {
       header: "Address",
-      accessor: (campus) =>
-        [campus.address, campus.city, campus.state, campus.zipCode, campus.country].filter(Boolean).join(", "),
+      accessor: (campus) => (
+        <AddressCell
+          address={[campus.address, campus.city, campus.state, campus.zipCode, campus.country].filter(Boolean).join(", ")}
+        />
+      ),
       wrap: true,
       className: "max-w-xs",
     },
@@ -768,7 +805,10 @@ export default function CampusesPage() {
           return (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleCopySignupLink(campus.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopySignupLink(campus.id);
+                }}
                 className="inline-flex items-center rounded-md bg-success-50 px-2 py-1 text-xs font-medium text-success-700 hover:bg-success-100"
               >
                 {copiedLinkId === campus.id ? "Copied!" : "Copy Link"}
@@ -780,7 +820,10 @@ export default function CampusesPage() {
         if (canGenerateSignupLink) {
           return (
             <button
-              onClick={() => handleGenerateSignupLink(campus.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleGenerateSignupLink(campus.id);
+              }}
               disabled={generatingLinkFor === campus.id}
               className="inline-flex items-center rounded-md bg-accent-50 px-2 py-1 text-xs font-medium text-accent-700 hover:bg-accent-100 disabled:bg-neutral-100 disabled:text-neutral-400"
             >
@@ -796,20 +839,49 @@ export default function CampusesPage() {
       accessor: (campus) => {
         const signupLink = getSignupLinkForCampus(campus.id);
         if (!activeCamp || !signupLink) return <span className="text-neutral-400">—</span>;
-        const limitLabel = signupLink.quota > 0 ? signupLink.quota : "no limit";
+        const setQuotaButton = canManageQuota && (
+          <button
+            onClick={(e) => {
+              // This column is a body cell, not the `actions` footer — Table.tsx
+              // only stops propagation for that footer and the selection checkbox,
+              // so without this the click also bubbles to the card's onRowClick
+              // and opens the detail drawer underneath the quota dialog.
+              e.stopPropagation();
+              handleOpenQuotaModal(signupLink);
+            }}
+            className="inline-flex items-center rounded-md bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-200"
+          >
+            Set Quota
+          </button>
+        );
+        // 0 = unlimited (see the "Registration Quota (0 = unlimited)" field label below) —
+        // a bar implies a denominator that doesn't exist here, so stay text-only.
+        if (signupLink.quota <= 0) {
+          return (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-neutral-700">{signupLink.usedCount} / no limit</span>
+              {setQuotaButton}
+            </div>
+          );
+        }
+        const percent = Math.round((signupLink.usedCount / signupLink.quota) * 100);
         return (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-neutral-700">
-              {signupLink.usedCount} / {limitLabel}
-            </span>
-            {canManageQuota && (
-              <button
-                onClick={() => handleOpenQuotaModal(signupLink)}
-                className="inline-flex items-center rounded-md bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-200"
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="text-neutral-700">
+                {signupLink.usedCount} / {signupLink.quota}
+              </span>
+              <span
+                className={cn(
+                  "font-medium",
+                  percent >= 100 ? "text-danger-600" : percent >= 80 ? "text-warning-600" : "text-success-600"
+                )}
               >
-                Set Quota
-              </button>
-            )}
+                {percent}%
+              </span>
+            </div>
+            <ProgressBar percent={percent} className="max-w-[10rem]" />
+            {setQuotaButton}
           </div>
         );
       },
@@ -1029,14 +1101,7 @@ export default function CampusesPage() {
                       </span>
                     )}
                   </div>
-                  {campusStats.quota > 0 && (
-                    <div className="h-2 w-full rounded-full bg-neutral-100">
-                      <div
-                        className={cn("h-2 rounded-full", campusStats.percentUsed >= 100 ? "bg-danger-500" : campusStats.percentUsed >= 80 ? "bg-warning-500" : "bg-success-500")}
-                        style={{ width: `${Math.min(100, campusStats.percentUsed)}%` }}
-                      />
-                    </div>
-                  )}
+                  {campusStats.quota > 0 && <ProgressBar percent={campusStats.percentUsed} />}
                   {campusStats.quotaFullBehavior === "WAITLIST" && (
                     <p className="mt-2 text-xs text-neutral-500">Waitlist mode: excess submissions are accepted but waitlisted at approval.</p>
                   )}

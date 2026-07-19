@@ -144,7 +144,7 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
                 type="button"
                 disabled={disabled}
                 onClick={() => toggle(opt.value)}
-                className={`rounded-full border px-3 py-1.5 text-sm transition-all ${
+                className={`min-h-[40px] rounded-full border px-3 py-2 text-sm transition-all md:min-h-0 md:py-1.5 ${
                   selected.includes(opt.value)
                     ? "border-accent-600 bg-accent-50 text-accent-700 font-medium"
                     : error 
@@ -171,14 +171,14 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
           </label>
           <div className="space-y-1">
             {options.map((opt) => (
-              <label key={opt.value} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+              <label key={opt.value} className="flex min-h-[44px] cursor-pointer items-center gap-2 py-1.5 text-sm text-neutral-700 md:min-h-0 md:py-0">
                 <input
                   type="radio"
                   name={fieldId}
                   disabled={disabled}
                   checked={value === opt.value}
                   onChange={() => onChange(opt.value)}
-                  className={`h-4 w-4 text-accent-600 focus:ring-accent-500 ${
+                  className={`h-5 w-5 text-accent-600 focus:ring-accent-500 md:h-4 md:w-4 ${
                     error ? "border-danger-300" : "border-neutral-300"
                   }`}
                 />
@@ -220,13 +220,13 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
       const checked = value === true || value === "true";
       return (
         <div>
-          <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+          <label className="flex min-h-[44px] cursor-pointer items-center gap-2 py-1.5 text-sm text-neutral-700 md:min-h-0 md:py-0">
             <input
               type="checkbox"
               checked={checked}
               disabled={disabled}
               onChange={(e) => onChange(e.target.checked)}
-              className={`h-4 w-4 rounded text-accent-600 focus:ring-accent-500 ${
+              className={`h-5 w-5 rounded text-accent-600 focus:ring-accent-500 md:h-4 md:w-4 ${
                 error ? "border-danger-300" : "border-neutral-300"
               }`}
             />

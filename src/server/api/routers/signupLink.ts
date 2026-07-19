@@ -155,8 +155,21 @@ export const signupLinkRouter = createTRPCRouter({
       const orgId = currentUser.organizationId;
       if (!orgId) return null;
 
+      // Anchor the parent's "+ Add Camper" link to their own campus (derived from
+      // any existing camper) so a second child can't be silently routed to a
+      // different campus's signup link — a family is locked to one campus. New
+      // parents with no camper yet fall back to the org's newest active link.
+      const anchor = await ctx.prisma.camper.findFirst({
+        where: { userId: currentUser.id, deletedAt: null, homeCampusId: { not: null } },
+        select: { homeCampusId: true },
+      });
+
       const link = await ctx.prisma.signupLink.findFirst({
-        where: { campus: { organizationId: orgId }, active: true },
+        where: {
+          campus: { organizationId: orgId },
+          active: true,
+          ...(anchor?.homeCampusId ? { campusId: anchor.homeCampusId } : {}),
+        },
         orderBy: { createdAt: "desc" },
         include: { campus: { select: { name: true } } },
       });

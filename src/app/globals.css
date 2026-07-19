@@ -103,5 +103,30 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans);
+}
+
+@layer base {
+  /* iOS Safari zooms the viewport when a focused control's font-size is
+     under 16px. Shared primitives (Input/SearchBar/Button) already set
+     16px explicitly below `md`; this catches raw/hand-rolled controls
+     that don't go through those primitives. */
+  @media (max-width: 767px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+
+  /* Removes the ~300ms tap delay and double-tap-to-zoom on interactive
+     controls app-wide, so taps feel immediate on touch devices. */
+  button,
+  a,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
 }

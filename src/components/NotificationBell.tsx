@@ -44,7 +44,7 @@ export default function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto">
+        <div className="absolute right-[-60px] sm:right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto">
           <div className="flex items-center justify-between p-3 border-b">
             <span className="font-medium text-sm">Notifications</span>
             <button className="text-xs text-blue-600" onClick={() => markAllRead.mutate()}>Mark all read</button>

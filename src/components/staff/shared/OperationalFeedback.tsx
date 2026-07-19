@@ -37,7 +37,7 @@ export function SuccessOverlay({
   return (
     <div
       onClick={onDismiss}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-600 text-white p-6 cursor-pointer animate-fade-in transition-all"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-600 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-white cursor-pointer animate-fade-in transition-all"
     >
       <div className="flex flex-col items-center max-w-lg text-center space-y-6">
         <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
@@ -83,7 +83,7 @@ export function ErrorOverlay({ title = "Check-in Failed", message, onDismiss }: 
   return (
     <div
       onClick={onDismiss}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-rose-600 text-white p-6 cursor-pointer animate-fade-in"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-rose-600 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-white cursor-pointer animate-fade-in"
     >
       <div className="flex flex-col items-center max-w-md text-center space-y-6">
         <XCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
@@ -140,7 +140,7 @@ export function MedicalOverlay({
   onCancel,
 }: MedicalOverlayProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-amber-600 text-white p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-amber-600 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-white overflow-y-auto">
       <div className="flex flex-col max-w-xl w-full text-center space-y-6 py-6">
         <div className="flex flex-col items-center space-y-3">
           <ExclamationTriangleIcon className="h-20 w-20 md:h-24 md:w-24 text-amber-100 animate-bounce" />

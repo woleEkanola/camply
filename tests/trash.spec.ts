@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, visibleText } from "./helpers";
 
 test.describe("Admin: Trash (restore / permanent delete)", () => {
   test.describe.configure({ mode: "serial" });
@@ -36,14 +36,14 @@ test.describe("Admin: Trash (restore / permanent delete)", () => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/trash");
 
-    await expect(page.getByText(campus.name)).toBeVisible({ timeout: 10000 });
+    await expect(visibleText(page, campus.name)).toBeVisible({ timeout: 10000 });
 
     const row = page.locator("tr", { hasText: campus.name });
     await row.getByRole("button", { name: "Restore" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Restore", exact: true }).click();
 
     await expect(page.getByText("Item restored successfully")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(campus.name)).not.toBeVisible();
+    await expect(visibleText(page, campus.name)).not.toBeVisible();
 
     await expect
       .poll(async () => (await prisma.campus.findUniqueOrThrow({ where: { id: campusId! } })).deletedAt)
@@ -60,7 +60,7 @@ test.describe("Admin: Trash (restore / permanent delete)", () => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/trash");
 
-    await expect(page.getByText(campus.name)).toBeVisible({ timeout: 10000 });
+    await expect(visibleText(page, campus.name)).toBeVisible({ timeout: 10000 });
 
     const row = page.locator("tr", { hasText: campus.name });
     await row.getByRole("button", { name: "Delete Forever" }).click();

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/Button";
+import { BoltIcon, BoltSlashIcon } from "@heroicons/react/24/solid";
 
 interface CameraScannerProps {
   onScanSuccess: (decodedText: string) => void;
@@ -17,6 +18,8 @@ export function CameraScanner({ onScanSuccess, onScanFailure, active }: CameraSc
   const [devices, setDevices] = useState<any[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [isScanning, setIsScanning] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
   // Play audio beep using Web Audio API (no external file assets needed)
   const playBeep = () => {
@@ -90,6 +93,15 @@ export function CameraScanner({ onScanSuccess, onScanFailure, active }: CameraSc
         .then(() => {
           setIsScanning(true);
           setPermissionError(null);
+          // `torch` is a non-standard MediaTrackCapabilities field (supported on
+          // most Android rear cameras, not iOS Safari) — TypeScript's DOM lib
+          // doesn't know about it, hence the cast.
+          try {
+            const capabilities = html5Qrcode.getRunningTrackCapabilities() as MediaTrackCapabilities & { torch?: boolean };
+            setTorchSupported(!!capabilities.torch);
+          } catch {
+            setTorchSupported(false);
+          }
         })
         .catch((err) => {
           console.error("Failed to start scanner:", err);
@@ -97,6 +109,8 @@ export function CameraScanner({ onScanSuccess, onScanFailure, active }: CameraSc
         });
 
       return () => {
+        setTorchSupported(false);
+        setTorchOn(false);
         if (html5Qrcode.isScanning) {
           html5Qrcode
             .stop()
@@ -108,6 +122,17 @@ export function CameraScanner({ onScanSuccess, onScanFailure, active }: CameraSc
       };
     }
   }, [active, selectedDeviceId]);
+
+  const toggleTorch = async () => {
+    if (!scannerRef.current) return;
+    const next = !torchOn;
+    try {
+      await scannerRef.current.applyVideoConstraints({ advanced: [{ torch: next } as MediaTrackConstraintSet] });
+      setTorchOn(next);
+    } catch (err) {
+      console.warn("Failed to toggle torch:", err);
+    }
+  };
 
   if (!active) return null;
 
@@ -127,6 +152,20 @@ export function CameraScanner({ onScanSuccess, onScanFailure, active }: CameraSc
       </div>
 
       <div id={videoElementId} className="w-full h-full object-cover bg-neutral-950 rounded-lg" />
+
+      {torchSupported && (
+        <button
+          type="button"
+          onClick={toggleTorch}
+          className={`absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/10 backdrop-blur transition-colors ${
+            torchOn ? "bg-accent-500 text-white" : "bg-black/60 text-white hover:bg-black/70"
+          }`}
+          aria-label={torchOn ? "Turn off flashlight" : "Turn on flashlight"}
+          aria-pressed={torchOn}
+        >
+          {torchOn ? <BoltIcon className="h-5 w-5" /> : <BoltSlashIcon className="h-5 w-5" />}
+        </button>
+      )}
 
       {permissionError && (
         <div className="absolute inset-0 bg-neutral-950/90 flex flex-col items-center justify-center p-6 text-center z-20">

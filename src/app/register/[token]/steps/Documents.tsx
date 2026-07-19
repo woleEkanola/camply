@@ -44,6 +44,15 @@ function DocumentRow({
     },
   });
 
+  const deleteMutation = api.document.delete.useMutation({
+    onSuccess: () => {
+      onUploaded();
+    },
+    onError: (e) => {
+      setLocalError(e.message);
+    },
+  });
+
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -120,12 +129,26 @@ function DocumentRow({
       {localError && <p className="text-xs text-danger-600 mb-2">{localError}</p>}
 
       {isDone && existingDoc?.fileName && (
-        <p className="text-xs text-success-700">
-          {existingDoc.fileName}
-          {existingDoc.url && (
-            <a href={existingDoc.url} target="_blank" rel="noreferrer" className="ml-2 text-accent-600 underline">View</a>
-          )}
-        </p>
+        <div className="flex items-center justify-between text-xs text-success-700">
+          <span className="truncate pr-2">
+            {existingDoc.fileName}
+            {existingDoc.url && (
+              <a href={existingDoc.url} target="_blank" rel="noreferrer" className="ml-2 text-accent-600 underline">View</a>
+            )}
+          </span>
+          <button
+            type="button"
+            disabled={deleteMutation.isPending}
+            onClick={() => {
+              if (window.confirm("Are you sure you want to delete this document?")) {
+                deleteMutation.mutate({ id: existingDoc.id });
+              }
+            }}
+            className="text-danger-600 hover:underline font-medium cursor-pointer shrink-0 disabled:opacity-50"
+          >
+            {deleteMutation.isPending ? "Deleting..." : "Delete"}
+          </button>
+        </div>
       )}
 
       {!isDone && !uploading && (

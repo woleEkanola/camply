@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, visibleText } from "./helpers";
 
 test.describe("Super Admin/Owner: Camp CRUD and active-camp switching", () => {
   test.describe.configure({ mode: "serial" });
@@ -57,7 +57,7 @@ test.describe("Super Admin/Owner: Camp CRUD and active-camp switching", () => {
     await dialog.getByLabel("Name").fill(campName);
     await dialog.getByRole("button", { name: "Create Camp", exact: true }).click();
 
-    await expect(page.getByText(campName)).toBeVisible({ timeout: 10000 });
+    await expect(visibleText(page, campName)).toBeVisible({ timeout: 10000 });
 
     const camp = await prisma.camp.findFirstOrThrow({ where: { name: campName } });
     campId = camp.id;

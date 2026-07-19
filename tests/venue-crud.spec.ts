@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, visibleText } from "./helpers";
 
 test.describe("Admin: Venue CRUD scoped to a Camp", () => {
   test.describe.configure({ mode: "serial" });
@@ -26,7 +26,7 @@ test.describe("Admin: Venue CRUD scoped to a Camp", () => {
     await dialog.getByLabel("Registration Quota").fill("100");
     await dialog.getByRole("button", { name: "Add Venue", exact: true }).click();
 
-    await expect(page.getByText(venueName)).toBeVisible({ timeout: 10000 });
+    await expect(visibleText(page, venueName)).toBeVisible({ timeout: 10000 });
 
     const venue = await prisma.venue.findFirstOrThrow({ where: { name: venueName } });
     venueId = venue.id;
@@ -84,7 +84,11 @@ test.describe("Admin: Venue CRUD scoped to a Camp", () => {
     await row.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
 
-    await expect(page.getByText(venueName)).not.toBeVisible({ timeout: 10000 });
+    // visibleText, not a raw getByText — Table.tsx dual-renders a desktop <td>
+    // and a mobile card <div> from the same data; while the delete mutation's
+    // refetch is still in flight both stale copies are briefly in the DOM at
+    // once, which strict-mode-violates a bare (not.)toBeVisible() check.
+    await expect(visibleText(page, venueName)).not.toBeVisible({ timeout: 10000 });
 
     const deletedVenue = await prisma.venue.findUniqueOrThrow({ where: { id: venueId! } });
     expect(deletedVenue.deletedAt).not.toBeNull();

@@ -184,7 +184,7 @@ export default function ReviewProgress({ registration, review, isTwoStep }: Revi
       {verificationStatus === "COMPLETED" && review?.verifiedAt && (
         <p className="mt-2 text-xs text-neutral-500 text-center">
           {review.recommendation === "APPROVE"
-            ? `Endorsed by ${displayName(review.verifiedBy) ?? "a campus rep"} on ${new Date(review.verifiedAt).toLocaleDateString()}`
+            ? `Recommended by ${displayName(review.verifiedBy) ?? "a campus rep"} on ${new Date(review.verifiedAt).toLocaleDateString()}`
             : `Verified on ${new Date(review.verifiedAt).toLocaleDateString()}`}
         </p>
       )}
