@@ -26,6 +26,7 @@ import ChangesSinceReview from "./components/ChangesSinceReview";
 import { Badge } from "@/components/ui/Badge";
 import { isEndorsed } from "@/server/registration/endorsement";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
+import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { FunnelIcon } from "@heroicons/react/24/outline";
@@ -108,14 +109,12 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
         <strong>Consent Form</strong> means the parent authorization document attached to this registration. It is tracked separately from other required documents.
       </div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-neutral-100 pb-3">
         <div><span className="text-neutral-500">Camp</span><div className="font-medium text-neutral-900">{registration.camp?.name}</div></div>
         <div><span className="text-neutral-500">Campus</span><div className="font-medium text-neutral-900">{registration.campus?.name}</div></div>
-        <div><span className="text-neutral-500">Date of Birth</span><div className="font-medium text-neutral-900">{registration.camper?.dateOfBirth ? new Date(registration.camper.dateOfBirth as any).toLocaleDateString() : "—"}</div></div>
-        <div><span className="text-neutral-500">Parent Email</span><div className="font-medium text-neutral-900">{(registration.camper as any)?.user?.email}</div></div>
-        <div><span className="text-neutral-500">Allergies</span><div className="font-medium text-neutral-900">{(registration.camper as any)?.allergies || "None reported"}</div></div>
-        <div><span className="text-neutral-500">Medical Conditions</span><div className="font-medium text-neutral-900">{(registration.camper as any)?.medicalConditions || "None reported"}</div></div>
       </div>
+
+      <CamperProfileView camper={registration.camper as any} />
 
       {tribes && tribes.length > 0 && (
         <div>
@@ -315,7 +314,10 @@ export default function RegistrationsPage() {
 
   const invalidateRegistrations = () => {
     setSelectedIds([]);
+    setCursor(undefined);
+    setAccumulatedItems([]);
     void utils.registration.adminList.invalidate();
+    void utils.registration.getAdminListStats.invalidate();
   };
 
   const bulkTransition = api.registration.bulkTransition.useMutation({
@@ -342,6 +344,15 @@ export default function RegistrationsPage() {
 
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
 
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [accumulatedItems, setAccumulatedItems] = useState<any[]>([]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCursor(undefined);
+    setAccumulatedItems([]);
+  }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery]);
+
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
       organizationId,
@@ -350,19 +361,41 @@ export default function RegistrationsPage() {
       status: filterStatus || undefined,
       reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
       q: debouncedSearchQuery || undefined,
+      cursor,
       limit: 50,
     },
     { enabled: !!organizationId }
   );
 
-  const registrations = data?.items ?? [];
+  // Fetch accurate total counts for dashboard cards
+  const { data: statsData } = api.registration.getAdminListStats.useQuery(
+    {
+      organizationId,
+      campId: activeCamp?.id,
+      campusId: filterCampus || undefined,
+    },
+    { enabled: !!organizationId }
+  );
 
-  const kpi = STATUS_OPTIONS.reduce<Record<string, number>>((acc, s) => {
-    acc[s] = registrations.filter((r: any) => r.status === s).length;
-    return acc;
-  }, {});
-  const awaitingVettingCount = registrations.filter((r: any) => r.status === "PENDING" && !isEndorsed(r.review)).length;
-  const awaitingFinalCount = registrations.filter((r: any) => r.status === "PENDING" && isEndorsed(r.review)).length;
+  useEffect(() => {
+    if (data?.items) {
+      if (cursor === undefined) {
+        setAccumulatedItems(data.items);
+      } else {
+        setAccumulatedItems((prev) => {
+          const prevIds = new Set(prev.map((item) => item.id));
+          const newItems = data.items.filter((item) => !prevIds.has(item.id));
+          return [...prev, ...newItems];
+        });
+      }
+    }
+  }, [data?.items, cursor]);
+
+  const kpi = statsData?.countsByStatus ?? {};
+  const awaitingVettingCount = statsData?.awaitingVetting ?? 0;
+  const awaitingFinalCount = statsData?.awaitingFinal ?? 0;
+
+  const registrations = accumulatedItems;
 
   const tableColumns: Column<any>[] = [
     {
@@ -488,10 +521,29 @@ export default function RegistrationsPage() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </Select>
-            <Select data-testid="registration-status-filter" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <Select
+              data-testid="registration-status-filter"
+              value={reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val.startsWith("REVIEW_")) {
+                  setFilterStatus("");
+                  setReviewStateFilter(val.replace("REVIEW_", "") as any);
+                } else {
+                  setFilterStatus(val);
+                  setReviewStateFilter("");
+                }
+              }}
+            >
               <option value="">All Statuses</option>
+              {isTwoStep && (
+                <>
+                  <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval (Recommended)</option>
+                  <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting (Pending)</option>
+                </>
+              )}
               {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                <option key={s} value={s}>{s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}</option>
               ))}
             </Select>
           </>
@@ -506,11 +558,11 @@ export default function RegistrationsPage() {
         title="Filters"
         footer={
           <div className="flex w-full gap-2">
-            {(filterCampus || filterStatus) && (
+            {(filterCampus || filterStatus || reviewStateFilter) && (
               <Button
                 variant="secondary"
                 className="flex-1"
-                onClick={() => { setFilterCampus(""); setFilterStatus(""); }}
+                onClick={() => { setFilterCampus(""); setFilterStatus(""); setReviewStateFilter(""); }}
               >
                 Clear filters
               </Button>
@@ -528,10 +580,30 @@ export default function RegistrationsPage() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </Select>
-          <Select label="Status" data-testid="registration-status-filter" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <Select
+            label="Status"
+            data-testid="registration-status-filter"
+            value={reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val.startsWith("REVIEW_")) {
+                setFilterStatus("");
+                setReviewStateFilter(val.replace("REVIEW_", "") as any);
+              } else {
+                setFilterStatus(val);
+                setReviewStateFilter("");
+              }
+            }}
+          >
             <option value="">All Statuses</option>
+            {isTwoStep && (
+              <>
+                <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval (Recommended)</option>
+                <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting (Pending)</option>
+              </>
+            )}
             {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+              <option key={s} value={s}>{s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}</option>
             ))}
           </Select>
         </div>
@@ -547,9 +619,23 @@ export default function RegistrationsPage() {
         selectable
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
-        isLoading={isLoading}
+        isLoading={isLoading && registrations.length === 0}
         emptyTitle="No registrations match your filters"
         emptyDescription="Try adjusting search, centre, or status filters."
+        footer={
+          data?.nextCursor ? (
+            <div className="flex justify-center p-3 border-t border-neutral-100">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setCursor(data.nextCursor)}
+                loading={isLoading}
+              >
+                Load More
+              </Button>
+            </div>
+          ) : null
+        }
         actions={(row) =>
           row.status === "PENDING" ? (
             <div className="flex flex-wrap justify-end gap-2">

@@ -1,25 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import { api } from "@/utils/trpc";
 import { Drawer } from "@/components/ui/Drawer";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardBody } from "@/components/ui/Card";
-import { Dialog } from "@/components/ui/Dialog";
-
-function age(dob: string | Date | null | undefined) {
-  if (!dob) return null;
-  const diff = Date.now() - new Date(dob).getTime();
-  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
-}
-
-function formatDate(dob: string | Date | null | undefined) {
-  if (!dob) return "—";
-  return new Date(dob).toLocaleDateString();
-}
+import { CamperProfileView } from "./CamperProfileView";
 
 export function CamperQuickProfileDrawer({ camperId, open, onClose }: { camperId: string | null; open: boolean; onClose: () => void }) {
-  const [isPhotoOpen, setIsPhotoOpen] = useState(false);
   const { data: camper } = api.camper.getById.useQuery(
     { id: camperId ?? "" },
     { enabled: !!camperId }
@@ -31,32 +18,6 @@ export function CamperQuickProfileDrawer({ camperId, open, onClose }: { camperId
     <Drawer open={open} onClose={onClose} title={camper?.name ?? "Camper Profile"} width="lg">
       {camper && (
         <div className="space-y-4">
-          <Card>
-            <CardBody>
-              <div className="flex items-center gap-3">
-                {camper.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={camper.photoUrl}
-                    alt=""
-                    className="h-14 w-14 rounded-full object-cover cursor-pointer border border-neutral-200 hover:scale-105 transition-transform"
-                    onClick={() => setIsPhotoOpen(true)}
-                  />
-                ) : (
-                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-100 text-lg font-medium text-accent-700">
-                    {camper.name?.[0]}
-                  </span>
-                )}
-                <div>
-                  <h3 className="text-lg font-semibold text-neutral-900">{camper.name}</h3>
-                  <div className="text-sm text-neutral-500">
-                    {[age(camper.dateOfBirth) ? `${age(camper.dateOfBirth)}y` : null, camper.gender].filter(Boolean).join(" · ") || "—"}
-                  </div>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-
           <Card>
             <CardBody>
               <h4 className="mb-2 text-sm font-semibold text-neutral-900">Registration</h4>
@@ -71,59 +32,7 @@ export function CamperQuickProfileDrawer({ camperId, open, onClose }: { camperId
             </CardBody>
           </Card>
 
-          <Card>
-            <CardBody>
-              <h4 className="mb-2 text-sm font-semibold text-neutral-900">Medical / Emergency</h4>
-              <div className="space-y-2 text-sm">
-                {camper.allergies && <div className="rounded-md bg-danger-50 p-2 text-danger-800"><span className="font-medium">Allergies:</span> {camper.allergies}</div>}
-                {camper.medicalConditions && <div className="rounded-md bg-danger-50 p-2 text-danger-800"><span className="font-medium">Conditions:</span> {camper.medicalConditions}</div>}
-                {camper.medications && <div><span className="text-neutral-500">Medications:</span> {camper.medications}</div>}
-                {camper.dietaryRestrictions && <div><span className="text-neutral-500">Dietary:</span> {camper.dietaryRestrictions}</div>}
-                {camper.emergencyContactName && <div><span className="text-neutral-500">{camper.relationship ?? "Emergency"}:</span> {camper.emergencyContactName} {camper.emergencyContactPhone && `(${camper.emergencyContactPhone})`}</div>}
-                {camper.parentPhone && <div><span className="text-neutral-500">Parent Phone:</span> {camper.parentPhone}</div>}
-                {camper.teenPhone && <div><span className="text-neutral-500">Teen Phone:</span> {camper.teenPhone}</div>}
-                {!camper.allergies && !camper.medicalConditions && !camper.medications && !camper.dietaryRestrictions && !camper.emergencyContactName && !camper.parentPhone && !camper.teenPhone && (
-                  <div className="text-neutral-500">No medical or emergency information on file.</div>
-                )}
-              </div>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardBody>
-              <h4 className="mb-2 text-sm font-semibold text-neutral-900">Parent / Guardian</h4>
-              <div className="text-sm">
-                <div>{camper.user?.firstName} {camper.user?.lastName}</div>
-                <div className="text-neutral-500">{camper.user?.email}</div>
-              </div>
-            </CardBody>
-          </Card>
-
-          {camper.fieldValues && camper.fieldValues.length > 0 && (
-            <Card>
-              <CardBody>
-                <h4 className="mb-2 text-sm font-semibold text-neutral-900">Custom Profile Details</h4>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {camper.fieldValues.map((fv: any) => (
-                    <div key={fv.id}>
-                      <span className="text-neutral-500 block text-[11px] uppercase font-semibold">{fv.field?.label || fv.field?.name || "Field"}:</span>
-                      <span className="text-neutral-800 font-medium">{fv.value || "—"}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardBody>
-            </Card>
-          )}
-
-          <Dialog open={isPhotoOpen} onClose={() => setIsPhotoOpen(false)} title="Full Teen Photo">
-            <div className="flex justify-center p-2 bg-neutral-900 rounded-lg overflow-hidden border border-neutral-800">
-              <img
-                src={camper.photoUrl || undefined}
-                alt={camper.name || ""}
-                className="max-h-[70vh] max-w-full object-contain rounded-md"
-              />
-            </div>
-          </Dialog>
+          <CamperProfileView camper={camper as any} />
         </div>
       )}
     </Drawer>

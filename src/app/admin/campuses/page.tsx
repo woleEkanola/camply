@@ -17,6 +17,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input } from "@/components/ui/Input";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SearchBar } from "@/components/ui/SearchBar";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -248,6 +249,10 @@ export default function CampusesPage() {
   const [selectedAdmins, setSelectedAdmins] = useState<string[]>([]);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [generatingLinkFor, setGeneratingLinkFor] = useState<string | null>(null);
+  // Click log state
+  const [clickLogLinkId, setClickLogLinkId] = useState<string | null>(null);
+  const [clickLogCampusName, setClickLogCampusName] = useState<string>("");
+  const [repSearchQuery, setRepSearchQuery] = useState("");
 
   const { data: session, status } = useSession({
     required: true,
@@ -448,6 +453,7 @@ export default function CampusesPage() {
   // Open admin management modal
   const openAdminModal = (campusId: string) => {
     setSelectedCampus(campusId);
+    setRepSearchQuery("");
     setIsAdminModalOpen(true);
   };
 
@@ -719,6 +725,12 @@ export default function CampusesPage() {
     return signupLinks.find((link: SignupLink) => link.campusId === campusId);
   };
 
+  // Click log query — only runs when a link is selected
+  const { data: clickLogData, isLoading: isLoadingClickLog } = api.signupLink.getClickLog.useQuery(
+    { signupLinkId: clickLogLinkId ?? "" },
+    { enabled: !!clickLogLinkId }
+  );
+
   // Generate signup link for a campus
   const handleGenerateSignupLink = (campusId: string) => {
     setGeneratingLinkFor(campusId);
@@ -803,7 +815,7 @@ export default function CampusesPage() {
         if (!activeCamp) return <span className="text-warning-600">No active camp set</span>;
         if (signupLink) {
           return (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -814,6 +826,17 @@ export default function CampusesPage() {
                 {copiedLinkId === campus.id ? "Copied!" : "Copy Link"}
               </button>
               <span className="text-xs text-neutral-500">Signup Link: {signupLink.active ? "Active" : "Inactive"}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setClickLogLinkId(signupLink.id);
+                  setClickLogCampusName(campus.name);
+                }}
+                className="inline-flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-200"
+              >
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                View Log
+              </button>
             </div>
           );
         }
@@ -995,14 +1018,27 @@ export default function CampusesPage() {
             For campus: <span className="font-medium">{campuses.find((c) => c.id === selectedCampus)?.name}</span>
           </p>
         )}
+        <div className="mb-3">
+          <SearchBar
+            placeholder="Search candidates by name or email..."
+            value={repSearchQuery}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRepSearchQuery(e.target.value)}
+            onClear={() => setRepSearchQuery("")}
+          />
+        </div>
         <div className="mb-4 max-h-60 overflow-y-auto rounded-md border border-neutral-200 p-2">
           <p className="mb-2 text-sm font-medium text-neutral-700">
             Assign as Rep — any active user, regardless of their existing role (e.g. a Teacher can also be a Campus Rep)
           </p>
-          {availableAdmins.length === 0 ? (
-            <p className="text-sm text-neutral-500">No users found.</p>
-          ) : (
-            availableAdmins.map((admin) => (
+          {(() => {
+            const filteredAdmins = availableAdmins.filter((admin) => {
+              const fullName = `${admin.firstName ?? ""} ${admin.lastName ?? ""} ${admin.email}`.toLowerCase();
+              return fullName.includes(repSearchQuery.toLowerCase());
+            });
+            if (filteredAdmins.length === 0) {
+              return <p className="text-sm text-neutral-500">No users found.</p>;
+            }
+            return filteredAdmins.map((admin) => (
               <label key={admin.id} className="flex items-center gap-2 py-1 text-sm text-neutral-700">
                 <input
                   type="checkbox"
@@ -1013,8 +1049,8 @@ export default function CampusesPage() {
                 {admin.firstName || admin.lastName ? `${admin.firstName ?? ""} ${admin.lastName ?? ""}`.trim() : admin.email}
                 {(admin as any).role && <span className="text-xs text-neutral-400">({(admin as any).role})</span>}
               </label>
-            ))
-          )}
+            ));
+          })()}
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setIsAdminModalOpen(false)}>Cancel</Button>
@@ -1146,6 +1182,83 @@ export default function CampusesPage() {
           <Button loading={updateQuotaMutation.isPending} onClick={handleSaveQuota}>Save Quota</Button>
         </div>
       </Dialog>
+
+      {/* Click Log Drawer */}
+      <Drawer
+        open={!!clickLogLinkId}
+        onClose={() => setClickLogLinkId(null)}
+        title={`Link Click Log — ${clickLogCampusName}`}
+        width="lg"
+      >
+        {isLoadingClickLog ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-accent-600" />
+          </div>
+        ) : !clickLogData || clickLogData.items.length === 0 ? (
+          <div className="py-12 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100">
+              <svg className="h-6 w-6 text-neutral-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+            </div>
+            <p className="text-sm font-medium text-neutral-700">No clicks yet</p>
+            <p className="mt-1 text-xs text-neutral-400">Clicks will appear here as people open this signup link.</p>
+          </div>
+        ) : (
+          <div>
+            <p className="mb-4 text-xs text-neutral-500">
+              {clickLogData.total} total click{clickLogData.total !== 1 ? "s" : ""} on this link
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-neutral-200">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-neutral-200 bg-neutral-50 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    <th className="px-4 py-2.5">Time</th>
+                    <th className="px-4 py-2.5">Name</th>
+                    <th className="px-4 py-2.5">Link</th>
+                    <th className="px-4 py-2.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {clickLogData.items.map((click) => (
+                    <tr key={click.id} className="bg-white hover:bg-neutral-50">
+                      <td className="whitespace-nowrap px-4 py-3 text-neutral-700">
+                        <div className="font-medium">{new Date(click.clickedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</div>
+                        <div className="text-xs text-neutral-400">{new Date(click.clickedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {click.name ? (
+                          <div>
+                            <div className="font-medium text-neutral-900">{click.name}</div>
+                            {click.email && <div className="text-xs text-neutral-400">{click.email}</div>}
+                          </div>
+                        ) : (
+                          <span className="text-neutral-400 italic">Anonymous</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <code className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-700">/register/{click.linkUrl}</code>
+                      </td>
+                      <td className="px-4 py-3">
+                        {click.name ? (
+                          click.registered ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-success-100 px-2 py-0.5 text-xs font-medium text-success-700">
+                              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" /></svg>
+                              Registered
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-warning-100 px-2 py-0.5 text-xs font-medium text-warning-700">Clicked only</span>
+                          )
+                        ) : (
+                          <span className="text-neutral-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </Drawer>
     </AppShell>
   );
 }

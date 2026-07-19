@@ -1649,6 +1649,71 @@ export const registrationRouter = createTRPCRouter({
       });
     }),
 
+  getAdminListStats: protectedProcedure
+    .input(z.object({
+      organizationId: z.string(),
+      campId: z.string().optional(),
+      campusId: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      let campusFilter: Record<string, unknown> = { organizationId: input.organizationId };
+
+      if (!isAdmin) {
+        if ((currentUser.managedCampuses?.length ?? 0) === 0) throw new TRPCError({ code: "FORBIDDEN" });
+        const managed = await ctx.prisma.campus.findMany({
+          where: { organizationId: input.organizationId, reps: { some: { id: currentUser.id } } },
+          select: { id: true },
+        });
+        campusFilter = { organizationId: input.organizationId, id: { in: managed.map((c) => c.id) } };
+      }
+
+      const baseWhere: Record<string, unknown> = {
+        campus: campusFilter,
+        deletedAt: null,
+        ...(input.campId && { campId: input.campId }),
+        ...(input.campusId && { campusId: input.campusId }),
+      };
+
+      const statusCounts = await ctx.prisma.registration.groupBy({
+        by: ["status"],
+        where: baseWhere,
+        _count: { _all: true },
+      });
+      const countsByStatus = Object.fromEntries(statusCounts.map((s) => [s.status, s._count._all]));
+
+      const awaitingVetting = await ctx.prisma.registration.count({
+        where: {
+          ...baseWhere,
+          status: "PENDING",
+          OR: [
+            { review: null },
+            { review: { NOT: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } } }
+          ]
+        }
+      });
+
+      const awaitingFinal = await ctx.prisma.registration.count({
+        where: {
+          ...baseWhere,
+          status: "PENDING",
+          review: {
+            verificationStatus: "COMPLETED",
+            recommendation: "APPROVE"
+          }
+        }
+      });
+
+      return {
+        countsByStatus,
+        awaitingVetting,
+        awaitingFinal,
+      };
+    }),
+
   // Admin list with server-side pagination/filter/sort (PRD Part 5 §4-7)
   adminList: protectedProcedure
     .input(z.object({

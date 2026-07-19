@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useCallback, useRef } from "react";
+import { useReducer, useEffect, useCallback, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/utils/trpc";
@@ -37,6 +37,12 @@ export function RegistrationWizard({ token }: { token: string }) {
   const [state, dispatch] = useReducer(wizardReducer, token, createInitialState);
   const router = useRouter();
   const hydratedRef = useRef(false);
+
+  // Collect browser metadata once on mount for the click log
+  const [clickMeta, setClickMeta] = useState<{ userAgent: string } | null>(null);
+  useEffect(() => {
+    setClickMeta({ userAgent: navigator.userAgent });
+  }, []);
 
   // Restore wizard state from localStorage on client mount so refreshing
   // mid-flow — or the mobile browser discarding a backgrounded tab, which
@@ -94,7 +100,15 @@ export function RegistrationWizard({ token }: { token: string }) {
     data: signupData,
     isLoading: isValidating,
     error: validationError,
-  } = api.signupLink.validateToken.useQuery({ token }, { retry: false });
+  } = api.signupLink.validateToken.useQuery(
+    { token, userAgent: clickMeta?.userAgent },
+    { retry: false, enabled: clickMeta !== null }
+  );
+
+  // linkClickBack — called once after a previously-anonymous visitor logs in
+  const linkClickBackMutation = api.signupLink.linkClickBack.useMutation();
+  const linkBackFiredRef = useRef(false);
+  const { data: session, status: sessionStatus } = useSession();
 
   useEffect(() => {
     if (signupData) {
@@ -137,7 +151,6 @@ export function RegistrationWizard({ token }: { token: string }) {
   // first decision is safe.
   const searchParams = useSearchParams();
   const shouldGoToHub = searchParams.get("step") === "hub";
-  const { data: session, status: sessionStatus } = useSession();
   const hubHandledRef = useRef(false);
 
   useEffect(() => {
@@ -154,6 +167,20 @@ export function RegistrationWizard({ token }: { token: string }) {
       dispatch({ type: "GO_TO", step: "IDENTITY" });
     }
   }, [shouldGoToHub, signupData, session, sessionStatus, state.step]);
+
+  // Once a previously-anonymous visitor successfully logs in or creates an account,
+  // retroactively attach their userId to the anonymous click row so the admin log
+  // can show their name. Fires at most once per wizard session.
+  useEffect(() => {
+    if (linkBackFiredRef.current) return;
+    if (sessionStatus !== "authenticated" || !session?.user?.id) return;
+    if (!signupData?.signupLinkId) return;
+    linkBackFiredRef.current = true;
+    linkClickBackMutation.mutate({
+      signupLinkId: signupData.signupLinkId,
+      userId: session.user.id,
+    });
+  }, [sessionStatus, session, signupData]);
 
   useEffect(() => {
     if (validationError && state.step === "LOADING") {
