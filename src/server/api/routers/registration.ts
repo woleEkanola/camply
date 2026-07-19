@@ -1707,10 +1707,15 @@ export const registrationRouter = createTRPCRouter({
         }
       });
 
+      const totalCount = await ctx.prisma.registration.count({
+        where: baseWhere
+      });
+
       return {
         countsByStatus,
         awaitingVetting,
         awaitingFinal,
+        totalCount,
       };
     }),
 
@@ -1789,6 +1794,86 @@ export const registrationRouter = createTRPCRouter({
         nextCursor = next?.id;
       }
 
-      return { items, nextCursor };
+      const totalCount = await ctx.prisma.registration.count({ where });
+
+      return { items, nextCursor, totalCount };
+    }),
+
+  reassignCampus: protectedProcedure
+    .input(z.object({
+      registrationId: z.string(),
+      newCampusId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+
+      await assertOrgAdmin(ctx, registration.campus.organizationId);
+
+      const updated = await ctx.prisma.registration.update({
+        where: { id: input.registrationId },
+        data: { campusId: input.newCampusId },
+      });
+
+      // Log audit event
+      await ctx.prisma.auditLog.create({
+        data: {
+          organizationId: registration.campus.organizationId,
+          registrationId: registration.id,
+          actorId: currentUser.id,
+          action: "REGISTRATION_TRANSFERRED_CAMPUS",
+          previousValue: { campusId: registration.campusId } as any,
+          newValue: { campusId: input.newCampusId } as any,
+        },
+      });
+
+      return updated;
+    }),
+
+  bulkReassignCampus: protectedProcedure
+    .input(z.object({
+      ids: z.array(z.string()).min(1),
+      newCampusId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      // Fetch first registration to check organizational authorization
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.ids[0] },
+        include: { campus: true },
+      });
+
+      await assertOrgAdmin(ctx, registration.campus.organizationId);
+
+      // Perform update inside transaction
+      await ctx.prisma.$transaction(
+        input.ids.map((id) =>
+          ctx.prisma.registration.update({
+            where: { id },
+            data: { campusId: input.newCampusId },
+          })
+        )
+      );
+
+      // Create audit logs in bulk
+      await ctx.prisma.auditLog.createMany({
+        data: input.ids.map((id) => ({
+          organizationId: registration.campus.organizationId,
+          registrationId: id,
+          actorId: currentUser.id,
+          action: "REGISTRATION_TRANSFERRED_CAMPUS",
+          previousValue: { campusId: "bulk_transfer" } as any,
+          newValue: { campusId: input.newCampusId } as any,
+        })),
+      });
+
+      return { success: true, count: input.ids.length };
     }),
 });
