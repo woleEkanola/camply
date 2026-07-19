@@ -29,6 +29,11 @@ export type SideEffectType =
 const MAX_ATTEMPTS = 5;
 const APP_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3001";
 
+/** Email clients strip data: URIs from <img src> — only a hosted http(s) URL or (for the in-app template preview) a data URI is safe to render. */
+function isRenderableQrSrc(value: string | undefined): value is string {
+  return !!value && (value.startsWith("data:image") || value.startsWith("http://") || value.startsWith("https://"));
+}
+
 /** Queues a post-transition side effect (email/notification) in the DB-backed outbox (PRD Part 6 §3, §16). */
 export async function enqueueSideEffect(registrationId: string, type: SideEffectType) {
   return prisma.sideEffect.create({ data: { registrationId, type } });
@@ -63,7 +68,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
     if (!loaded || !loaded.channels.includes("EMAIL")) { await hardcodedFn(); return; }
 
     try {
-      const qrCode = variables.qr_code?.startsWith("data:image") ? variables.qr_code : undefined;
+      const qrCode = isRenderableQrSrc(variables.qr_code) ? variables.qr_code : undefined;
       
       // Resolve from-address and replyTo
       const { from, replyTo } = await resolveFromAddress({
@@ -106,7 +111,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
       if (!registration.qrToken || !registration.registrationNumber) {
         throw new Error("Cannot send acceptance email before QR token and registration number are assigned.");
       }
-      const qrDataUrl = await qrDataUrlForToken(registration.qrToken);
+      const qrImageUrl = `${APP_URL}/api/qr/${registration.qrToken}`;
       await tryTemplateEmail("REGISTRATION_APPROVED", {
         parent_name: parentEmail,
         camper_name: camperName,
@@ -114,7 +119,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
         centre_name: registration.campus.name,
         registration_number: registration.registrationNumber,
         reporting_date: registration.camp.arrivalDate?.toDateString() ?? "",
-        qr_code: qrDataUrl,
+        qr_code: qrImageUrl,
         registration_url: viewUrl,
         tribe_name: registration.tribe?.name ?? "",
         tribe_color: registration.tribe?.color ?? "",
@@ -125,7 +130,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
           campName: registration.camp.name, centreName: registration.campus.name,
           registrationNumber: registration.registrationNumber!,
           reportingDate: registration.camp.arrivalDate?.toDateString(),
-          qrDataUrl, viewUrl,
+          qrSrc: qrImageUrl, viewUrl,
           remindersHtml: registration.camp.remindersHtml,
           tribeName: registration.tribe?.name, tribeColor: registration.tribe?.color,
           orgSlug,

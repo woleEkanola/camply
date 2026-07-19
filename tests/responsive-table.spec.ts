@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { loginWithPassword, getFixtureOrgContext } from "./helpers";
+import { loginWithPassword, getFixtureOrgContext, ensureCamperSignupLink } from "./helpers";
 
 /**
  * Table.tsx dual-renders a desktop <table> (`hidden md:block`) and a mobile
@@ -50,6 +50,10 @@ test.describe("Responsive table — mobile cards", () => {
 
   test("setting a numeric quota renders it as a progress bar", async ({ page }) => {
     const { campusName } = await getFixtureOrgContext();
+    // The quota UI (Set Quota button, used/limit column) only renders once the
+    // campus has a SignupLink — quota is a SignupLink field, not a Campus one.
+    // Idempotent: reuses an existing link or creates+activates one.
+    await ensureCamperSignupLink();
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campuses");

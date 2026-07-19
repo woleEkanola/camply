@@ -43,8 +43,50 @@ export const DEFAULT_TEMPLATES: Record<string, DefaultTemplate> = {
         ] },
         { type: "paragraph" },
         { type: "paragraph", content: [{ type: "text", text: "Please present the QR code below during check-in." }] },
-        { type: "paragraph", content: [{ type: "text", text: "{{qr_code}}" }] },
         { type: "emailButton", attrs: { label: "View Registration", href: "{{registration_url}}" } },
+        { type: "paragraph" },
+        { type: "heading", attrs: { level: 3 }, content: [{ type: "text", text: "What's next" }] },
+        {
+          type: "orderedList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Save this email for check-in" }]
+                }
+              ]
+            },
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Present the QR code at check-in" }]
+                }
+              ]
+            },
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Arrive before the reporting time" }]
+                }
+              ]
+            },
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Bring any required items listed in your welcome packet" }]
+                }
+              ]
+            }
+          ]
+        }
       ],
     },
   },
@@ -92,6 +134,8 @@ export const DEFAULT_TEMPLATES: Record<string, DefaultTemplate> = {
         ] },
         { type: "paragraph", content: [{ type: "text", text: "Please note that this registration is currently pending review and approval by our camp administration. We will verify the details and documents shortly and notify you via email once a decision has been made." }] },
         { type: "paragraph", content: [{ type: "text", text: "If we require any changes or additional information, we will send you a correction request with instructions." }] },
+        { type: "paragraph" },
+        { type: "emailButton", attrs: { label: "View Registration", href: "{{registration_url}}" } },
         { type: "paragraph" },
         { type: "paragraph", content: [{ type: "text", text: "Thank you,\nThe Camply Team" }] },
       ],
@@ -215,6 +259,40 @@ export const DEFAULT_TEMPLATES: Record<string, DefaultTemplate> = {
         { type: "paragraph", content: [{ type: "text", text: "Or copy and paste this link into your browser:" }] },
         { type: "paragraph", content: [{ type: "text", text: "{{verify_url}}" }] },
         { type: "paragraph", content: [{ type: "text", text: "Once verified, you'll be able to complete your camper's registration." }] },
+        { type: "paragraph" },
+        { type: "heading", attrs: { level: 3 }, content: [{ type: "text", text: "What's next" }] },
+        {
+          type: "orderedList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Verify your email address" }]
+                }
+              ]
+            },
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Create a camper profile" }]
+                }
+              ]
+            },
+            {
+              type: "listItem",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Register for a camp" }]
+                }
+              ]
+            }
+          ]
+        }
       ],
     },
   },

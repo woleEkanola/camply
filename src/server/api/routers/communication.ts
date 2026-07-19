@@ -655,7 +655,9 @@ export const communicationRouter = createTRPCRouter({
       if (isEventKey) {
         let qrDataUrl: string | undefined;
         if (input.event === "REGISTRATION_APPROVED") {
-          qrDataUrl = variables.qr_code ?? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+          qrDataUrl = variables.qr_code?.startsWith("data:image")
+            ? variables.qr_code
+            : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
         }
 
         const renderResult = await renderEmailWithEvent({
