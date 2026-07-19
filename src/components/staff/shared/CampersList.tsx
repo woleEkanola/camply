@@ -14,6 +14,7 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
 import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { useSession } from "next-auth/react";
 
 function age(dob: string | Date | null | undefined) {
   if (!dob) return null;
@@ -55,7 +56,7 @@ interface CampersListProps {
 const REGISTRATION_STATUSES = [
   { value: "APPROVED", label: "Approved" },
   { value: "CHECKED_IN", label: "Checked In" },
-  { value: "COMPLETED", label: "Completed" },
+  { value: "COMPLETED", label: "Checked Out" },
 ];
 
 const GENDERS = [
@@ -72,6 +73,10 @@ export function CampersList({
   emptyTitle = "No campers found",
   emptyDescription = "Try adjusting your filters or check back later.",
 }: CampersListProps) {
+  const { data: session } = useSession();
+  const user = session?.user;
+  const isCampusRep = user?.role === "SUPER_ADMIN" || user?.role === "OWNER" || user?.role === "ADMIN" || user?.role === "CAMPUS_REPRESENTATIVE" || (user?.role === "TEACHER" && ((user as any)?.managedCampuses?.length ?? 0) > 0);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [campusFilter, setCampusFilter] = useState<string | "all">("all");
   const [statusFilter, setStatusFilter] = useState("");
@@ -206,7 +211,7 @@ export function CampersList({
           if (!reg) return <Badge tone="neutral">Not Registered</Badge>;
           return (
             <div className="space-y-0.5">
-              <StatusBadge status={reg.status} />
+              <StatusBadge status={reg.status} labelOverrides={{ COMPLETED: "Checked Out" }} />
               {reg.registrationNumber && <div className="text-xs text-neutral-500">{reg.registrationNumber}</div>}
             </div>
           );
@@ -249,19 +254,6 @@ export function CampersList({
           options: GENDERS,
           placeholder: "All Genders",
         },
-      },
-      {
-        header: "Medical",
-        // Promoted to the card subtitle (right under the camper's name) —
-        // an allergy/condition flag is safety-relevant enough that staff
-        // walking around camp shouldn't have to scroll a card to see it.
-        secondary: true,
-        accessor: (item) =>
-          item.allergies || item.medicalConditions ? (
-            <Badge tone="danger">⚠ Medical Alert</Badge>
-          ) : (
-            <span className="text-sm text-neutral-400">—</span>
-          ),
       },
     ],
     [campusFilter, campusesData, campusScoped, genderFilter, statusFilter, tribeFilter, tribesData]
@@ -325,10 +317,12 @@ export function CampersList({
           </button>
         </div>
       </div>
-      <Button size="sm" variant="secondary" onClick={exportCsv} aria-label="Export CSV">
-        <ArrowDownTrayIcon className="h-4 w-4 md:mr-1" />
-        <span className="hidden md:inline">Export CSV</span>
-      </Button>
+      {isCampusRep && (
+        <Button size="sm" variant="secondary" onClick={exportCsv} aria-label="Export CSV">
+          <ArrowDownTrayIcon className="h-4 w-4 md:mr-1" />
+          <span className="hidden md:inline">Export CSV</span>
+        </Button>
+      )}
     </div>
   );
 
@@ -422,7 +416,7 @@ export function CampersList({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between">
                             <h4 className="font-semibold text-neutral-800 text-base truncate">{item.name}</h4>
-                            {reg && <StatusBadge status={reg.status} />}
+                            {reg && <StatusBadge status={reg.status} labelOverrides={{ COMPLETED: "Checked Out" }} />}
                           </div>
                           <div className="text-xs text-neutral-500 mt-0.5">
                             {[age(item.dateOfBirth) ? `${age(item.dateOfBirth)}y` : null, item.gender].filter(Boolean).join(" · ")}

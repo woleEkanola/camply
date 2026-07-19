@@ -106,7 +106,7 @@ test.describe("Unified teacher campers page", () => {
     await onlyVisible(page.getByLabel("Filter by Gender")).selectOption("Male");
     await expect(visibleText(page, "Unified Camper Alpha")).toBeVisible();
 
-    // Export CSV button is present.
-    await expect(page.getByRole("button", { name: "Export CSV" })).toBeVisible();
+    // Export CSV button is not visible for non-rep teachers.
+    await expect(page.getByRole("button", { name: "Export CSV" })).not.toBeVisible();
   });
 });
