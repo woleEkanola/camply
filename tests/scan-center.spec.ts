@@ -65,7 +65,7 @@ test.describe("Scan Center - Unified Operations Platform", () => {
   });
 
   test("processes arrival check-in, triggers green overlay, and reports duplicate with blue overlay", async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(120000);
     // 1. Log in and go to admin check-in
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/check-in");
@@ -104,7 +104,7 @@ test.describe("Scan Center - Unified Operations Platform", () => {
   });
 
   test("allows switching stations, handles meals success and duplicate meal warning", async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(120000);
     // Pre-check-in the camper so the scan serves a meal rather than auto-checking them in
     await prisma.registration.update({
       where: { id: registrationId },

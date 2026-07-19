@@ -113,7 +113,6 @@ describe("scanRouter - processScan", () => {
         user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
         expires: "",
       },
-      userId: adminId,
     });
 
     const result = await caller.scan.processScan({
@@ -145,7 +144,6 @@ describe("scanRouter - processScan", () => {
         user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
         expires: "",
       },
-      userId: adminId,
     });
 
     // Scan once (Success)
@@ -180,7 +178,6 @@ describe("scanRouter - processScan", () => {
         user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
         expires: "",
       },
-      userId: adminId,
     });
 
     // Set camper to checked in first
@@ -239,7 +236,6 @@ describe("scanRouter - processScan", () => {
         user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
         expires: "",
       },
-      userId: adminId,
     });
 
     // Serve Breakfast
@@ -280,7 +276,6 @@ describe("scanRouter - processScan", () => {
         user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
         expires: "",
       },
-      userId: adminId,
     });
 
     const timestamp1 = new Date(2026, 6, 19, 8, 0, 0).toISOString();

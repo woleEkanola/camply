@@ -86,6 +86,7 @@ export function ScanCenterShell({
 
   // Hook for Offline capabilities
   const offlineScanner = useOfflineScanner(organizationId);
+  const utils = api.useUtils();
 
   // Overlays & Dialogs State
   const [successData, setSuccessData] = useState<any>(null);
@@ -426,7 +427,7 @@ export function ScanCenterShell({
       {/* ═══ TOP STATUS HEADERS ═══ */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-neutral-100 pb-4">
         <div>
-          <PageHeader title={getStationLabel()} subtitle={activeStation ? "Unified Scanning Platform" : "Operations Center"} />
+          <PageHeader title={getStationLabel()} />
         </div>
         
         {/* Offline & Cache Indicators */}
@@ -444,7 +445,7 @@ export function ScanCenterShell({
 
           {!offlineScanner.isOnline && offlineScanner.offlineQueueCount > 0 && (
             <Button
-              size="xs"
+              size="sm"
               variant="secondary"
               icon={<ArrowPathIcon className="h-3 w-3" />}
               loading={offlineScanner.isSyncing}
@@ -455,7 +456,7 @@ export function ScanCenterShell({
           )}
 
           <Button
-            size="xs"
+            size="sm"
             variant="secondary"
             icon={<CpuChipIcon className="h-3 w-3" />}
             loading={isRefreshingCache}

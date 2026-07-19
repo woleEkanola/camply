@@ -65,12 +65,13 @@ export function useOfflineScanner(organizationId: string) {
         organizationId,
       });
 
-      const offlineCampers: OfflineCamper[] = regs
+      const offlineCampers: OfflineCamper[] = (regs as any[])
         .filter((r) => r.status === "APPROVED" || r.status === "CHECKED_IN")
         .map((r) => {
           const c = r.camper;
           return {
             registrationId: r.id,
+            camperId: c.id,
             registrationNumber: r.registrationNumber || "REG-NUM",
             qrToken: r.qrToken || "",
             name: c.name || `${c.firstName || ""} ${c.lastName || ""}`.trim(),

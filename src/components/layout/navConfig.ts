@@ -255,6 +255,7 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
   {
     name: "Operations",
     items: [
+      { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
       { name: "Check-in", href: "/volunteer/check-in", icon: QrCodeIcon },
       { name: "Check-out", href: "/volunteer/check-out", icon: QrCodeIcon },
       { name: "Medical", href: "/volunteer/medical", icon: HeartIcon },
@@ -356,8 +357,8 @@ export function getBottomNavItems(
     case "volunteer":
       return [
         { name: "Home", href: "/volunteer", icon: HomeIcon },
+        { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
         { name: "Check-in", href: "/volunteer/check-in", icon: QrCodeIcon },
-        { name: "Medical", href: "/volunteer/medical", icon: HeartIcon },
         { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
       ];
     case "campus-rep":

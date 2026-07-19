@@ -6,6 +6,7 @@ const DB_VERSION = 1;
 
 export interface OfflineCamper {
   registrationId: string;
+  camperId?: string | null;
   registrationNumber: string;
   qrToken: string;
   name: string;
