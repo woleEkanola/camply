@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Fragment } from "react";
+import { useState, Fragment, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -29,6 +29,13 @@ export default function AppShell({ area, children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { data: session } = useSession();
+  const activeRef = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => {
+    if (activeRef.current) {
+      activeRef.current.scrollIntoView({ block: "nearest" });
+    }
+  }, [pathname]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -82,14 +89,22 @@ export default function AppShell({ area, children }: AppShellProps) {
             </div>
             <div className="space-y-0.5">
               {group.items.map((item) => {
-                // Area root paths (e.g. "/admin") only match exactly — otherwise every
-                // nested page (e.g. "/admin/registrations") would also highlight "Dashboard".
-                const isAreaRoot = ["/admin", "/dashboard", "/campus-rep-dashboard", "/super-admin", "/teacher", "/volunteer"].includes(item.href);
-                const active = isAreaRoot ? pathname === item.href : pathname === item.href || pathname?.startsWith(item.href + "/");
+                // Links requiring exact path matching to prevent sub-paths from incorrectly triggering active highlight.
+                const exactMatch = [
+                  "/admin",
+                  "/admin/communication",
+                  "/dashboard",
+                  "/campus-rep-dashboard",
+                  "/super-admin",
+                  "/teacher",
+                  "/volunteer"
+                ].includes(item.href);
+                const active = exactMatch ? pathname === item.href : pathname === item.href || pathname?.startsWith(item.href + "/");
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
+                    ref={active ? activeRef : undefined}
                     onClick={() => setMobileOpen(false)}
                     className={cn(
                       "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
