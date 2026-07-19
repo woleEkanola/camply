@@ -96,6 +96,7 @@ model User {
   campers          Camper[] // User can have multiple camper profiles
   staffProfiles    StaffProfile[]
   reportsFromStaff StaffProfile[] @relation("StaffReportsToUser")
+  scanEvents       ScanEvent[]
   deletedAt        DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -341,6 +342,7 @@ model Camp {
   incidentReports      IncidentReport[]
   medicalVisits        MedicalVisit[]
   mealDistributions    MealDistribution[]
+  scanEvents           ScanEvent[]
   departments          Department[]
   positions            Position[]
 
@@ -467,6 +469,7 @@ model Registration {
   incidentReports    IncidentReport[]
   medicalVisits      MedicalVisit[]
   mealDistributions  MealDistribution[]
+  scanEvents         ScanEvent[]
 
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -1188,3 +1191,24 @@ model BroadcastRecipient {
   @@index([recipientId, readAt])
   @@index([recipientId, pinned])
 }
+
+model ScanEvent {
+  id             String       @id @default(cuid())
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId String
+  campId         String?
+  camp           Camp?        @relation(fields: [campId], references: [id], onDelete: Cascade)
+  station        String       // e.g. "Lekki Pickup Point", "Camp Arrival", "Breakfast", "Checkout", "Identity Lookup"
+  timestamp      DateTime     @default(now())
+  volunteer      User         @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
+  volunteerId    String
+  device         String?
+  location       String?
+  result         String       // "SUCCESS" | "DUPLICATE" | "ERROR"
+  metadata       Json?        // Stores collector name, relationship, offline timestamp details, etc.
+  
+  @@index([registrationId])
+  @@index([campId])
+  @@index([timestamp])
+}
+

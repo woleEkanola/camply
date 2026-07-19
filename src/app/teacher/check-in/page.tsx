@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import AppShell from "@/components/layout/AppShell";
 import { StaffGate } from "@/components/staff/StaffGate";
-import { CheckInShell } from "@/components/staff/shared/CheckInShell";
+import { ScanCenterShell } from "@/components/staff/shared/ScanCenterShell";
 
 export default function TeacherCheckInPage() {
   const router = useRouter();
@@ -14,7 +14,7 @@ export default function TeacherCheckInPage() {
   return (
     <AppShell area="teacher">
       <StaffGate>
-        {() => <CheckInShell organizationId={organizationId} title="Check-in" />}
+        {() => <ScanCenterShell organizationId={organizationId} defaultStationId="CAMP_ARRIVAL" />}
       </StaffGate>
     </AppShell>
   );
