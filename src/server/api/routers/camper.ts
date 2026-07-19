@@ -146,6 +146,7 @@ export const camperRouter = createTRPCRouter({
       tribeId: z.string().optional(),
       active: z.boolean().optional(),
       status: z.string().optional(),
+      statuses: z.array(z.string()).optional(),
       limit: z.number().min(1).max(100).default(50),
       cursor: z.string().optional(),
     }))
@@ -175,7 +176,7 @@ export const camperRouter = createTRPCRouter({
       const registrationWhere: Record<string, any> = {
         deletedAt: null,
         ...(input.campId && { campId: input.campId }),
-        ...(input.status && { status: input.status }),
+        ...(input.status ? { status: input.status } : input.statuses ? { status: { in: input.statuses } } : {}),
         ...(input.tribeId && { tribeId: input.tribeId }),
       };
 
@@ -185,7 +186,7 @@ export const camperRouter = createTRPCRouter({
         ...(input.campusId && { homeCampusId: input.campusId }),
         ...(input.active !== undefined && { active: input.active }),
         ...(input.gender && { gender: input.gender }),
-        ...((input.status || input.tribeId) && {
+        ...((input.status || input.statuses || input.tribeId) && {
           registrations: { some: registrationWhere },
         }),
         ...(input.q && {

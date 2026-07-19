@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/Input";
 import { isEndorsed } from "@/server/registration/endorsement";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
 import { Dialog } from "@/components/ui/Dialog";
+import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   APPROVED: "success",
@@ -21,8 +22,10 @@ const STATUS_TONE: Record<string, BadgeTone> = {
 interface Registration {
   id: string;
   camper: {
+    id: string;
     name?: string | null;
     dateOfBirth?: string | null;
+    photoUrl?: string | null;
   };
   createdAt?: string;
   status: string;
@@ -45,6 +48,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const [reviewStateFilter, setReviewStateFilter] = React.useState<"ALL" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("ALL");
   const [actionError, setActionError] = React.useState("");
   const [documentRegId, setDocumentRegId] = React.useState<string | null>(null);
+  const [profileCamperId, setProfileCamperId] = React.useState<string | null>(null);
 
   const { data: org } = api.organization.getById.useQuery(
     { id: organizationId },
@@ -104,9 +108,35 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
 
   const columns = [
     {
-      header: "Name",
+      header: "Camper",
       primary: true,
-      accessor: (reg: Registration) => reg.camper?.name || "-",
+      accessor: (reg: Registration) => (
+        <div className="flex items-center gap-3">
+          {reg.camper?.photoUrl ? (
+            <img
+              src={reg.camper.photoUrl}
+              alt=""
+              className="h-10 w-10 rounded-full object-cover cursor-pointer border border-neutral-200 hover:scale-105 transition-transform"
+              onClick={(e) => {
+                e.stopPropagation();
+                setProfileCamperId(reg.camper.id);
+              }}
+            />
+          ) : (
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-100 text-sm font-medium text-accent-700">
+              {(reg.camper?.name || "C")[0]}
+            </span>
+          )}
+          <div>
+            <div className="font-medium text-neutral-900">{reg.camper?.name || "-"}</div>
+            {getAge(reg.camper?.dateOfBirth) && (
+              <div className="text-xs text-neutral-500">
+                {getAge(reg.camper?.dateOfBirth)}y · {reg.camper?.dateOfBirth ? new Date(reg.camper.dateOfBirth).toLocaleDateString() : ""}
+              </div>
+            )}
+          </div>
+        </div>
+      ),
       searchable: true,
       sortable: true,
     },
@@ -132,15 +162,6 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
       ),
       sortable: true,
     },
-    {
-      header: "Consent Form",
-      accessor: (reg: Registration) =>
-        reg.parentConsent ? (
-          <Badge tone="success">Uploaded</Badge>
-        ) : (
-          <Badge tone="danger">Missing</Badge>
-        ),
-    },
   ];
 
   // Rendered via the Table's dedicated `actions` prop (a right-aligned
@@ -151,6 +172,9 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
     const endorsed = isEndorsed(reg.review);
     return (
       <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="secondary" onClick={() => setProfileCamperId(reg.camper.id)}>
+          View Profile
+        </Button>
         <Button size="sm" variant="secondary" onClick={() => setDocumentRegId(reg.id)}>
           Documents
         </Button>
@@ -235,11 +259,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             <option value="CANCELLED">Cancelled</option>
           </Select>
 
-          <Select label="Consent Form" containerClassName="w-40" value={consentFilter} onChange={(e) => setConsentFilter(e.target.value as any)}>
-            <option value="ALL">All</option>
-            <option value="UPLOADED">Uploaded</option>
-            <option value="NOT_UPLOADED">Missing</option>
-          </Select>
+          {/* Consent Form filter removed */}
 
           {isTwoStep && (
             <Select label="Review State" containerClassName="w-48" value={reviewStateFilter} onChange={(e) => setReviewStateFilter(e.target.value as any)}>
@@ -260,6 +280,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         columns={columns}
         data={filteredRegs}
         rowKey={(reg) => reg.id}
+        onRowClick={(reg) => setProfileCamperId(reg.camper.id)}
         actions={rowActions}
         isLoading={isLoading}
         emptyTitle="No registrations found"
@@ -269,6 +290,8 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
       <Dialog open={!!documentRegId} onClose={() => setDocumentRegId(null)} title="Registration Documents">
         {documentRegId && <RegistrationDocumentPanel registrationId={documentRegId} />}
       </Dialog>
+
+      <CamperQuickProfileDrawer camperId={profileCamperId} open={!!profileCamperId} onClose={() => setProfileCamperId(null)} />
     </>
   );
 }

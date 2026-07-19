@@ -13,10 +13,7 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
   const [actionError, setActionError] = useState("");
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
 
-  const reviewDoc = api.document.review.useMutation({
-    onSuccess: () => refetch(),
-    onError: (e) => setActionError(e.message),
-  });
+
   const flagRequiresAction = api.document.flagRequiresAction.useMutation({
     onSuccess: () => refetch(),
     onError: (e) => setActionError(e.message),
@@ -47,18 +44,7 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
                 >
                   View
                 </button>
-                <button className="text-xs text-success-600 hover:underline" onClick={() => reviewDoc.mutate({ id: doc.id, status: "APPROVED" })}>
-                  Approve
-                </button>
-                <button
-                  className="text-xs text-danger-600 hover:underline"
-                  onClick={() => {
-                    const reason = window.prompt("Rejection reason?") || "";
-                    if (reason) reviewDoc.mutate({ id: doc.id, status: "REJECTED", rejectionReason: reason });
-                  }}
-                >
-                  Reject
-                </button>
+
               </div>
             </div>
             {previewDocId === doc.id && (

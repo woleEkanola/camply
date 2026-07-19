@@ -102,6 +102,14 @@ export async function POST(request: Request) {
       if (rest.departmentId) {
         await assertDepartmentHasCapacity(tx, rest.departmentId);
       }
+      // Sync names to User record
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          firstName: rest.firstName,
+          lastName: rest.lastName,
+        },
+      });
       return tx.staffProfile.create({
         data: {
           userId: user.id,
