@@ -805,7 +805,10 @@ export default function CampusesPage() {
           return (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleCopySignupLink(campus.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopySignupLink(campus.id);
+                }}
                 className="inline-flex items-center rounded-md bg-success-50 px-2 py-1 text-xs font-medium text-success-700 hover:bg-success-100"
               >
                 {copiedLinkId === campus.id ? "Copied!" : "Copy Link"}
@@ -817,7 +820,10 @@ export default function CampusesPage() {
         if (canGenerateSignupLink) {
           return (
             <button
-              onClick={() => handleGenerateSignupLink(campus.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleGenerateSignupLink(campus.id);
+              }}
               disabled={generatingLinkFor === campus.id}
               className="inline-flex items-center rounded-md bg-accent-50 px-2 py-1 text-xs font-medium text-accent-700 hover:bg-accent-100 disabled:bg-neutral-100 disabled:text-neutral-400"
             >
