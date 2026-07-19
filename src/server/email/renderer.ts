@@ -70,7 +70,7 @@ const EVENT_ASSEMBLERS: Record<EmailEventKey, (p: {
   variables: Record<string, string>;
   branding: Branding | null;
   bodyContent?: string;
-  qrDataUrl?: string;
+  qrSrc?: string;
   previewText?: string;
 }) => string> = {
   REGISTRATION_APPROVED: buildApprovedEmail,
@@ -122,7 +122,7 @@ export async function renderEmailWithEvent(params: {
       variables,
       branding,
       bodyContent,
-      qrDataUrl,
+      qrSrc: qrDataUrl,
       previewText: previewText ?? undefined,
     }),
     unknownTokens,

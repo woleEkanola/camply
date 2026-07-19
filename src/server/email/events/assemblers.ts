@@ -7,18 +7,12 @@ import {
   EmailHero,
   StatusBanner,
   Headline,
-  Subheading,
   BodyText,
   InfoCard,
   QRCodeCard,
-  Timeline,
   AlertCard,
-  PrimaryButton,
-  SecondaryButton,
   SupportCard,
   EmailFooter,
-  NextSteps,
-  Divider,
   Section,
 } from "../components";
 import type { StatusType } from "../components/cards";
@@ -28,8 +22,8 @@ interface AssemblerParams {
   branding: Branding | null;
   /** Body content HTML rendered from TipTap */
   bodyContent?: string;
-  /** Base64 data URL for QR code image (acceptance emails only) */
-  qrDataUrl?: string;
+  /** QR code image source (acceptance emails only) — a hosted http(s) URL for real sends, or a data URL for the in-app template preview */
+  qrSrc?: string;
   /** Optional custom preview text override */
   previewText?: string;
 }
@@ -55,10 +49,8 @@ export function buildApprovedEmail(p: AssemblerParams): string {
     EmailHero({ illustration: "🎉" }),
     StatusBanner({ type: "success", title: "Registration Approved", subtitle: `${v.camper_name || "Camper"} has been approved for ${v.camp_name || "camp"}.` }),
     InfoCard({ rows: regInfoRows(v) }),
-    p.qrDataUrl ? QRCodeCard({ qrDataUrl: p.qrDataUrl, registrationNumber: v.registration_number || "" }) : "",
+    p.qrSrc ? QRCodeCard({ qrSrc: p.qrSrc, registrationNumber: v.registration_number || "" }) : "",
     p.bodyContent ? Section({ children: p.bodyContent }) : "",
-    PrimaryButton({ label: "View Registration", href: v.registration_url || "/dashboard" }),
-    NextSteps({ steps: ["Save this email for check-in", "Present the QR code at check-in", "Arrive before the reporting time", "Bring any required items listed in your welcome packet"] }),
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
@@ -74,7 +66,6 @@ export function buildSubmittedEmail(p: AssemblerParams): string {
     StatusBanner({ type: "info", title: "Registration Received", subtitle: "Your registration has been received and is pending review." }),
     InfoCard({ rows: regInfoRows(v).filter(r => ["Camper", "Camp", "Registration #"].includes(r.label)) }),
     p.bodyContent ? Section({ children: p.bodyContent }) : "",
-    PrimaryButton({ label: "View Registration", href: v.registration_url || "/dashboard" }),
     BodyText({ text: "We will review your registration and notify you of the outcome within 3–5 business days.", align: "center", color: undefined }),
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
@@ -91,7 +82,6 @@ export function buildCorrectionEmail(p: AssemblerParams): string {
     StatusBanner({ type: "warning", title: "Action Required", subtitle: "Additional information is needed to complete your registration." }),
     AlertCard({ type: "warning", title: "Correction Needed", message: v.correction_message || "Please update your registration with the requested information." }),
     p.bodyContent ? Section({ children: p.bodyContent }) : "",
-    PrimaryButton({ label: "Continue Registration", href: v.registration_url || "/dashboard" }),
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
@@ -138,7 +128,6 @@ export function buildStaffApprovedEmail(p: AssemblerParams): string {
     StatusBanner({ type: "success", title: "Staff Application Approved", subtitle: `You've been approved as a ${v.staff_role || "staff"} for ${v.camp_name || "camp"}!` }),
     InfoCard({ rows: [{ label: "Name", value: v.staff_name || "" }, { label: "Role", value: v.staff_role || "" }, { label: "Camp", value: v.camp_name || "" }].filter(r => r.value) }),
     p.bodyContent ? Section({ children: p.bodyContent }) : "",
-    PrimaryButton({ label: "Go to Dashboard", href: v.dashboard_url || "/dashboard" }),
     SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
@@ -166,13 +155,7 @@ export function buildWelcomeEmail(p: AssemblerParams): string {
   const v = p.variables;
   const content = [
     EmailHero({ illustration: "👋" }),
-    Headline({ text: "Welcome to Camply!" }),
-    BodyText({ text: "Your account has been created. Please verify your email address to get started.", align: "center" }),
-    PrimaryButton({ label: "Verify Your Email", href: v.verify_url || "#" }),
-    BodyText({ text: "Or copy and paste this link into your browser:", align: "center", color: undefined }),
-    BodyText({ text: v.verify_url || "", align: "center", color: undefined }),
     p.bodyContent ? Section({ children: p.bodyContent }) : "",
-    NextSteps({ steps: ["Verify your email address", "Create a camper profile", "Register for a camp"] }),
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
   return EmailLayout({ content, branding: p.branding, previewText: p.previewText || "Welcome to Camply — verify your email" });
