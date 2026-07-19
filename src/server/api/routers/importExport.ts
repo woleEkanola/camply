@@ -117,4 +117,331 @@ export const importExportRouter = createTRPCRouter({
 
       return results;
     }),
+
+  exportUserData: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        userType: z.enum(["ALL", "CAMPER", "TEACHER", "VOLUNTEER", "ADMIN", "PARENT"]).optional().default("ALL"),
+        campusId: z.string().optional(),
+        status: z.string().optional(),
+        campId: z.string().optional(),
+        search: z.string().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertOrgAdmin(ctx, input.organizationId);
+
+      const rows: Record<string, any>[] = [];
+
+      // 1. Export Campers
+      if (input.userType === "ALL" || input.userType === "CAMPER") {
+        const camperWhere: any = {
+          organizationId: input.organizationId,
+          deletedAt: null,
+        };
+
+        if (input.campusId) {
+          camperWhere.homeCampusId = input.campusId;
+        }
+
+        if (input.search?.trim()) {
+          const s = input.search.trim();
+          camperWhere.OR = [
+            { name: { contains: s, mode: "insensitive" } },
+            { user: { email: { contains: s, mode: "insensitive" } } },
+            { registrations: { some: { registrationNumber: { contains: s, mode: "insensitive" } } } },
+          ];
+        }
+
+        if (input.status || input.campId) {
+          camperWhere.registrations = {
+            some: {
+              ...(input.status ? { status: input.status as any } : {}),
+              ...(input.campId ? { campId: input.campId } : {}),
+            },
+          };
+        }
+
+        const campers: any[] = await ctx.prisma.camper.findMany({
+          where: camperWhere,
+          include: {
+            user: true,
+            homeCampus: true,
+            registrations: {
+              where: {
+                ...(input.status ? { status: input.status as any } : {}),
+                ...(input.campId ? { campId: input.campId } : {}),
+              },
+              include: {
+                camp: true,
+                campus: true,
+                venue: true,
+                tribe: true,
+                room: true,
+                bed: true,
+              },
+              orderBy: { createdAt: "desc" },
+            },
+            fieldValues: {
+              include: {
+                field: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        for (const camper of campers) {
+          const reg = camper.registrations?.[0];
+          const ageVal = camper.dateOfBirth
+            ? Math.floor((Date.now() - new Date(camper.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+            : null;
+
+          const row: Record<string, any> = {
+            "Record Type": "Camper",
+            "Camper Name": camper.name,
+            "First Name": camper.firstName || "",
+            "Last Name": camper.lastName || "",
+            "Preferred Name": camper.preferredName || "",
+            "Date of Birth": camper.dateOfBirth ? new Date(camper.dateOfBirth).toISOString().slice(0, 10) : "",
+            "Age": ageVal !== null ? ageVal : "",
+            "Gender": camper.gender || "",
+
+            // Image Links
+            "Photo URL": camper.photoUrl || "",
+            "Birth Certificate URL": camper.birthCert || "",
+            "Parent Consent URL": reg?.parentConsent || "",
+
+            // Contact & Address
+            "Parent Name": [camper.user?.firstName, camper.user?.lastName].filter(Boolean).join(" ") || camper.user?.email || "",
+            "Parent Email": camper.user?.email || "",
+            "Parent Phone": camper.parentPhone || "",
+            "Teen Phone": camper.teenPhone || "",
+            "Street Address": camper.homeAddressStreet || "",
+            "City": camper.homeAddressCity || "",
+            "State": camper.homeAddressState || "",
+            "Zip Code": camper.homeAddressZip || "",
+
+            // Education & Church
+            "School": camper.school || "",
+            "Current Class": camper.currentClass || "",
+            "Church": camper.church || "",
+            "Pastor": camper.pastor || "",
+
+            // Medical & Emergency
+            "Allergies": camper.allergies || "",
+            "Medical Conditions": camper.medicalConditions || "",
+            "Medications": camper.medications || "",
+            "Dietary Restrictions": camper.dietaryRestrictions || "",
+            "Emergency Contact": camper.emergencyContactName || "",
+            "Emergency Phone": camper.emergencyContactPhone || "",
+            "Emergency Relationship": camper.relationship || "",
+
+            // Registration Info
+            "Registration Status": reg?.status || "NOT_REGISTERED",
+            "Registration #": reg?.registrationNumber || "",
+            "Camp": reg?.camp?.name || "",
+            "Campus": reg?.campus?.name || camper.homeCampus?.name || "",
+            "Venue": reg?.venue?.name || "",
+            "Tribe": reg?.tribe?.name || "",
+            "Room": reg?.room?.name || "",
+            "Bed": reg?.bed?.label || "",
+          };
+
+          // Append custom fields
+          if (camper.fieldValues) {
+            for (const fv of camper.fieldValues) {
+              const label = fv.field?.label || fv.field?.name || fv.fieldId;
+              row[`Custom: ${label}`] = fv.value || "";
+            }
+          }
+
+          rows.push(row);
+        }
+      }
+
+      // 2. Export Staff Profiles (Teachers / Volunteers)
+      if (input.userType === "ALL" || input.userType === "TEACHER" || input.userType === "VOLUNTEER") {
+        const staffWhere: any = {
+          organizationId: input.organizationId,
+          deletedAt: null,
+        };
+
+        if (input.userType === "TEACHER" || input.userType === "VOLUNTEER") {
+          staffWhere.type = input.userType;
+        }
+
+        if (input.campId) {
+          staffWhere.campId = input.campId;
+        }
+
+        if (input.search?.trim()) {
+          const s = input.search.trim();
+          staffWhere.OR = [
+            { firstName: { contains: s, mode: "insensitive" } },
+            { lastName: { contains: s, mode: "insensitive" } },
+            { email: { contains: s, mode: "insensitive" } },
+          ];
+        }
+
+        const staffProfiles: any[] = await ctx.prisma.staffProfile.findMany({
+          where: staffWhere,
+          include: {
+            user: {
+              include: {
+                managedCampuses: true,
+              },
+            },
+            assignedVenue: true,
+            assignedTribe: true,
+            department: true,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        for (const staff of staffProfiles) {
+          const row: Record<string, any> = {
+            "Record Type": staff.type === "TEACHER" ? "Teacher" : "Volunteer",
+            "Camper Name": `${staff.firstName || ""} ${staff.lastName || ""}`.trim() || staff.email,
+            "First Name": staff.firstName || "",
+            "Last Name": staff.lastName || "",
+            "Preferred Name": "",
+            "Date of Birth": "",
+            "Age": "",
+            "Gender": "",
+
+            // Image Links
+            "Photo URL": staff.user?.photoUrl || "",
+            "Birth Certificate URL": "",
+            "Parent Consent URL": "",
+
+            // Contact & Address
+            "Parent Name": "",
+            "Parent Email": staff.email,
+            "Parent Phone": staff.phone || "",
+            "Teen Phone": "",
+            "Street Address": "",
+            "City": "",
+            "State": "",
+            "Zip Code": "",
+
+            // Education & Church
+            "School": "",
+            "Current Class": "",
+            "Church": "",
+            "Pastor": "",
+
+            // Medical & Emergency
+            "Allergies": "",
+            "Medical Conditions": "",
+            "Medications": "",
+            "Dietary Restrictions": "",
+            "Emergency Contact": "",
+            "Emergency Phone": "",
+            "Emergency Relationship": "",
+
+            // Registration Info
+            "Registration Status": staff.status,
+            "Registration #": "",
+            "Camp": "",
+            "Campus": staff.user?.managedCampuses?.map((c: any) => c.name).join(", ") || "",
+            "Venue": staff.assignedVenue?.name || "",
+            "Tribe": staff.assignedTribe?.name || "",
+            "Room": "",
+            "Bed": "",
+          };
+
+          rows.push(row);
+        }
+      }
+
+      // 3. Export Admins / Parents
+      if (input.userType === "ADMIN" || input.userType === "PARENT") {
+        const userWhere: any = {
+          organizationId: input.organizationId,
+          deletedAt: null,
+        };
+
+        if (input.userType === "ADMIN") {
+          userWhere.role = { in: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"] };
+        } else if (input.userType === "PARENT") {
+          userWhere.role = "PARENT";
+        }
+
+        if (input.search?.trim()) {
+          const s = input.search.trim();
+          userWhere.OR = [
+            { firstName: { contains: s, mode: "insensitive" } },
+            { lastName: { contains: s, mode: "insensitive" } },
+            { email: { contains: s, mode: "insensitive" } },
+          ];
+        }
+
+        const users: any[] = await ctx.prisma.user.findMany({
+          where: userWhere,
+          include: {
+            managedCampuses: true,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        for (const u of users) {
+          const row: Record<string, any> = {
+            "Record Type": u.role === "PARENT" ? "Parent" : "Admin",
+            "Camper Name": `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+            "First Name": u.firstName || "",
+            "Last Name": u.lastName || "",
+            "Preferred Name": "",
+            "Date of Birth": "",
+            "Age": "",
+            "Gender": "",
+
+            // Image Links
+            "Photo URL": u.photoUrl || "",
+            "Birth Certificate URL": "",
+            "Parent Consent URL": "",
+
+            // Contact & Address
+            "Parent Name": `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+            "Parent Email": u.email,
+            "Parent Phone": u.phone || "",
+            "Teen Phone": "",
+            "Street Address": "",
+            "City": "",
+            "State": "",
+            "Zip Code": "",
+
+            // Education & Church
+            "School": "",
+            "Current Class": "",
+            "Church": "",
+            "Pastor": "",
+
+            // Medical & Emergency
+            "Allergies": "",
+            "Medical Conditions": "",
+            "Medications": "",
+            "Dietary Restrictions": "",
+            "Emergency Contact": "",
+            "Emergency Phone": "",
+            "Emergency Relationship": "",
+
+            // Registration Info
+            "Registration Status": u.active ? "ACTIVE" : "INACTIVE",
+            "Registration #": "",
+            "Camp": "",
+            "Campus": u.managedCampuses?.map((c: any) => c.name).join(", ") || "",
+            "Venue": "",
+            "Tribe": "",
+            "Room": "",
+            "Bed": "",
+          };
+
+          rows.push(row);
+        }
+      }
+
+      return rows;
+    }),
 });

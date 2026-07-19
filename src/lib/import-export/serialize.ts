@@ -104,3 +104,41 @@ export function downloadBlob(filename: string, blob: Blob) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+export function exportUserDataToCsv(rows: Record<string, any>[]): string {
+  if (!rows || rows.length === 0) return "";
+  return Papa.unparse(rows);
+}
+
+export async function exportUserDataToXlsx(rows: Record<string, any>[]): Promise<Blob> {
+  const XLSX = await import("xlsx");
+  const workbook = XLSX.utils.book_new();
+
+  if (!rows || rows.length === 0) {
+    const sheet = XLSX.utils.aoa_to_sheet([["No records match the requested filters"]]);
+    XLSX.utils.book_append_sheet(workbook, sheet, "User Data");
+  } else {
+    // Collect all unique header keys across all objects to handle dynamic custom fields
+    const headerSet = new Set<string>();
+    for (const r of rows) {
+      for (const k of Object.keys(r)) {
+        headerSet.add(k);
+      }
+    }
+    const headers = Array.from(headerSet);
+    const body = rows.map((r) => headers.map((h) => (r[h] !== undefined && r[h] !== null ? String(r[h]) : "")));
+
+    const sheet = XLSX.utils.aoa_to_sheet([headers, ...body]);
+
+    // Format column widths nicely
+    const colWidths = headers.map((h) => ({
+      wch: Math.max(h.length, 15),
+    }));
+    sheet["!cols"] = colWidths;
+
+    XLSX.utils.book_append_sheet(workbook, sheet, "User & Camper Data");
+  }
+
+  const arrayBuffer = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+  return new Blob([arrayBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
