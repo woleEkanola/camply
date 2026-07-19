@@ -397,6 +397,7 @@ model SignupLink {
   active    Boolean  @default(true)
   quota     Int      @default(0) // 0 = unlimited
   quotaFullBehavior String @default("CLOSE") // CLOSE | WAITLIST
+  clicks    SignupLinkClick[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -687,6 +688,7 @@ model StaffSignupLink {
   campId         String
   organizationId String
   active         Boolean   @default(true)
+  clicks         StaffSignupLinkClick[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -1212,3 +1214,30 @@ model ScanEvent {
   @@index([timestamp])
 }
 
+// ─── Signup Link Click Tracking ───────────────────────────────────────────────
+
+model SignupLinkClick {
+  id           String     @id @default(cuid())
+  signupLink   SignupLink @relation(fields: [signupLinkId], references: [id], onDelete: Cascade)
+  signupLinkId String
+  userId       String?    // null = anonymous; populated after the visitor logs in/registers
+  ipAddress    String?
+  userAgent    String?
+  clickedAt    DateTime   @default(now())
+
+  @@index([signupLinkId])
+  @@index([clickedAt])
+}
+
+model StaffSignupLinkClick {
+  id                String          @id @default(cuid())
+  staffSignupLink   StaffSignupLink @relation(fields: [staffSignupLinkId], references: [id], onDelete: Cascade)
+  staffSignupLinkId String
+  userId            String?
+  ipAddress         String?
+  userAgent         String?
+  clickedAt         DateTime        @default(now())
+
+  @@index([staffSignupLinkId])
+  @@index([clickedAt])
+}

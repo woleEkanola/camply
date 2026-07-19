@@ -24,6 +24,16 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
     { enabled: !!profile?.assignedVenueId && profile?.type === "TEACHER" }
   );
 
+  const { data: allCampuses = [] } = api.campus.getAll.useQuery(
+    { organizationId },
+    { enabled: !!organizationId }
+  );
+
+  const { data: userData, refetch: refetchUser } = api.user.getById.useQuery(
+    { id: profile?.userId ?? "" },
+    { enabled: !!profile?.userId }
+  );
+
   const [rejectReason, setRejectReason] = useState("");
   const [actionError, setActionError] = useState("");
 
@@ -46,6 +56,22 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
   const setTribeMonitor = api.staff.setTribeMonitor.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignHostel = api.staff.assignHostel.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignRoom = api.staff.assignRoom.useMutation({ onSuccess: invalidate, onError: onErr });
+
+  const assignCampus = api.user.assignCampusToRep.useMutation({
+    onSuccess: () => {
+      void refetchUser();
+      void utils.staff.adminList.invalidate();
+    },
+    onError: onErr,
+  });
+
+  const removeCampus = api.user.removeCampusFromRep.useMutation({
+    onSuccess: () => {
+      void refetchUser();
+      void utils.staff.adminList.invalidate();
+    },
+    onError: onErr,
+  });
 
   if (!profile) {
     return <Drawer open onClose={onClose} title="Loading…"><div className="p-6 text-sm text-neutral-500">Loading…</div></Drawer>;
@@ -172,10 +198,42 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
                 onChange={(e) => setTribeMonitor.mutate({ id: staffId, isAssistantMonitor: e.target.checked })}
                 className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
               />
-              Assistant Camp Monitor
             </label>
           </>
         )}
+      </div>
+
+      <div className="border-t border-neutral-100 pt-4">
+        <label className="mb-1 block text-sm font-semibold text-neutral-900">Campus Representative</label>
+        <p className="mb-2 text-xs text-neutral-500">
+          Assign this {profile.type === "TEACHER" ? "teacher" : "volunteer"} to manage registrations for specific campuses:
+        </p>
+        <div className="space-y-1.5 max-h-40 overflow-y-auto rounded border border-neutral-200 p-2 bg-neutral-50">
+          {allCampuses.length === 0 ? (
+            <p className="text-xs text-neutral-500">No campuses found.</p>
+          ) : (
+            allCampuses.map((c: any) => {
+              const isAssigned = userData?.managedCampuses?.some((mc: any) => mc.id === c.id) ?? false;
+              return (
+                <label key={c.id} className="flex items-center gap-2 text-xs text-neutral-700 cursor-pointer py-0.5 hover:bg-neutral-100 rounded px-1">
+                  <input
+                    type="checkbox"
+                    checked={isAssigned}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        assignCampus.mutate({ userId: profile.userId, campusId: c.id });
+                      } else {
+                        removeCampus.mutate({ userId: profile.userId, campusId: c.id });
+                      }
+                    }}
+                    className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                  />
+                  {c.name}
+                </label>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );

@@ -6,13 +6,19 @@ import { assertOrgAdmin } from "../trpc/scoping";
 const entityTypeSchema = z.enum([
   "campus",
   "venue",
+  "camp",
+  "camper",
   "registration",
   "hostel",
   "room",
   "bed",
   "tribe",
   "department",
-  "staffProfile"
+  "staffProfile",
+  "formField",
+  "document",
+  "documentRequirement",
+  "user",
 ]);
 
 export const trashRouter = createTRPCRouter({

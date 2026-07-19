@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -24,10 +24,29 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
   const router = useRouter();
   const isTeacher = type === "TEACHER";
 
+  // Collect browser metadata once on mount for the click log
+  const [userAgent, setUserAgent] = useState<string | undefined>(undefined);
+  useEffect(() => { setUserAgent(navigator.userAgent); }, []);
+
   const { data: linkData, isLoading: linkLoading, error: linkError } = api.staffSignupLink.validateToken.useQuery(
-    { token },
-    { retry: false }
+    { token, userAgent },
+    { retry: false, enabled: userAgent !== undefined }
   );
+
+  // linkClickBack — fires once after sign-in to attach name to anonymous click
+  const linkClickBackMutation = api.staffSignupLink.linkClickBack.useMutation();
+  const linkBackFiredRef = useRef(false);
+  const { data: session, status: sessionStatus } = useSession();
+  useEffect(() => {
+    if (linkBackFiredRef.current) return;
+    if (sessionStatus !== "authenticated" || !session?.user?.id) return;
+    if (!linkData?.staffSignupLinkId) return;
+    linkBackFiredRef.current = true;
+    linkClickBackMutation.mutate({
+      staffSignupLinkId: linkData.staffSignupLinkId,
+      userId: session.user.id,
+    });
+  }, [sessionStatus, session, linkData]);
 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");

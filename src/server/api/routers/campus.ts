@@ -144,7 +144,11 @@ export const campusRouter = createTRPCRouter({
     .query(async ({ input, ctx }) => {
       await assertOrgAdmin(ctx, input.organizationId);
       return prisma.user.findMany({
-        where: { organizationId: input.organizationId, deletedAt: null },
+        where: {
+          organizationId: input.organizationId,
+          deletedAt: null,
+          role: { in: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE", "TEACHER"] }
+        },
         select: { id: true, email: true, firstName: true, lastName: true, role: true },
         orderBy: [{ firstName: "asc" }, { email: "asc" }],
       });

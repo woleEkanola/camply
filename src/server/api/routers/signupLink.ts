@@ -412,7 +412,11 @@ export const signupLinkRouter = createTRPCRouter({
 
   // Validate a signup link token
   validateToken: publicProcedure
-    .input(z.object({ token: z.string() }))
+    .input(z.object({
+      token: z.string(),
+      ipAddress: z.string().optional(),
+      userAgent: z.string().optional(),
+    }))
     .query(async ({ ctx, input }) => {
       // Handles both the raw random-hex token and the
       // {campus-slug}_{camp-slug} format the admin UI's "Copy Link" button
@@ -432,6 +436,16 @@ export const signupLinkRouter = createTRPCRouter({
         });
       }
       const quotaReached = await computeQuotaReached(ctx.prisma, signupLink);
+
+      // Fire-and-forget click log — never blocks the response
+      void ctx.prisma.signupLinkClick.create({
+        data: {
+          signupLinkId: signupLink.id,
+          userId: ctx.session?.user?.id ?? null,
+          ipAddress: input.ipAddress ?? null,
+          userAgent: input.userAgent ?? null,
+        },
+      }).catch(() => { /* non-fatal */ });
 
       return {
         campusId: signupLink.campusId,
@@ -453,13 +467,19 @@ export const signupLinkRouter = createTRPCRouter({
         registrationOpensAt: signupLink.camp.registrationOpensAt?.toISOString().split("T")[0] ?? null,
         registrationClosesAt: signupLink.camp.registrationClosesAt?.toISOString().split("T")[0] ?? null,
         quotaReached,
+        signupLinkId: signupLink.id,
       };
 
     }),
 
   // Validate a signup link by slug and camp
   validateSlug: publicProcedure
-    .input(z.object({ slug: z.string(), camp: z.string() }))
+    .input(z.object({
+      slug: z.string(),
+      camp: z.string(),
+      ipAddress: z.string().optional(),
+      userAgent: z.string().optional(),
+    }))
     .query(async ({ ctx, input }) => {
       // Find the campus by slug
       const campus = await ctx.prisma.campus.findUnique({
@@ -501,6 +521,16 @@ export const signupLinkRouter = createTRPCRouter({
       }
       const quotaReached = await computeQuotaReached(ctx.prisma, signupLink);
 
+      // Fire-and-forget click log
+      void ctx.prisma.signupLinkClick.create({
+        data: {
+          signupLinkId: signupLink.id,
+          userId: ctx.session?.user?.id ?? null,
+          ipAddress: input.ipAddress ?? null,
+          userAgent: input.userAgent ?? null,
+        },
+      }).catch(() => { /* non-fatal */ });
+
       return {
         campusId: signupLink.campusId,
         campusName: signupLink.campus.name,
@@ -521,6 +551,7 @@ export const signupLinkRouter = createTRPCRouter({
         registrationOpensAt: signupLink.camp.registrationOpensAt?.toISOString().split("T")[0] ?? null,
         registrationClosesAt: signupLink.camp.registrationClosesAt?.toISOString().split("T")[0] ?? null,
         quotaReached,
+        signupLinkId: signupLink.id,
       };
     }),
 
@@ -628,5 +659,111 @@ export const signupLinkRouter = createTRPCRouter({
         where: { id: input.id },
         data: { active: true }
       });
-    })
+    }),
+
+  // Attach a userId to the most-recent anonymous click for this link.
+  // Called client-side right after a user successfully logs in or creates
+  // an account inside the registration wizard.
+  linkClickBack: publicProcedure
+    .input(z.object({
+      signupLinkId: z.string(),
+      userId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Find the most recent anonymous click for this link
+      const click = await ctx.prisma.signupLinkClick.findFirst({
+        where: { signupLinkId: input.signupLinkId, userId: null },
+        orderBy: { clickedAt: "desc" },
+      });
+      if (!click) return { updated: false };
+      await ctx.prisma.signupLinkClick.update({
+        where: { id: click.id },
+        data: { userId: input.userId },
+      });
+      return { updated: true };
+    }),
+
+  // Return paginated click log for a signup link (admin-only).
+  getClickLog: protectedProcedure
+    .input(z.object({
+      signupLinkId: z.string(),
+      limit: z.number().int().min(1).max(200).default(50),
+      cursor: z.string().optional(), // clickId for cursor-based pagination
+    }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      // Verify the link belongs to the caller's org (or they're SUPER_ADMIN)
+      const link = await ctx.prisma.signupLink.findUnique({
+        where: { id: input.signupLinkId },
+        include: { campus: true, camp: true },
+      });
+      if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Signup link not found" });
+
+      const hasPermission =
+        currentUser.role === "SUPER_ADMIN" ||
+        (["OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"].includes(currentUser.role as string) &&
+          currentUser.organizationId === link.campus.organizationId);
+      if (!hasPermission) throw new TRPCError({ code: "FORBIDDEN" });
+
+      const clicks = await ctx.prisma.signupLinkClick.findMany({
+        where: { signupLinkId: input.signupLinkId },
+        orderBy: { clickedAt: "desc" },
+        take: input.limit + 1,
+        ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+      });
+
+      const hasMore = clicks.length > input.limit;
+      const items = hasMore ? clicks.slice(0, input.limit) : clicks;
+
+      // Bulk-fetch user names for all non-null userIds
+      const userIds = [...new Set(items.map((c) => c.userId).filter(Boolean))] as string[];
+      const users = userIds.length
+        ? await ctx.prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, firstName: true, lastName: true, email: true },
+          })
+        : [];
+      const userMap = new Map(users.map((u) => [u.id, u]));
+
+      // For each click, check whether the user has a registration against this link's camp
+      const registeredUserIds = userIds.length
+        ? await ctx.prisma.registration
+            .findMany({
+              where: {
+                campId: link.campId,
+                campusId: link.campusId,
+                camper: { userId: { in: userIds } },
+                deletedAt: null,
+              },
+              select: { camper: { select: { userId: true } } },
+            })
+            .then((rows) => new Set(rows.map((r) => r.camper.userId)))
+        : new Set<string>();
+
+      // Build full link URL for display (slug format used by Copy Link)
+      const linkUrl = `${link.campus.slug}_${link.camp.slug}`;
+
+      return {
+        items: items.map((click) => {
+          const user = click.userId ? userMap.get(click.userId) : null;
+          const name = user
+            ? [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email
+            : null;
+          return {
+            id: click.id,
+            clickedAt: click.clickedAt,
+            linkUrl,
+            name,
+            email: user?.email ?? null,
+            userAgent: click.userAgent,
+            ipAddress: click.ipAddress,
+            registered: click.userId ? registeredUserIds.has(click.userId) : false,
+          };
+        }),
+        nextCursor: hasMore ? items[items.length - 1].id : null,
+        total: await ctx.prisma.signupLinkClick.count({ where: { signupLinkId: input.signupLinkId } }),
+      };
+    }),
 });
