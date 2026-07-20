@@ -119,6 +119,8 @@ model Organization {
   registrationDeclarations RegistrationDeclaration[]
   registrationConfig       RegistrationConfig?
   branding                 OrganizationBranding?
+  emailCampaigns           EmailCampaign[]
+  savedAudiences           SavedAudience[]
   approvalWorkflow String  @default("SINGLE_STEP") // SINGLE_STEP | TWO_STEP
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -644,8 +646,14 @@ model SideEffect {
   id                    String   @id @default(cuid())
   registrationId        String?
   broadcastRecipientId  String?
-  type                  String   // REGISTRATION_APPROVED | BROADCAST_SEND | ...
-  status                String   @default("QUEUED") // QUEUED | DONE | FAILED
+  campaignId            String?
+  campaign              EmailCampaign? @relation(fields: [campaignId], references: [id])
+  deliverySource        String?  // REGISTRATION_APPROVED | CAMPAIGN | OTP | WELCOME | STAFF_APPROVED | BROADCAST_SEND | ...
+  recipientEmail        String?  // for display in queue UI
+  recipientType         String?  // PARENT | TEACHER | VOLUNTEER | CAMPUS_REP | ADMIN
+  txId                  String?  // Resend/history log id for tracking
+  type                  String   // REGISTRATION_APPROVED | BROADCAST_SEND | CAMPAIGN_SEND | ...
+  status                String   @default("QUEUED") // QUEUED | DONE | FAILED | CANCELLED
   attempts              Int      @default(0)
   lastError             String?
   runAfter              DateTime @default(now())
@@ -653,6 +661,8 @@ model SideEffect {
   updatedAt             DateTime @updatedAt
 
   @@index([status, runAfter])
+  @@index([campaignId])
+  @@index([recipientEmail])
 }
 
 model RegistrationCounter {
@@ -1120,6 +1130,7 @@ model EmailTemplate {
   isDefault      Boolean            @default(false)
   active         Boolean            @default(true)
   eventConfigs   EmailEventConfig[] // Events using this template
+  campaigns      EmailCampaign[]
   deletedAt      DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
@@ -1192,6 +1203,103 @@ model BroadcastRecipient {
   @@index([broadcastId, status])
   @@index([recipientId, readAt])
   @@index([recipientId, pinned])
+}
+
+// ─── Campaigns (replaces Broadcast) ──────────────────────────────────────────
+
+model EmailCampaign {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  subject          String
+  previewText      String?
+  templateId       String?
+  template         EmailTemplate?  @relation(fields: [templateId], references: [id])
+  body             Json            // TipTap JSON
+  status           String          @default("DRAFT") // DRAFT | SCHEDULED | QUEUED | SENDING | COMPLETED | PAUSED | CANCELLED | FAILED
+  scheduledFor     DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  recipientCount   Int             @default(0)
+  audienceFilter   Json?           // SavedAudience filter definition (inline or reference)
+  savedAudienceId  String?
+  savedAudience    SavedAudience?  @relation(fields: [savedAudienceId], references: [id])
+  senderMode       String          @default("ORG_SLUG")
+  customFromLocalPart String?
+  replyTo          String?
+  attachments      Json?           // [{ url, fileName, fileType, fileSize }]
+  createdById      String
+  deletedAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  recipients       EmailRecipient[]
+  sideEffects      SideEffect[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@index([deletedAt])
+}
+
+model EmailRecipient {
+  id               String        @id @default(cuid())
+  campaignId       String
+  campaign         EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId           String
+  registrationId   String?
+  email            String
+  recipientType    String        // PARENT | TEACHER | VOLUNTEER | CAMPUS_REP | ADMIN
+  deliveryStatus   String        @default("QUEUED") // QUEUED | SENT | DELIVERED | OPENED | CLICKED | BOUNCED | FAILED | CANCELLED
+  queuedAt         DateTime      @default(now())
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  openedAt         DateTime?
+  clickedAt        DateTime?
+  bouncedAt        DateTime?
+  failedReason     String?
+  retryCount       Int           @default(0)
+  providerMessageId String?
+  sideEffectId     String?
+  readAt           DateTime?     // inbox read tracking
+  pinned           Boolean       @default(false) // inbox pin
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([campaignId, deliveryStatus])
+  @@index([userId, readAt])
+  @@index([userId, pinned])
+  @@index([email])
+  @@index([registrationId])
+}
+
+model SavedAudience {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  filterDefinition Json            // { recipientType, filters: { registrationStatus?, campId?, campusId?, ... } }
+  createdById      String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  campaigns        EmailCampaign[]
+
+  @@index([organizationId])
+}
+
+model EmailAuditLog {
+  id               String   @id @default(cuid())
+  organizationId   String
+  userId           String?
+  action           String   // CAMPAIGN_SENT | CAMPAIGN_CANCELLED | RETRY_TRIGGERED | QUEUE_PAUSED | QUEUE_RESUMED | CAMPAIGN_DELETED
+  targetType       String?  // CAMPAIGN | QUEUE | RECIPIENT | TEMPLATE | EVENT_CONFIG
+  targetId         String?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([targetType, targetId])
 }
 
 model ScanEvent {

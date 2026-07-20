@@ -7,6 +7,9 @@ import { getSampleData } from "../../email/variables";
 import { resolveFromAddress } from "../../email/resolveFromAddress";
 import { interpolateSubject } from "../../email/interpolate";
 import { validateTemplate } from "../../email/validateTemplate";
+import { audienceFilterSchema } from "../../email/audience/filters";
+import { resolveAudience, previewAudience } from "../../email/audience/resolver";
+import { sendCampaign, scheduleCampaign } from "../../email/campaign/sender";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -796,5 +799,718 @@ export const communicationRouter = createTRPCRouter({
       const item = await ctx.prisma.broadcastRecipient.findUniqueOrThrow({ where: { id: input.id } });
       if (item.recipientId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
       return ctx.prisma.broadcastRecipient.update({ where: { id: input.id }, data: { pinned: false } });
+    }),
+
+  // ═══ Dashboard ═══════════════════════════════════════════════════════════════
+
+  dashboardStats: protectedProcedure.query(async ({ ctx }) => {
+    const currentUser = ctx.session?.user;
+    if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+    const oid = orgId(ctx);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [sentToday, sentWeek, failed, waiting, queueSize, campaignsRunning, campaignsScheduled, totalSent, totalDelivered, totalOpened, totalClicked, totalBounced] =
+      await Promise.all([
+        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, updatedAt: { gte: todayStart }, campaign: { organizationId: oid } } }),
+        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, updatedAt: { gte: weekAgo }, campaign: { organizationId: oid } } }),
+        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["FAILED", "BOUNCED"] }, campaign: { organizationId: oid } } }),
+        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "QUEUED", campaign: { organizationId: oid } } }),
+        ctx.prisma.sideEffect.count({ where: { status: "QUEUED", campaignId: { not: null } } }),
+        ctx.prisma.emailCampaign.count({ where: { organizationId: oid, status: "SENDING" } }),
+        ctx.prisma.emailCampaign.count({ where: { organizationId: oid, status: "SCHEDULED" } }),
+        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
+        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["DELIVERED", "OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
+        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
+        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "CLICKED", campaign: { organizationId: oid } } }),
+        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "BOUNCED", campaign: { organizationId: oid } } }),
+      ]);
+
+    const recent = await ctx.prisma.emailRecipient.findMany({
+      take: 20,
+      orderBy: { createdAt: "desc" },
+      where: { campaign: { organizationId: oid } },
+      include: { campaign: { select: { name: true, status: true } } },
+    });
+
+    return {
+      sentToday,
+      sentWeek,
+      failed,
+      waiting,
+      queueSize,
+      campaignsRunning,
+      campaignsScheduled,
+      successRate: totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0,
+      openRate: totalDelivered > 0 ? Math.round((totalOpened / totalDelivered) * 100) : 0,
+      clickRate: totalOpened > 0 ? Math.round((totalClicked / totalOpened) * 100) : 0,
+      bounced: totalBounced,
+      recentActivity: recent.map((r: any) => ({
+        id: r.id,
+        email: r.email,
+        deliveryStatus: r.deliveryStatus,
+        campaignName: r.campaign?.name,
+        campaignStatus: r.campaign?.status,
+        createdAt: r.createdAt,
+      })),
+    };
+  }),
+
+  // ═══ Audiences ═══════════════════════════════════════════════════════════════
+
+  audienceList: protectedProcedure.query(async ({ ctx }) => {
+    const oid = orgId(ctx);
+    return ctx.prisma.savedAudience.findMany({
+      where: { organizationId: oid },
+      orderBy: { createdAt: "desc" },
+    });
+  }),
+
+  audienceGet: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.prisma.savedAudience.findUniqueOrThrow({ where: { id: input.id } });
+    }),
+
+  audienceCreate: protectedProcedure
+    .input(z.object({ name: z.string().min(1), description: z.string().optional(), filterDefinition: audienceFilterSchema }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      return ctx.prisma.savedAudience.create({
+        data: { ...input, organizationId: oid, createdById: ctx.session!.user!.id, filterDefinition: input.filterDefinition as any },
+      });
+    }),
+
+  audienceUpdate: protectedProcedure
+    .input(z.object({ id: z.string(), name: z.string().min(1).optional(), description: z.string().nullable().optional(), filterDefinition: audienceFilterSchema.optional() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const { id, ...data } = input;
+      return ctx.prisma.savedAudience.update({ where: { id }, data: data as any });
+    }),
+
+  audienceDelete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      return ctx.prisma.savedAudience.delete({ where: { id: input.id } });
+    }),
+
+  audiencePreview: protectedProcedure
+    .input(z.object({ filterDefinition: audienceFilterSchema.optional(), savedAudienceId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      let filterDefinition = input.filterDefinition;
+      if (input.savedAudienceId) {
+        const saved = await ctx.prisma.savedAudience.findUniqueOrThrow({ where: { id: input.savedAudienceId } });
+        filterDefinition = saved.filterDefinition as any;
+      }
+      if (!filterDefinition) throw new TRPCError({ code: "BAD_REQUEST", message: "No filter definition provided" });
+      return previewAudience(ctx.prisma, oid, filterDefinition);
+    }),
+
+  // ═══ Campaigns ═══════════════════════════════════════════════════════════════
+
+  campaignList: protectedProcedure
+    .input(z.object({ cursor: z.string().optional(), limit: z.number().min(1).max(50).default(10), status: z.string().optional(), search: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const limit = input?.limit ?? 10;
+      const where: Record<string, unknown> = { organizationId: oid, deletedAt: null };
+      if (input?.status) where.status = input.status;
+      if (input?.search) {
+        where.OR = [
+          { name: { contains: input.search, mode: "insensitive" } },
+          { subject: { contains: input.search, mode: "insensitive" } },
+        ];
+      }
+
+      const items = await ctx.prisma.emailCampaign.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: limit + 1,
+        ...(input?.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+        include: { _count: { select: { recipients: true } } },
+      });
+
+      let nextCursor: string | undefined;
+      if (items.length > limit) {
+        const next = items.pop();
+        nextCursor = next?.id;
+      }
+      return { items, nextCursor };
+    }),
+
+  campaignGet: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const campaign = await ctx.prisma.emailCampaign.findUnique({
+        where: { id: input.id },
+        include: {
+          _count: { select: { recipients: true } },
+          recipients: { select: { deliveryStatus: true, openedAt: true, clickedAt: true } },
+        },
+      });
+      if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const recipients = campaign.recipients as any[];
+      return {
+        ...campaign,
+        stats: {
+          total: campaign._count.recipients,
+          queued: recipients.filter((r) => r.deliveryStatus === "QUEUED").length,
+          sent: recipients.filter((r) => r.deliveryStatus === "SENT").length,
+          delivered: recipients.filter((r) => ["DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
+          opened: recipients.filter((r) => r.openedAt).length,
+          clicked: recipients.filter((r) => r.clickedAt).length,
+          failed: recipients.filter((r) => r.deliveryStatus === "FAILED").length,
+          bounced: recipients.filter((r) => r.deliveryStatus === "BOUNCED").length,
+        },
+      };
+    }),
+
+  campaignCreate: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1),
+      description: z.string().optional(),
+      subject: z.string().min(1),
+      previewText: z.string().optional(),
+      body: z.record(z.unknown()),
+      audienceFilter: audienceFilterSchema.optional(),
+      savedAudienceId: z.string().optional(),
+      templateId: z.string().optional(),
+      senderMode: z.string().optional(),
+      customFromLocalPart: z.string().nullable().optional(),
+      replyTo: z.string().nullable().optional(),
+      attachments: z.array(z.object({ url: z.string(), fileName: z.string(), fileType: z.string(), fileSize: z.number() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      return ctx.prisma.emailCampaign.create({
+        data: { ...input, organizationId: oid, createdById: ctx.session!.user!.id, body: input.body as any, audienceFilter: input.audienceFilter as any },
+      });
+    }),
+
+  campaignUpdate: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      subject: z.string().min(1).optional(),
+      previewText: z.string().nullable().optional(),
+      body: z.record(z.unknown()).optional(),
+      audienceFilter: audienceFilterSchema.optional(),
+      savedAudienceId: z.string().nullable().optional(),
+      templateId: z.string().nullable().optional(),
+      senderMode: z.string().optional(),
+      customFromLocalPart: z.string().nullable().optional(),
+      replyTo: z.string().nullable().optional(),
+      attachments: z.array(z.object({ url: z.string(), fileName: z.string(), fileType: z.string(), fileSize: z.number() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const { id, ...data } = input;
+      await ctx.prisma.emailCampaign.update({ where: { id }, data: data as any });
+      return ctx.prisma.emailCampaign.findUnique({ where: { id } });
+    }),
+
+  campaignDelete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      return ctx.prisma.emailCampaign.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
+    }),
+
+  campaignSend: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
+      if (!campaign || campaign.organizationId !== orgId(ctx)) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!["DRAFT", "SCHEDULED"].includes(campaign.status)) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot send a campaign that is not a draft or scheduled" });
+
+      await ctx.prisma.emailAuditLog.create({
+        data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "CAMPAIGN_SENT", targetType: "CAMPAIGN", targetId: input.id, metadata: { name: campaign.name } },
+      });
+
+      return sendCampaign(ctx.prisma, input.id);
+    }),
+
+  campaignSchedule: protectedProcedure
+    .input(z.object({ id: z.string(), scheduledFor: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
+      if (!campaign || campaign.organizationId !== orgId(ctx)) throw new TRPCError({ code: "NOT_FOUND" });
+      await scheduleCampaign(ctx.prisma, input.id, new Date(input.scheduledFor));
+      return { success: true };
+    }),
+
+  campaignCancel: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
+      if (!campaign || campaign.organizationId !== orgId(ctx)) throw new TRPCError({ code: "NOT_FOUND" });
+      await ctx.prisma.emailCampaign.update({ where: { id: input.id }, data: { status: "CANCELLED" } });
+      await ctx.prisma.emailAuditLog.create({
+        data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "CAMPAIGN_CANCELLED", targetType: "CAMPAIGN", targetId: input.id },
+      });
+      return { success: true };
+    }),
+
+  campaignPause: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
+      if (!campaign || campaign.organizationId !== orgId(ctx)) throw new TRPCError({ code: "NOT_FOUND" });
+      if (campaign.status !== "SENDING") throw new TRPCError({ code: "BAD_REQUEST", message: "Only sending campaigns can be paused" });
+      await ctx.prisma.emailCampaign.update({ where: { id: input.id }, data: { status: "PAUSED" } });
+      return { success: true };
+    }),
+
+  campaignResume: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
+      if (!campaign || campaign.organizationId !== orgId(ctx)) throw new TRPCError({ code: "NOT_FOUND" });
+      if (campaign.status !== "PAUSED") throw new TRPCError({ code: "BAD_REQUEST", message: "Only paused campaigns can be resumed" });
+      await ctx.prisma.emailCampaign.update({ where: { id: input.id }, data: { status: "SENDING" } });
+      return sendCampaign(ctx.prisma, input.id);
+    }),
+
+  campaignGetStats: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const recipients = await ctx.prisma.emailRecipient.findMany({
+        where: { campaignId: input.id },
+        select: { deliveryStatus: true, openedAt: true, clickedAt: true },
+      });
+      return {
+        total: recipients.length,
+        queued: recipients.filter((r) => r.deliveryStatus === "QUEUED").length,
+        sent: recipients.filter((r) => r.deliveryStatus === "SENT").length,
+        delivered: recipients.filter((r) => ["DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
+        opened: recipients.filter((r) => r.openedAt).length,
+        clicked: recipients.filter((r) => r.clickedAt).length,
+        failed: recipients.filter((r) => r.deliveryStatus === "FAILED").length,
+        bounced: recipients.filter((r) => r.deliveryStatus === "BOUNCED").length,
+      };
+    }),
+
+  campaignDuplicate: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const original = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
+      if (!original || original.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
+      return ctx.prisma.emailCampaign.create({
+        data: {
+          organizationId: oid,
+          name: `${original.name} (copy)`,
+          description: original.description,
+          subject: original.subject,
+          previewText: original.previewText,
+          templateId: original.templateId,
+          body: original.body,
+          audienceFilter: original.audienceFilter,
+          savedAudienceId: original.savedAudienceId,
+          senderMode: original.senderMode,
+          customFromLocalPart: original.customFromLocalPart,
+          replyTo: original.replyTo,
+          attachments: original.attachments,
+          createdById: ctx.session!.user!.id,
+        },
+      } as any);
+    }),
+
+  campaignCheckDuplicate: protectedProcedure
+    .input(z.object({ id: z.string().optional(), subject: z.string().optional(), audienceFilter: audienceFilterSchema.optional() }))
+    .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const recent = await ctx.prisma.emailCampaign.findFirst({
+        where: {
+          organizationId: oid,
+          subject: input.subject,
+          status: { in: ["COMPLETED", "SENDING"] },
+          startedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          ...(input.id ? { id: { not: input.id } } : {}),
+        },
+        orderBy: { startedAt: "desc" },
+        select: { id: true, name: true, subject: true, recipientCount: true, startedAt: true },
+      });
+      return { isDuplicate: !!recent, lastCampaign: recent };
+    }),
+
+  campaignSendToNonOpeners: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const original = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
+      if (!original || original.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const nonOpeners = await ctx.prisma.emailRecipient.findMany({
+        where: { campaignId: input.id, openedAt: null, deliveryStatus: { in: ["SENT", "DELIVERED"] } },
+        select: { userId: true, email: true },
+      });
+
+      if (nonOpeners.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "No non-openers found" });
+
+      const campaign = await ctx.prisma.emailCampaign.create({
+        data: {
+          organizationId: oid,
+          name: `${original.name} (non-openers)`,
+          description: `Follow-up to "${original.name}" — sent only to non-openers`,
+          subject: original.subject,
+          previewText: original.previewText,
+          templateId: original.templateId,
+          body: original.body,
+          audienceFilter: {
+            recipientType: "ALL",
+            filters: { hasNotOpenedPreviousCampaign: { campaignId: input.id } },
+          },
+          senderMode: original.senderMode,
+          customFromLocalPart: original.customFromLocalPart,
+          replyTo: original.replyTo,
+          createdById: ctx.session!.user!.id,
+        },
+      } as any);
+
+      return campaign;
+    }),
+
+  // ═══ Delivery Queue ═════════════════════════════════════════════════════════
+
+  queueList: protectedProcedure
+    .input(z.object({
+      cursor: z.string().optional(),
+      limit: z.number().min(1).max(100).default(20),
+      status: z.string().optional(),
+      campaignId: z.string().optional(),
+      deliverySource: z.string().optional(),
+      search: z.string().optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const limit = input?.limit ?? 20;
+      const where: Record<string, unknown> = { type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } };
+
+      if (input?.status) where.status = input.status;
+      if (input?.campaignId) where.campaignId = input.campaignId;
+      if (input?.deliverySource) where.deliverySource = input.deliverySource;
+      if (input?.search) where.recipientEmail = { contains: input.search, mode: "insensitive" };
+
+      const items = await ctx.prisma.sideEffect.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: limit + 1,
+        ...(input?.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+        include: {
+          campaign: { select: { name: true } },
+        },
+      });
+
+      let nextCursor: string | undefined;
+      if (items.length > limit) {
+        const next = items.pop();
+        nextCursor = next?.id;
+      }
+      return { items, nextCursor };
+    }),
+
+  queueStats: protectedProcedure.query(async ({ ctx }) => {
+    const items = await ctx.prisma.sideEffect.findMany({
+      where: { type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } },
+      select: { status: true },
+    });
+    return {
+      waiting: items.filter((i) => i.status === "QUEUED").length,
+      sending: items.filter((i) => i.status === "DONE").length,
+      retrying: items.filter((i) => i.status === "QUEUED").length,
+      completed: items.filter((i) => i.status === "DONE").length,
+      failed: items.filter((i) => i.status === "FAILED").length,
+    };
+  }),
+
+  queueRetry: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()).optional(), retryAll: z.boolean().optional(), campaignId: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      let ids = input.ids ?? [];
+      if (input.retryAll || input.campaignId) {
+        const failed = await ctx.prisma.sideEffect.findMany({
+          where: { status: "FAILED", ...(input.campaignId && { campaignId: input.campaignId }) },
+          select: { id: true },
+        });
+        ids = failed.map((f) => f.id);
+      }
+      if (ids.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "No failed items to retry" });
+      await ctx.prisma.sideEffect.updateMany({
+        where: { id: { in: ids }, status: "FAILED" },
+        data: { status: "QUEUED", attempts: 0, runAfter: new Date() },
+      });
+      await ctx.prisma.emailAuditLog.create({
+        data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "RETRY_TRIGGERED", targetType: "QUEUE", metadata: { count: ids.length } },
+      });
+      return { retried: ids.length };
+    }),
+
+  queuePause: protectedProcedure
+    .input(z.object({ campaignId: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const where: Record<string, unknown> = { status: "QUEUED", type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } };
+      if (input.campaignId) where.campaignId = input.campaignId;
+      const count = await ctx.prisma.sideEffect.count({ where });
+      await ctx.prisma.emailAuditLog.create({
+        data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "QUEUE_PAUSED", targetType: "QUEUE", metadata: { pausedCount: count } },
+      });
+      return { paused: count };
+    }),
+
+  queueResume: protectedProcedure
+    .input(z.object({ campaignId: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const where: Record<string, unknown> = { status: "QUEUED", type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } };
+      if (input.campaignId) where.campaignId = input.campaignId;
+      const count = await ctx.prisma.sideEffect.count({ where });
+      await ctx.prisma.emailAuditLog.create({
+        data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "QUEUE_RESUMED", targetType: "QUEUE", metadata: { resumedCount: count } },
+      });
+      return { resumed: count };
+    }),
+
+  queueCancel: protectedProcedure
+    .input(z.object({ campaignId: z.string().optional(), ids: z.array(z.string()).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const where: Record<string, unknown> = { status: "QUEUED", type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } };
+      if (input.campaignId) where.campaignId = input.campaignId;
+      if (input.ids) where.id = { in: input.ids };
+      const result = await ctx.prisma.sideEffect.updateMany({
+        where,
+        data: { status: "CANCELLED" },
+      });
+      await ctx.prisma.emailAuditLog.create({
+        data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "CAMPAIGN_CANCELLED", targetType: "QUEUE", metadata: { cancelledCount: result.count } },
+      });
+      return { cancelled: result.count };
+    }),
+
+  // ═══ Delivery Logs ══════════════════════════════════════════════════════════
+
+  deliveryLogs: protectedProcedure
+    .input(z.object({
+      cursor: z.string().optional(),
+      limit: z.number().min(1).max(100).default(20),
+      email: z.string().optional(),
+      name: z.string().optional(),
+      registrationNumber: z.string().optional(),
+      campaignName: z.string().optional(),
+      subject: z.string().optional(),
+      campId: z.string().optional(),
+      campusId: z.string().optional(),
+      deliverySource: z.string().optional(),
+      status: z.string().optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const limit = input?.limit ?? 20;
+
+      const where: Record<string, unknown> = { campaign: { organizationId: oid } };
+
+      if (input?.email) where.email = { contains: input.email, mode: "insensitive" };
+      if (input?.status) where.deliveryStatus = input.status;
+      if (input?.campaignName) where.campaign = { name: { contains: input.campaignName, mode: "insensitive" } };
+      if (input?.dateFrom || input?.dateTo) {
+        where.createdAt = {};
+        if (input.dateFrom) (where.createdAt as any).gte = new Date(input.dateFrom);
+        if (input.dateTo) (where.createdAt as any).lte = new Date(input.dateTo);
+      }
+
+      const items = await ctx.prisma.emailRecipient.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: limit + 1,
+        ...(input?.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+        include: {
+          campaign: { select: { name: true, subject: true, status: true } },
+        },
+      });
+
+      let nextCursor: string | undefined;
+      if (items.length > limit) {
+        const next = items.pop();
+        nextCursor = next?.id;
+      }
+      return { items, nextCursor };
+    }),
+
+  deliveryLogStats: protectedProcedure.query(async ({ ctx }) => {
+    const oid = orgId(ctx);
+    const items = await ctx.prisma.emailRecipient.findMany({
+      where: { campaign: { organizationId: oid } },
+      select: { deliveryStatus: true },
+    });
+    return {
+      total: items.length,
+      delivered: items.filter((i) => ["DELIVERED", "OPENED", "CLICKED"].includes(i.deliveryStatus)).length,
+      opened: items.filter((i) => ["OPENED", "CLICKED"].includes(i.deliveryStatus)).length,
+      clicked: items.filter((i) => i.deliveryStatus === "CLICKED").length,
+      bounced: items.filter((i) => i.deliveryStatus === "BOUNCED").length,
+      failed: items.filter((i) => i.deliveryStatus === "FAILED").length,
+    };
+  }),
+
+  // ═══ Analytics ══════════════════════════════════════════════════════════════
+
+  analyticsOverview: protectedProcedure
+    .input(z.object({ dateFrom: z.string().optional(), dateTo: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const where: Record<string, unknown> = { campaign: { organizationId: oid } };
+      if (input?.dateFrom || input?.dateTo) {
+        where.createdAt = {};
+        if (input?.dateFrom) (where.createdAt as any).gte = new Date(input.dateFrom);
+        if (input?.dateTo) (where.createdAt as any).lte = new Date(input.dateTo);
+      }
+
+      const items = await ctx.prisma.emailRecipient.findMany({
+        where,
+        select: { deliveryStatus: true, openedAt: true, clickedAt: true, createdAt: true },
+      });
+
+      return {
+        totalSent: items.length,
+        delivered: items.filter((i) => ["DELIVERED", "OPENED", "CLICKED"].includes(i.deliveryStatus)).length,
+        opened: items.filter((i) => i.openedAt).length,
+        clicked: items.filter((i) => i.clickedAt).length,
+        bounced: items.filter((i) => i.deliveryStatus === "BOUNCED").length,
+        failed: items.filter((i) => i.deliveryStatus === "FAILED").length,
+      };
+    }),
+
+  analyticsTimeSeries: protectedProcedure
+    .input(z.object({ days: z.number().default(30) }).optional())
+    .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const days = input?.days ?? 30;
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const items = await ctx.prisma.emailRecipient.findMany({
+        where: { campaign: { organizationId: oid }, createdAt: { gte: since } },
+        select: { createdAt: true, deliveryStatus: true, openedAt: true },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const series: { date: string; sent: number; opened: number }[] = [];
+      for (let d = 0; d < days; d++) {
+        const date = new Date(Date.now() - (days - 1 - d) * 24 * 60 * 60 * 1000);
+        const key = date.toISOString().slice(0, 10);
+        const dayItems = items.filter((i) => i.createdAt.toISOString().slice(0, 10) === key);
+        series.push({
+          date: key,
+          sent: dayItems.length,
+          opened: dayItems.filter((i) => i.openedAt).length,
+        });
+      }
+
+      return series;
+    }),
+
+  // ═══ Communication Timeline ════════════════════════════════════════════════
+
+  timelineForRegistration: protectedProcedure
+    .input(z.object({ registrationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.prisma.emailRecipient.findMany({
+        where: { registrationId: input.registrationId },
+        orderBy: { createdAt: "desc" },
+        include: { campaign: { select: { name: true, subject: true } } },
+        take: 50,
+      });
+    }),
+
+  timelineForUser: protectedProcedure
+    .input(z.object({ userId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.prisma.emailRecipient.findMany({
+        where: { userId: input.userId },
+        orderBy: { createdAt: "desc" },
+        include: { campaign: { select: { name: true, subject: true } } },
+        take: 50,
+      });
+    }),
+
+  // ═══ Inbox (staff email recipients) ═════════════════════════════════════════
+
+  inboxMineV2: protectedProcedure
+    .input(z.object({ unreadOnly: z.boolean().default(false), pinnedOnly: z.boolean().default(false) }).optional())
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const where: Record<string, unknown> = { userId: currentUser.id };
+      if (input?.unreadOnly) where.readAt = null;
+      if (input?.pinnedOnly) where.pinned = true;
+
+      return ctx.prisma.emailRecipient.findMany({
+        where,
+        include: {
+          campaign: { select: { id: true, name: true, subject: true, body: true, startedAt: true } },
+        },
+        orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
+        take: 100,
+      });
+    }),
+
+  markInboxReadV2: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const item = await ctx.prisma.emailRecipient.findUniqueOrThrow({ where: { id: input.id } });
+      if (item.userId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
+      return ctx.prisma.emailRecipient.update({ where: { id: input.id }, data: { readAt: new Date() } });
+    }),
+
+  markInboxUnreadV2: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const item = await ctx.prisma.emailRecipient.findUniqueOrThrow({ where: { id: input.id } });
+      if (item.userId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
+      return ctx.prisma.emailRecipient.update({ where: { id: input.id }, data: { readAt: null } });
+    }),
+
+  pinInboxItemV2: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const item = await ctx.prisma.emailRecipient.findUniqueOrThrow({ where: { id: input.id } });
+      if (item.userId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
+      return ctx.prisma.emailRecipient.update({ where: { id: input.id }, data: { pinned: true } });
+    }),
+
+  unpinInboxItemV2: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const item = await ctx.prisma.emailRecipient.findUniqueOrThrow({ where: { id: input.id } });
+      if (item.userId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
+      return ctx.prisma.emailRecipient.update({ where: { id: input.id }, data: { pinned: false } });
     }),
 });
