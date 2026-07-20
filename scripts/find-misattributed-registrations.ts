@@ -95,14 +95,59 @@ async function main() {
   }
 
   if (misattributed.length === 0) {
-    console.log("✅ No misattributed registrations found.");
-    return;
+    console.log("✅ No misattributed registrations found (click-based check).");
+  } else {
+    console.log(`🚨 Found ${misattributed.length} misattributed registration(s) (click-based check):\n`);
+    console.table(misattributed);
   }
 
-  console.log(`🚨 Found ${misattributed.length} misattributed registration(s):\n`);
-  console.table(misattributed);
+  // ── Pass 2: family-cluster heuristic ─────────────────────────────────────
+  // Click logging only started recently, so registrations created BEFORE that
+  // have no click rows and are invisible to the check above. Fallback: a
+  // family is locked to one campus — any user whose campers' registrations
+  // span multiple campuses within the same camp is a misrouting suspect.
+  console.log("\nRunning family-cluster check (catches pre-click-logging registrations)...\n");
 
-  console.log("\nTo reassign these registrations, you can use the admin bulk reassign feature in the UI or execute a script.");
+  const familyMap = new Map<string, { campusIds: Set<string>; regs: typeof registrations }>();
+  for (const reg of registrations) {
+    const userId = reg.camper.userId;
+    if (!userId) continue;
+    const key = `${userId}:${reg.campId}`;
+    let entry = familyMap.get(key);
+    if (!entry) {
+      entry = { campusIds: new Set(), regs: [] };
+      familyMap.set(key, entry);
+    }
+    entry.campusIds.add(reg.campusId);
+    entry.regs.push(reg);
+  }
+
+  const familySuspects = [];
+  for (const [, entry] of familyMap) {
+    if (entry.campusIds.size <= 1) continue;
+    for (const reg of entry.regs) {
+      familySuspects.push({
+        registrationId: reg.id,
+        registrationNumber: reg.registrationNumber ?? "N/A",
+        camperName: reg.camper.name,
+        parentEmail: reg.camper.user?.email ?? "N/A",
+        campus: reg.campus.name,
+        camp: reg.camp.name,
+        registeredAt: reg.createdAt.toISOString(),
+      });
+    }
+  }
+
+  if (familySuspects.length === 0) {
+    console.log("✅ No multi-campus families found.");
+  } else {
+    console.log(`🚨 Found ${familySuspects.length} registration(s) in families split across campuses:\n`);
+    console.table(familySuspects);
+  }
+
+  if (misattributed.length > 0 || familySuspects.length > 0) {
+    console.log("\nTo reassign these registrations, you can use the admin bulk reassign feature in the UI or execute a script.");
+  }
 }
 
 main()

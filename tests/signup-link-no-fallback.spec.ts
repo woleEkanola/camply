@@ -38,4 +38,50 @@ test.describe("Signup link fallback prevention", () => {
     // It should point to /dashboard/profiles/new
     expect(href).toBe("/dashboard/profiles/new");
   });
+
+  test("parent with no camper but a recorded link click gets + Add Camper anchored to the campus they clicked", async ({ page }) => {
+    const { organizationId, campId } = await getFixtureOrgContext();
+
+    // A second campus with its own signup link for the same camp
+    const secondCampus = await prisma.campus.create({
+      data: {
+        name: `E2E ClickAnchor Campus ${Date.now()}`,
+        slug: `e2e-click-anchor-${Date.now()}`,
+        address: "2 Anchor Ave",
+        city: "Testville",
+        country: "Testland",
+        organizationId,
+      },
+    });
+    const secondLink = await prisma.signupLink.create({
+      data: {
+        token: `e2e-anchor-${Date.now()}`,
+        campusId: secondCampus.id,
+        campId,
+        active: true,
+      },
+    });
+
+    const parent = await prisma.user.findUniqueOrThrow({ where: { email: testParentEmail } });
+    // Simulate: this user arrived via the second campus's link (click backfilled after login)
+    await prisma.signupLinkClick.create({
+      data: { signupLinkId: secondLink.id, userId: parent.id },
+    });
+
+    try {
+      await loginWithPassword(page, testParentEmail, parentPassword);
+      await page.goto("/dashboard");
+
+      const addCamperLink = page.getByRole("link", { name: "+ Add Camper" });
+      await expect(addCamperLink).toBeVisible();
+
+      const href = await addCamperLink.getAttribute("href");
+      // Must route to the campus the user actually clicked — never a random org link
+      expect(href).toBe(`/register/${secondLink.token}?step=hub`);
+    } finally {
+      await prisma.signupLinkClick.deleteMany({ where: { signupLinkId: secondLink.id } });
+      await prisma.signupLink.delete({ where: { id: secondLink.id } });
+      await prisma.campus.delete({ where: { id: secondCampus.id } });
+    }
+  });
 });

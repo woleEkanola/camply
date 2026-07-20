@@ -677,13 +677,17 @@ export const signupLinkRouter = createTRPCRouter({
 
   // Attach a userId to the most-recent anonymous click for this link.
   // Called client-side right after a user successfully logs in or creates
-  // an account inside the registration wizard.
+  // an account inside the registration wizard. The userId always comes from
+  // the session — never from client input — so nobody can claim someone
+  // else's anonymous clicks.
   linkClickBack: publicProcedure
     .input(z.object({
       signupLinkId: z.string(),
-      userId: z.string(),
+      userId: z.string().optional(), // legacy param, ignored — session wins
     }))
     .mutation(async ({ ctx, input }) => {
+      const sessionUserId = ctx.session?.user?.id;
+      if (!sessionUserId) return { updated: false };
       // Find the most recent anonymous click for this link
       const click = await ctx.prisma.signupLinkClick.findFirst({
         where: { signupLinkId: input.signupLinkId, userId: null },
@@ -692,7 +696,7 @@ export const signupLinkRouter = createTRPCRouter({
       if (!click) return { updated: false };
       await ctx.prisma.signupLinkClick.update({
         where: { id: click.id },
-        data: { userId: input.userId },
+        data: { userId: sessionUserId },
       });
       return { updated: true };
     }),

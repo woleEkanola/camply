@@ -75,3 +75,79 @@ test.describe("Admin: Trash (restore / permanent delete)", () => {
     campusId = undefined;
   });
 });
+
+// Covers an entity type ("camper") that was listed in Trash but whose restore/purge
+// mutations were rejected by the router's enum before the trash hardening fix.
+test.describe("Admin: Trash (newly-enabled entity types)", () => {
+  test.describe.configure({ mode: "serial" });
+
+  let organizationId: string;
+  let camperId: string | undefined;
+
+  test.beforeAll(async () => {
+    const ctx = await getFixtureOrgContext();
+    organizationId = ctx.organizationId;
+    const admin = await prisma.user.findUniqueOrThrow({ where: { email: "admin@camply.com" } });
+
+    const camper = await prisma.camper.create({
+      data: {
+        name: `E2E Trash Camper ${Date.now()}`,
+        firstName: "E2E",
+        lastName: "TrashCamper",
+        organizationId,
+        userId: admin.id,
+        deletedAt: new Date(),
+      },
+    });
+    camperId = camper.id;
+  });
+
+  test.afterAll(async () => {
+    if (camperId) await prisma.camper.deleteMany({ where: { id: camperId } });
+  });
+
+  test("a soft-deleted camper appears in Trash and can be restored", async ({ page }) => {
+    if (!camperId) throw new Error("camperId not set");
+    const camper = await prisma.camper.findUniqueOrThrow({ where: { id: camperId } });
+
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/trash");
+
+    await expect(visibleText(page, camper.name)).toBeVisible({ timeout: 10000 });
+
+    const row = page.locator("tr", { hasText: camper.name });
+    await row.getByRole("button", { name: "Restore" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Restore", exact: true }).click();
+
+    await expect(page.getByText("Item restored successfully")).toBeVisible({ timeout: 10000 });
+    await expect(visibleText(page, camper.name)).not.toBeVisible();
+
+    await expect
+      .poll(async () => (await prisma.camper.findUniqueOrThrow({ where: { id: camperId! } })).deletedAt)
+      .toBeNull();
+  });
+
+  test("a camper can be permanently deleted from Trash", async ({ page }) => {
+    if (!camperId) throw new Error("camperId not set");
+
+    await prisma.camper.update({ where: { id: camperId }, data: { deletedAt: new Date() } });
+    const camper = await prisma.camper.findUniqueOrThrow({ where: { id: camperId } });
+
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/trash");
+
+    await expect(visibleText(page, camper.name)).toBeVisible({ timeout: 10000 });
+
+    const row = page.locator("tr", { hasText: camper.name });
+    await row.getByRole("button", { name: "Delete Forever" }).click();
+
+    const dialog = page.getByRole("dialog");
+    await dialog.locator("input[type=text]").fill("delete");
+    await dialog.getByRole("button", { name: "Delete Forever" }).click();
+
+    await expect(page.getByText("Item permanently deleted")).toBeVisible({ timeout: 10000 });
+
+    await expect(prisma.camper.findUnique({ where: { id: camperId } })).resolves.toBeNull();
+    camperId = undefined;
+  });
+});

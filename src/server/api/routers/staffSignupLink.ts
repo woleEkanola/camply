@@ -154,9 +154,11 @@ export const staffSignupLinkRouter = createTRPCRouter({
   linkClickBack: publicProcedure
     .input(z.object({
       staffSignupLinkId: z.string(),
-      userId: z.string(),
+      userId: z.string().optional(), // legacy param, ignored — session wins
     }))
     .mutation(async ({ ctx, input }) => {
+      const sessionUserId = ctx.session?.user?.id;
+      if (!sessionUserId) return { updated: false };
       const click = await ctx.prisma.staffSignupLinkClick.findFirst({
         where: { staffSignupLinkId: input.staffSignupLinkId, userId: null },
         orderBy: { clickedAt: "desc" },
@@ -164,7 +166,7 @@ export const staffSignupLinkRouter = createTRPCRouter({
       if (!click) return { updated: false };
       await ctx.prisma.staffSignupLinkClick.update({
         where: { id: click.id },
-        data: { userId: input.userId },
+        data: { userId: sessionUserId },
       });
       return { updated: true };
     }),

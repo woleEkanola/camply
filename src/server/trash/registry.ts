@@ -135,6 +135,7 @@ export const TRASH_REGISTRY: Record<TrashEntityType, TrashEntry> = {
  * blocked by a remaining live FK reference rather than aborting the whole sweep). */
 export const PURGE_ORDER: TrashEntityType[] = [
   "document",
+  "formField",
   "bed",
   "registration",
   "room",

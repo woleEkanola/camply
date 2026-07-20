@@ -54,10 +54,17 @@ export const trashRouter = createTRPCRouter({
     }))
     .mutation(async ({ input, ctx }) => {
       await assertOrgAdmin(ctx, input.organizationId);
+      const failed: { type: string; id: string; message: string }[] = [];
+      let restored = 0;
       for (const item of input.items) {
-        await restoreEntity(item.type, item.id, input.organizationId);
+        try {
+          await restoreEntity(item.type, item.id, input.organizationId);
+          restored++;
+        } catch (error) {
+          failed.push({ type: item.type, id: item.id, message: error instanceof Error ? error.message : "Restore failed" });
+        }
       }
-      return { success: true };
+      return { success: failed.length === 0, restored, failed };
     }),
 
   bulkPurgeNow: protectedProcedure
@@ -78,10 +85,19 @@ export const trashRouter = createTRPCRouter({
         return orderA - orderB;
       });
 
+      // Per-item tolerance: one row still blocked by a live FK reference must not
+      // abort the whole batch — report it and keep going.
+      const failed: { type: string; id: string; message: string }[] = [];
+      let purged = 0;
       for (const item of sortedItems) {
-        await purgeEntity(item.type, item.id, input.organizationId);
+        try {
+          await purgeEntity(item.type, item.id, input.organizationId);
+          purged++;
+        } catch (error) {
+          failed.push({ type: item.type, id: item.id, message: error instanceof Error ? error.message : "Purge failed" });
+        }
       }
-      return { success: true };
+      return { success: failed.length === 0, purged, failed };
     }),
 
   emptyTrash: protectedProcedure
@@ -97,9 +113,16 @@ export const trashRouter = createTRPCRouter({
         return orderA - orderB;
       });
 
+      const failed: { type: string; id: string; message: string }[] = [];
+      let purged = 0;
       for (const item of sortedTrash) {
-        await purgeEntity(item.type, item.id, input.organizationId);
+        try {
+          await purgeEntity(item.type, item.id, input.organizationId);
+          purged++;
+        } catch (error) {
+          failed.push({ type: item.type, id: item.id, message: error instanceof Error ? error.message : "Purge failed" });
+        }
       }
-      return { success: true };
+      return { success: failed.length === 0, purged, failed };
     }),
 });

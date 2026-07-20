@@ -95,29 +95,41 @@ export default function TrashPage() {
   });
 
   const bulkRestoreMutation = api.trash.bulkRestore.useMutation({
-    onSuccess: () => {
-      setSuccess("Selected items restored successfully");
+    onSuccess: (result) => {
+      if (result.failed.length > 0) {
+        setError(`${result.restored} item(s) restored, but ${result.failed.length} failed: ${result.failed[0].message}`);
+      } else {
+        setSuccess("Selected items restored successfully");
+        setTimeout(() => setSuccess(""), 5000);
+      }
       invalidate();
-      setTimeout(() => setSuccess(""), 5000);
     },
     onError: (err) => setError(`Error restoring items: ${err.message}`),
   });
 
   const bulkPurgeMutation = api.trash.bulkPurgeNow.useMutation({
-    onSuccess: () => {
-      setSuccess("Selected items permanently deleted");
+    onSuccess: (result) => {
+      if (result.failed.length > 0) {
+        setError(`${result.purged} item(s) permanently deleted, but ${result.failed.length} failed: ${result.failed[0].message}`);
+      } else {
+        setSuccess("Selected items permanently deleted");
+        setTimeout(() => setSuccess(""), 5000);
+      }
       invalidate();
-      setTimeout(() => setSuccess(""), 5000);
     },
     onError: (err) => setError(`Error deleting items: ${err.message}`),
   });
 
   const emptyTrashMutation = api.trash.emptyTrash.useMutation({
-    onSuccess: () => {
-      setSuccess("Trash emptied successfully");
+    onSuccess: (result) => {
+      if (result.failed.length > 0) {
+        setError(`${result.purged} item(s) permanently deleted, but ${result.failed.length} could not be (still referenced elsewhere): ${result.failed[0].message}`);
+      } else {
+        setSuccess("Trash emptied successfully");
+        setTimeout(() => setSuccess(""), 5000);
+      }
       setIsEmptyTrashOpen(false);
       invalidate();
-      setTimeout(() => setSuccess(""), 5000);
     },
     onError: (err) => {
       setError(`Error emptying trash: ${err.message}`);
