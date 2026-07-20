@@ -211,6 +211,73 @@ describe("submission pipeline", () => {
   });
 });
 
+describe("createDraft campus re-anchoring", () => {
+  async function makeSecondCampus() {
+    return prisma.campus.create({
+      data: {
+        name: `Second Campus ${Date.now()}`,
+        slug: `second-campus-${Date.now()}-${Math.random()}`,
+        address: "2 Test Ave",
+        city: "Testville",
+        country: "Testland",
+        organizationId: orgId,
+        campusCode: "SC2",
+      },
+    });
+  }
+
+  it("re-anchors a DRAFT to the campus of the link the parent re-entered through", async () => {
+    const second = await makeSecondCampus();
+    const camper = await makeCamper();
+
+    // First draft created under the (wrong) original campus
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+    expect(draft.campusId).toBe(campusId);
+
+    // Parent re-enters via a different campus's link — same camper+camp dedupe
+    // must not silently keep the wrong campus on a still-DRAFT registration.
+    const reanchored = await engine.createDraft({ camperId: camper.id, campId, campusId: second.id, actorId: parentId });
+    expect(reanchored.id).toBe(draft.id);
+    expect(reanchored.campusId).toBe(second.id);
+
+    const auditEvents = await prisma.auditLog.findMany({
+      where: { registrationId: draft.id, action: "REGISTRATION_CAMPUS_REANCHORED" },
+    });
+    expect(auditEvents).toHaveLength(1);
+  });
+
+  it("does NOT re-anchor a registration that has moved past DRAFT", async () => {
+    const second = await makeSecondCampus();
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+    const pending = await engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
+    expect(pending.status).toBe("PENDING");
+
+    const result = await engine.createDraft({ camperId: camper.id, campId, campusId: second.id, actorId: parentId });
+    expect(result.id).toBe(draft.id);
+    expect(result.campusId).toBe(campusId); // unchanged — reassignment is an admin action
+
+    const auditEvents = await prisma.auditLog.findMany({
+      where: { registrationId: draft.id, action: "REGISTRATION_CAMPUS_REANCHORED" },
+    });
+    expect(auditEvents).toHaveLength(0);
+  });
+
+  it("same-campus re-entry is a plain no-op (no audit noise)", async () => {
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+
+    const again = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+    expect(again.id).toBe(draft.id);
+    expect(again.campusId).toBe(campusId);
+
+    const auditEvents = await prisma.auditLog.findMany({
+      where: { registrationId: draft.id, action: "REGISTRATION_CAMPUS_REANCHORED" },
+    });
+    expect(auditEvents).toHaveLength(0);
+  });
+});
+
 describe("approval workflow", () => {
   it("approves a pending registration and assigns number + QR", async () => {
     const camper = await makeCamper();

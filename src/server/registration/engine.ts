@@ -90,7 +90,29 @@ export async function createDraft(params: {
     const existing = await tx.registration.findFirst({
       where: { camperId: params.camperId, campId: params.campId, deletedAt: null },
     });
-    if (existing) return existing;
+    if (existing) {
+      // Re-anchor a still-DRAFT registration to the campus of the link the parent
+      // actually came through. Drafts have no registrationNumber yet (it embeds the
+      // campus code and is only assigned at submit), so this is safe only pre-submit.
+      // Anything past DRAFT keeps its campus — reassignment is an admin action.
+      if (existing.status === "DRAFT" && existing.campusId !== params.campusId) {
+        const camper = await tx.camper.findUniqueOrThrow({ where: { id: params.camperId } });
+        const updated = await tx.registration.update({
+          where: { id: existing.id },
+          data: { campusId: params.campusId },
+        });
+        await logEvent(tx, {
+          organizationId: camper.organizationId,
+          registrationId: existing.id,
+          actorId: params.actorId,
+          action: "REGISTRATION_CAMPUS_REANCHORED",
+          previousValue: { campusId: existing.campusId },
+          newValue: { campusId: params.campusId },
+        });
+        return updated;
+      }
+      return existing;
+    }
 
     const registration = await tx.registration.create({
       data: {
