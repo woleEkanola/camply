@@ -10,6 +10,7 @@ import { validateTemplate } from "../../email/validateTemplate";
 import { audienceFilterSchema } from "../../email/audience/filters";
 import { resolveAudience, previewAudience } from "../../email/audience/resolver";
 import { sendCampaign, scheduleCampaign } from "../../email/campaign/sender";
+import { assertCampaignSender } from "../trpc/campaignAccess";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,13 @@ function orgId(ctx: { session?: { user?: { organizationId?: string } } | null })
   const id = ctx.session?.user?.organizationId;
   if (!id) throw new TRPCError({ code: "UNAUTHORIZED", message: "No organization" });
   return id;
+}
+
+function forceCampusOnFilter(filter: Record<string, unknown> | undefined, campusId: string): Record<string, unknown> {
+  return {
+    ...(filter || {}),
+    filters: { ...((filter as any)?.filters || {}), campusId },
+  };
 }
 
 /**
@@ -876,8 +884,8 @@ export const communicationRouter = createTRPCRouter({
   audienceCreate: protectedProcedure
     .input(z.object({ name: z.string().min(1), description: z.string().optional(), filterDefinition: audienceFilterSchema }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx);
       const oid = orgId(ctx);
+      await assertCampaignSender(ctx, oid);
       return ctx.prisma.savedAudience.create({
         data: { ...input, organizationId: oid, createdById: ctx.session!.user!.id, filterDefinition: input.filterDefinition as any },
       });
@@ -987,10 +995,14 @@ export const communicationRouter = createTRPCRouter({
       attachments: z.array(z.object({ url: z.string(), fileName: z.string(), fileType: z.string(), fileSize: z.number() })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx);
       const oid = orgId(ctx);
+      const { forcedCampusId } = await assertCampaignSender(ctx, oid);
+      let filter = input.audienceFilter ?? {};
+      if (forcedCampusId) {
+        filter = forceCampusOnFilter(filter as any, forcedCampusId);
+      }
       return ctx.prisma.emailCampaign.create({
-        data: { ...input, organizationId: oid, createdById: ctx.session!.user!.id, body: input.body as any, audienceFilter: input.audienceFilter as any },
+        data: { ...input, organizationId: oid, createdById: ctx.session!.user!.id, body: input.body as any, audienceFilter: filter as any },
       });
     }),
 
@@ -1027,7 +1039,8 @@ export const communicationRouter = createTRPCRouter({
   campaignSend: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      await assertCampaignSender(ctx, oid);
       const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
       if (!campaign || campaign.organizationId !== orgId(ctx)) throw new TRPCError({ code: "NOT_FOUND" });
       if (!["DRAFT", "SCHEDULED"].includes(campaign.status)) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot send a campaign that is not a draft or scheduled" });
@@ -1042,9 +1055,10 @@ export const communicationRouter = createTRPCRouter({
   campaignSchedule: protectedProcedure
     .input(z.object({ id: z.string(), scheduledFor: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      await assertCampaignSender(ctx, oid);
       const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
-      if (!campaign || campaign.organizationId !== orgId(ctx)) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!campaign || campaign.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
       await scheduleCampaign(ctx.prisma, input.id, new Date(input.scheduledFor));
       return { success: true };
     }),
@@ -1052,9 +1066,10 @@ export const communicationRouter = createTRPCRouter({
   campaignCancel: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      await assertCampaignSender(ctx, oid);
       const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
-      if (!campaign || campaign.organizationId !== orgId(ctx)) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!campaign || campaign.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
       await ctx.prisma.emailCampaign.update({ where: { id: input.id }, data: { status: "CANCELLED" } });
       await ctx.prisma.emailAuditLog.create({
         data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "CAMPAIGN_CANCELLED", targetType: "CAMPAIGN", targetId: input.id },
@@ -1106,8 +1121,8 @@ export const communicationRouter = createTRPCRouter({
   campaignDuplicate: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx);
       const oid = orgId(ctx);
+      await assertCampaignSender(ctx, oid);
       const original = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
       if (!original || original.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
       return ctx.prisma.emailCampaign.create({
@@ -1151,8 +1166,8 @@ export const communicationRouter = createTRPCRouter({
   campaignSendToNonOpeners: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx);
       const oid = orgId(ctx);
+      await assertCampaignSender(ctx, oid);
       const original = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
       if (!original || original.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
 

@@ -3,6 +3,9 @@ import { resolveFromAddress } from "./resolveFromAddress";
 import { loadTemplateForEvent } from "./templateLoader";
 import { renderEmailWithEvent } from "./renderer";
 import { interpolateSubject } from "./interpolate";
+import { prisma } from "../db";
+import { normalizeEmail } from "../../lib/email";
+import { logDelivery } from "./logDelivery";
 
 let resend: Resend | null = null;
 
@@ -88,6 +91,14 @@ export async function sendStaffApprovedEmail(params: {
     html: finalHtml,
     replyTo: finalReplyTo,
   });
+
+  let staffUserId: string | undefined;
+  try { const u = await prisma.user.findUnique({ where: { email: normalizeEmail(params.to) }, select: { id: true } }); staffUserId = u?.id; } catch {}
+  await logDelivery({
+    prisma, email: params.to, userId: staffUserId ?? "",
+    recipientType: params.type === "TEACHER" ? "TEACHER" : "VOLUNTEER",
+    deliverySource: "STAFF_APPROVED", subject: finalSubject, deliveryStatus: "SENT",
+  });
 }
 
 export async function sendStaffRejectedEmail(params: {
@@ -163,5 +174,13 @@ export async function sendStaffRejectedEmail(params: {
     subject: finalSubject,
     html: finalHtml,
     replyTo: finalReplyTo,
+  });
+
+  let staffUserId2: string | undefined;
+  try { const u = await prisma.user.findUnique({ where: { email: normalizeEmail(params.to) }, select: { id: true } }); staffUserId2 = u?.id; } catch {}
+  await logDelivery({
+    prisma, email: params.to, userId: staffUserId2 ?? "",
+    recipientType: params.type === "TEACHER" ? "TEACHER" : "VOLUNTEER",
+    deliverySource: "STAFF_REJECTED", subject: finalSubject, deliveryStatus: "SENT",
   });
 }

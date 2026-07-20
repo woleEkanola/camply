@@ -1243,34 +1243,37 @@ model EmailCampaign {
 }
 
 model EmailRecipient {
-  id               String        @id @default(cuid())
-  campaignId       String
-  campaign         EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  campaignId       String?
+  campaign         EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   userId           String
   registrationId   String?
   email            String
-  recipientType    String        // PARENT | TEACHER | VOLUNTEER | CAMPUS_REP | ADMIN
-  deliveryStatus   String        @default("QUEUED") // QUEUED | SENT | DELIVERED | OPENED | CLICKED | BOUNCED | FAILED | CANCELLED
-  queuedAt         DateTime      @default(now())
+  recipientType    String         // PARENT | TEACHER | VOLUNTEER | CAMPUS_REP | ADMIN
+  deliveryStatus   String         @default("QUEUED") // QUEUED | SENT | DELIVERED | OPENED | CLICKED | BOUNCED | FAILED | CANCELLED
+  deliverySource   String?        // REGISTRATION_APPROVED | CAMPAIGN | OTP | WELCOME | STAFF_APPROVED | ...
+  subject          String?        // email subject line
+  queuedAt         DateTime       @default(now())
   sentAt           DateTime?
   deliveredAt      DateTime?
   openedAt         DateTime?
   clickedAt        DateTime?
   bouncedAt        DateTime?
   failedReason     String?
-  retryCount       Int           @default(0)
+  retryCount       Int            @default(0)
   providerMessageId String?
   sideEffectId     String?
-  readAt           DateTime?     // inbox read tracking
-  pinned           Boolean       @default(false) // inbox pin
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  readAt           DateTime?      // inbox read tracking
+  pinned           Boolean        @default(false) // inbox pin
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   @@index([campaignId, deliveryStatus])
   @@index([userId, readAt])
   @@index([userId, pinned])
   @@index([email])
   @@index([registrationId])
+  @@index([deliverySource])
 }
 
 model SavedAudience {
