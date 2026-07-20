@@ -1,4 +1,7 @@
+"use client";
+
 import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { api } from "@/utils/trpc";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -108,6 +111,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   setError,
   setSuccess,
 }) => {
+  const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [campusFilter, setCampusFilter] = useState<string | "all">("all");
   const [statusFilter, setStatusFilter] = useState("");
@@ -121,6 +125,18 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   const [bulkAction, setBulkAction] = useState<"REJECT_REG" | "DELETE" | null>(null);
   const [bulkReason, setBulkReason] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "thumbnail" | "card">("list");
+
+  const openCamperParam = searchParams.get("openCamper") || searchParams.get("camperId") || searchParams.get("open") || searchParams.get("id");
+  const queryParam = searchParams.get("q");
+
+  useEffect(() => {
+    if (openCamperParam) {
+      setProfileCamperId(openCamperParam);
+    }
+    if (queryParam) {
+      setSearchTerm(queryParam);
+    }
+  }, [openCamperParam, queryParam]);
 
   // Pagination states
   const [cursor, setCursor] = useState<string | undefined>(undefined);

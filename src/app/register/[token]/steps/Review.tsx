@@ -196,6 +196,7 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
   const submitRef = useRef(false);
 
   const submitRegistration = api.registration.submit.useMutation();
+  const resubmitRegistration = api.registration.resubmit.useMutation();
   const { data: declarations } = api.registrationConfig.listDeclarations.useQuery(
     { organizationId: state.campData?.organizationId ?? "" },
     { enabled: !!state.campData?.organizationId }

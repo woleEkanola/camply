@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { api } from "@/utils/trpc";
 import AppShell from "@/components/layout/AppShell";
 import CamperManagement from "../components/CamperManagement";
@@ -22,7 +22,15 @@ interface ExtendedUser {
   image?: string | null;
 }
 
-export default function CampersPage() {
+export default function CampersPageWrapper() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-neutral-500">Loading...</div>}>
+      <CampersPage />
+    </Suspense>
+  );
+}
+
+function CampersPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -62,12 +70,14 @@ export default function CampersPage() {
         {success && <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700">{success}</div>}
 
         {status === "authenticated" && organizationId && (
-          <CamperManagement 
-            organizationId={organizationId} 
-            currentUser={session.user as ExtendedUser}
-            setError={setError}
-            setSuccess={setSuccess}
-          />
+          <Suspense fallback={<div className="p-6 text-sm text-neutral-500">Loading...</div>}>
+            <CamperManagement 
+              organizationId={organizationId} 
+              currentUser={session.user as ExtendedUser}
+              setError={setError}
+              setSuccess={setSuccess}
+            />
+          </Suspense>
         )}
       </div>
     </AppShell>

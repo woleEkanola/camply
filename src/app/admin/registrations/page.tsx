@@ -1,8 +1,8 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import AppShell from "@/components/layout/AppShell";
@@ -303,8 +303,17 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
   );
 }
 
-export default function RegistrationsPage() {
+export default function RegistrationsPageWrapper() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-neutral-500">Loading...</div>}>
+      <RegistrationsPage />
+    </Suspense>
+  );
+}
+
+function RegistrationsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedRegistration, setSelectedRegistration] = useState<string | null>(null);
@@ -316,6 +325,18 @@ export default function RegistrationsPage() {
   const [bulkAction, setBulkAction] = useState<"REJECT" | "REQUEST_CORRECTION" | "DELETE" | null>(null);
   const [bulkReason, setBulkReason] = useState("");
   const [bulkResult, setBulkResult] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const openParam = searchParams.get("openReg") || searchParams.get("open") || searchParams.get("id");
+  const queryParam = searchParams.get("q");
+
+  useEffect(() => {
+    if (openParam) {
+      setSelectedRegistration(openParam);
+    }
+    if (queryParam) {
+      setSearchQuery(queryParam);
+    }
+  }, [openParam, queryParam]);
 
   const { data: session, status } = useSession({
     required: true,

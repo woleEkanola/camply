@@ -8,11 +8,13 @@ import { EmptyState } from "./EmptyState";
 import { SkeletonTable } from "./Skeleton";
 
 export interface Column<T> {
+  id?: string;
   header: React.ReactNode;
   accessor: keyof T | ((row: T) => React.ReactNode);
   sortable?: boolean;
   searchable?: boolean;
   className?: string;
+  hideable?: boolean;
   /** Allow long content (e.g. addresses) to wrap within the column's width instead of
    * forcing the table wider and requiring horizontal scroll to see later columns. */
   wrap?: boolean;
@@ -39,6 +41,11 @@ export interface Column<T> {
   mobileLabel?: React.ReactNode;
 }
 
+export interface ColumnVisibilityState {
+  visibleIds: string[];
+  onToggle: (id: string) => void;
+}
+
 interface CommonProps<T> {
   columns: Column<T>[];
   data: T[];
@@ -53,6 +60,7 @@ interface CommonProps<T> {
   selectable?: boolean;
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
+  columnVisibility?: ColumnVisibilityState;
 }
 
 interface LocalModeProps<T> extends CommonProps<T> {
@@ -94,7 +102,7 @@ function headerLabel(header: React.ReactNode): string {
  * via `primary`/`secondary`/`mobileHidden`.
  */
 export function Table<T>(props: TableProps<T>) {
-  const { columns, data, rowKey, onRowClick, actions, isLoading, emptyTitle, emptyDescription, emptyAction, selectable, selectedIds, onSelectionChange } = props;
+  const { columns, data, rowKey, onRowClick, actions, isLoading, emptyTitle, emptyDescription, emptyAction, selectable, selectedIds, onSelectionChange, columnVisibility } = props;
   const isControlled = props.mode === "controlled";
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -104,6 +112,16 @@ export function Table<T>(props: TableProps<T>) {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [isColumnDropdownOpen, setIsColumnDropdownOpen] = useState(false);
+
+  const activeColumns = useMemo(() => {
+    if (!columnVisibility) return columns;
+    return columns.filter((col) => {
+      if (!col.hideable) return true;
+      const colId = col.id ?? headerLabel(col.header);
+      return columnVisibility.visibleIds.includes(colId);
+    });
+  }, [columns, columnVisibility]);
 
   const handleSort = (key: keyof T) => {
     setSortConfig((prev) =>
@@ -116,7 +134,7 @@ export function Table<T>(props: TableProps<T>) {
     let items = [...data];
     if (searchTerm) {
       items = items.filter((row) =>
-        columns.some((col) => {
+        activeColumns.some((col) => {
           if (!col.searchable || typeof col.accessor === "function") return false;
           const value = row[col.accessor];
           return typeof value === "string" || typeof value === "number"
@@ -135,16 +153,16 @@ export function Table<T>(props: TableProps<T>) {
       });
     }
     return items;
-  }, [data, searchTerm, sortConfig, columns, isControlled]);
+  }, [data, searchTerm, sortConfig, activeColumns, isControlled]);
 
   const totalPages = Math.max(1, Math.ceil(processed.length / itemsPerPage));
   const pageData = isControlled ? processed : processed.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const primaryCol = columns.find((c) => c.primary) ?? columns[0];
-  const secondaryCol = columns.find((c) => c.secondary);
-  const bodyCols = columns.filter((c) => c !== primaryCol && c !== secondaryCol && !c.mobileHidden);
-  const filterableCols = columns.filter((c) => c.filter);
-  const sortableCols = columns.filter((c) => c.sortable && typeof c.accessor !== "function");
+  const primaryCol = activeColumns.find((c) => c.primary) ?? activeColumns[0];
+  const secondaryCol = activeColumns.find((c) => c.secondary);
+  const bodyCols = activeColumns.filter((c) => c !== primaryCol && c !== secondaryCol && !c.mobileHidden);
+  const filterableCols = activeColumns.filter((c) => c.filter);
+  const sortableCols = activeColumns.filter((c) => c.sortable && typeof c.accessor !== "function");
 
   const allOnPageSelected = pageData.length > 0 && pageData.every((row) => selectedIds?.includes(rowKey(row)));
   const toggleSelectAllOnPage = (checked: boolean) => {
@@ -164,30 +182,86 @@ export function Table<T>(props: TableProps<T>) {
     }
   };
 
+  const hideableColumns = useMemo(() => columns.filter((col) => col.hideable), [columns]);
+
   return (
     <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-      <div className="border-b border-neutral-200 p-3">
-        {isControlled ? (
-          props.toolbar
-        ) : (
-          <SearchBar
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            onClear={() => {
-              setSearchTerm("");
-              setCurrentPage(1);
-            }}
-            placeholder={props.searchPlaceholder ?? "Search..."}
-          />
+      <div className="flex flex-col gap-2 border-b border-neutral-200 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          {isControlled ? (
+            props.toolbar
+          ) : (
+            <SearchBar
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              onClear={() => {
+                setSearchTerm("");
+                setCurrentPage(1);
+              }}
+              placeholder={props.searchPlaceholder ?? "Search..."}
+            />
+          )}
+        </div>
+
+        {columnVisibility && hideableColumns.length > 0 && (
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              id="column-visibility-menu-button"
+              onClick={() => setIsColumnDropdownOpen((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            >
+              <svg className="h-4 w-4 text-neutral-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              </svg>
+              Columns
+            </button>
+
+            {isColumnDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setIsColumnDropdownOpen(false)}
+                />
+                <div className="absolute right-0 z-20 mt-1.5 w-48 rounded-lg border border-neutral-200 bg-white p-2 shadow-lg ring-1 ring-black/5">
+                  <div className="mb-1.5 px-2 py-1 text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                    Visible Columns
+                  </div>
+                  <div className="space-y-1">
+                    {hideableColumns.map((col) => {
+                      const colId = col.id ?? headerLabel(col.header);
+                      const isVisible = columnVisibility.visibleIds.includes(colId);
+                      const labelText = headerLabel(col.header) || colId;
+                      return (
+                        <label
+                          key={colId}
+                          className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isVisible}
+                            onChange={() => columnVisibility.onToggle(colId)}
+                            className="rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                          />
+                          <span>{labelText}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
 
       {isLoading ? (
         <div className="p-3">
-          <SkeletonTable columns={columns.length} />
+          <SkeletonTable columns={activeColumns.length} />
         </div>
       ) : pageData.length === 0 ? (
         <EmptyState
@@ -214,7 +288,7 @@ export function Table<T>(props: TableProps<T>) {
                       />
                     </th>
                   )}
-                  {columns.map((column, i) => (
+                  {activeColumns.map((column, i) => (
                     <th
                       key={i}
                       scope="col"
@@ -240,10 +314,10 @@ export function Table<T>(props: TableProps<T>) {
                   ))}
                   {actions && <th scope="col" className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-neutral-500">Actions</th>}
                 </tr>
-                {columns.some((c) => c.filter) && (
+                {activeColumns.some((c) => c.filter) && (
                   <tr className="border-t border-neutral-100 bg-neutral-50">
                     {selectable && <th scope="col" className="px-4 py-1.5" />}
-                    {columns.map((column, i) => (
+                    {activeColumns.map((column, i) => (
                       <th key={i} scope="col" className="px-4 py-1.5 font-normal">
                         {column.filter && (
                           <select
@@ -282,7 +356,7 @@ export function Table<T>(props: TableProps<T>) {
                         />
                       </td>
                     )}
-                    {columns.map((column, i) => (
+                    {activeColumns.map((column, i) => (
                       <td
                         key={i}
                         className={cn(

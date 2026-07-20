@@ -400,6 +400,24 @@ describe("rejection and correction workflow", () => {
     expect(resubmitted.status).toBe("PENDING");
     expect(resubmitted.correctionRequest).toBeNull();
   });
+
+  it("automatically delegates submitRegistration to resubmitRegistration when status is REQUIRES_ACTION", async () => {
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+    const pending = await engine.submitRegistration({ registrationId: draft.id, actorId: parentId });
+
+    const requiresAction = await engine.requestCorrection({
+      registrationId: pending.id,
+      actorId: adminId,
+      message: "Please fix photo.",
+    });
+    expect(requiresAction.status).toBe("REQUIRES_ACTION");
+
+    // Parent clicks "Submit Registration" on the wizard (which calls submitRegistration)
+    const result = await engine.submitRegistration({ registrationId: requiresAction.id, actorId: parentId });
+    expect(result.status).toBe("PENDING");
+    expect(result.correctionRequest).toBeNull();
+  });
 });
 
 describe("two-step approval workflow", () => {
