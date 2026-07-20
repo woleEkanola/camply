@@ -31,6 +31,7 @@ import { downloadBlob, exportUserDataToXlsx } from "@/lib/import-export/serializ
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { FunnelIcon } from "@heroicons/react/24/outline";
+import { CommunicationTimeline } from "@/components/communication/CommunicationTimeline";
 
 type ExtendedUser = {
   id: string;
@@ -103,6 +104,7 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
   );
   const campuses = campusesData ?? [];
   const reassignCampus = api.registration.reassignCampus.useMutation({ onSuccess: invalidate, onError: onErr });
+  const { data: commTimeline } = api.communication.timelineForRegistration.useQuery({ registrationId });
 
   if (!registration) {
     return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
@@ -278,6 +280,10 @@ function RegistrationDetail({ registrationId, onClose }: { registrationId: strin
                 <DecisionHistory timeline={timeline ?? []} />
               </div>
             ),
+          },
+          {
+            label: "Communication",
+            content: <CommunicationTimeline events={commTimeline ?? []} />,
           },
         ]}
       />

@@ -1,6 +1,7 @@
 import QRCode from "qrcode";
 import { Resend } from "resend";
 import { prisma } from "../db";
+import { logDelivery } from "../email/logDelivery";
 import {
   sendAcceptanceEmail,
   sendCorrectionEmail,
@@ -12,6 +13,7 @@ import { loadTemplateForEvent } from "../email/templateLoader";
 import { renderEmail, renderEmailWithEvent } from "../email/renderer";
 import { resolveFromAddress } from "../email/resolveFromAddress";
 import { interpolateSubject } from "../email/interpolate";
+import { processCampaignSideEffect } from "../email/campaign/sender";
 
 let resend: Resend | null = null;
 function getResend() {
@@ -93,16 +95,27 @@ async function runEffect(registrationId: string, type: SideEffectType) {
         previewText: interpolatedPreviewText,
       });
 
-      await getResend().emails.send({
+      const result = await getResend().emails.send({
         from,
         to: parentEmail,
         subject: interpolatedSubject,
         html: html,
         replyTo,
       });
+      await logDelivery({
+        prisma,
+        email: parentEmail,
+        userId: registration.camper.userId,
+        registrationId: registration.id,
+        recipientType: "PARENT",
+        deliverySource: eventKey,
+        subject: interpolatedSubject,
+        providerMessageId: result.data?.id ?? undefined,
+        deliveryStatus: "SENT",
+      });
     } catch (err) {
       console.error(`[effects] Template email failed for ${eventKey}, falling back to hardcoded:`, err);
-      await hardcodedFn();
+      try { await hardcodedFn(); } catch { /* hardcoded also failed */ }
     }
   }
 
@@ -254,6 +267,8 @@ export async function processSideEffect(id: string) {
     // Broadcast effects are handled differently from registration effects
     if (effect.type === "BROADCAST_SEND" && effect.broadcastRecipientId) {
       await processBroadcastEffect(effect.id);
+    } else if (effect.type === "CAMPAIGN_SEND" && effect.campaignId) {
+      await processCampaignSideEffect(prisma, effect.id);
     } else if (effect.registrationId) {
       await runEffect(effect.registrationId, effect.type as SideEffectType);
     }
@@ -346,6 +361,16 @@ async function processBroadcastEffect(effectId: string) {
     subject: interpolatedSubject,
     html,
     replyTo,
+  });
+
+  await logDelivery({
+    prisma,
+    email: recipient.email,
+    userId: recipient.recipientId,
+    recipientType: broadcast.audience === "PARENTS" ? "PARENT" : broadcast.audience === "TEACHERS" ? "TEACHER" : broadcast.audience === "VOLUNTEERS" ? "VOLUNTEER" : "PARENT",
+    deliverySource: "BROADCAST",
+    subject: interpolatedSubject,
+    deliveryStatus: "SENT",
   });
 
   await prisma.broadcastRecipient.update({

@@ -3,6 +3,9 @@ import { resolveFromAddress } from './resolveFromAddress';
 import { loadTemplateForEvent } from './templateLoader';
 import { renderEmailWithEvent } from './renderer';
 import { interpolateSubject } from './interpolate';
+import { prisma } from "../db";
+import { normalizeEmail } from "../../lib/email";
+import { logDelivery } from "./logDelivery";
 
 let resend: Resend | null = null;
 const APP_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3001";
@@ -82,6 +85,24 @@ export async function sendWelcomeEmail(email: string, firstName: string, verifyT
       replyTo: finalReplyTo,
     });
     console.log("[RESEND] Welcome email result", result.error ? `Error: ${result.error.message}` : `OK id=${result.data?.id}`);
+
+    let userId: string | undefined;
+    try {
+      const user = await prisma.user.findUnique({ where: { email: normalizeEmail(email) }, select: { id: true } });
+      userId = user?.id;
+    } catch { /* best-effort */ }
+
+    await logDelivery({
+      prisma,
+      email,
+      userId: userId ?? "",
+      recipientType: "PARENT",
+      deliverySource: "WELCOME_EMAIL",
+      subject: finalSubject,
+      providerMessageId: result.data?.id ?? undefined,
+      deliveryStatus: result.error ? "FAILED" : "SENT",
+      failedReason: result.error?.message,
+    });
   } catch (err) {
     console.error("[RESEND] Failed to send welcome email:", err);
   }

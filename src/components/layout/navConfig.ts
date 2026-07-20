@@ -21,6 +21,10 @@ import {
   BuildingOffice2Icon,
   TrashIcon,
   ArrowsUpDownIcon,
+  ClockIcon,
+  DocumentTextIcon,
+  PaintBrushIcon,
+  ChartBarIcon,
 } from "@heroicons/react/24/outline";
 
 export type Role =
@@ -141,33 +145,57 @@ const ADMIN_GROUPS: NavGroup[] = [
     name: "Communication",
     items: [
       {
-        name: "Overview",
-        href: "/admin/communication",
+        name: "Dashboard",
+        href: "/admin/communication/dashboard",
         icon: MegaphoneIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
       {
-        name: "Email Events",
-        href: "/admin/communication/events",
+        name: "Campaigns",
+        href: "/admin/communication/campaigns",
         icon: MegaphoneIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Audiences",
+        href: "/admin/communication/audiences",
+        icon: UserGroupIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Delivery Queue",
+        href: "/admin/communication/queue",
+        icon: ClockIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Delivery Logs",
+        href: "/admin/communication/logs",
+        icon: ClipboardDocumentListIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
       {
         name: "Templates",
         href: "/admin/communication/templates",
-        icon: IdentificationIcon,
+        icon: DocumentTextIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
       {
-        name: "Broadcast",
-        href: "/admin/communication/broadcast",
-        icon: MegaphoneIcon,
+        name: "Event Settings",
+        href: "/admin/communication/events",
+        icon: Cog6ToothIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
       {
         name: "Branding",
         href: "/admin/communication/branding",
-        icon: Cog6ToothIcon,
+        icon: PaintBrushIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Analytics",
+        href: "/admin/communication/analytics",
+        icon: ChartBarIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
     ],
