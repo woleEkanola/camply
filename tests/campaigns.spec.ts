@@ -71,10 +71,10 @@ test.describe("Campaigns", () => {
     await expect(page.getByText("E2E Stats Campaign")).toBeVisible();
 
     // Stats should show
-    await expect(page.getByText("Total")).toBeVisible();
-    await expect(page.getByText("Delivered")).toBeVisible();
-    await expect(page.getByText("Failed/Bounced")).toBeVisible();
-    await expect(page.getByText("Success Rate")).toBeVisible();
+    await expect(page.getByText("Total", { exact: true })).toBeVisible();
+    await expect(page.getByText("Delivered", { exact: true })).toBeVisible();
+    await expect(page.getByText("Failed/Bounced", { exact: true })).toBeVisible();
+    await expect(page.getByText("Success Rate", { exact: true })).toBeVisible();
 
     // Subject should be visible
     await expect(page.getByText("Stats Test")).toBeVisible();
