@@ -6,6 +6,7 @@ interface LogDeliveryParams {
   prisma: TxClient;
   email: string;
   userId?: string;
+  organizationId?: string | null;
   registrationId?: string;
   recipientType: string;
   deliverySource: string;
@@ -23,6 +24,7 @@ export async function logDelivery(params: LogDeliveryParams): Promise<void> {
     await (params.prisma as any).emailRecipient.create({
       data: {
         campaignId: null,
+        organizationId: params.organizationId ?? null,
         userId: params.userId,
         registrationId: params.registrationId ?? null,
         email: params.email,

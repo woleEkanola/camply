@@ -482,6 +482,7 @@ export const communicationRouter = createTRPCRouter({
               broadcastRecipientId: recipient.id,
               type: "BROADCAST_SEND",
               status: "QUEUED",
+              organizationId: oid,
             },
           });
         })
@@ -1067,13 +1068,17 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   campaignSchedule: protectedProcedure
-    .input(z.object({ id: z.string(), scheduledFor: z.string() }))
+    .input(z.object({ id: z.string(), scheduledFor: z.string().datetime() }))
     .mutation(async ({ ctx, input }) => {
       const oid = orgId(ctx);
       await assertCampaignSender(ctx, oid);
       const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
       if (!campaign || campaign.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
-      await scheduleCampaign(ctx.prisma, input.id, new Date(input.scheduledFor));
+      const scheduledFor = new Date(input.scheduledFor);
+      if (scheduledFor.getTime() <= Date.now()) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Scheduled time must be in the future" });
+      }
+      await scheduleCampaign(ctx.prisma, input.id, scheduledFor);
       return { success: true };
     }),
 
@@ -1085,6 +1090,16 @@ export const communicationRouter = createTRPCRouter({
       const campaign = await ctx.prisma.emailCampaign.findUnique({ where: { id: input.id } });
       if (!campaign || campaign.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
       await ctx.prisma.emailCampaign.update({ where: { id: input.id }, data: { status: "CANCELLED" } });
+      // Cancelling must actually stop the send: kill every still-queued effect and
+      // mark unsent recipients CANCELLED so stats don't show them as forever-queued.
+      await ctx.prisma.sideEffect.updateMany({
+        where: { campaignId: input.id, type: "CAMPAIGN_SEND", status: "QUEUED" },
+        data: { status: "CANCELLED" },
+      });
+      await ctx.prisma.emailRecipient.updateMany({
+        where: { campaignId: input.id, deliveryStatus: "QUEUED" },
+        data: { deliveryStatus: "CANCELLED" },
+      });
       await ctx.prisma.emailAuditLog.create({
         data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "CAMPAIGN_CANCELLED", targetType: "CAMPAIGN", targetId: input.id },
       });
@@ -1129,7 +1144,9 @@ export const communicationRouter = createTRPCRouter({
       return {
         total: recipients.length,
         queued: recipients.filter((r) => r.deliveryStatus === "QUEUED").length,
-        sent: recipients.filter((r) => r.deliveryStatus === "SENT").length,
+        // deliveryStatus advances SENT → DELIVERED → OPENED → CLICKED, so "sent"
+        // must count the whole pipeline or it shrinks as people engage.
+        sent: recipients.filter((r) => ["SENT", "DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
         delivered: recipients.filter((r) => ["DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
         opened: recipients.filter((r) => r.openedAt).length,
         clicked: recipients.filter((r) => r.clickedAt).length,
@@ -1169,6 +1186,9 @@ export const communicationRouter = createTRPCRouter({
     .input(z.object({ id: z.string().optional(), subject: z.string().optional(), audienceFilter: audienceFilterSchema.optional() }))
     .query(async ({ ctx, input }) => {
       const oid = orgId(ctx);
+      // No subject → nothing meaningful to compare; without this guard Prisma
+      // drops the undefined key and EVERY recent campaign looks like a duplicate.
+      if (!input.subject) return { isDuplicate: false, lastCampaign: null };
       const recent = await ctx.prisma.emailCampaign.findFirst({
         where: {
           organizationId: oid,
@@ -1235,7 +1255,13 @@ export const communicationRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const oid = orgId(ctx);
       const limit = input?.limit ?? 20;
-      const where: Record<string, unknown> = { type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } };
+      // Org attribution lives on SideEffect.organizationId (backfilled for legacy
+      // rows). Rows that could not be attributed (orphaned test/dev debris) are
+      // hidden rather than leaked to the wrong org.
+      const where: Record<string, unknown> = {
+        type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] },
+        organizationId: oid,
+      };
 
       if (input?.status) where.status = input.status;
       if (input?.campaignId) where.campaignId = input.campaignId;
@@ -1243,13 +1269,7 @@ export const communicationRouter = createTRPCRouter({
       if (input?.search) where.recipientEmail = { contains: input.search, mode: "insensitive" };
 
       const items = await ctx.prisma.sideEffect.findMany({
-        where: {
-          ...where,
-          OR: [
-            { campaign: { organizationId: oid } },
-            { campaignId: null }, // registration effects — no campaign, but still org-scoped via registration
-          ],
-        },
+        where,
         orderBy: { createdAt: "desc" },
         take: limit + 1,
         ...(input?.cursor && { cursor: { id: input.cursor }, skip: 1 }),
@@ -1271,17 +1291,15 @@ export const communicationRouter = createTRPCRouter({
     const items = await ctx.prisma.sideEffect.findMany({
       where: {
         type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] },
-        OR: [
-          { campaign: { organizationId: oid } },
-          { campaignId: null },
-        ],
+        organizationId: oid,
       },
-      select: { status: true },
+      select: { status: true, attempts: true },
     });
+    const queued = items.filter((i) => i.status === "QUEUED");
     return {
-      waiting: items.filter((i) => i.status === "QUEUED").length,
-      sending: items.filter((i) => i.status === "DONE").length,
-      retrying: items.filter((i) => i.status === "QUEUED").length,
+      waiting: queued.length,
+      sending: 0, // SideEffect has no in-flight state; kept for API compatibility
+      retrying: queued.filter((i) => i.attempts > 0).length,
       completed: items.filter((i) => i.status === "DONE").length,
       failed: items.filter((i) => i.status === "FAILED").length,
     };
@@ -1297,54 +1315,67 @@ export const communicationRouter = createTRPCRouter({
         const failed = await ctx.prisma.sideEffect.findMany({
           where: {
             status: "FAILED",
-            ...(input.campaignId && { campaignId: input.campaignId, campaign: { organizationId: oid } }),
+            organizationId: oid,
+            ...(input.campaignId && { campaignId: input.campaignId }),
           },
           select: { id: true },
         });
         ids = failed.map((f) => f.id);
       }
       if (ids.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "No failed items to retry" });
-      await ctx.prisma.sideEffect.updateMany({
-        where: { id: { in: ids }, status: "FAILED" },
+      // Scope the update itself to this org — caller-supplied ids are not proof
+      // the effects belong to them.
+      const result = await ctx.prisma.sideEffect.updateMany({
+        where: { id: { in: ids }, status: "FAILED", organizationId: oid },
         data: { status: "QUEUED", attempts: 0, runAfter: new Date() },
       });
       await ctx.prisma.emailAuditLog.create({
-        data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "RETRY_TRIGGERED", targetType: "QUEUE", metadata: { count: ids.length } },
+        data: { organizationId: oid, userId: ctx.session!.user!.id, action: "RETRY_TRIGGERED", targetType: "QUEUE", metadata: { count: result.count } },
       });
-      return { retried: ids.length };
+      return { retried: result.count };
     }),
 
   queuePause: protectedProcedure
     .input(z.object({ campaignId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
-      const where: Record<string, unknown> = { status: "QUEUED", type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } };
+      const oid = orgId(ctx);
+      // PAUSED rows are never picked up by the sweep (it only selects QUEUED).
+      const where: Record<string, unknown> = { status: "QUEUED", type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] }, organizationId: oid };
       if (input.campaignId) where.campaignId = input.campaignId;
-      const count = await ctx.prisma.sideEffect.count({ where });
-      await ctx.prisma.emailAuditLog.create({
-        data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "QUEUE_PAUSED", targetType: "QUEUE", metadata: { pausedCount: count } },
+      const result = await ctx.prisma.sideEffect.updateMany({
+        where,
+        data: { status: "PAUSED" },
       });
-      return { paused: count };
+      await ctx.prisma.emailAuditLog.create({
+        data: { organizationId: oid, userId: ctx.session!.user!.id, action: "QUEUE_PAUSED", targetType: "QUEUE", metadata: { pausedCount: result.count } },
+      });
+      return { paused: result.count };
     }),
 
   queueResume: protectedProcedure
     .input(z.object({ campaignId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
-      const where: Record<string, unknown> = { status: "QUEUED", type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } };
+      const oid = orgId(ctx);
+      const where: Record<string, unknown> = { status: "PAUSED", type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] }, organizationId: oid };
       if (input.campaignId) where.campaignId = input.campaignId;
-      const count = await ctx.prisma.sideEffect.count({ where });
-      await ctx.prisma.emailAuditLog.create({
-        data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "QUEUE_RESUMED", targetType: "QUEUE", metadata: { resumedCount: count } },
+      const result = await ctx.prisma.sideEffect.updateMany({
+        where,
+        data: { status: "QUEUED", runAfter: new Date() },
       });
-      return { resumed: count };
+      await ctx.prisma.emailAuditLog.create({
+        data: { organizationId: oid, userId: ctx.session!.user!.id, action: "QUEUE_RESUMED", targetType: "QUEUE", metadata: { resumedCount: result.count } },
+      });
+      return { resumed: result.count };
     }),
 
   queueCancel: protectedProcedure
     .input(z.object({ campaignId: z.string().optional(), ids: z.array(z.string()).optional() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
-      const where: Record<string, unknown> = { status: "QUEUED", type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } };
+      const oid = orgId(ctx);
+      const where: Record<string, unknown> = { status: "QUEUED", type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] }, organizationId: oid };
       if (input.campaignId) where.campaignId = input.campaignId;
       if (input.ids) where.id = { in: input.ids };
       const result = await ctx.prisma.sideEffect.updateMany({
@@ -1379,11 +1410,14 @@ export const communicationRouter = createTRPCRouter({
       const oid = orgId(ctx);
       const limit = input?.limit ?? 20;
 
-      const where: Record<string, unknown> = { campaign: { organizationId: oid } };
+      // Scoped by the denormalized organizationId — covers campaign email AND
+      // transactional deliveries (registration, OTP, welcome, staff) alike.
+      const where: Record<string, unknown> = { organizationId: oid };
 
       if (input?.email) where.email = { contains: input.email, mode: "insensitive" };
       if (input?.status) where.deliveryStatus = input.status;
       if (input?.campaignName) where.campaign = { name: { contains: input.campaignName, mode: "insensitive" } };
+      if (input?.deliverySource) where.deliverySource = input.deliverySource;
       if (input?.dateFrom || input?.dateTo) {
         where.createdAt = {};
         if (input.dateFrom) (where.createdAt as any).gte = new Date(input.dateFrom);
@@ -1411,7 +1445,7 @@ export const communicationRouter = createTRPCRouter({
   deliveryLogStats: protectedProcedure.query(async ({ ctx }) => {
     const oid = orgId(ctx);
     const items = await ctx.prisma.emailRecipient.findMany({
-      where: { campaign: { organizationId: oid } },
+      where: { organizationId: oid },
       select: { deliveryStatus: true },
     });
     return {

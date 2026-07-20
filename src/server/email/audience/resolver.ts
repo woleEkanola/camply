@@ -315,6 +315,11 @@ export async function resolveAudience(
       const existing = await (prisma as any).emailRecipient.findMany({
         where: {
           campaignId: campaignFilter.campaignId,
+          // "Received" / "didn't open" only make sense for email that actually
+          // left the building — QUEUED and FAILED rows are neither.
+          deliveryStatus: requireOpened
+            ? { in: ["OPENED", "CLICKED"] }
+            : { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] },
           ...(requireOpened ? { openedAt: { not: null } } : {}),
           ...(requireNotOpened ? { openedAt: null } : {}),
           userId: { in: filtered.map((u) => u.id) },

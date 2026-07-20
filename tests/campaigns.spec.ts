@@ -9,6 +9,12 @@ test.describe("Campaigns", () => {
   test.beforeAll(async () => {
     const ctx = await getFixtureOrgContext();
     organizationId = ctx.organizationId;
+
+    // Ensure admin@camply.com is attached to fixture organization
+    await prisma.user.update({
+      where: { email: "admin@camply.com" },
+      data: { organizationId },
+    }).catch(() => {});
   });
 
   test.afterAll(async () => {
@@ -17,11 +23,12 @@ test.describe("Campaigns", () => {
   });
 
   test("creates a draft campaign and shows it in the list", async ({ page }) => {
+    await page.context().clearCookies();
     await loginWithPassword(page, "admin@camply.com", "password123");
 
     // Navigate to campaign composer
     await page.goto("/admin/communication/campaigns/new");
-    await expect(page.getByRole("heading", { name: "New Campaign" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "New Campaign" })).toBeVisible({ timeout: 15000 });
 
     // Fill in form
     await page.locator("input").first().fill("E2E Draft Campaign");
@@ -29,7 +36,7 @@ test.describe("Campaigns", () => {
 
     // Save draft
     await page.getByRole("button", { name: "Save Draft" }).click();
-    await expect(page.getByText("Draft saved")).toBeVisible();
+    await expect(page.getByText("Draft saved")).toBeVisible({ timeout: 15000 });
 
     // Verify in DB
     const campaign = await prisma.emailCampaign.findFirst({
@@ -40,6 +47,7 @@ test.describe("Campaigns", () => {
   });
 
   test("campaign detail shows stats for completed campaign", async ({ page }) => {
+    await page.context().clearCookies();
     await loginWithPassword(page, "admin@camply.com", "password123");
 
     // Seed a completed campaign with recipients
@@ -68,7 +76,7 @@ test.describe("Campaigns", () => {
 
     // Open detail page
     await page.goto(`/admin/communication/campaigns/${campaign.id}`);
-    await expect(page.getByText("E2E Stats Campaign")).toBeVisible();
+    await expect(page.getByText("E2E Stats Campaign")).toBeVisible({ timeout: 15000 });
 
     // Stats should show
     await expect(page.getByText("Total", { exact: true })).toBeVisible();

@@ -648,6 +648,7 @@ model SideEffect {
   broadcastRecipientId  String?
   campaignId            String?
   campaign              EmailCampaign? @relation(fields: [campaignId], references: [id])
+  organizationId        String?
   deliverySource        String?  // REGISTRATION_APPROVED | CAMPAIGN | OTP | WELCOME | STAFF_APPROVED | BROADCAST_SEND | ...
   recipientEmail        String?  // for display in queue UI
   recipientType         String?  // PARENT | TEACHER | VOLUNTEER | CAMPUS_REP | ADMIN
@@ -662,6 +663,7 @@ model SideEffect {
 
   @@index([status, runAfter])
   @@index([campaignId])
+  @@index([organizationId, status])
   @@index([recipientEmail])
 }
 
@@ -1246,6 +1248,7 @@ model EmailRecipient {
   id               String         @id @default(cuid())
   campaignId       String?
   campaign         EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  organizationId   String?
   userId           String
   registrationId   String?
   email            String
@@ -1269,6 +1272,7 @@ model EmailRecipient {
   updatedAt        DateTime       @updatedAt
 
   @@index([campaignId, deliveryStatus])
+  @@index([organizationId, createdAt])
   @@index([userId, readAt])
   @@index([userId, pinned])
   @@index([email])

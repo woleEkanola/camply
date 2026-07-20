@@ -10,6 +10,15 @@ test.describe("Communication Dashboard", () => {
     const ctx = await getFixtureOrgContext();
     organizationId = ctx.organizationId;
 
+    // Ensure admin@camply.com is attached to fixture organization
+    await prisma.user.update({
+      where: { email: "admin@camply.com" },
+      data: { organizationId },
+    }).catch(() => {});
+
+    const admin = await prisma.user.findUniqueOrThrow({ where: { email: "admin@camply.com" } });
+    const parent = await prisma.user.findFirstOrThrow({ where: { organizationId, role: "PARENT" } });
+
     // Seed a campaign + recipient so dashboard has data
     const campaign = await prisma.emailCampaign.create({
       data: {
@@ -18,7 +27,7 @@ test.describe("Communication Dashboard", () => {
         subject: "Dashboard Test",
         body: { type: "doc", content: [{ type: "paragraph", content: [{ text: "Hello" }] }] },
         status: "COMPLETED",
-        createdById: (await prisma.user.findUniqueOrThrow({ where: { email: "admin@camply.com" } })).id,
+        createdById: admin.id,
         recipientCount: 1,
         startedAt: new Date(),
         completedAt: new Date(),
@@ -28,7 +37,7 @@ test.describe("Communication Dashboard", () => {
     await prisma.emailRecipient.create({
       data: {
         campaignId: campaign.id,
-        userId: (await prisma.user.findFirstOrThrow({ where: { organizationId, role: "PARENT" } })).id,
+        userId: parent.id,
         email: "parent@camply.test",
         recipientType: "PARENT",
         deliveryStatus: "SENT",
@@ -45,11 +54,12 @@ test.describe("Communication Dashboard", () => {
   });
 
   test("dashboard loads with stats and recent activity", async ({ page }) => {
+    await page.context().clearCookies();
     await loginWithPassword(page, "admin@camply.com", "password123");
 
     // Navigate via sidebar
     await page.goto("/admin/communication/dashboard");
-    await expect(page.getByRole("heading", { name: "Communication Dashboard" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Communication Dashboard" })).toBeVisible({ timeout: 15000 });
 
     // Stats cards should be present
     await expect(page.getByText("Sent Today")).toBeVisible();

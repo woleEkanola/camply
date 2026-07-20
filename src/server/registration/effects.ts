@@ -38,7 +38,14 @@ function isRenderableQrSrc(value: string | undefined): value is string {
 
 /** Queues a post-transition side effect (email/notification) in the DB-backed outbox (PRD Part 6 §3, §16). */
 export async function enqueueSideEffect(registrationId: string, type: SideEffectType) {
-  return prisma.sideEffect.create({ data: { registrationId, type } });
+  // Attribute the effect to an org so the admin delivery queue can scope by it.
+  const registration = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    select: { camp: { select: { organizationId: true } } },
+  });
+  return prisma.sideEffect.create({
+    data: { registrationId, type, organizationId: registration?.camp.organizationId ?? null },
+  });
 }
 
 export async function qrDataUrlForToken(token: string): Promise<string> {
@@ -106,6 +113,7 @@ async function runEffect(registrationId: string, type: SideEffectType) {
         prisma,
         email: parentEmail,
         userId: registration.camper.userId,
+        organizationId: registration.camp.organizationId,
         registrationId: registration.id,
         recipientType: "PARENT",
         deliverySource: eventKey,
@@ -263,6 +271,26 @@ export async function processSideEffect(id: string) {
   const effect = await prisma.sideEffect.findUnique({ where: { id } });
   if (!effect || effect.status === "DONE") return;
 
+  // Campaign effects respect the campaign's own lifecycle: a CANCELLED campaign
+  // must never send again; a PAUSED campaign defers without burning attempts.
+  if (effect.type === "CAMPAIGN_SEND" && effect.campaignId) {
+    const campaign = await prisma.emailCampaign.findUnique({
+      where: { id: effect.campaignId },
+      select: { status: true },
+    });
+    if (campaign?.status === "CANCELLED") {
+      await prisma.sideEffect.update({ where: { id }, data: { status: "CANCELLED" } });
+      return;
+    }
+    if (campaign?.status === "PAUSED") {
+      await prisma.sideEffect.update({
+        where: { id },
+        data: { runAfter: new Date(Date.now() + 5 * 60 * 1000) },
+      });
+      return;
+    }
+  }
+
   try {
     // Broadcast effects are handled differently from registration effects
     if (effect.type === "BROADCAST_SEND" && effect.broadcastRecipientId) {
@@ -273,6 +301,20 @@ export async function processSideEffect(id: string) {
       await runEffect(effect.registrationId, effect.type as SideEffectType);
     }
     await prisma.sideEffect.update({ where: { id }, data: { status: "DONE" } });
+
+    // When a campaign's queue drains, mark it COMPLETED (failures are visible
+    // per-recipient in campaign stats — COMPLETED means "send run finished").
+    if (effect.type === "CAMPAIGN_SEND" && effect.campaignId) {
+      const remaining = await prisma.sideEffect.count({
+        where: { campaignId: effect.campaignId, type: "CAMPAIGN_SEND", status: "QUEUED" },
+      });
+      if (remaining === 0) {
+        await prisma.emailCampaign.updateMany({
+          where: { id: effect.campaignId, status: "SENDING" },
+          data: { status: "COMPLETED", completedAt: new Date() },
+        });
+      }
+    }
   } catch (error) {
     const attempts = effect.attempts + 1;
     const backoffMinutes = Math.min(2 ** attempts, 60);
@@ -367,6 +409,7 @@ async function processBroadcastEffect(effectId: string) {
     prisma,
     email: recipient.email,
     userId: recipient.recipientId,
+    organizationId: broadcast.organizationId,
     recipientType: broadcast.audience === "PARENTS" ? "PARENT" : broadcast.audience === "TEACHERS" ? "TEACHER" : broadcast.audience === "VOLUNTEERS" ? "VOLUNTEER" : "PARENT",
     deliverySource: "BROADCAST",
     subject: interpolatedSubject,
@@ -381,6 +424,15 @@ async function processBroadcastEffect(effectId: string) {
 
 /** Sweeps due, non-terminal effects. Intended to be hit by a cron/pinger every minute or so. */
 export async function sweepPendingSideEffects(limit = 25) {
+  // Fire any scheduled campaigns whose time has come — their sends enqueue
+  // CAMPAIGN_SEND effects which the loop below then picks up.
+  try {
+    const { processScheduledCampaigns } = await import("../email/campaign/sender");
+    await processScheduledCampaigns(prisma);
+  } catch (error) {
+    console.error("[sweep] processScheduledCampaigns failed:", error);
+  }
+
   const due = await prisma.sideEffect.findMany({
     where: { status: "QUEUED", runAfter: { lte: new Date() } },
     take: limit,
