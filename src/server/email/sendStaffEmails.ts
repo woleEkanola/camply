@@ -93,9 +93,10 @@ export async function sendStaffApprovedEmail(params: {
   });
 
   let staffUserId: string | undefined;
-  try { const u = await prisma.user.findUnique({ where: { email: normalizeEmail(params.to) }, select: { id: true } }); staffUserId = u?.id; } catch {}
+  let staffOrgId: string | null | undefined;
+  try { const u = await prisma.user.findUnique({ where: { email: normalizeEmail(params.to) }, select: { id: true, organizationId: true } }); staffUserId = u?.id; staffOrgId = u?.organizationId; } catch {}
   await logDelivery({
-    prisma, email: params.to, userId: staffUserId ?? "",
+    prisma, email: params.to, userId: staffUserId ?? "", organizationId: staffOrgId ?? null,
     recipientType: params.type === "TEACHER" ? "TEACHER" : "VOLUNTEER",
     deliverySource: "STAFF_APPROVED", subject: finalSubject, deliveryStatus: "SENT",
   });
@@ -177,9 +178,10 @@ export async function sendStaffRejectedEmail(params: {
   });
 
   let staffUserId2: string | undefined;
-  try { const u = await prisma.user.findUnique({ where: { email: normalizeEmail(params.to) }, select: { id: true } }); staffUserId2 = u?.id; } catch {}
+  let staffOrgId2: string | null | undefined;
+  try { const u = await prisma.user.findUnique({ where: { email: normalizeEmail(params.to) }, select: { id: true, organizationId: true } }); staffUserId2 = u?.id; staffOrgId2 = u?.organizationId; } catch {}
   await logDelivery({
-    prisma, email: params.to, userId: staffUserId2 ?? "",
+    prisma, email: params.to, userId: staffUserId2 ?? "", organizationId: staffOrgId2 ?? null,
     recipientType: params.type === "TEACHER" ? "TEACHER" : "VOLUNTEER",
     deliverySource: "STAFF_REJECTED", subject: finalSubject, deliveryStatus: "SENT",
   });

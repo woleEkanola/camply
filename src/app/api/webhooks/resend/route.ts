@@ -49,15 +49,16 @@ export async function POST(request: NextRequest) {
 
     switch (event.type) {
       case "email.delivered":
+        // Events can arrive out of order — never regress OPENED/CLICKED/BOUNCED.
         await prisma.emailRecipient.updateMany({
-          where,
+          where: { ...where, deliveryStatus: { notIn: ["OPENED", "CLICKED", "BOUNCED"] } },
           data: { deliveredAt: new Date(), deliveryStatus: "DELIVERED" },
         });
         break;
 
       case "email.bounced":
         await prisma.emailRecipient.updateMany({
-          where,
+          where: { ...where, deliveryStatus: { notIn: ["OPENED", "CLICKED"] } },
           data: { bouncedAt: new Date(), deliveryStatus: "BOUNCED" },
         });
         break;
@@ -71,9 +72,11 @@ export async function POST(request: NextRequest) {
         break;
 
       case "email.clicked":
+        // A click implies an open — backfill openedAt so the opened stat counts
+        // clickers whose mail client blocked the tracking pixel.
         await prisma.emailRecipient.updateMany({
           where: { ...where, clickedAt: null },
-          data: { clickedAt: new Date(), deliveryStatus: "CLICKED" },
+          data: { clickedAt: new Date(), openedAt: new Date(), deliveryStatus: "CLICKED" },
         });
         break;
 

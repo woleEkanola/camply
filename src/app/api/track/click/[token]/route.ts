@@ -13,13 +13,14 @@ export async function GET(
     try {
       const recipient = await prisma.emailRecipient.findUnique({
         where: { id: decoded.recipientId },
-        select: { clickedAt: true },
+        select: { clickedAt: true, openedAt: true },
       });
 
       if (recipient && !recipient.clickedAt) {
+        // A click implies an open — backfill openedAt for pixel-blocked clients.
         await prisma.emailRecipient.update({
           where: { id: decoded.recipientId },
-          data: { clickedAt: new Date(), deliveryStatus: "CLICKED" },
+          data: { clickedAt: new Date(), openedAt: recipient.openedAt ?? new Date(), deliveryStatus: "CLICKED" },
         });
       }
     } catch {

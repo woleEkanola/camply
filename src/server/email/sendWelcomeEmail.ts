@@ -87,15 +87,18 @@ export async function sendWelcomeEmail(email: string, firstName: string, verifyT
     console.log("[RESEND] Welcome email result", result.error ? `Error: ${result.error.message}` : `OK id=${result.data?.id}`);
 
     let userId: string | undefined;
+    let userOrgId: string | null | undefined;
     try {
-      const user = await prisma.user.findUnique({ where: { email: normalizeEmail(email) }, select: { id: true } });
+      const user = await prisma.user.findUnique({ where: { email: normalizeEmail(email) }, select: { id: true, organizationId: true } });
       userId = user?.id;
+      userOrgId = user?.organizationId;
     } catch { /* best-effort */ }
 
     await logDelivery({
       prisma,
       email,
       userId: userId ?? "",
+      organizationId: userOrgId ?? null,
       recipientType: "PARENT",
       deliverySource: "WELCOME_EMAIL",
       subject: finalSubject,

@@ -13,10 +13,11 @@ export async function GET(
     try {
       const recipient = await prisma.emailRecipient.findUnique({
         where: { id: decoded.recipientId },
-        select: { openedAt: true },
+        select: { openedAt: true, deliveryStatus: true },
       });
 
-      if (recipient && !recipient.openedAt) {
+      // Record first open only, and never regress CLICKED → OPENED.
+      if (recipient && !recipient.openedAt && recipient.deliveryStatus !== "CLICKED") {
         await prisma.emailRecipient.update({
           where: { id: decoded.recipientId },
           data: { openedAt: new Date(), deliveryStatus: "OPENED" },
