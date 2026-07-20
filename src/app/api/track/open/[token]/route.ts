@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decodeOpenToken } from "@/server/email/tracking/trackingToken";
+import { prisma } from "@/server/db";
 
 export async function GET(
   _request: NextRequest,
@@ -10,8 +11,6 @@ export async function GET(
 
   if (decoded) {
     try {
-      const { PrismaClient } = await import("@prisma/client");
-      const prisma = new PrismaClient();
       const recipient = await prisma.emailRecipient.findUnique({
         where: { id: decoded.recipientId },
         select: { openedAt: true },
@@ -23,7 +22,6 @@ export async function GET(
           data: { openedAt: new Date(), deliveryStatus: "OPENED" },
         });
       }
-      await prisma.$disconnect();
     } catch {
       // silently ignore tracking errors
     }

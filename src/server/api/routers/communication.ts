@@ -189,7 +189,8 @@ export const communicationRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      const tmpl = await ctx.prisma.emailTemplate.findUnique({ where: { id: input.id } });
+      const oid = orgId(ctx);
+      const tmpl = await ctx.prisma.emailTemplate.findFirst({ where: { id: input.id, organizationId: oid } });
       if (!tmpl) throw new TRPCError({ code: "NOT_FOUND" });
       return tmpl;
     }),
@@ -226,6 +227,9 @@ export const communicationRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const existing = await ctx.prisma.emailTemplate.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       const { id, ...data } = input;
       return ctx.prisma.emailTemplate.update({ where: { id }, data: data as any });
     }),
@@ -234,6 +238,9 @@ export const communicationRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const existing = await ctx.prisma.emailTemplate.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       // Reassign any events using this template to null (they'll fall back to defaults)
       await ctx.prisma.emailEventConfig.updateMany({
         where: { templateId: input.id },
@@ -249,6 +256,9 @@ export const communicationRouter = createTRPCRouter({
     .input(z.object({ id: z.string(), event: z.enum(ALL_EVENT_KEYS) }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const existing = await ctx.prisma.emailTemplate.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       const def = DEFAULT_TEMPLATES[input.event];
       if (!def) throw new TRPCError({ code: "BAD_REQUEST", message: "Unknown event" });
       return ctx.prisma.emailTemplate.update({
@@ -825,7 +835,7 @@ export const communicationRouter = createTRPCRouter({
         ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, updatedAt: { gte: weekAgo }, campaign: { organizationId: oid } } }),
         ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["FAILED", "BOUNCED"] }, campaign: { organizationId: oid } } }),
         ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "QUEUED", campaign: { organizationId: oid } } }),
-        ctx.prisma.sideEffect.count({ where: { status: "QUEUED", campaignId: { not: null } } }),
+        ctx.prisma.sideEffect.count({ where: { status: "QUEUED", campaignId: { not: null }, campaign: { organizationId: oid } } }),
         ctx.prisma.emailCampaign.count({ where: { organizationId: oid, status: "SENDING" } }),
         ctx.prisma.emailCampaign.count({ where: { organizationId: oid, status: "SCHEDULED" } }),
         ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
@@ -878,7 +888,10 @@ export const communicationRouter = createTRPCRouter({
   audienceGet: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      return ctx.prisma.savedAudience.findUniqueOrThrow({ where: { id: input.id } });
+      const oid = orgId(ctx);
+      const audience = await ctx.prisma.savedAudience.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!audience) throw new TRPCError({ code: "NOT_FOUND" });
+      return audience;
     }),
 
   audienceCreate: protectedProcedure
@@ -954,8 +967,9 @@ export const communicationRouter = createTRPCRouter({
   campaignGet: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const campaign = await ctx.prisma.emailCampaign.findUnique({
-        where: { id: input.id },
+      const oid = orgId(ctx);
+      const campaign = await ctx.prisma.emailCampaign.findFirst({
+        where: { id: input.id, organizationId: oid },
         include: {
           _count: { select: { recipients: true } },
           recipients: { select: { deliveryStatus: true, openedAt: true, clickedAt: true } },
@@ -1102,6 +1116,12 @@ export const communicationRouter = createTRPCRouter({
   campaignGetStats: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const campaign = await ctx.prisma.emailCampaign.findFirst({
+        where: { id: input.id, organizationId: oid },
+        select: { id: true },
+      });
+      if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
       const recipients = await ctx.prisma.emailRecipient.findMany({
         where: { campaignId: input.id },
         select: { deliveryStatus: true, openedAt: true, clickedAt: true },
@@ -1223,7 +1243,13 @@ export const communicationRouter = createTRPCRouter({
       if (input?.search) where.recipientEmail = { contains: input.search, mode: "insensitive" };
 
       const items = await ctx.prisma.sideEffect.findMany({
-        where,
+        where: {
+          ...where,
+          OR: [
+            { campaign: { organizationId: oid } },
+            { campaignId: null }, // registration effects — no campaign, but still org-scoped via registration
+          ],
+        },
         orderBy: { createdAt: "desc" },
         take: limit + 1,
         ...(input?.cursor && { cursor: { id: input.cursor }, skip: 1 }),
@@ -1241,8 +1267,15 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   queueStats: protectedProcedure.query(async ({ ctx }) => {
+    const oid = orgId(ctx);
     const items = await ctx.prisma.sideEffect.findMany({
-      where: { type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] } },
+      where: {
+        type: { in: ["CAMPAIGN_SEND", "BROADCAST_SEND"] },
+        OR: [
+          { campaign: { organizationId: oid } },
+          { campaignId: null },
+        ],
+      },
       select: { status: true },
     });
     return {
@@ -1258,10 +1291,14 @@ export const communicationRouter = createTRPCRouter({
     .input(z.object({ ids: z.array(z.string()).optional(), retryAll: z.boolean().optional(), campaignId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
+      const oid = orgId(ctx);
       let ids = input.ids ?? [];
       if (input.retryAll || input.campaignId) {
         const failed = await ctx.prisma.sideEffect.findMany({
-          where: { status: "FAILED", ...(input.campaignId && { campaignId: input.campaignId }) },
+          where: {
+            status: "FAILED",
+            ...(input.campaignId && { campaignId: input.campaignId, campaign: { organizationId: oid } }),
+          },
           select: { id: true },
         });
         ids = failed.map((f) => f.id);

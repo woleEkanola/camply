@@ -20,17 +20,19 @@ function getResend() {
 export async function sendOtpEmail(email: string, otp: string, orgSlug?: string, organizationId?: string) {
   let finalOrgId = organizationId;
   let userId: string | undefined;
+  let userRole: string | undefined;
 
-  // Fetch organizationId + userId by email if not passed (e.g. forgot password flow)
+  // Fetch organizationId + userId + role by email if not passed (e.g. forgot password flow)
   if (!finalOrgId) {
     try {
       const user = await prisma.user.findUnique({
         where: { email: normalizeEmail(email) },
-        select: { id: true, organizationId: true },
+        select: { id: true, organizationId: true, role: true },
       });
       if (user?.organizationId) {
         finalOrgId = user.organizationId;
         userId = user.id;
+        userRole = user.role;
       }
     } catch (err) {
       console.error("[RESEND] Failed to lookup user organizationId for OTP:", err);
@@ -100,7 +102,7 @@ export async function sendOtpEmail(email: string, otp: string, orgSlug?: string,
     prisma,
     email,
     userId: userId ?? "",
-    recipientType: "PARENT",
+    recipientType: userRole === "TEACHER" ? "TEACHER" : userRole === "VOLUNTEER" ? "VOLUNTEER" : "PARENT",
     deliverySource: "OTP_EMAIL",
     subject: finalSubject,
     providerMessageId: result.data?.id ?? undefined,

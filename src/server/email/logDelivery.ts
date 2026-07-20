@@ -17,10 +17,13 @@ interface LogDeliveryParams {
 
 export async function logDelivery(params: LogDeliveryParams): Promise<void> {
   try {
+    // Skip logging if no userId — we can't attribute the email to anyone
+    if (!params.userId) return;
+
     await (params.prisma as any).emailRecipient.create({
       data: {
         campaignId: null,
-        userId: params.userId ?? "",
+        userId: params.userId,
         registrationId: params.registrationId ?? null,
         email: params.email,
         recipientType: params.recipientType,
