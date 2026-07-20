@@ -1,8 +1,8 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import { api } from "@/utils/trpc";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -12,13 +12,14 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Dialog } from "@/components/ui/Dialog";
+import { AttachmentList } from "@/components/communication/AttachmentList";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import LinkExtension from "@tiptap/extension-link";
 import ImageExtension from "@tiptap/extension-image";
 import { EmailButton } from "@/server/email/buttonExtension";
-import { EMAIL_VARIABLES } from "@/server/email/variables";
 
 function TbBtn({ onClick, active, label }: { onClick: () => void; active?: boolean; label: string }) {
   return (
@@ -31,18 +32,12 @@ function TbBtn({ onClick, active, label }: { onClick: () => void; active?: boole
   );
 }
 
-export default function CampaignComposer() {
+function ComposerInner() {
   const { data: session, status } = useSession({ required: true });
   const router = useRouter();
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      const role = session?.user?.role;
-      if (!role || !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)) {
-        router.replace("/admin");
-      }
-    }
-  }, [session, status, router]);
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("id");
+  const utils = api.useUtils();
 
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
@@ -53,15 +48,29 @@ export default function CampaignComposer() {
   const [customFromLocalPart, setCustomFromLocalPart] = useState("");
   const [replyTo, setReplyTo] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Array<{ url: string; fileName: string; fileType: string; fileSize: number }>>([]);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmDraftId, setConfirmDraftId] = useState("");
+  const [confirmData, setConfirmData] = useState<{ isDuplicate: boolean; lastCampaign?: any } | null>(null);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      const role = session?.user?.role;
+      if (!role || !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)) router.replace("/admin");
+    }
+  }, [session, status, router]);
 
   const { data: audiences } = api.communication.audienceList.useQuery();
   const { data: branding } = api.communication.brandingGet.useQuery();
   const createMut = api.communication.campaignCreate.useMutation();
+  const updateMut = api.communication.campaignUpdate.useMutation();
   const sendMut = api.communication.campaignSend.useMutation();
   const previewMut = api.communication.previewEmail.useMutation();
-  const audiencePreview = api.communication.audiencePreview.useQuery(
-    { savedAudienceId: savedAudienceId || undefined },
-    { enabled: false }
+
+  const { data: existingCampaign } = api.communication.campaignGet.useQuery(
+    { id: editId! },
+    { enabled: !!editId }
   );
 
   const editor = useEditor({
@@ -69,40 +78,74 @@ export default function CampaignComposer() {
     content: "<p>Write your campaign message here...</p>",
   });
 
+  // Load existing campaign into editor when editing
+  useEffect(() => {
+    if (existingCampaign && editor) {
+      setName(existingCampaign.name);
+      setSubject(existingCampaign.subject);
+      setPreviewText(existingCampaign.previewText || "");
+      setSenderMode(existingCampaign.senderMode || "ORG_SLUG");
+      setCustomFromLocalPart(existingCampaign.customFromLocalPart || "");
+      setReplyTo(existingCampaign.replyTo || "");
+      setAttachments((existingCampaign.attachments as any) || []);
+      if (existingCampaign.savedAudienceId) setSavedAudienceId(existingCampaign.savedAudienceId);
+      if (existingCampaign.body) {
+        editor.commands.setContent(existingCampaign.body as any);
+      }
+    }
+  }, [existingCampaign, editor]);
+
+  const campaignPayload = () => ({
+    name,
+    subject,
+    previewText: previewText || undefined,
+    body: editor!.getJSON() as Record<string, unknown>,
+    audienceFilter: { recipientType: audienceType as any },
+    savedAudienceId: savedAudienceId || undefined,
+    senderMode,
+    customFromLocalPart: customFromLocalPart || undefined,
+    replyTo: replyTo || undefined,
+    attachments: attachments.length > 0 ? attachments : undefined,
+  });
+
   const handleSaveDraft = async () => {
     if (!name || !subject || !editor) return;
-    const body = editor.getJSON();
-    await createMut.mutateAsync({
-      name,
-      subject,
-      previewText: previewText || undefined,
-      body: body as Record<string, unknown>,
-      audienceFilter: { recipientType: audienceType as any },
-      savedAudienceId: savedAudienceId || undefined,
-      senderMode,
-      customFromLocalPart: customFromLocalPart || undefined,
-      replyTo: replyTo || undefined,
-    });
+    if (editId) {
+      await updateMut.mutateAsync({ id: editId, ...campaignPayload() });
+    } else {
+      await createMut.mutateAsync(campaignPayload());
+    }
     setToast("Draft saved");
   };
 
   const handleSendNow = async () => {
     if (!name || !subject || !editor) return;
-    const body = editor.getJSON();
-    const result = await createMut.mutateAsync({
-      name,
+
+    // Create or update draft first, then check for duplicates
+    let draftId: string = editId ?? "";
+    if (!draftId) {
+      const result = await createMut.mutateAsync(campaignPayload());
+      draftId = result.id;
+    } else {
+      await updateMut.mutateAsync({ id: editId!, ...campaignPayload() });
+    }
+
+    // Check for duplicates
+    const duplicateCheck = await utils.communication.campaignCheckDuplicate.fetch({
+      id: draftId,
       subject,
-      previewText: previewText || undefined,
-      body: body as Record<string, unknown>,
-      audienceFilter: { recipientType: audienceType as any },
-      savedAudienceId: savedAudienceId || undefined,
-      senderMode,
-      customFromLocalPart: customFromLocalPart || undefined,
-      replyTo: replyTo || undefined,
     });
-    await sendMut.mutateAsync({ id: result.id });
-    setToast(`Sent to ${sendMut.data?.recipientCount ?? 0} recipients`);
-    router.push("/admin/communication/campaigns");
+
+    setConfirmDraftId(draftId);
+    setConfirmData(duplicateCheck);
+    setShowConfirm(true);
+  };
+
+  const handleConfirmSend = async () => {
+    setSending(true);
+    await sendMut.mutateAsync({ id: confirmDraftId });
+    setShowConfirm(false);
+    router.push(`/admin/communication/campaigns/${confirmDraftId}`);
   };
 
   const handleTestSend = async () => {
@@ -131,7 +174,8 @@ export default function CampaignComposer() {
   return (
     <AppShell area="admin">
       <div className="mx-auto max-w-4xl space-y-6">
-        <PageHeader title="New Campaign" />
+        <PageHeader title={editId ? "Edit Campaign" : "New Campaign"} />
+
         {toast && (
           <div className="rounded-lg bg-accent-50 border border-accent-200 px-4 py-2 text-sm text-accent-800">{toast}</div>
         )}
@@ -149,16 +193,11 @@ export default function CampaignComposer() {
           <CardHeader><CardTitle>Recipients</CardTitle></CardHeader>
           <CardBody className="space-y-4">
             <Select label="Recipient Type" value={audienceType} onChange={(e: any) => setAudienceType(e.target.value)} options={[
-              { value: "ALL", label: "Everyone" },
-              { value: "PARENTS", label: "Parents" },
-              { value: "TEACHERS", label: "Teachers" },
-              { value: "VOLUNTEERS", label: "Volunteers" },
-              { value: "CAMPUS_REPS", label: "Campus Representatives" },
-              { value: "ADMINS", label: "Administrators" },
+              { value: "ALL", label: "Everyone" }, { value: "PARENTS", label: "Parents" }, { value: "TEACHERS", label: "Teachers" },
+              { value: "VOLUNTEERS", label: "Volunteers" }, { value: "CAMPUS_REPS", label: "Campus Representatives" }, { value: "ADMINS", label: "Administrators" },
             ]} />
             <Select label="Saved Audience (optional)" value={savedAudienceId} onChange={(e: any) => setSavedAudienceId(e.target.value)} options={[
-              { value: "", label: "None" },
-              ...(audiences?.map((a: any) => ({ value: a.id, label: a.name })) ?? []),
+              { value: "", label: "None" }, ...(audiences?.map((a: any) => ({ value: a.id, label: a.name })) ?? []),
             ]} />
           </CardBody>
         </Card>
@@ -167,13 +206,18 @@ export default function CampaignComposer() {
           <CardHeader><CardTitle>Sender Settings</CardTitle></CardHeader>
           <CardBody className="space-y-4">
             <Select label="Sender Address" value={senderMode} onChange={(e: any) => setSenderMode(e.target.value)} options={[
-              { value: "ORG_SLUG", label: "Organization Slug" },
-              { value: "CUSTOM", label: "Custom Local Part" },
-              { value: "DONOTREPLY", label: "Donotreply" },
+              { value: "ORG_SLUG", label: "Organization Slug" }, { value: "CUSTOM", label: "Custom Local Part" }, { value: "DONOTREPLY", label: "Donotreply" },
             ]} />
             {senderMode === "CUSTOM" && <Input label="Custom Local Part" value={customFromLocalPart} onChange={(e: any) => setCustomFromLocalPart(e.target.value)} placeholder="news" />}
             <Input label="Reply-To" value={replyTo} onChange={(e: any) => setReplyTo(e.target.value)} placeholder="support@example.com" />
             <div className="rounded bg-neutral-50 p-2 text-xs font-mono text-neutral-600">{senderPreview}</div>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Attachments</CardTitle></CardHeader>
+          <CardBody>
+            <AttachmentList attachments={attachments} onChange={setAttachments} />
           </CardBody>
         </Card>
 
@@ -204,7 +248,48 @@ export default function CampaignComposer() {
             <Button onClick={handleSendNow}>Send Now</Button>
           </div>
         </div>
+
+        <Dialog open={showConfirm} onClose={() => setShowConfirm(false)} title="Confirm Send" size="md" footer={
+          <div className="flex gap-2 flex-wrap justify-end">
+            <Button variant="secondary" onClick={() => setShowConfirm(false)}>Cancel</Button>
+            {confirmData?.isDuplicate && confirmData?.lastCampaign && (
+              <Button variant="secondary" onClick={() => { setShowConfirm(false); router.push(`/admin/communication/campaigns/${confirmData.lastCampaign!.id}`); }}>
+                View Previous
+              </Button>
+            )}
+            <Button onClick={handleConfirmSend} loading={sending}>
+              {confirmData?.isDuplicate ? "Send Again Anyway" : "Confirm Send"}
+            </Button>
+          </div>
+        }>
+          <div className="space-y-3 text-sm">
+            {confirmData?.isDuplicate && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                <p className="font-medium text-amber-800">Possible duplicate detected</p>
+                <p className="mt-1 text-amber-700">
+                  A campaign with this subject{" "}
+                  {confirmData.lastCampaign?.name && <strong>{confirmData.lastCampaign.name}</strong>}{" "}
+                  was delivered {confirmData.lastCampaign?.startedAt ? (
+                    <>to <strong>{confirmData.lastCampaign.recipientCount}</strong> recipients{" "}
+                    {Math.round((Date.now() - new Date(confirmData.lastCampaign.startedAt).getTime()) / 60000)} minutes ago</>
+                  ) : "recently"}.
+                </p>
+              </div>
+            )}
+            <p>This campaign will be sent to the selected audience.</p>
+            <p className="text-neutral-500">Sender: {senderPreview}</p>
+            <p className="text-neutral-500">Subject: {subject}</p>
+          </div>
+        </Dialog>
       </div>
     </AppShell>
+  );
+}
+
+export default function CampaignComposer() {
+  return (
+    <Suspense fallback={<AppShell area="admin"><div className="mx-auto max-w-4xl"><Skeleton className="h-8 w-48" /></div></AppShell>}>
+      <ComposerInner />
+    </Suspense>
   );
 }
