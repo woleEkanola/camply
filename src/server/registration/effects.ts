@@ -13,6 +13,7 @@ import { loadTemplateForEvent } from "../email/templateLoader";
 import { renderEmail, renderEmailWithEvent } from "../email/renderer";
 import { resolveFromAddress } from "../email/resolveFromAddress";
 import { interpolateSubject } from "../email/interpolate";
+import { processCampaignSideEffect } from "../email/campaign/sender";
 
 let resend: Resend | null = null;
 function getResend() {
@@ -266,6 +267,8 @@ export async function processSideEffect(id: string) {
     // Broadcast effects are handled differently from registration effects
     if (effect.type === "BROADCAST_SEND" && effect.broadcastRecipientId) {
       await processBroadcastEffect(effect.id);
+    } else if (effect.type === "CAMPAIGN_SEND" && effect.campaignId) {
+      await processCampaignSideEffect(prisma, effect.id);
     } else if (effect.registrationId) {
       await runEffect(effect.registrationId, effect.type as SideEffectType);
     }

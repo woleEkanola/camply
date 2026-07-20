@@ -1,9 +1,11 @@
+import crypto from "crypto";
+
 const SECRET = process.env.NEXTAUTH_SECRET || "camply-tracking-secret";
 
 function encode(obj: Record<string, string>): string {
   const json = JSON.stringify(obj);
   const encoded = Buffer.from(json).toString("base64url");
-  const check = simpleHash(json);
+  const check = crypto.createHmac("sha256", SECRET).update(json).digest("base64url");
   return `${encoded}.${check}`;
 }
 
@@ -12,22 +14,12 @@ function decode<T extends Record<string, string>>(token: string): T | null {
     const [encoded, check] = token.split(".");
     if (!encoded || !check) return null;
     const json = Buffer.from(encoded, "base64url").toString("utf-8");
-    if (simpleHash(json) !== check) return null;
+    const expected = crypto.createHmac("sha256", SECRET).update(json).digest("base64url");
+    if (check !== expected) return null;
     return JSON.parse(json) as T;
   } catch {
     return null;
   }
-}
-
-function simpleHash(input: string): string {
-  let hash = 0;
-  const combined = input + SECRET;
-  for (let i = 0; i < combined.length; i++) {
-    const char = combined.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(36);
 }
 
 export function generateOpenToken(

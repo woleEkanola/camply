@@ -47,9 +47,10 @@ export async function resolveAudience(
 
   // ── Role filter ──────────────────────────────────────────────────────────
   const roles: string[] = [];
-  if (recipientType === "ALL" || recipientType === "PARENTS") roles.push("PARENT");
-  if (recipientType === "ALL" || recipientType === "TEACHERS") roles.push("TEACHER");
-  if (recipientType === "ALL" || recipientType === "VOLUNTEERS") roles.push("VOLUNTEER");
+  if (recipientType === "ALL") roles.push("PARENT", "TEACHER", "VOLUNTEER", "CAMPUS_REPRESENTATIVE");
+  if (recipientType === "PARENTS") roles.push("PARENT");
+  if (recipientType === "TEACHERS") roles.push("TEACHER");
+  if (recipientType === "VOLUNTEERS") roles.push("VOLUNTEER");
   if (recipientType === "CAMPUS_REPS") roles.push("CAMPUS_REPRESENTATIVE");
   if (recipientType === "ADMINS") roles.push("SUPER_ADMIN", "OWNER", "ADMIN");
 
