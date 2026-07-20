@@ -1,9 +1,8 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Fragment, useState, useEffect, Suspense } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 import { Menu, Transition } from "@headlessui/react";
 import { EllipsisVerticalIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { api } from "@/utils/trpc";
@@ -29,7 +28,16 @@ const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 const VOLUNTEER_CATEGORIES = ["Registration", "Medical", "Kitchen", "Transport", "Security", "Media", "Logistics", "Technical", "Cleaning", "Protocol"];
 
 export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-neutral-500">Loading...</div>}>
+      <StaffListPageContent type={type} />
+    </Suspense>
+  );
+}
+
+function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession({ required: true, onUnauthenticated: () => router.push("/login") });
 
   useEffect(() => {
@@ -45,6 +53,18 @@ export function StaffListPage({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const openStaffParam = searchParams.get("openStaff") || searchParams.get("staffId") || searchParams.get("userId") || searchParams.get("open") || searchParams.get("id");
+  const queryParam = searchParams.get("q");
+
+  useEffect(() => {
+    if (openStaffParam) {
+      setSelectedId(openStaffParam);
+    }
+    if (queryParam) {
+      setSearchQuery(queryParam);
+    }
+  }, [openStaffParam, queryParam]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");

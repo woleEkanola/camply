@@ -102,10 +102,12 @@ export async function createDraft(params: {
     });
 
     const camper = await tx.camper.findUniqueOrThrow({ where: { id: params.camperId } });
-    await tx.camper.update({
-      where: { id: params.camperId },
-      data: { homeCampusId: params.campusId },
-    });
+    if (!camper.homeCampusId) {
+      await tx.camper.update({
+        where: { id: params.camperId },
+        data: { homeCampusId: params.campusId },
+      });
+    }
     await logEvent(tx, {
       organizationId: camper.organizationId,
       registrationId: registration.id,
@@ -131,6 +133,9 @@ export async function submitRegistration(params: { registrationId: string; actor
   const existing = await prisma.registration.findUniqueOrThrow({ where: { id: params.registrationId } });
   if (existing.status === "SUBMITTED" || existing.status === "PENDING") {
     return existing;
+  }
+  if (existing.status === "REQUIRES_ACTION" || existing.status === "REJECTED") {
+    return resubmitRegistration({ registrationId: params.registrationId, actorId: params.actorId });
   }
 
   const result = await prisma.$transaction(async (tx) => {

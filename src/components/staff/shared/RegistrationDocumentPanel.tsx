@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { api } from "@/utils/trpc";
+import { DocumentZoomModal } from "@/components/ui/DocumentZoomModal";
+import { MagnifyingGlassPlusIcon } from "@heroicons/react/24/outline";
 
 interface Props {
   registrationId: string;
@@ -12,6 +14,7 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
   const { data: documents, refetch } = api.document.listForRegistration.useQuery({ registrationId });
   const [actionError, setActionError] = useState("");
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
+  const [zoomDoc, setZoomDoc] = useState<{ url: string; fileName: string; fileType?: string } | null>(null);
 
 
   const flagRequiresAction = api.document.flagRequiresAction.useMutation({
@@ -26,6 +29,7 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
   return (
     <div className="space-y-3">
       {actionError && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{actionError}</div>}
+      <DocumentZoomModal isOpen={!!zoomDoc} onClose={() => setZoomDoc(null)} {...(zoomDoc || { url: "", fileName: "" })} />
       {(documents ?? []).map((doc: any) => {
         const activeAction = doc.documentActions?.[0]?.status === "REQUIRES_ACTION" ? doc.documentActions[0] : null;
         return (
@@ -39,25 +43,32 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
                   {doc.status}
                 </span>
                 <button
-                  className="text-xs text-accent-600 hover:underline font-medium"
-                  onClick={() => setPreviewDocId(previewDocId === doc.id ? null : doc.id)}
+                  className="inline-flex items-center gap-1 text-xs text-accent-600 hover:text-accent-700 font-semibold"
+                  onClick={() => setZoomDoc({ url: doc.url, fileName: doc.fileName, fileType: doc.fileType })}
                 >
-                  View
+                  <MagnifyingGlassPlusIcon className="h-3.5 w-3.5" />
+                  View & Zoom
                 </button>
-
               </div>
             </div>
             {previewDocId === doc.id && (
-              <div className="mt-3 flex justify-center bg-neutral-50 p-2 rounded-md border border-neutral-200">
+              <div className="mt-3 relative group flex justify-center bg-neutral-50 p-2 rounded-md border border-neutral-200 cursor-pointer overflow-hidden"
+                onClick={() => setZoomDoc({ url: doc.url, fileName: doc.fileName, fileType: doc.fileType })}
+              >
                 {doc.fileType?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(doc.url || "") ? (
                   <img
                     src={doc.url}
                     alt={doc.fileName}
-                    className="max-h-85 max-w-full object-contain rounded-md shadow-sm border border-neutral-200 bg-white"
+                    className="max-h-85 max-w-full object-contain rounded-md shadow-sm border border-neutral-200 bg-white group-hover:opacity-90 transition"
                   />
                 ) : (
                   <iframe src={doc.url} className="h-85 w-full rounded-md border border-neutral-200 bg-white" title={doc.fileName} />
                 )}
+                <div className="absolute inset-0 bg-neutral-950/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                  <span className="bg-neutral-900/80 text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
+                    <MagnifyingGlassPlusIcon className="h-4 w-4" /> Click to Zoom
+                  </span>
+                </div>
               </div>
             )}
             {activeAction && (

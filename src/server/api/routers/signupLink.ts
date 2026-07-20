@@ -155,20 +155,34 @@ export const signupLinkRouter = createTRPCRouter({
       const orgId = currentUser.organizationId;
       if (!orgId) return null;
 
-      // Anchor the parent's "+ Add Camper" link to their own campus (derived from
-      // any existing camper) so a second child can't be silently routed to a
-      // different campus's signup link — a family is locked to one campus. New
-      // parents with no camper yet fall back to the org's newest active link.
+      // Anchor the parent's "+ Add Camper" / "Start Registration" link to their campus.
+      // 1. Try to anchor to any existing camper's homeCampusId.
       const anchor = await ctx.prisma.camper.findFirst({
         where: { userId: currentUser.id, deletedAt: null, homeCampusId: { not: null } },
         select: { homeCampusId: true },
       });
 
+      let targetCampusId = anchor?.homeCampusId;
+
+      // 2. If no camper has a homeCampusId yet, fallback to the signup link the user actually clicked.
+      if (!targetCampusId) {
+        const lastClick = await ctx.prisma.signupLinkClick.findFirst({
+          where: { userId: currentUser.id },
+          orderBy: { clickedAt: "desc" },
+          select: { signupLink: { select: { campusId: true } } },
+        });
+        targetCampusId = lastClick?.signupLink.campusId;
+      }
+
+      // If user never selected a campus and has no camper with homeCampusId, return null
+      // so dashboard buttons fall back to manual profile creation instead of auto-assigning a random campus.
+      if (!targetCampusId) return null;
+
       const link = await ctx.prisma.signupLink.findFirst({
         where: {
           campus: { organizationId: orgId },
           active: true,
-          ...(anchor?.homeCampusId ? { campusId: anchor.homeCampusId } : {}),
+          campusId: targetCampusId,
         },
         orderBy: { createdAt: "desc" },
         include: { campus: { select: { name: true } } },

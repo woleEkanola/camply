@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Dialog } from "@/components/ui/Dialog";
+import { DocumentZoomModal } from "@/components/ui/DocumentZoomModal";
 import {
   PhoneIcon,
   EnvelopeIcon,
@@ -17,6 +18,7 @@ import {
   PlusIcon,
   DocumentArrowUpIcon,
   TrashIcon,
+  MagnifyingGlassPlusIcon,
 } from "@heroicons/react/24/outline";
 
 interface DepartmentSidePanelProps {
@@ -38,6 +40,7 @@ export function DepartmentSidePanel({ organizationId, campId, departmentId, onCl
   const [docName, setDocName] = useState("");
   const [docUrl, setDocUrl] = useState("");
   const [docType, setDocType] = useState("PDF");
+  const [zoomDoc, setZoomDoc] = useState<{ url: string; fileName: string; fileType?: string } | null>(null);
 
   const [newResp, setNewResp] = useState("");
 
@@ -418,14 +421,14 @@ export function DepartmentSidePanel({ organizationId, campId, departmentId, onCl
                   <div className="text-xs font-semibold text-neutral-900 truncate">{doc.name}</div>
                   <div className="text-[10px] text-neutral-400 truncate">{doc.fileType} · {new Date(doc.createdAt).toLocaleDateString()}</div>
                 </div>
-                <a
-                  href={doc.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded border border-neutral-200 px-2.5 py-1 text-[10px] font-medium text-neutral-600 hover:bg-neutral-50"
+                <button
+                  type="button"
+                  onClick={() => setZoomDoc({ url: doc.url, fileName: doc.name, fileType: doc.fileType })}
+                  className="inline-flex items-center gap-1 rounded border border-neutral-200 px-2.5 py-1 text-[10px] font-medium text-neutral-600 hover:bg-neutral-50 hover:text-accent-600 transition"
                 >
-                  View
-                </a>
+                  <MagnifyingGlassPlusIcon className="h-3 w-3" />
+                  View & Zoom
+                </button>
               </CardBody>
             </Card>
           ))}
@@ -477,19 +480,22 @@ export function DepartmentSidePanel({ organizationId, campId, departmentId, onCl
   );
 
   return (
-    <Drawer open onClose={onClose} title={dept.name} subtitle="Department Operations Center" width="lg">
-      <div className="h-full flex flex-col pt-3">
-        <Tabs
-          tabs={[
-            { label: "Overview", content: overviewTab },
-            { label: "People", content: peopleTab },
-            { label: "Responsibilities", content: responsibilitiesTab },
-            { label: "Announcements", content: announcementsTab },
-            { label: "Documents", content: documentsTab },
-            { label: "Activity", content: activityTab },
-          ]}
-        />
-      </div>
-    </Drawer>
+    <>
+      <DocumentZoomModal isOpen={!!zoomDoc} onClose={() => setZoomDoc(null)} {...(zoomDoc || { url: "", fileName: "" })} />
+      <Drawer open onClose={onClose} title={dept.name} subtitle="Department Operations Center" width="lg">
+        <div className="h-full flex flex-col pt-3">
+          <Tabs
+            tabs={[
+              { label: "Overview", content: overviewTab },
+              { label: "People", content: peopleTab },
+              { label: "Responsibilities", content: responsibilitiesTab },
+              { label: "Announcements", content: announcementsTab },
+              { label: "Documents", content: documentsTab },
+              { label: "Activity", content: activityTab },
+            ]}
+          />
+        </div>
+      </Drawer>
+    </>
   );
 }

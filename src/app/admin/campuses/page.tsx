@@ -254,6 +254,31 @@ export default function CampusesPage() {
   const [clickLogCampusName, setClickLogCampusName] = useState<string>("");
   const [repSearchQuery, setRepSearchQuery] = useState("");
 
+  const ALL_HIDEABLE_COLUMN_IDS = ["code", "order", "address", "assignedRep", "signupLink", "quota"];
+  const [visibleColumnIds, setVisibleColumnIds] = useState<string[]>(ALL_HIDEABLE_COLUMN_IDS);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("camply_campuses_visible_columns");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setVisibleColumnIds(parsed);
+        }
+      } catch (e) {
+        // ignore invalid JSON
+      }
+    }
+  }, []);
+
+  const toggleColumnVisibility = (id: string) => {
+    setVisibleColumnIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((colId) => colId !== id) : [...prev, id];
+      localStorage.setItem("camply_campuses_visible_columns", JSON.stringify(next));
+      return next;
+    });
+  };
+
   const { data: session, status } = useSession({
     required: true,
     onUnauthenticated() {
@@ -780,10 +805,12 @@ export default function CampusesPage() {
       mobileHidden: true,
     },
     { header: "Name", accessor: "name", searchable: true, primary: true },
-    { header: "Code", accessor: (campus) => campus.campusCode || "-" },
-    { header: "Order", accessor: (campus) => campus.displayOrder?.toString() ?? "0" },
+    { id: "code", header: "Code", hideable: true, accessor: (campus) => campus.campusCode || "-" },
+    { id: "order", header: "Order", hideable: true, accessor: (campus) => campus.displayOrder?.toString() ?? "0" },
     {
+      id: "address",
       header: "Address",
+      hideable: true,
       accessor: (campus) => (
         <AddressCell
           address={[campus.address, campus.city, campus.state, campus.zipCode, campus.country].filter(Boolean).join(", ")}
@@ -793,7 +820,9 @@ export default function CampusesPage() {
       className: "max-w-xs",
     },
     {
+      id: "assignedRep",
       header: "Assigned Rep",
+      hideable: true,
       accessor: (campus) =>
         campus.reps && campus.reps.length > 0 ? (
           <Badge tone="attention">
@@ -809,7 +838,9 @@ export default function CampusesPage() {
         ),
     },
     {
+      id: "signupLink",
       header: "Signup Link",
+      hideable: true,
       accessor: (campus) => {
         const signupLink = getSignupLinkForCampus(campus.id);
         if (!activeCamp) return <span className="text-warning-600">No active camp set</span>;
@@ -858,7 +889,9 @@ export default function CampusesPage() {
       },
     },
     {
+      id: "quota",
       header: "Quota (used/limit)",
+      hideable: true,
       accessor: (campus) => {
         const signupLink = getSignupLinkForCampus(campus.id);
         if (!activeCamp || !signupLink) return <span className="text-neutral-400">—</span>;
@@ -968,6 +1001,10 @@ export default function CampusesPage() {
             emptyDescription="Add your first campus to start accepting registrations."
             emptyAction={canCreateCampus ? <Button onClick={openCreateModal}>Add Campus</Button> : undefined}
             searchPlaceholder="Search campuses..."
+            columnVisibility={{
+              visibleIds: visibleColumnIds,
+              onToggle: toggleColumnVisibility,
+            }}
           />
         </>
       )}
