@@ -1,0 +1,210 @@
+"use client";
+
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { api } from "@/utils/trpc";
+import AppShell from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Badge } from "@/components/ui/Badge";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Underline from "@tiptap/extension-underline";
+import LinkExtension from "@tiptap/extension-link";
+import ImageExtension from "@tiptap/extension-image";
+import { EmailButton } from "@/server/email/buttonExtension";
+import { EMAIL_VARIABLES } from "@/server/email/variables";
+
+function TbBtn({ onClick, active, label }: { onClick: () => void; active?: boolean; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2 py-1 text-xs rounded border text-neutral-700 hover:bg-neutral-100 ${active ? "bg-accent-50 border-accent-300 text-accent-700" : "border-neutral-200"}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+export default function CampaignComposer() {
+  const { data: session, status } = useSession({ required: true });
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      const role = session?.user?.role;
+      if (!role || !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)) {
+        router.replace("/admin");
+      }
+    }
+  }, [session, status, router]);
+
+  const [name, setName] = useState("");
+  const [subject, setSubject] = useState("");
+  const [previewText, setPreviewText] = useState("");
+  const [audienceType, setAudienceType] = useState("ALL");
+  const [savedAudienceId, setSavedAudienceId] = useState("");
+  const [senderMode, setSenderMode] = useState("ORG_SLUG");
+  const [customFromLocalPart, setCustomFromLocalPart] = useState("");
+  const [replyTo, setReplyTo] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
+
+  const { data: audiences } = api.communication.audienceList.useQuery();
+  const { data: branding } = api.communication.brandingGet.useQuery();
+  const createMut = api.communication.campaignCreate.useMutation();
+  const sendMut = api.communication.campaignSend.useMutation();
+  const previewMut = api.communication.previewEmail.useMutation();
+  const audiencePreview = api.communication.audiencePreview.useQuery(
+    { savedAudienceId: savedAudienceId || undefined },
+    { enabled: false }
+  );
+
+  const editor = useEditor({
+    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), Underline, LinkExtension, ImageExtension, EmailButton],
+    content: "<p>Write your campaign message here...</p>",
+  });
+
+  const handleSaveDraft = async () => {
+    if (!name || !subject || !editor) return;
+    const body = editor.getJSON();
+    await createMut.mutateAsync({
+      name,
+      subject,
+      previewText: previewText || undefined,
+      body: body as Record<string, unknown>,
+      audienceFilter: { recipientType: audienceType as any },
+      savedAudienceId: savedAudienceId || undefined,
+      senderMode,
+      customFromLocalPart: customFromLocalPart || undefined,
+      replyTo: replyTo || undefined,
+    });
+    setToast("Draft saved");
+  };
+
+  const handleSendNow = async () => {
+    if (!name || !subject || !editor) return;
+    const body = editor.getJSON();
+    const result = await createMut.mutateAsync({
+      name,
+      subject,
+      previewText: previewText || undefined,
+      body: body as Record<string, unknown>,
+      audienceFilter: { recipientType: audienceType as any },
+      savedAudienceId: savedAudienceId || undefined,
+      senderMode,
+      customFromLocalPart: customFromLocalPart || undefined,
+      replyTo: replyTo || undefined,
+    });
+    await sendMut.mutateAsync({ id: result.id });
+    setToast(`Sent to ${sendMut.data?.recipientCount ?? 0} recipients`);
+    router.push("/admin/communication/campaigns");
+  };
+
+  const handleTestSend = async () => {
+    const to = window.prompt("Send test to email address:");
+    if (!to || !editor) return;
+    await previewMut.mutateAsync({
+      event: "BROADCAST",
+      tiptapJson: editor.getJSON() as Record<string, unknown>,
+      subject,
+      to,
+      broadcast: { senderMode, customFromLocalPart: customFromLocalPart || undefined, replyTo: replyTo || undefined },
+    });
+    setToast(`Test sent to ${to}`);
+  };
+
+  const senderPreview = useMemo(() => {
+    if (senderMode === "DONOTREPLY") return "donotreply@camply.ng";
+    if (senderMode === "CUSTOM" && customFromLocalPart) return `${customFromLocalPart}@camply.ng`;
+    return branding?.senderName ? `${branding.senderName} <org@camply.ng>` : "org@camply.ng";
+  }, [senderMode, customFromLocalPart, branding]);
+
+  if (status === "loading") {
+    return <AppShell area="admin"><div className="mx-auto max-w-4xl"><Skeleton className="h-8 w-48" /></div></AppShell>;
+  }
+
+  return (
+    <AppShell area="admin">
+      <div className="mx-auto max-w-4xl space-y-6">
+        <PageHeader title="New Campaign" />
+        {toast && (
+          <div className="rounded-lg bg-accent-50 border border-accent-200 px-4 py-2 text-sm text-accent-800">{toast}</div>
+        )}
+
+        <Card>
+          <CardHeader><CardTitle>Campaign Details</CardTitle></CardHeader>
+          <CardBody className="space-y-4">
+            <Input label="Campaign Name" value={name} onChange={(e: any) => setName(e.target.value)} placeholder="Summer Camp Newsletter" />
+            <Input label="Subject" value={subject} onChange={(e: any) => setSubject(e.target.value)} placeholder="Updates for {{camp_name}}" />
+            <Input label="Preview Text" value={previewText} onChange={(e: any) => setPreviewText(e.target.value)} placeholder="Brief preview shown in inbox" />
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Recipients</CardTitle></CardHeader>
+          <CardBody className="space-y-4">
+            <Select label="Recipient Type" value={audienceType} onChange={(e: any) => setAudienceType(e.target.value)} options={[
+              { value: "ALL", label: "Everyone" },
+              { value: "PARENTS", label: "Parents" },
+              { value: "TEACHERS", label: "Teachers" },
+              { value: "VOLUNTEERS", label: "Volunteers" },
+              { value: "CAMPUS_REPS", label: "Campus Representatives" },
+              { value: "ADMINS", label: "Administrators" },
+            ]} />
+            <Select label="Saved Audience (optional)" value={savedAudienceId} onChange={(e: any) => setSavedAudienceId(e.target.value)} options={[
+              { value: "", label: "None" },
+              ...(audiences?.map((a: any) => ({ value: a.id, label: a.name })) ?? []),
+            ]} />
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Sender Settings</CardTitle></CardHeader>
+          <CardBody className="space-y-4">
+            <Select label="Sender Address" value={senderMode} onChange={(e: any) => setSenderMode(e.target.value)} options={[
+              { value: "ORG_SLUG", label: "Organization Slug" },
+              { value: "CUSTOM", label: "Custom Local Part" },
+              { value: "DONOTREPLY", label: "Donotreply" },
+            ]} />
+            {senderMode === "CUSTOM" && <Input label="Custom Local Part" value={customFromLocalPart} onChange={(e: any) => setCustomFromLocalPart(e.target.value)} placeholder="news" />}
+            <Input label="Reply-To" value={replyTo} onChange={(e: any) => setReplyTo(e.target.value)} placeholder="support@example.com" />
+            <div className="rounded bg-neutral-50 p-2 text-xs font-mono text-neutral-600">{senderPreview}</div>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Message</CardTitle></CardHeader>
+          <CardBody className="space-y-3 !p-0">
+            <div className="flex flex-wrap gap-1 border-b p-2">
+              <TbBtn onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive("bold")} label="B" />
+              <TbBtn onClick={() => editor?.chain().focus().toggleItalic().run()} active={editor?.isActive("italic")} label="I" />
+              <TbBtn onClick={() => editor?.chain().focus().toggleUnderline().run()} active={editor?.isActive("underline")} label="U" />
+              <TbBtn onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} active={editor?.isActive("heading", { level: 1 })} label="H1" />
+              <TbBtn onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} active={editor?.isActive("heading", { level: 2 })} label="H2" />
+              <TbBtn onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} active={editor?.isActive("heading", { level: 3 })} label="H3" />
+              <TbBtn onClick={() => editor?.chain().focus().toggleBulletList().run()} active={editor?.isActive("bulletList")} label="UL" />
+              <TbBtn onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={editor?.isActive("orderedList")} label="OL" />
+              <TbBtn onClick={() => { const url = window.prompt("URL:"); if (url) editor?.chain().focus().setLink({ href: url }).run(); }} label="Link" />
+              <TbBtn onClick={() => { const url = window.prompt("Image URL:"); if (url) editor?.chain().focus().setImage({ src: url }).run(); }} label="Img" />
+              <TbBtn onClick={() => { const label = window.prompt("Button text:"); const href = window.prompt("Button URL:"); if (label && href) (editor as any)?.chain().focus().insertEmailButton({ label, href }).run(); }} label="Btn" />
+            </div>
+            <EditorContent editor={editor} className="prose prose-sm max-w-none px-4 pb-4 min-h-[200px]" />
+          </CardBody>
+        </Card>
+
+        <div className="flex items-center justify-between">
+          <Button variant="secondary" onClick={handleTestSend}>Send Test</Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={handleSaveDraft}>Save Draft</Button>
+            <Button onClick={handleSendNow}>Send Now</Button>
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
