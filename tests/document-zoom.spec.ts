@@ -59,6 +59,10 @@ test.describe("Document Zoom Lightbox Modal E2E", () => {
         data: {
           name: `DocZoom Camp ${stamp}`,
           organizationId,
+          slug: `doczoom-camp-${stamp}`,
+          year: new Date().getFullYear(),
+          startDate: new Date(),
+          endDate: new Date(),
         },
       });
     }
