@@ -157,7 +157,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
       onClick={() => onOpenDetails?.(campus.id)}
       className={cn(
         "group relative flex flex-col justify-between rounded-2xl border bg-white p-5 shadow-sm transition-all duration-200 hover:border-neutral-300 hover:shadow-md cursor-pointer",
-        isSelected ? "border-purple-500 ring-2 ring-purple-500/20 bg-purple-50/10" : "border-neutral-200/80"
+        isSelected ? "border-accent-500 ring-2 ring-accent-500/20 bg-accent-50/10" : "border-neutral-200/80"
       )}
     >
       {/* SECTION 1 — CAMPUS IDENTITY */}
@@ -176,14 +176,14 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => onSelect?.(campus.id)}
-                  className="h-5 w-5 rounded border-neutral-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                  className="h-5 w-5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
                   aria-label={`Select ${campus.name}`}
                 />
               </div>
             )}
 
             {/* Lavender Church Emblem */}
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-100/70 text-purple-700 text-xl font-medium shadow-2xs group-hover:bg-purple-100 transition-colors">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-100/70 text-accent-700 text-xl font-medium shadow-2xs group-hover:bg-accent-100 transition-colors">
               ⛪
             </div>
 
@@ -231,7 +231,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onOpenEdit?.(campus.id);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
                   >
                     <PencilIcon className="h-4 w-4 text-neutral-500" />
                     Edit Campus
@@ -245,7 +245,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onOpenManageReps?.(campus.id);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
                   >
                     <UserGroupIcon className="h-4 w-4 text-neutral-500" />
                     Manage Representatives
@@ -259,7 +259,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onCopySignupLink?.(campus.id);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
                   >
                     <ClipboardDocumentIcon className="h-4 w-4 text-neutral-500" />
                     Copy Registration Link
@@ -273,7 +273,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onOpenClickLog?.(signupLink.id, campus.name);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
                   >
                     <ClockIcon className="h-4 w-4 text-neutral-500" />
                     View Signup History
@@ -287,7 +287,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onOpenQuotaModal?.(signupLink);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
                   >
                     <AdjustmentsHorizontalIcon className="h-4 w-4 text-neutral-500" />
                     Set Registration Capacity
@@ -300,7 +300,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                     setIsMenuOpen(false);
                     onDuplicateCampus?.(campus);
                   }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
                 >
                   <DocumentDuplicateIcon className="h-4 w-4 text-neutral-500" />
                   Duplicate Campus
@@ -339,7 +339,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
           className="flex items-center justify-between gap-2 rounded-xl p-1 -mx-1 hover:bg-neutral-50 transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs shrink-0">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs shrink-0">
               👥
             </div>
             <span className="text-[13px] font-semibold text-neutral-800 truncate">
@@ -355,7 +355,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                   return (
                     <div
                       key={rep.id || idx}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-purple-200 font-semibold text-purple-900 text-[11px] ring-2 ring-white"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-accent-200 font-semibold text-accent-900 text-[11px] ring-2 ring-white"
                       title={repName}
                     >
                       {getInitials(repName)}
@@ -371,7 +371,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
         {/* Address Row */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs shrink-0">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs shrink-0">
               📍
             </div>
             <span className="text-[13px] font-semibold text-neutral-800 truncate">Address</span>
@@ -383,7 +383,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
               e.stopPropagation();
               onOpenDetails?.(campus.id);
             }}
-            className="inline-flex items-center gap-0.5 text-xs font-semibold text-neutral-500 hover:text-purple-700 transition-colors"
+            className="inline-flex items-center gap-0.5 text-xs font-semibold text-neutral-500 hover:text-accent-700 transition-colors"
           >
             <span>View address</span>
             <ChevronRightIcon className="h-3.5 w-3.5 text-neutral-400" />
@@ -393,7 +393,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
         {/* Signup Link Row */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs shrink-0">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs shrink-0">
               🔗
             </div>
             <span className="text-[13px] font-semibold text-neutral-800 truncate">Signup Link</span>
@@ -412,7 +412,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                   "inline-flex min-h-[34px] items-center gap-1 rounded-xl px-3 py-1 text-xs font-semibold transition-all",
                   isCopied
                     ? "bg-emerald-600 text-white"
-                    : "bg-purple-50 text-purple-700 hover:bg-purple-100 active:scale-95"
+                    : "bg-accent-50 text-accent-700 hover:bg-accent-100 active:scale-95"
                 )}
               >
                 {isCopied ? (
@@ -429,7 +429,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                 type="button"
                 onClick={() => onGenerateSignupLink?.(campus.id)}
                 disabled={isGeneratingLink}
-                className="inline-flex min-h-[34px] items-center gap-1 rounded-xl bg-purple-600 px-3 py-1 text-xs font-semibold text-white hover:bg-purple-700 transition-all disabled:opacity-50"
+                className="inline-flex min-h-[34px] items-center gap-1 rounded-xl bg-accent-600 px-3 py-1 text-xs font-semibold text-white hover:bg-accent-700 transition-all disabled:opacity-50"
               >
                 <SparklesIcon className="h-3.5 w-3.5" />
                 {isGeneratingLink ? "Generating..." : "Generate"}
@@ -456,7 +456,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                   e.stopPropagation();
                   onOpenQuotaModal?.(signupLink);
                 }}
-                className="text-xs font-semibold text-purple-600 hover:text-purple-800 transition-colors"
+                className="text-xs font-semibold text-accent-600 hover:text-accent-800 transition-colors"
               >
                 Set Capacity
               </button>
@@ -473,7 +473,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
         <div className="space-y-2">
           {isUnlimited ? (
             <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
-              <div className="h-full bg-purple-400/40 w-full animate-pulse" />
+              <div className="h-full bg-accent-400/40 w-full animate-pulse" />
             </div>
           ) : (
             <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
@@ -508,9 +508,9 @@ export const CampusCard: React.FC<CampusCardProps> = ({
           <button
             type="button"
             onClick={() => onOpenEdit?.(campus.id)}
-            className="flex-1 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-purple-50/90 text-purple-700 hover:bg-purple-100 font-semibold text-xs transition-all active:scale-98"
+            className="flex-1 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50/90 text-accent-700 hover:bg-accent-100 font-semibold text-xs transition-all active:scale-98"
           >
-            <PencilIcon className="h-3.5 w-3.5 text-purple-600" />
+            <PencilIcon className="h-3.5 w-3.5 text-accent-600" />
             Edit
           </button>
         )}
@@ -519,9 +519,9 @@ export const CampusCard: React.FC<CampusCardProps> = ({
           <button
             type="button"
             onClick={() => onOpenManageReps?.(campus.id)}
-            className="flex-1 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-purple-50/90 text-purple-700 hover:bg-purple-100 font-semibold text-xs transition-all active:scale-98"
+            className="flex-1 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50/90 text-accent-700 hover:bg-accent-100 font-semibold text-xs transition-all active:scale-98"
           >
-            <UserGroupIcon className="h-3.5 w-3.5 text-purple-600" />
+            <UserGroupIcon className="h-3.5 w-3.5 text-accent-600" />
             Manage Reps
           </button>
         )}
