@@ -82,6 +82,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "You have already registered for this camp", staffProfileId: existing.id }, { status: 200 });
     }
 
+    // Teacher campus quota enforcement (teacher recruitment only).
+    if (link.type === "TEACHER" && rest.preferredCampusId) {
+      const quota = await prisma.teacherCampusQuota.findUnique({
+        where: {
+          campId_campusId: { campId: link.campId, campusId: rest.preferredCampusId },
+        },
+      });
+      if (quota && quota.quota > 0) {
+        const usedCount = await prisma.staffProfile.count({
+          where: {
+            campId: link.campId,
+            preferredCampusId: rest.preferredCampusId,
+            type: "TEACHER",
+            deletedAt: null,
+            status: { in: ["APPROVED", "PENDING"] },
+          },
+        });
+        if (usedCount >= quota.quota) {
+          return NextResponse.json(
+            {
+              message: "The teacher quota for this campus has been reached. Registration is currently closed for this campus.",
+              code: "TEACHER_CAMPUS_QUOTA_REACHED",
+            },
+            { status: 409 }
+          );
+        }
+      }
+    }
+
     const submittedValues: Record<string, unknown> = { ...rest, dateOfBirth };
     for (const fv of fieldValues || []) {
       submittedValues[fv.fieldId] = fv.value;

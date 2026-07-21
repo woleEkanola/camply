@@ -13,6 +13,16 @@ function assertAdminForOrg(currentUser: { role: string; organizationId?: string 
   }
 }
 
+function assertAdminOnly(currentUser: { role: string; organizationId?: string | null } | undefined, organizationId: string) {
+  if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+  const hasPermission =
+    currentUser.role === "SUPER_ADMIN" ||
+    (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === organizationId);
+  if (!hasPermission) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage teacher quotas for this organization" });
+  }
+}
+
 export const staffSignupLinkRouter = createTRPCRouter({
   // Both the Teacher and Volunteer links for a camp (Year), with live registration counts
   getByCamp: protectedProcedure
@@ -49,6 +59,138 @@ export const staffSignupLinkRouter = createTRPCRouter({
       return (["TEACHER", "VOLUNTEER"] as const).map((type) => {
         const link = links.find((l: { type: string }) => l.type === type) ?? null;
         return { type, link, registrationCount: countByType[type] ?? 0 };
+      });
+    }),
+
+  // Teacher recruitment quotas per campus for the active camp.
+  getTeacherQuotasByCamp: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      assertAdminForOrg(currentUser, input.organizationId);
+
+      let campId = input.campId;
+      if (!campId) {
+        const organization = await ctx.prisma.organization.findUnique({
+          where: { id: input.organizationId },
+          select: { activeCampId: true },
+        });
+        if (!organization?.activeCampId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "No active camp set for this organization" });
+        }
+        campId = organization.activeCampId;
+      }
+
+      const campuses = await ctx.prisma.campus.findMany({
+        where: { organizationId: input.organizationId },
+        orderBy: { name: "asc" },
+      });
+
+      const quotas = await ctx.prisma.teacherCampusQuota.findMany({
+        where: { campId },
+      });
+      const quotaByCampusId = new Map(quotas.map((q) => [q.campusId, q]));
+
+      const profiles = await ctx.prisma.staffProfile.findMany({
+        where: {
+          campId,
+          type: "TEACHER",
+          deletedAt: null,
+          status: { in: ["APPROVED", "PENDING"] },
+        },
+        select: { preferredCampusId: true, status: true },
+      });
+
+      const countByCampusStatus = new Map<string, Record<string, number>>();
+      for (const p of profiles) {
+        const campusId = p.preferredCampusId;
+        if (!campusId) continue;
+        const map = countByCampusStatus.get(campusId) || {};
+        map[p.status] = (map[p.status] || 0) + 1;
+        countByCampusStatus.set(campusId, map);
+      }
+
+      return campuses.map((campus) => {
+        const quota = quotaByCampusId.get(campus.id);
+        const statusCounts = countByCampusStatus.get(campus.id) || {};
+        const approvedCount = statusCounts.APPROVED || 0;
+        const pendingCount = statusCounts.PENDING || 0;
+        const usedCount = approvedCount + pendingCount;
+        const quotaLimit = quota?.quota ?? 0;
+        const isUnlimited = quotaLimit <= 0;
+        const remaining = isUnlimited ? null : Math.max(0, quotaLimit - usedCount);
+        const isFull = !isUnlimited && usedCount >= quotaLimit;
+
+        return {
+          campusId: campus.id,
+          campusName: campus.name,
+          quotaId: quota?.id ?? null,
+          quota: quotaLimit,
+          quotaFullBehavior: (quota?.quotaFullBehavior as "CLOSE" | "WAITLIST") ?? "CLOSE",
+          approvedCount,
+          pendingCount,
+          usedCount,
+          remaining,
+          isFull,
+          isUnlimited,
+        };
+      });
+    }),
+
+  updateTeacherQuota: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      campusId: z.string(),
+      quota: z.number().int().min(0),
+      quotaFullBehavior: z.enum(["CLOSE", "WAITLIST"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      const camp = await ctx.prisma.camp.findUnique({
+        where: { id: input.campId },
+        select: { organizationId: true },
+      });
+      if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+      assertAdminOnly(currentUser, camp.organizationId);
+
+      const usedCount = await ctx.prisma.staffProfile.count({
+        where: {
+          campId: input.campId,
+          preferredCampusId: input.campusId,
+          type: "TEACHER",
+          deletedAt: null,
+          status: { in: ["APPROVED", "PENDING"] },
+        },
+      });
+
+      if (input.quota > 0 && input.quota < usedCount) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Quota cannot be less than the number of teachers already in the approval pipeline for this campus.",
+        });
+      }
+
+      const existing = await ctx.prisma.teacherCampusQuota.findUnique({
+        where: { campId_campusId: { campId: input.campId, campusId: input.campusId } },
+      });
+
+      if (existing) {
+        return ctx.prisma.teacherCampusQuota.update({
+          where: { id: existing.id },
+          data: {
+            quota: input.quota,
+            ...(input.quotaFullBehavior ? { quotaFullBehavior: input.quotaFullBehavior } : {}),
+          },
+        });
+      }
+
+      return ctx.prisma.teacherCampusQuota.create({
+        data: {
+          campId: input.campId,
+          campusId: input.campusId,
+          quota: input.quota,
+          quotaFullBehavior: input.quotaFullBehavior ?? "CLOSE",
+        },
       });
     }),
 
