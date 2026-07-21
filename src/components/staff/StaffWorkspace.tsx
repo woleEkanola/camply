@@ -6,6 +6,8 @@ import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 import {
   ArrowLeftIcon,
   ChevronLeftIcon,
@@ -30,6 +32,25 @@ interface StaffWorkspaceProps {
 export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }: StaffWorkspaceProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(defaultTab ?? tabs[0]?.id);
+  const utils = api.useUtils();
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const approve = api.staff.approve.useMutation({
+    onSuccess: () => {
+      utils.staff.getById.invalidate({ id: staffId });
+      utils.staff.adminList.invalidate();
+      utils.staff.stats.invalidate();
+    },
+  });
+  const reject = api.staff.reject.useMutation({
+    onSuccess: () => {
+      setRejectOpen(false);
+      setRejectReason("");
+      utils.staff.getById.invalidate({ id: staffId });
+      utils.staff.adminList.invalidate();
+      utils.staff.stats.invalidate();
+    },
+  });
   const { data: profile, isLoading } = api.staff.getById.useQuery({ id: staffId });
 
   if (isLoading || !profile) {
@@ -139,6 +160,28 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
               )}
             </div>
           </div>
+
+          {profile.status === "PENDING" && (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                data-testid="approve-button"
+                loading={approve.isPending}
+                onClick={() => approve.mutate({ id: staffId })}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                data-testid="reject-button"
+                loading={reject.isPending}
+                onClick={() => setRejectOpen(true)}
+              >
+                Reject
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -147,6 +190,8 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
             {tabs.map((tab) => (
               <button
                 key={tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
                   "whitespace-nowrap pb-3 text-xs font-semibold border-b-2 transition",
@@ -164,6 +209,28 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
         {/* Tab content */}
         <div className="space-y-6">{activeTabContent}</div>
       </div>
+
+      <Dialog open={rejectOpen} onClose={() => setRejectOpen(false)} title="Reject staff profile" size="sm">
+        <div className="space-y-4">
+          <Input
+            label="Rejection reason"
+            placeholder="Rejection reason"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setRejectOpen(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              loading={reject.isPending}
+              disabled={!rejectReason.trim()}
+              onClick={() => reject.mutate({ id: staffId, reason: rejectReason.trim() })}
+            >
+              Reject
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

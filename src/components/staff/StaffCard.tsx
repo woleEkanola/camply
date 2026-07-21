@@ -81,7 +81,11 @@ export function StaffCard({ row, onClick, actions, type, selected, onSelect }: S
         </div>
       </div>
 
-      {actions && <div className="flex flex-wrap gap-2 pt-1">{actions}</div>}
+      {actions && (
+        <div className="flex flex-wrap gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+          {actions}
+        </div>
+      )}
     </div>
   );
 }

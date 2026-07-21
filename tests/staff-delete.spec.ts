@@ -30,6 +30,7 @@ test.describe("Admin: Staff profile delete (Teachers page)", () => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/teachers");
 
+    await page.getByRole("button", { name: "List", exact: true }).click();
     const row = page.locator("tr", { hasText: "E2E DeleteTeacher" });
     await row.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
