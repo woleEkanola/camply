@@ -116,11 +116,12 @@ test.describe("Document Zoom Lightbox Modal E2E", () => {
     // Deep-link directly to registration drawer
     await page.goto(`/admin/registrations?openReg=${registrationId}`);
 
-    // Wait for registration drawer title
+    // Wait for registration drawer
+    await expect(page.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(`REG-ZOOM-${stamp}`).first()).toBeVisible({ timeout: 15000 });
 
-    // Click Documents tab in registration drawer
-    const docsTab = page.getByRole("tab", { name: /Documents/i });
+    // Drawer nav tabs are plain buttons (not ARIA tabs)
+    const docsTab = page.getByRole("dialog").getByRole("button", { name: /Documents/i });
     await expect(docsTab).toBeVisible({ timeout: 10000 });
     await docsTab.click();
 

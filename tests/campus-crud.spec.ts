@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows, visibleText } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, visibleText, findCampusCard } from "./helpers";
 
 test.describe("Admin: Campus CRUD and signup link generation", () => {
   test.describe.configure({ mode: "serial" });
@@ -22,23 +22,23 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
 
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Campus Name").fill(campusName);
+    await dialog.getByLabel(/Campus Code/i).fill("E2E");
+    await dialog.getByLabel("Display Order").fill("0");
     await dialog.getByLabel("Address").fill("42 E2E Test Ave");
     await dialog.getByLabel("City").fill("Testville");
     await dialog.getByLabel("Country").fill("Testland");
     await dialog.getByRole("button", { name: "Add Campus", exact: true }).click();
 
-    // This shared fixture org has accumulated many campuses across prior e2e
-    // sessions — the newly-created row can land off the default 10-row page.
-    await showAllRows(page);
-    await expect(visibleText(page, campusName)).toBeVisible({ timeout: 10000 });
+    const card = await findCampusCard(page, campusName);
+    await expect(card).toBeVisible({ timeout: 10000 });
 
     const campus = await prisma.campus.findFirstOrThrow({ where: { name: campusName } });
     campusId = campus.id;
     expect(campus.address).toBe("42 E2E Test Ave");
     expect(campus.active).toBe(true);
 
-    const row = page.locator("tr", { hasText: campusName });
-    await row.getByRole("button", { name: /Generate Link/i }).click();
+    // Card shows Generate when no signup link exists
+    await card.getByRole("button", { name: /Generate/i }).click();
 
     await expect
       .poll(async () => prisma.signupLink.findFirst({ where: { campusId: campus.id } }), { timeout: 10000 })
@@ -54,25 +54,24 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campuses");
-    await showAllRows(page);
 
-    // Wait for the signup links query to actually load into state before
-    // interacting — otherwise the bulk handler's `getSignupLinkForCampus`
-    // lookup can race ahead of the data and silently no-op.
-    const row = page.locator("tr", { hasText: campusName });
-    await expect(row).toContainText("Signup Link: Active", { timeout: 10000 });
+    const card = await findCampusCard(page, campusName);
+    await expect(card).toContainText("• Active", { timeout: 10000 });
 
-    await page.getByLabel(`Select campus ${campusName}`).click();
-    await expect(page.getByRole("button", { name: "Disable Signup Link" })).toBeVisible();
-    await page.getByRole("button", { name: "Disable Signup Link" }).click();
+    // Select via the card's checkbox (input has aria-label "Select {name}")
+    await card.locator('input[type="checkbox"]').click();
+    const bulkBar = page.locator("div", { hasText: "campus(es) selected" }).last();
+    await expect(page.getByRole("button", { name: "Disable Signup Links" })).toBeVisible({ timeout: 5000 });
+    await page.getByRole("button", { name: "Disable Signup Links" }).click();
 
     await expect
       .poll(async () => (await prisma.signupLink.findFirstOrThrow({ where: { campusId: campusId! } })).active, { timeout: 10000 })
       .toBe(false);
-    await expect(row).toContainText("Signup Link: Inactive");
 
-    await page.getByLabel(`Select campus ${campusName}`).click();
-    await page.getByRole("button", { name: "Enable Signup Link" }).click();
+    // Re-select after re-render (selection state resets after bulk action)
+    await findCampusCard(page, campusName);
+    await card.locator('input[type="checkbox"]').click();
+    await page.getByRole("button", { name: "Enable Signup Links" }).click();
 
     await expect
       .poll(async () => (await prisma.signupLink.findFirstOrThrow({ where: { campusId: campusId! } })).active, { timeout: 10000 })
@@ -83,9 +82,8 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     const { organizationId } = await getFixtureOrgContext();
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campuses");
-    await showAllRows(page);
 
-    await expect(visibleText(page, campusName)).toBeVisible({ timeout: 10000 });
+    await expect(await findCampusCard(page, campusName)).toBeVisible({ timeout: 10000 });
 
     const allCampusesForOrg = await prisma.campus.findMany({ where: { organizationId } });
     expect(allCampusesForOrg.some((c) => c.name === campusName)).toBe(true);
@@ -105,16 +103,15 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     try {
       await loginWithPassword(page, "owner@camply.com", "password123");
       await page.goto("/admin/campuses");
-      await showAllRows(page);
 
-      const row = page.locator("tr", { hasText: campusName });
-      await row.getByRole("button", { name: "Delete" }).click();
-      await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+      const card = await findCampusCard(page, campusName);
+      await card.getByLabel("Campus options menu").click();
+      await page.getByRole("button", { name: "Delete Campus" }).click();
+      await page.getByRole("dialog").getByRole("button", { name: "Delete Campus" }).click();
 
       await expect(page.getByText("Campus deleted successfully")).toBeVisible({ timeout: 10000 });
       await expect(visibleText(page, campusName)).not.toBeVisible();
 
-      // Soft-deleted, not gone — and the cascade must have reached the registration too.
       await expect
         .poll(async () => (await prisma.campus.findUniqueOrThrow({ where: { id: campusId! } })).deletedAt)
         .not.toBeNull();

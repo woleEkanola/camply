@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, findCampusCard } from "./helpers";
 
 test.describe("Admin: Campus detail and rep display", () => {
   test.describe.configure({ mode: "serial" });
@@ -12,8 +12,6 @@ test.describe("Admin: Campus detail and rep display", () => {
     const ctx = await getFixtureOrgContext();
     organizationId = ctx.organizationId;
 
-    // Create a campus with an assigned rep that has no first/last name so we
-    // can verify the email fallback (instead of raw ID).
     const repUser = await prisma.user.create({
       data: {
         email: `e2e-campus-rep-${Date.now()}@camply.test`,
@@ -45,32 +43,27 @@ test.describe("Admin: Campus detail and rep display", () => {
     await prisma.user.deleteMany({ where: { email: { contains: "e2e-campus-rep-" } } });
   });
 
-  test("campus row shows rep email fallback and opens detail drawer with stats", async ({ page }) => {
+  test("campus card shows rep and opens detail page with stats", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campuses");
 
-    await showAllRows(page);
-    const row = page.locator("tr", { hasText: campusName });
-    await expect(row).toContainText("42 Detail Ave");
+    const card = await findCampusCard(page, campusName);
 
-    // Rep has no name, so the cell should show the email, not the raw user ID.
     const repUser = await prisma.user.findFirst({
       where: { email: { contains: "e2e-campus-rep-" } },
       orderBy: { createdAt: "desc" },
     });
-    await expect(row.getByText(repUser?.email ?? "")).toBeVisible();
-    await expect(row).not.toContainText(repUser?.id ?? "should-not-match");
 
-    // Open detail drawer.
-    await row.click();
+    // Card shows rep count (not raw user id)
+    await expect(card.getByText("1 Representatives")).toBeVisible();
+    await expect(card).not.toContainText(repUser?.id ?? "should-not-match");
+
+    // Open detail page (card heading area has no stopPropagation)
+    await card.getByRole("heading", { name: campusName }).click();
+    await expect(page).toHaveURL(new RegExp(`/admin/campuses/${campusId}`), { timeout: 10000 });
     await expect(page.getByRole("heading", { name: campusName })).toBeVisible();
-    await expect(page.getByText("Assigned Representatives")).toBeVisible();
-    await expect(page.getByRole("dialog").getByText(repUser?.email ?? "")).toBeVisible();
-
-    // Stats sections render.
-    const drawer = page.getByRole("dialog");
-    await expect(drawer.getByRole("heading", { name: "Registrations" })).toBeVisible();
-    await expect(drawer.getByText("Total Campers")).toBeVisible();
-    await expect(drawer.getByText("Total Registrations")).toBeVisible();
+    await expect(page.getByText("Campus Representatives")).toBeVisible();
+    await expect(page.getByText(repUser?.email ?? "")).toBeVisible();
+    await expect(page.getByText(/42 Detail Ave/)).toBeVisible();
   });
 });

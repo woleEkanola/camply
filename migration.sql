@@ -1,40 +1,53 @@
-Error: 
-0 `--from-...` parameter(s) provided. 1 must be provided.
+-- AlterTable
+ALTER TABLE "Camp" ADD COLUMN     "targetTribeSize" INTEGER,
+ADD COLUMN     "tribeAllocationPresets" JSONB;
 
-Usage
+-- AlterTable
+ALTER TABLE "Camper" ADD COLUMN     "medicalProfile" JSONB;
 
-  $ prisma migrate diff [options]
+-- AlterTable
+ALTER TABLE "Registration" ADD COLUMN     "isTribeLocked" BOOLEAN NOT NULL DEFAULT false;
 
-Options
+-- AlterTable
+ALTER TABLE "Tribe" ADD COLUMN     "isAllocationLocked" BOOLEAN NOT NULL DEFAULT false;
 
-  -h, --help               Display this help message
-  --config                 Custom path to your Prisma config file
-  -o, --output             Writes to a file instead of stdout
+-- CreateTable
+CREATE TABLE "TribeAllocationLog" (
+    "id" TEXT NOT NULL,
+    "registrationId" TEXT NOT NULL,
+    "tribeId" TEXT NOT NULL,
+    "campId" TEXT NOT NULL,
+    "engineVersion" TEXT NOT NULL,
+    "allocationMode" TEXT NOT NULL,
+    "rulesetVersion" TEXT NOT NULL,
+    "rulesetSnapshot" JSONB NOT NULL,
+    "scoreBreakdown" JSONB NOT NULL,
+    "reasons" JSONB NOT NULL,
+    "wasOverridden" BOOLEAN NOT NULL DEFAULT false,
+    "overriddenById" TEXT,
+    "overriddenAt" TIMESTAMP(3),
+    "actorId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-From and To inputs (1 `--from-...` and 1 `--to-...` must be provided):
-  --from-url               A datasource URL
-  --to-url
+    CONSTRAINT "TribeAllocationLog_pkey" PRIMARY KEY ("id")
+);
 
-  --from-empty             Flag to assume from or to is an empty datamodel
-  --to-empty
+-- AddForeignKey
+ALTER TABLE "TribeAllocationLog" ADD CONSTRAINT "TribeAllocationLog_registrationId_fkey" FOREIGN KEY ("registrationId") REFERENCES "Registration"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-  --from-schema-datamodel  Path to a Prisma schema file, uses the datamodel for the diff
-  --to-schema-datamodel
+-- AddForeignKey
+ALTER TABLE "TribeAllocationLog" ADD CONSTRAINT "TribeAllocationLog_tribeId_fkey" FOREIGN KEY ("tribeId") REFERENCES "Tribe"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-  --from-schema-datasource Path to a Prisma schema file, uses the datasource url for the diff
-  --to-schema-datasource
+-- AddForeignKey
+ALTER TABLE "TribeAllocationLog" ADD CONSTRAINT "TribeAllocationLog_campId_fkey" FOREIGN KEY ("campId") REFERENCES "Camp"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-  --from-migrations        Path to the Prisma Migrate migrations directory
-  --to-migrations
-
-  --from-local-d1          Automatically locate the local Cloudflare D1 database
-  --to-local-d1
-
-Shadow database (only required if using --from-migrations or --to-migrations):
-  --shadow-database-url    URL for the shadow database
-
-Flags
-
-  --script                 Render a SQL script to stdout instead of the default human readable summary (not supported on MongoDB)
-  --exit-code              Change the exit code behavior to signal if the diff is empty or not (Empty: 0, Error: 1, Not empty: 2). Default behavior is Success: 0, Error: 1.
-
+┌─────────────────────────────────────────────────────────┐
+│  Update available 6.7.0 -> 7.9.0                        │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘

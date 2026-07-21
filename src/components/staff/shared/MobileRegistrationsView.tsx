@@ -55,6 +55,20 @@ export function shortenRegistrationNumber(regNum: string | null | undefined): st
   return regNum;
 }
 
+/** Age in whole years from a date-of-birth (Date or ISO string); null when unknown/invalid. */
+export function getAgeFromDob(dob: string | Date | null | undefined): number | null {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const m = now.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 export function getStatusStyle(status: string) {
   switch (status?.toUpperCase()) {
     case "APPROVED":
@@ -130,6 +144,7 @@ export function MobileRegistrationCard({
   const regNumber = shortenRegistrationNumber(registration.registrationNumber);
   const updatedTime = formatRelativeTime(registration.updatedAt || registration.createdAt);
   const relationship = registration.relationship || (registration.camper ? "Parent" : "Camper");
+  const age = getAgeFromDob(registration.camper?.dateOfBirth);
 
   // Dynamic Document Calculation
   const uploadedCount = Array.isArray(registration.documents) ? registration.documents.length : 0;
@@ -188,6 +203,11 @@ export function MobileRegistrationCard({
               <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
                 {relationship}
               </span>
+              {age !== null && (
+                <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                  {age}y
+                </span>
+              )}
               {parentName && (
                 <span className="truncate text-xs font-medium text-neutral-500">
                   {parentName}

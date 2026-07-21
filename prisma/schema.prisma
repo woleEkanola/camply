@@ -268,6 +268,8 @@ model Camper {
   emergencyContactName  String?
   emergencyContactPhone String?
   relationship          String?
+  // Structured medical profile for allocation engine v2
+  medicalProfile        Json? // { conditions[], mobilityNeeds, specialAccommodations, dietaryRestrictions }
 
   // Contact Details
   parentPhone       String?
@@ -349,10 +351,13 @@ model Camp {
   positions            Position[]
 
   // Tribe Allocation (PRD Part 4A)
-  tribeAllocationEnabled Boolean @default(false)
-  tribeAllocationMode    String  @default("MANUAL") // MANUAL | AUTOMATIC | HYBRID
-  tribeAllocationRules   Json? // ordered array: [{ criterion: "POPULATION"|"GENDER"|"AGE"|"CAMPUS"|"CHURCH"|"SCHOOL"|"SIBLINGS_TOGETHER"|"SIBLINGS_APART"|"RETURNING_CAMPER", enabled: true }]
+  tribeAllocationEnabled Boolean  @default(false)
+  tribeAllocationMode    String   @default("MANUAL") // MANUAL | AUTOMATIC | HYBRID
+  tribeAllocationRules   Json?    // [{ criterion, enabled }] — legacy flat format; mapped to v2 internally
+  targetTribeSize        Int?     // Optional override; otherwise computed from approved_registrations / active_tribes
+  tribeAllocationPresets Json?    // [{ name, description, rules }]
   tribes                 Tribe[]
+  tribeAllocationLogs    TribeAllocationLog[]
 
   // Bed Allocation (mirrors Tribe Allocation above) — gender-match to Hostel.gender
   // is always a hard filter in the engine, not a toggleable rule here.
@@ -456,7 +461,9 @@ model Registration {
   tribe                 Tribe?    @relation(fields: [tribeId], references: [id])
   tribeId               String?
   tribeAssignedAt       DateTime?
-  tribeAssignmentMethod String? // AUTOMATIC | MANUAL | HYBRID_OVERRIDE
+  tribeAssignmentMethod String?   // AUTOMATIC | MANUAL | HYBRID_OVERRIDE
+  isTribeLocked         Boolean   @default(false)
+  tribeAllocationLogs   TribeAllocationLog[]
 
   // Accommodation (Camp Structure module)
   room   Room?   @relation(fields: [roomId], references: [id])
@@ -625,8 +632,10 @@ model Tribe {
   ageRange           String?             // e.g. "10-12" | "All Ages"
   allocationStrategy String              @default("MANUAL") // MANUAL | AUTOMATIC | INVITE_ONLY
   maxCapacity        Int?
+  isAllocationLocked Boolean             @default(false)
   status             String              @default("ACTIVE") // ACTIVE | INACTIVE
   registrations      Registration[]
+  allocationLogs     TribeAllocationLog[]
   preferredByStaff   StaffProfile[]      @relation("PreferredTribe")
   assignedStaff      StaffProfile[]      @relation("AssignedStaffTribe")
   attendanceSessions AttendanceSession[]
@@ -994,6 +1003,27 @@ model TribePointsLog {
   reason    String?
   actorId   String
   createdAt DateTime @default(now())
+}
+
+model TribeAllocationLog {
+  id               String       @id @default(cuid())
+  registration     Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId   String
+  tribe            Tribe        @relation(fields: [tribeId], references: [id], onDelete: Cascade)
+  tribeId          String
+  camp             Camp         @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId           String
+  engineVersion    String
+  allocationMode   String
+  rulesetVersion   String
+  rulesetSnapshot  Json
+  scoreBreakdown   Json
+  reasons          Json
+  wasOverridden    Boolean      @default(false)
+  overriddenById   String?
+  overriddenAt     DateTime?
+  actorId          String?
+  createdAt        DateTime     @default(now())
 }
 
 model RegistrationDeclaration {

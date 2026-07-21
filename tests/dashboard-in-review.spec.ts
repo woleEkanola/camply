@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import bcrypt from "bcryptjs";
-import { prisma, getFixtureOrgContext, loginWithPassword, showAllRows } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, switchRegistrationsToListView } from "./helpers";
 
 /**
  * Covers the reported request: parents should see "In Review" instead of
@@ -69,7 +69,8 @@ test.describe("Parent dashboard shows 'In Review' for PENDING/SUBMITTED registra
   test("admin registrations page still shows the raw 'PENDING' status (unaffected)", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/registrations");
-    await showAllRows(page);
+    await switchRegistrationsToListView(page);
+    await page.getByPlaceholder("Name, email, or registration #").fill(`E2E InReview Camper ${stamp}`);
 
     const row = page.locator("tr", { hasText: `E2E InReview Camper ${stamp}` });
     await expect(row).toBeVisible({ timeout: 10000 });

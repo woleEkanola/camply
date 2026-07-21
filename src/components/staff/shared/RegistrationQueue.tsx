@@ -18,8 +18,7 @@ import { RegistrationDocumentPanel } from "@/components/staff/shared/Registratio
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { MobileRegistrationsView } from "./MobileRegistrationsView";
-import { MobileRegistrationCard } from "./MobileRegistrationsView";
+import { MobileRegistrationsView, MobileRegistrationCard } from "./MobileRegistrationsView";
 import { RegistrationDetailsDrawer } from "./RegistrationDetailsDrawer";
 import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
 
@@ -175,32 +174,6 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
 
   const approveMutation = api.registration.approve.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
   const endorseMutation = api.registration.endorse.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
-  const rejectMutation = api.registration.reject.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
-  const requestCorrectionMutation = api.registration.requestCorrection.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
-
-  const getAge = (dob: string | null | undefined): number | null => {
-    if (!dob) return null;
-    const birth = new Date(dob);
-    const now = new Date();
-    let age = now.getFullYear() - birth.getFullYear();
-    const m = now.getMonth() - birth.getMonth();
-    if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
-      age--;
-    }
-    return age;
-  };
-
-  function handleReject(reg: Registration) {
-    const reason = window.prompt("Rejection reason?") || "";
-    if (!reason) return;
-    rejectMutation.mutate({ registrationId: reg.id, reason });
-  }
-
-  function handleRequestCorrection(reg: Registration) {
-    const message = window.prompt("What needs to be corrected?") || "";
-    if (!message) return;
-    requestCorrectionMutation.mutate({ registrationId: reg.id, message });
-  }
 
   const registrations: Registration[] = accumulatedItems.map((reg: any) => ({
     ...reg,
@@ -214,9 +187,6 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   }));
 
   const approvedCount = registrations.filter((r) => r.status === "APPROVED").length;
-  const pendingCount = registrations.filter((r) => r.status === "PENDING").length;
-  const checkedInCount = registrations.filter((r) => r.status === "CHECKED_IN").length;
-  const rejectedCount = registrations.filter((r) => r.status === "REJECTED").length;
   const campusQuota = signupLink?.quota ?? 0;
   const quotaLabel = campusQuota > 0 ? `${approvedCount} / ${campusQuota}` : `${approvedCount} (no limit)`;
 
@@ -261,40 +231,6 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
       accessor: (row: any) => new Date(row.updatedAt).toLocaleDateString(),
     },
   ];
-
-  const rowActions = (reg: Registration) => {
-    const endorsed = isEndorsed(reg.review);
-    return (
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button size="sm" variant="secondary" onClick={() => setProfileCamperId(reg.camper.id)}>
-          View Profile
-        </Button>
-        <Button size="sm" variant="secondary" onClick={() => setDocumentRegId(reg.id)}>
-          Documents
-        </Button>
-        {reg.status === "PENDING" && isTwoStep && !endorsed && (
-          <Button size="sm" loading={endorseMutation.isPending} onClick={() => endorseMutation.mutate({ registrationId: reg.id })}>
-            Recommend
-          </Button>
-        )}
-        {reg.status === "PENDING" && !isTwoStep && (
-          <Button size="sm" loading={approveMutation.isPending} onClick={() => approveMutation.mutate({ registrationId: reg.id })}>
-            Approve
-          </Button>
-        )}
-        {(reg.status === "PENDING" || reg.status === "REQUIRES_ACTION") && (
-          <>
-            <Button size="sm" variant="secondary" loading={requestCorrectionMutation.isPending} onClick={() => handleRequestCorrection(reg)}>
-              Request Correction
-            </Button>
-            <Button size="sm" variant="danger" loading={rejectMutation.isPending} onClick={() => handleReject(reg)}>
-              Reject
-            </Button>
-          </>
-        )}
-      </div>
-    );
-  };
 
   return (
     <>
@@ -354,12 +290,17 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             if (isTwoStep) endorseMutation.mutate({ registrationId: reg.id });
             else approveMutation.mutate({ registrationId: reg.id });
           }}
-          onReject={(reg) => handleReject(reg)}
+          onReject={(reg) => {
+            setSelectedIds([reg.id]);
+            setBulkAction("REJECT");
+            setBulkReason("");
+          }}
           onQuickAction={(reg, action) => {
             if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
               setProfileCamperId(reg.camper?.id || reg.id);
             } else if (action === "DELETE") {
-              handleReject(reg);
+              setSelectedIds([reg.id]);
+              setBulkAction("DELETE");
             }
           }}
           onBulkApprove={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}
@@ -756,13 +697,6 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         open={!!profileCamperId}
         onClose={() => setProfileCamperId(null)}
       />
-
-      {selectedRegistrationId && (
-        <RegistrationDetailsDrawer
-          registrationId={selectedRegistrationId}
-          onClose={() => setSelectedRegistrationId(null)}
-        />
-      )}
     </>
   );
 }

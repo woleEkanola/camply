@@ -243,6 +243,50 @@ export async function loginWithPassword(page: Page, email: string, password: str
   await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard)/, { timeout: 45000 });
 }
 
+/**
+ * Admin + campus-rep registration pages default to card view. Specs that assert
+ * against `<tr>` rows must flip to list view first.
+ */
+export async function switchRegistrationsToListView(page: Page) {
+  const listBtn = page.getByText("List View");
+  if (await listBtn.isVisible().catch(() => false)) {
+    await listBtn.click();
+  }
+}
+
+/** Campus cards on the redesigned /admin/campuses grid. */
+export function campusCard(page: Page, name: string | RegExp) {
+  return page.locator('[data-testid="campus-card"]').filter({ hasText: name });
+}
+
+/** Search the campuses grid and return the matching card. */
+export async function findCampusCard(page: Page, name: string) {
+  const search = page.getByPlaceholder(/Search campuses/i);
+  if (await search.isVisible().catch(() => false)) {
+    await search.fill(name);
+  }
+  const card = campusCard(page, name);
+  await card.first().waitFor({ state: "visible", timeout: 15000 });
+  return card.first();
+}
+
+/**
+ * Open a registration's detail drawer. Prefer list view + row click so desktop
+ * and mobile both land on RegistrationDetailsDrawer.
+ */
+export async function openRegistrationByName(page: Page, name: string | RegExp) {
+  await switchRegistrationsToListView(page);
+  const row = page.locator("tr", { hasText: name }).first();
+  await row.waitFor({ state: "visible", timeout: 15000 });
+  await row.click();
+  await page.getByRole("heading", { name: "Registration Details" }).waitFor({ state: "visible", timeout: 10000 });
+}
+
+/** Drawer nav tabs are plain buttons (not ARIA tabs). */
+export async function clickRegistrationDrawerTab(page: Page, label: string | RegExp) {
+  await page.getByRole("dialog").getByRole("button", { name: label }).click();
+}
+
 /** Fills the shared 6-box OtpInput grid (src/components/ui/OtpInput.tsx) — each box is aria-labelled "Digit N of 6", not a single field, so getByLabel("Verification Code")-style locators no longer resolve to a fillable element. */
 export async function fillOtpGrid(page: Page, code: string) {
   for (let i = 0; i < code.length; i++) {

@@ -2,6 +2,17 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "../db";
 import { logEvent } from "../audit";
 import { calculateAge } from "../registration/validation";
+import { normalizeRules, DEFAULT_RULES_V2 } from "./allocator/rules";
+import { passesHardConstraints } from "./allocator/constraints";
+import { scoreCandidate, computeTargetSize } from "./allocator/scoring";
+import { rankCandidates } from "./allocator/selector";
+import { runAllocationPipeline, simulateAllocation } from "./allocator/pipeline";
+
+export { simulateAllocation, runAllocationPipeline };
+export { normalizeRules, DEFAULT_RULES_V2 };
+export type { RuleConfig } from "./allocator/types";
+
+export const TRIBE_ALLOCATION_ENGINE_VERSION = "2.0.0";
 
 type TxClient = PrismaClient | Prisma.TransactionClient;
 
@@ -25,17 +36,12 @@ type Criterion =
   | "SCHOOL"
   | "POPULATION";
 
-interface Rule {
-  criterion: Criterion;
-  enabled: boolean;
-}
-
-const DEFAULT_RULES: Rule[] = [
+const DEFAULT_RULES = [
   { criterion: "SIBLINGS_TOGETHER", enabled: false },
   { criterion: "GENDER", enabled: true },
   { criterion: "AGE", enabled: true },
   { criterion: "POPULATION", enabled: true },
-];
+] as { criterion: Criterion; enabled: boolean }[];
 
 function ageGroup(dateOfBirth: Date | null, cutoff: Date): string {
   if (!dateOfBirth) return "unknown";
@@ -50,13 +56,9 @@ export interface TribeSuggestion {
   tribeName: string;
   confidence: number;
   reasons: string[];
+  scoreBreakdown?: Record<string, number>;
 }
 
-/**
- * Scores every active, non-full tribe against the year's enabled allocation
- * criteria (in priority order) and returns the best match (PRD Part 4A §6-8).
- * Pure read — never mutates anything, safe to call for a "suggested" preview.
- */
 export async function suggestTribe(tx: TxClient, registrationId: string): Promise<TribeSuggestion | null> {
   const registration = await tx.registration.findUniqueOrThrow({
     where: { id: registrationId },
@@ -69,15 +71,10 @@ export async function suggestTribe(tx: TxClient, registrationId: string): Promis
   });
   if (tribes.length === 0) return null;
 
-  const rules: Rule[] = Array.isArray(registration.camp.tribeAllocationRules)
-    ? (registration.camp.tribeAllocationRules as unknown as Rule[])
-    : DEFAULT_RULES;
-  const enabledRules = rules.filter((r) => r.enabled);
-
+  const rulesNormalized = normalizeRules(registration.camp.tribeAllocationRules ?? DEFAULT_RULES);
   const cutoff = registration.camp.ageCutoffDate ?? registration.camp.startDate;
   const camperAgeGroup = ageGroup(registration.camper.dateOfBirth, cutoff);
 
-  // Siblings: other campers under the same parent already assigned to a tribe this camp.
   const siblingTribeIds = new Set(
     (
       await tx.registration.findMany({
@@ -90,104 +87,120 @@ export async function suggestTribe(tx: TxClient, registrationId: string): Promis
         },
         select: { tribeId: true },
       })
-    ).map((r) => r.tribeId)
+    ).map((r) => r.tribeId).filter((id): id is string => id !== null)
   );
 
-  const candidates = tribes.filter((t) => t.maxCapacity == null || t.registrations.length < t.maxCapacity);
-  if (candidates.length === 0) return null;
-
-  const scored = candidates.map((tribe) => {
-    let score = 0;
-    const reasons: string[] = [];
-
-    for (const rule of enabledRules) {
-      switch (rule.criterion) {
-        case "SIBLINGS_TOGETHER":
-          if (siblingTribeIds.has(tribe.id)) {
-            score += 1000;
-            reasons.push("Sibling already in this tribe");
-          }
-          break;
-        case "SIBLINGS_APART":
-          if (siblingTribeIds.has(tribe.id)) {
-            score -= 1000;
-          } else {
-            reasons.push("Keeps siblings separate");
-          }
-          break;
-        case "GENDER": {
-          const counts = tribe.registrations.reduce(
-            (acc, r) => {
-              const g = (r.camper as any).gender;
-              if (g) acc[g] = (acc[g] ?? 0) + 1;
-              return acc;
-            },
-            {} as Record<string, number>
-          );
-          const myGender = registration.camper.gender;
-          const myCount = myGender ? counts[myGender] ?? 0 : 0;
-          score += 100 - myCount; // fewer of my gender here = better
-          if (myCount === Math.min(...Object.values(counts), 0)) reasons.push("Gender balance maintained");
-          break;
-        }
-        case "AGE": {
-          const sameAgeGroupCount = tribe.registrations.filter(
-            (r) => ageGroup((r.camper as any).dateOfBirth, cutoff) === camperAgeGroup
-          ).length;
-          score += 100 - sameAgeGroupCount;
-          reasons.push("Age balance maintained");
-          break;
-        }
-        case "CAMPUS": {
-          const sameCampusCount = tribe.registrations.filter((r) => r.campusId === registration.campusId).length;
-          score += 50 - sameCampusCount;
-          break;
-        }
-        case "CHURCH": {
-          const church = (registration.camper as any).church;
-          const sameChurchCount = church
-            ? tribe.registrations.filter((r) => (r.camper as any).church === church).length
-            : 0;
-          score += 20 - sameChurchCount;
-          break;
-        }
-        case "SCHOOL": {
-          const school = (registration.camper as any).school;
-          const sameSchoolCount = school
-            ? tribe.registrations.filter((r) => (r.camper as any).school === school).length
-            : 0;
-          score += 20 - sameSchoolCount;
-          break;
-        }
-        case "POPULATION":
-          score += 1000 - tribe.registrations.length;
-          if (reasons.length === 0 || !reasons.includes("Lowest population")) {
-            reasons.push("Lowest population");
-          }
-          break;
-      }
-    }
-
-    return { tribe, score, reasons };
+  const enriched = tribes.map((t) => {
+    const regs = t.registrations;
+    const pop = regs.length;
+    const myGender = registration.camper.gender;
+    return {
+      id: t.id,
+      name: t.name,
+      campId: t.campId,
+      gender: (t.gender as string | null) ?? null,
+      ageRange: (t.ageRange as string | null) ?? null,
+      maxCapacity: (t.maxCapacity as number | null) ?? null,
+      isAllocationLocked: (t as any).isAllocationLocked === true,
+      status: t.status,
+      population: pop,
+      sameGenderCount: myGender ? regs.filter((r) => (r.camper as any).gender === myGender).length : 0,
+      sameAgeGroupCount: regs.filter((r) => ageGroup((r.camper as any).dateOfBirth, cutoff) === camperAgeGroup).length,
+      sameCampusCount: regs.filter((r) => r.campusId === registration.campusId).length,
+      sameChurchCount: 0,
+      sameSchoolCount: 0,
+    };
   });
 
-  scored.sort((a, b) => b.score - a.score);
-  const best = scored[0];
-  const worstScore = scored[scored.length - 1].score;
-  const spread = best.score - worstScore || 1;
-  const confidence = Math.round(Math.min(99, 50 + ((best.score - worstScore) / spread) * 49));
+  const unit = {
+    registrationId: registration.id,
+    camper: {
+      id: registration.camper.id,
+      name: registration.camper.name,
+      dateOfBirth: registration.camper.dateOfBirth as Date | null,
+      gender: (registration.camper.gender as string | null) ?? null,
+      userId: registration.camper.userId,
+      school: (registration.camper as any).school ?? null,
+      church: (registration.camper as any).church ?? null,
+      medicalProfile: (registration.camper as any).medicalProfile ?? null,
+    },
+    campusId: registration.campusId,
+    siblingGroupIds: [] as string[],
+  };
+
+  const candidates = [];
+  for (const tribe of enriched) {
+    const hard = passesHardConstraints(tribe, unit, rulesNormalized.hard, siblingTribeIds);
+    if (!hard.passed) continue;
+
+    const targetSize = computeTargetSize(
+      { tribes: new Map(), units: [], assignments: new Map(), targetSize: 0 },
+      null,
+    );
+
+    const state = {
+      tribes: new Map(),
+      units: [],
+      assignments: new Map(),
+      targetSize,
+    };
+
+    const { score, breakdown } = scoreCandidate(tribe, unit, rulesNormalized.soft, state, camperAgeGroup);
+    candidates.push({ tribe, score, breakdown });
+  }
+
+  if (candidates.length === 0) return null;
+
+  const ranked = rankCandidates(
+    candidates.map((c) => ({
+      ...c,
+      reasons: [],
+    })),
+    unit,
+    {
+      tribes: new Map(),
+      units: [],
+      assignments: new Map(),
+      targetSize: 0,
+    },
+  );
+
+  const best = ranked[0];
+  const worstScore = ranked.length > 1 ? ranked[ranked.length - 1].score : 0;
+  const spread = Math.abs(best.score - worstScore) + 1;
+  const confidence = Math.round(Math.min(99, 50 + (Math.abs(best.score - worstScore) / spread) * 49));
+
+  const reasons = [];
+  reasons.push("Tribe has available capacity");
+
+  const targetForSuggestion = Math.ceil(
+    enriched.reduce((s, t) => s + t.population, 0) / enriched.length
+  );
+  const dev = Math.abs(best.tribe.population + 1 - targetForSuggestion);
+  if (dev <= 2) {
+    reasons.push("Keeps tribe within target population");
+  }
+
+  if (registration.camper.gender && best.tribe.gender === "MIXED") {
+    reasons.push("Gender-compatible tribe");
+  }
+
+  if (best.tribe.sameCampusCount < best.tribe.population / 2) {
+    reasons.push("Improves campus diversity");
+  }
 
   return {
     tribeId: best.tribe.id,
     tribeName: best.tribe.name,
     confidence,
-    reasons: Array.from(new Set(best.reasons)),
+    reasons: Array.from(new Set(reasons)),
+    scoreBreakdown: best.breakdown,
   };
 }
 
 async function assignTribeInTx(
   tx: Prisma.TransactionClient,
-  params: { registrationId: string; tribeId: string; actorId: string | null; method: "AUTOMATIC" | "MANUAL" | "HYBRID_OVERRIDE" }
+  params: { registrationId: string; tribeId: string; actorId: string | null; method: "AUTOMATIC" | "MANUAL" | "HYBRID_OVERRIDE"; rules?: unknown },
 ) {
   const registration = await tx.registration.findUniqueOrThrow({
     where: { id: params.registrationId },
@@ -228,30 +241,28 @@ export async function assignTribe(params: {
   registrationId: string;
   tribeId: string;
   actorId: string;
-  method?: "MANUAL" | "HYBRID_OVERRIDE";
+  method?: "AUTOMATIC" | "MANUAL" | "HYBRID_OVERRIDE";
 }) {
   return prisma.$transaction((tx) =>
     assignTribeInTx(tx, { ...params, method: params.method ?? "MANUAL" })
   );
 }
 
-/** Called from the Registration Engine on approval when tribeAllocationMode === AUTOMATIC. Never throws. */
 export async function autoAssignTribeOnApproval(registrationId: string) {
   try {
     const registration = await prisma.registration.findUnique({ where: { id: registrationId }, include: { camp: true } });
     if (!registration || !registration.camp.tribeAllocationEnabled || registration.camp.tribeAllocationMode !== "AUTOMATIC") {
       return;
     }
-    if (registration.tribeId) return; // already assigned
+    if (registration.tribeId) return;
 
     const suggestion = await suggestTribe(prisma, registrationId);
-    if (!suggestion) return; // no tribes configured or all full — leave for manual assignment
+    if (!suggestion) return;
 
     await prisma.$transaction((tx) =>
       assignTribeInTx(tx, { registrationId, tribeId: suggestion.tribeId, actorId: null, method: "AUTOMATIC" })
     );
   } catch (error) {
-    // Tribe assignment must never block or reverse an approval (PRD Part 4A §3).
     console.error("Automatic tribe assignment failed:", error);
   }
 }
@@ -291,7 +302,6 @@ export async function clearTribeAssignment(params: { registrationId: string; act
   });
 }
 
-/** Bulk-assigns tribes for every un-tribed approved registration in a camp using automatic suggestion. */
 export async function bulkAutoAssignTribes(params: { campId: string; actorId: string }) {
   const registrations = await prisma.registration.findMany({
     where: { campId: params.campId, status: { in: ["APPROVED", "CHECKED_IN"] }, tribeId: null, deletedAt: null },
@@ -315,4 +325,11 @@ export async function bulkAutoAssignTribes(params: { campId: string; actorId: st
     }
   }
   return results;
+}
+
+export async function lockTribeAssignment(registrationId: string, locked: boolean, actorId: string) {
+  return prisma.registration.update({
+    where: { id: registrationId },
+    data: { isTribeLocked: locked },
+  });
 }

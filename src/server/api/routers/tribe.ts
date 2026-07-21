@@ -73,6 +73,7 @@ export const tribeRouter = createTRPCRouter({
         ageRange: z.string().nullable().optional(),
         allocationStrategy: z.enum(["MANUAL", "AUTOMATIC", "INVITE_ONLY"]).optional(),
         maxCapacity: z.number().int().min(1).nullable().optional(),
+        isAllocationLocked: z.boolean().optional(),
         logoUrl: z.string().nullable().optional(),
         bannerUrl: z.string().nullable().optional(),
         status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
@@ -85,8 +86,6 @@ export const tribeRouter = createTRPCRouter({
       return ctx.prisma.tribe.update({ where: { id: input.id }, data: input.data });
     }),
 
-  // Delete a tribe (soft delete — recoverable from Trash for 60 days).
-  // Blocked if campers are still assigned — reassign them first.
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -100,13 +99,14 @@ export const tribeRouter = createTRPCRouter({
       return ctx.prisma.tribe.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 
-  // Allocation configuration for a camp (PRD Part 4A §5-8)
   updateAllocationConfig: protectedProcedure
     .input(z.object({
       campId: z.string(),
       tribeAllocationEnabled: z.boolean().optional(),
       tribeAllocationMode: z.enum(["MANUAL", "AUTOMATIC", "HYBRID"]).optional(),
-      tribeAllocationRules: z.array(z.object({ criterion: z.string(), enabled: z.boolean() })).optional(),
+      tribeAllocationRules: z.any().optional(),
+      targetTribeSize: z.number().int().min(1).nullable().optional(),
+      tribeAllocationPresets: z.any().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertCanManageCamp(ctx, input.campId);
@@ -114,10 +114,6 @@ export const tribeRouter = createTRPCRouter({
       return ctx.prisma.camp.update({ where: { id: campId }, data });
     }),
 
-  // Bed allocation configuration for a camp — mirrors updateAllocationConfig
-  // above exactly, for the accommodation engine's weighted rules
-  // (src/server/accommodation/engine.ts). Gender-match to Hostel.gender is
-  // always a hard filter in the engine, not a toggleable rule here.
   updateBedAllocationConfig: protectedProcedure
     .input(z.object({
       campId: z.string(),
@@ -130,10 +126,6 @@ export const tribeRouter = createTRPCRouter({
       return ctx.prisma.camp.update({ where: { id: campId }, data });
     }),
 
-  // Campus Rep scoping: a rep may only suggest/assign/clear tribe assignment
-  // on registrations belonging to their own assigned campus (re-verified
-  // against the DB, not the LOCATION_ADMIN role alone - this was previously
-  // a real cross-campus authorization gap).
   suggest: protectedProcedure
     .input(z.object({ registrationId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -183,7 +175,84 @@ export const tribeRouter = createTRPCRouter({
       return tribeEngine.bulkAutoAssignTribes({ campId: input.campId, actorId: currentUser!.id });
     }),
 
-  // Camp Structure: competition points
+  lockAssignment: protectedProcedure
+    .input(z.object({ registrationId: z.string(), locked: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      return tribeEngine.lockTribeAssignment(input.registrationId, input.locked, currentUser.id);
+    }),
+
+  simulate: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      rules: z.any().optional(),
+      targetSize: z.number().int().min(1).nullable().optional(),
+      scope: z.enum(["approved", "all"]).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertCanManageCamp(ctx, input.campId);
+      return tribeEngine.simulateAllocation(ctx.prisma, input.campId, {
+        rules: input.rules,
+        targetSize: input.targetSize,
+        scope: input.scope,
+      });
+    }),
+
+  optimize: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      apply: z.boolean().default(false),
+      force: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      await assertCanManageCamp(ctx, input.campId);
+
+      if (!input.apply && !input.force) {
+        const checkedInExists = await ctx.prisma.registration.count({
+          where: { campId: input.campId, status: "CHECKED_IN", deletedAt: null },
+        });
+        if (checkedInExists > 0 && !input.force) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Check-in has already begun. Set force: true to override.",
+          });
+        }
+      }
+
+      const simulation = await tribeEngine.runAllocationPipeline(ctx.prisma, input.campId);
+
+      if (input.apply) {
+        for (const assignment of simulation.assignments) {
+          try {
+            await tribeEngine.assignTribe({
+              registrationId: assignment.registrationId,
+              tribeId: assignment.tribeId,
+              actorId: currentUser!.id,
+              method: "AUTOMATIC",
+            });
+          } catch (err) {
+            console.error(`Failed to assign ${assignment.registrationId}:`, err);
+          }
+        }
+      }
+
+      return {
+        assignments: simulation.assignments,
+        quality: simulation.quality,
+        warnings: simulation.warnings,
+        lockedCount: simulation.lockedCount,
+        changedCount: simulation.changedCount,
+        applied: input.apply,
+      };
+    }),
+
   updatePoints: protectedProcedure
     .input(z.object({ tribeId: z.string(), delta: z.number().int(), reason: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {

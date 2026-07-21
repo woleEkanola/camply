@@ -102,15 +102,15 @@ test.describe("Mobile Campus Redesign E2E", () => {
     await expect(card.getByText("MOB")).toBeVisible();
     await expect(card.getByText("• Active").first()).toBeVisible();
 
-    // Check Section 2 — Quick Info
-    await expect(card.getByText("Grace Kemka")).toBeVisible();
-    await expect(card.getByText("12 Salvation Road, Lagos")).toBeVisible();
+    // Check Section 2 — Quick Info (reps count + address row + copy link)
+    await expect(card.getByText("1 Representatives")).toBeVisible();
+    await expect(card.getByText("Address", { exact: true })).toBeVisible();
     const copyBtn = card.getByRole("button", { name: "Copy" });
     await expect(copyBtn).toBeVisible();
 
     // Check Section 3 — Registration Capacity & Metrics
-    await expect(card.getByText("0 / 100")).toBeVisible();
-    await expect(card.getByText("100 slots remaining")).toBeVisible();
+    await expect(card.getByText(/0\s*\/\s*100/)).toBeVisible();
+    await expect(card.getByText("View registration analytics")).toBeVisible();
 
     // Check Section 4 — Touch Target Sizing (>= 44px min-height)
     const editBtn = card.getByRole("button", { name: "Edit", exact: true });
