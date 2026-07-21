@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import AppShell from "@/components/layout/AppShell";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
-import ParentsPage from "./parents";
 
 // Define extended session user type
 interface ExtendedUser {
