@@ -2,7 +2,6 @@
 
 import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
 
 interface StaffCardProps {
   row: any;
@@ -11,6 +10,21 @@ interface StaffCardProps {
   type: "TEACHER" | "VOLUNTEER";
   selected?: boolean;
   onSelect?: (selected: boolean) => void;
+}
+
+const SKILL_COLORS = [
+  "bg-blue-50 text-blue-700 border-blue-100",
+  "bg-purple-50 text-purple-700 border-purple-100",
+  "bg-emerald-50 text-emerald-700 border-emerald-100",
+  "bg-amber-50 text-amber-700 border-amber-100",
+  "bg-rose-50 text-rose-700 border-rose-100",
+  "bg-cyan-50 text-cyan-700 border-cyan-100",
+];
+
+function skillColor(skill: string) {
+  let hash = 0;
+  for (let i = 0; i < skill.length; i++) hash = skill.charCodeAt(i) + ((hash << 5) - hash);
+  return SKILL_COLORS[Math.abs(hash) % SKILL_COLORS.length];
 }
 
 export function StaffCard({ row, onClick, actions, type, selected, onSelect }: StaffCardProps) {
@@ -26,7 +40,7 @@ export function StaffCard({ row, onClick, actions, type, selected, onSelect }: S
     <div
       onClick={onClick}
       className={cn(
-        "group relative flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-xs transition",
+        "group relative flex flex-col gap-4 rounded-2xl border bg-white p-4 shadow-xs transition",
         onClick && "cursor-pointer hover:border-accent-300 hover:shadow-sm",
         selected ? "border-accent-500 ring-1 ring-accent-500" : "border-neutral-200/80"
       )}
@@ -54,30 +68,29 @@ export function StaffCard({ row, onClick, actions, type, selected, onSelect }: S
             <div>
               <h3 className="text-sm font-bold text-neutral-900">{name}</h3>
               <p className="text-xs text-neutral-500 truncate">{row.email}</p>
+              <p className="text-xs text-neutral-400">{row.phone}</p>
             </div>
             <StatusBadge status={row.status} />
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-lg bg-neutral-50 p-2">
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div className="rounded-xl bg-neutral-50 p-2.5">
           <span className="block text-neutral-400">Campus</span>
           <span className="font-medium text-neutral-900 truncate">{row.preferredCampus?.name || "—"}</span>
         </div>
-        <div className="rounded-lg bg-neutral-50 p-2">
-          <span className="block text-neutral-400">Venue</span>
-          <span className="font-medium text-neutral-900 truncate">{row.assignedVenue?.name || "—"}</span>
+        <div className="rounded-xl bg-neutral-50 p-2.5">
+          <span className="block text-neutral-400">{type === "TEACHER" ? "Venue" : "Category"}</span>
+          <span className="font-medium text-neutral-900 truncate">{type === "TEACHER" ? row.assignedVenue?.name || "—" : row.volunteerCategory || "—"}</span>
         </div>
-        <div className="rounded-lg bg-neutral-50 p-2">
-          <span className="block text-neutral-400">{type === "TEACHER" ? "Tribe" : "Category"}</span>
-          <span className="font-medium text-neutral-900 truncate">
-            {type === "TEACHER" ? row.assignedTribe?.name || "—" : row.volunteerCategory || "—"}
-          </span>
+        <div className="rounded-xl bg-neutral-50 p-2.5">
+          <span className="block text-neutral-400">{type === "TEACHER" ? "Dept" : "Venue"}</span>
+          <span className="font-medium text-neutral-900 truncate">{type === "TEACHER" ? row.department?.name || "—" : row.assignedVenue?.name || "—"}</span>
         </div>
-        <div className="rounded-lg bg-neutral-50 p-2">
-          <span className="block text-neutral-400">Phone</span>
-          <span className="font-medium text-neutral-900 truncate">{row.phone || "—"}</span>
+        <div className="rounded-xl bg-neutral-50 p-2.5">
+          <span className="block text-neutral-400">Skills</span>
+          <span className="font-medium text-neutral-900 truncate">{(row.skills || []).slice(0, 2).join(", ") || "—"}</span>
         </div>
       </div>
 

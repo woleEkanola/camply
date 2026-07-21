@@ -192,20 +192,23 @@ export const staffRouter = createTRPCRouter({
         }),
       };
 
-      const items = await ctx.prisma.staffProfile.findMany({
-        where,
-        include: { assignedVenue: true, assignedTribe: true, preferredCampus: true },
-        orderBy: { createdAt: "desc" },
-        take: input.limit + 1,
-        ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
-      });
+      const [items, totalCount] = await Promise.all([
+        ctx.prisma.staffProfile.findMany({
+          where,
+          include: { assignedVenue: true, assignedTribe: true, preferredCampus: true },
+          orderBy: { createdAt: "desc" },
+          take: input.limit + 1,
+          ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+        }),
+        ctx.prisma.staffProfile.count({ where }),
+      ]);
 
       let nextCursor: string | undefined;
       if (items.length > input.limit) {
         const next = items.pop();
         nextCursor = next?.id;
       }
-      return { items, nextCursor };
+      return { items, nextCursor, totalCount };
     }),
 
   getById: protectedProcedure

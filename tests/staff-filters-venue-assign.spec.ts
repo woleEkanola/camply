@@ -96,7 +96,6 @@ test.describe("Teachers page: Campus column, filters, venue assignment", () => {
     try {
       await loginWithPassword(page, "owner@camply.com", "password123");
       await page.goto("/admin/teachers");
-      await page.getByRole("button", { name: "List", exact: true }).click();
       await showAllRows(page);
 
       const row = page.locator("tr", { hasText: "FilterTeacher" });
@@ -104,7 +103,7 @@ test.describe("Teachers page: Campus column, filters, venue assignment", () => {
       await row.locator('input[type="checkbox"]').click();
 
       await expect(page.getByText("1 selected")).toBeVisible();
-      await page.locator("select", { hasText: "Assign to venue…" }).selectOption({ label: bulkVenue.name });
+      await page.locator(".fixed.bottom-0 select").selectOption({ label: bulkVenue.name });
       await page.getByRole("button", { name: "Assign", exact: true }).click();
 
       await expect
@@ -123,15 +122,14 @@ test.describe("Teachers page: Campus column, filters, venue assignment", () => {
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/teachers");
-    await page.getByRole("button", { name: "List", exact: true }).click();
     await showAllRows(page);
 
     const row = page.locator("tr", { hasText: "SoleVenueTeacher" });
     await expect(row).toBeVisible({ timeout: 10000 });
     await row.locator('input[type="checkbox"]').click();
-    // Scoped to the bulk-actions toolbar — the row itself also has an inline
-    // "Approve" action now, so an unscoped query is ambiguous once selected.
-    await page.getByRole("toolbar", { name: "Bulk actions" }).getByRole("button", { name: "Approve", exact: true }).click();
+    // Use the text "Approve" button in the fixed bottom bulk-action bar,
+    // scoped to the bar that appears when items are selected.
+    await page.locator(".fixed.bottom-0").getByRole("button", { name: "Approve" }).click();
 
     await expect
       .poll(async () => (await prisma.staffProfile.findUniqueOrThrow({ where: { id: pendingProfileId! } })).assignedVenueId, { timeout: 10000 })
