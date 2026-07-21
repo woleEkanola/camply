@@ -278,7 +278,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
           registrations={filteredRegs}
           selectedIds={selectedIds}
           onSelectRow={(id, checked) => {
-            if (checked) setSelectedIds((prev) => [...prev, id]);
+            if (checked) setSelectedIds((prev) => Array.from(new Set([...prev, id])));
             else setSelectedIds((prev) => prev.filter((i) => i !== id));
           }}
           onCardClick={(reg) => setSelectedRegistrationId(reg.id)}
