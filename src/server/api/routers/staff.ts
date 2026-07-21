@@ -114,7 +114,41 @@ export const staffRouter = createTRPCRouter({
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED" } }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED", assignedVenueId: { not: null } } }),
       ]);
-      return { total, pending, approved, assigned, unassigned: Math.max(approved - assigned, 0) };
+
+      const result: Record<string, any> = {
+        total,
+        pending,
+        approved,
+        assigned,
+        unassigned: Math.max(approved - assigned, 0),
+      };
+
+      // Teacher recruitment quota summary for the recruitment panel.
+      if (input.type === "TEACHER") {
+        const quotas = await ctx.prisma.teacherCampusQuota.findMany({
+          where: { campId: input.campId },
+        });
+        const totalQuota = quotas.reduce((sum, q) => sum + (q.quota > 0 ? q.quota : 0), 0);
+        const unlimitedCampuses = quotas.filter((q) => q.quota <= 0).length;
+        const usedCount = await ctx.prisma.staffProfile.count({
+          where: {
+            organizationId: input.organizationId,
+            campId: input.campId,
+            type: "TEACHER",
+            deletedAt: null,
+            status: { in: ["APPROVED", "PENDING"] },
+          },
+        });
+        result.quotaSummary = {
+          totalQuota: totalQuota > 0 ? totalQuota : null,
+          unlimitedCampuses,
+          usedCount,
+          remaining: totalQuota > 0 ? Math.max(0, totalQuota - usedCount) : null,
+          hasAnyQuota: totalQuota > 0,
+        };
+      }
+
+      return result;
     }),
 
   adminList: protectedProcedure

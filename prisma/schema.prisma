@@ -153,6 +153,7 @@ model Campus {
   campers        Camper[]
   registrations  Registration[]
   signupLinks    SignupLink[]
+  teacherCampusQuotas TeacherCampusQuota[]
 
   registrationCounters RegistrationCounter[]
   preferredByStaff     StaffProfile[]        @relation("PreferredStaffCampus")
@@ -349,6 +350,7 @@ model Camp {
   scanEvents           ScanEvent[]
   departments          Department[]
   positions            Position[]
+  teacherCampusQuotas  TeacherCampusQuota[]
 
   // Tribe Allocation (PRD Part 4A)
   tribeAllocationEnabled Boolean  @default(false)
@@ -409,6 +411,21 @@ model SignupLink {
   updatedAt DateTime @updatedAt
 
   @@unique([campusId, campId])
+}
+
+// Teacher recruitment quota per campus, per camp. Mirrors the philosophy of
+// SignupLink.quota but is scoped to teacher recruitment via StaffSignupLink.
+model TeacherCampusQuota {
+  id                String  @id @default(cuid())
+  campId            String
+  camp              Camp    @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campusId          String
+  campus            Campus  @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  quota             Int     @default(0) // 0 = unlimited
+  quotaFullBehavior String  @default("CLOSE") // CLOSE | WAITLIST
+
+  @@unique([campId, campusId])
+  @@index([campId])
 }
 
 model OTP {
