@@ -1780,7 +1780,17 @@ export const registrationRouter = createTRPCRouter({
         include: {
           camper: { include: { user: true } },
           campus: true,
-          camp: true,
+          camp: {
+            include: {
+              documentRequirements: {
+                where: { deletedAt: null },
+              },
+            },
+          },
+          documents: {
+            where: { deletedAt: null },
+            select: { id: true, status: true, fileName: true, requirementId: true },
+          },
           review: { select: { verificationStatus: true, recommendation: true, verifiedById: true, verifiedAt: true, assignedToId: true } },
         },
         orderBy: { createdAt: "desc" },

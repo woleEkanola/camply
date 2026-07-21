@@ -131,6 +131,11 @@ export function MobileRegistrationCard({
   const updatedTime = formatRelativeTime(registration.updatedAt || registration.createdAt);
   const relationship = registration.relationship || (registration.camper ? "Parent" : "Camper");
 
+  // Dynamic Document Calculation
+  const uploadedCount = Array.isArray(registration.documents) ? registration.documents.length : 0;
+  const totalRequired = registration.camp?.documentRequirements?.length ?? registration.totalRequiredDocs ?? (registration.documents ? registration.documents.length : 2);
+  const docPercent = totalRequired > 0 ? Math.min(100, Math.round((uploadedCount / totalRequired) * 100)) : 100;
+
   return (
     <div
       onClick={() => onClick(registration)}
@@ -147,13 +152,15 @@ export function MobileRegistrationCard({
             className="shrink-0 pt-0.5"
             onClick={(e) => {
               e.stopPropagation();
-              onSelect(registration.id, !isSelected);
             }}
           >
             <input
               type="checkbox"
               checked={isSelected}
-              onChange={(e) => onSelect(registration.id, e.target.checked)}
+              onChange={(e) => {
+                e.stopPropagation();
+                onSelect(registration.id, e.target.checked);
+              }}
               className="h-5 w-5 rounded border-neutral-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
               aria-label={`Select ${camperName}`}
             />
@@ -212,21 +219,23 @@ export function MobileRegistrationCard({
         </span>
       </div>
 
-      {/* DOCUMENT PROGRESS BAR (PRD / Mockup Screen 1) */}
+      {/* DYNAMIC DOCUMENT PROGRESS BAR */}
       <div className="mt-2.5 space-y-1">
         <div className="flex items-center justify-between text-[11px] font-medium text-neutral-500">
-          <span>Documents: {registration.documents?.length || 3} of 4 uploaded</span>
+          <span>
+            Documents: {uploadedCount} of {totalRequired} uploaded
+          </span>
           <span className="font-bold text-purple-600">
-            {Math.min(100, Math.round(((registration.documents?.length || 3) / 4) * 100))}%
+            {docPercent}%
           </span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
           <div
             className={cn(
               "h-full transition-all duration-300",
-              (registration.documents?.length || 3) >= 4 ? "bg-emerald-500" : "bg-amber-500"
+              docPercent === 100 ? "bg-emerald-500" : "bg-amber-500"
             )}
-            style={{ width: `${Math.min(100, Math.round(((registration.documents?.length || 3) / 4) * 100))}%` }}
+            style={{ width: `${docPercent}%` }}
           />
         </div>
       </div>
@@ -254,67 +263,77 @@ export function MobileRegistrationCard({
           </button>
 
           {menuOpen && (
-            <div
-              className="absolute right-0 bottom-11 z-30 w-56 rounded-2xl border border-neutral-200 bg-white py-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                onClick={() => {
+            <>
+              {/* Click outside backdrop to close */}
+              <div
+                className="fixed inset-0 z-20 bg-transparent"
+                onClick={(e) => {
+                  e.stopPropagation();
                   setMenuOpen(false);
-                  onClick(registration);
                 }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+              />
+              <div
+                className="absolute right-0 bottom-11 z-30 w-56 rounded-2xl border border-neutral-200 bg-white py-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100"
+                onClick={(e) => e.stopPropagation()}
               >
-                <UserIcon className="h-4 w-4 text-neutral-500" />
-                View Registration
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onQuickAction?.(registration, "EDIT");
-                }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
-              >
-                <PencilIcon className="h-4 w-4 text-neutral-500" />
-                Edit Registration
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onQuickAction?.(registration, "TRIBE");
-                }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
-              >
-                <UserGroupIcon className="h-4 w-4 text-neutral-500" />
-                Assign Tribe
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onQuickAction?.(registration, "EMAIL");
-                }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
-              >
-                <EnvelopeIcon className="h-4 w-4 text-neutral-500" />
-                Send Email
-              </button>
-              <div className="my-1 border-t border-neutral-100" />
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onQuickAction?.(registration, "DELETE");
-                }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
-              >
-                <TrashIcon className="h-4 w-4 text-rose-500" />
-                Delete
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onClick(registration);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                >
+                  <UserIcon className="h-4 w-4 text-neutral-500" />
+                  View Registration
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onQuickAction?.(registration, "EDIT");
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                >
+                  <PencilIcon className="h-4 w-4 text-neutral-500" />
+                  Edit Registration
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onQuickAction?.(registration, "TRIBE");
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                >
+                  <UserGroupIcon className="h-4 w-4 text-neutral-500" />
+                  Assign Tribe
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onQuickAction?.(registration, "EMAIL");
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                >
+                  <EnvelopeIcon className="h-4 w-4 text-neutral-500" />
+                  Send Email
+                </button>
+                <div className="my-1 border-t border-neutral-100" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onQuickAction?.(registration, "DELETE");
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                >
+                  <TrashIcon className="h-4 w-4 text-rose-500" />
+                  Delete
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -422,8 +441,8 @@ export function MobileRegistrationsView({
         </button>
       </div>
 
-      {/* 2. STATISTICS SUMMARY CARDS (Horizontally Scrolling) */}
-      <div className="flex gap-2.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
+      {/* 2. STATISTICS SUMMARY CARDS (Grid Layout) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 pt-0.5">
         {statCards.map((stat) => {
           const isSelected = filterStatus === stat.statusKey;
           return (
