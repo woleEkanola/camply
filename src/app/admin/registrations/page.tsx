@@ -85,6 +85,8 @@ function RegistrationsPage() {
 
   const openParam = searchParams.get("openReg") || searchParams.get("open") || searchParams.get("id");
   const queryParam = searchParams.get("q");
+  const statusParam = searchParams.get("status");
+  const reviewStateParam = searchParams.get("reviewState");
 
   useEffect(() => {
     if (openParam) {
@@ -94,6 +96,21 @@ function RegistrationsPage() {
       setSearchQuery(queryParam);
     }
   }, [openParam, queryParam]);
+
+  // Deep-linked filters (e.g. from the admin dashboard's Today's Summary cards)
+  useEffect(() => {
+    if (statusParam && STATUS_OPTIONS.includes(statusParam)) {
+      setReviewStateFilter("");
+      setFilterStatus(statusParam);
+    }
+    if (
+      reviewStateParam &&
+      ["AWAITING_VETTING", "AWAITING_FINAL", "AWAITING_DOCUMENT_REPLACEMENT"].includes(reviewStateParam)
+    ) {
+      setFilterStatus("");
+      setReviewStateFilter(reviewStateParam as "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT");
+    }
+  }, [statusParam, reviewStateParam]);
 
   const { data: session, status } = useSession({
     required: true,

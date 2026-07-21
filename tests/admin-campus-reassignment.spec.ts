@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, switchRegistrationsToListView } from "./helpers";
 
 test.describe("Admin: campus reassignment (single and bulk)", () => {
   test.describe.configure({ mode: "serial" });
 
   const parentEmail = `e2e-reassign-parent-${Date.now()}@camply.test`;
+  const camperName = `E2E Reassign Camper ${Date.now()}`;
   let organizationId: string;
   let campId: string;
   let campusIdA: string;
@@ -12,17 +13,18 @@ test.describe("Admin: campus reassignment (single and bulk)", () => {
   let registrationId: string;
   let userId: string;
   let camperId: string;
+  let campusNameB: string;
 
   test.beforeAll(async () => {
     const ctx = await getFixtureOrgContext();
     organizationId = ctx.organizationId;
     campId = ctx.campId;
+    const stamp = Date.now();
 
-    // Create Campus A
     const campusA = await prisma.campus.create({
       data: {
-        name: `E2E Reassign Campus A ${Date.now()}`,
-        slug: `e2e-reassign-campus-a-${Date.now()}`,
+        name: `E2E Reassign Campus A ${stamp}`,
+        slug: `e2e-reassign-campus-a-${stamp}`,
         address: "100 Campus A St",
         city: "Town A",
         country: "Country A",
@@ -31,11 +33,11 @@ test.describe("Admin: campus reassignment (single and bulk)", () => {
     });
     campusIdA = campusA.id;
 
-    // Create Campus B
+    campusNameB = `E2E Reassign Campus B ${stamp}`;
     const campusB = await prisma.campus.create({
       data: {
-        name: `E2E Reassign Campus B ${Date.now()}`,
-        slug: `e2e-reassign-campus-b-${Date.now()}`,
+        name: campusNameB,
+        slug: `e2e-reassign-campus-b-${stamp}`,
         address: "200 Campus B St",
         city: "Town B",
         country: "Country B",
@@ -56,7 +58,7 @@ test.describe("Admin: campus reassignment (single and bulk)", () => {
 
     const camper = await prisma.camper.create({
       data: {
-        name: `E2E Reassign Camper ${Date.now()}`,
+        name: camperName,
         userId: parent.id,
         organizationId,
         homeCampusId: campusIdA,
@@ -85,52 +87,48 @@ test.describe("Admin: campus reassignment (single and bulk)", () => {
   test("admin can reassign a single registration's campus via the detail drawer", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/registrations");
+    await switchRegistrationsToListView(page);
 
-    // Locate the row and click it to open the drawer
-    const row = page.locator("tbody tr").filter({ hasText: `E2E Reassign Camper` });
+    const search = page.getByPlaceholder("Name, email, or registration #");
+    await search.fill(camperName);
+    const row = page.locator("tbody tr").filter({ hasText: camperName });
     await expect(row).toBeVisible({ timeout: 15000 });
     await row.click();
 
-    // The drawer should open. Wait for the select dropdown under Campus
-    const drawer = page.locator('[role="dialog"]').filter({ hasText: 'E2E Reassign Camper' });
-    const select = drawer.locator('div').filter({ has: page.locator('span', { hasText: 'Campus' }) }).locator('select');
-    await expect(select).toBeVisible({ timeout: 15000 });
+    const drawer = page.getByRole("dialog");
+    await expect(drawer.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 15000 });
 
-    // Reassign to Campus B
+    // Campus select lives on the Overview tab
+    const select = drawer.locator("select").filter({ has: page.locator(`option[value="${campusIdB}"]`) }).first();
+    await expect(select).toBeVisible({ timeout: 15000 });
     await select.selectOption(campusIdB);
 
-    // Verify database update
     await expect.poll(async () => {
       const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
       return reg?.campusId;
     }, { timeout: 10000 }).toBe(campusIdB);
 
-    // Close the drawer
-    await page.getByRole("button", { name: "Close" }).click();
+    await drawer.getByRole("button", { name: "Back" }).click();
   });
 
   test("admin can reassign campus in bulk from registrations action bar", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/registrations");
+    await switchRegistrationsToListView(page);
 
-    // Filter status and verify row is visible
-    const row = page.locator("tbody tr").filter({ hasText: `E2E Reassign Camper` });
+    const search = page.getByPlaceholder("Name, email, or registration #");
+    await search.fill(camperName);
+    const row = page.locator("tbody tr").filter({ hasText: camperName });
     await expect(row).toBeVisible({ timeout: 15000 });
 
-    // Select the checkbox
     await row.locator('input[type="checkbox"]').first().click();
 
-    // Click bulk reassign campus
-    await page.getByRole("button", { name: "Reassign Campus" }).click();
+    await page.getByRole("toolbar", { name: "Bulk actions" }).getByRole("button", { name: "Reassign Campus" }).click();
 
-    // In the dialog, select Campus A
-    const dialogSelect = page.getByTestId("dialog-panel").locator("select");
-    await dialogSelect.selectOption(campusIdA);
+    const dialog = page.getByRole("dialog").filter({ hasText: "Reassign Campus" });
+    await dialog.locator("select").selectOption(campusIdA);
+    await dialog.getByRole("button", { name: "Reassign", exact: true }).click();
 
-    // Click Reassign
-    await page.getByRole("button", { name: "Reassign", exact: true }).click();
-
-    // Verify database update back to Campus A
     await expect.poll(async () => {
       const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
       return reg?.campusId;
@@ -142,16 +140,15 @@ test.describe("Admin: campus reassignment (single and bulk)", () => {
   test("admin dashboard stat cards and filtered counts pull correct numbers", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/registrations");
+    await switchRegistrationsToListView(page);
 
-    // 1. Verify "Total Registrations" card is visible
     const totalCard = page.getByRole("button").filter({ hasText: "Total Registrations" });
     await expect(totalCard).toBeVisible({ timeout: 15000 });
 
-    // 2. Select Campus A in campus dropdown filter
-    const campusSelect = page.locator('select').first();
+    // Campus filter is the first select in the filter row (All Campuses)
+    const campusSelect = page.locator("select").filter({ has: page.locator('option:text-is("All Campuses")') }).first();
     await campusSelect.selectOption(campusIdA);
 
-    // 3. Verify showing 1 of 1 registrations in toolbar (since we created exactly 1 registration on Campus A)
     await expect(page.getByText(/Showing 1 of 1 registration/)).toBeVisible({ timeout: 15000 });
   });
 });

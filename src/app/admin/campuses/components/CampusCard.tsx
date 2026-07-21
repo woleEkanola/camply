@@ -19,6 +19,7 @@ import {
   ClipboardDocumentCheckIcon,
   ClipboardDocumentIcon,
   SparklesIcon,
+  AdjustmentsHorizontalIcon,
 } from "@heroicons/react/24/outline";
 
 export interface CampusRepInfo {
@@ -279,6 +280,20 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                   </button>
                 )}
 
+                {canManageQuota && signupLink && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onOpenQuotaModal?.(signupLink);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                  >
+                    <AdjustmentsHorizontalIcon className="h-4 w-4 text-neutral-500" />
+                    Set Registration Capacity
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {
@@ -433,11 +448,25 @@ export const CampusCard: React.FC<CampusCardProps> = ({
             {usedCount} <span className="text-neutral-400 font-normal text-base">/ {isUnlimited ? "∞" : quotaLimit}</span>
           </span>
 
-          {!isUnlimited && (
-            <span className="text-base font-bold text-emerald-600">
-              {percent}%
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {canManageQuota && signupLink && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenQuotaModal?.(signupLink);
+                }}
+                className="text-xs font-semibold text-purple-600 hover:text-purple-800 transition-colors"
+              >
+                Set Capacity
+              </button>
+            )}
+            {!isUnlimited && (
+              <span className="text-base font-bold text-emerald-600">
+                {percent}%
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Green Capacity Bar */}

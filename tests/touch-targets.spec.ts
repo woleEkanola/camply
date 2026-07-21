@@ -14,7 +14,8 @@ async function openAddCampusDialog(page: import("@playwright/test").Page) {
   // doesn't have; OWNER bypasses that check unconditionally.
   await loginWithPassword(page, "owner@camply.com", "password123");
   await page.goto("/admin/campuses");
-  await page.getByRole("button", { name: "Add Campus" }).click();
+  // FAB on mobile, header button on desktop — first() resolves strict mode
+  await page.getByRole("button", { name: "Add Campus" }).first().click();
   await expect(page.getByTestId("dialog-panel")).toBeVisible();
 }
 

@@ -90,11 +90,15 @@ test.describe("Document flagging requires action", () => {
     await page.goto("/admin/registrations");
     await page.waitForSelector("text=Registrations");
 
-    // Click the row for our camper
-    await page.locator("text=E2E Doc Flag Camper").first().click();
+    // Switch to list view (default is card), then open the camper row
+    const listBtn = page.getByText("List View");
+    if (await listBtn.isVisible().catch(() => false)) await listBtn.click();
+    await page.getByPlaceholder("Name, email, or registration #").fill("E2E Doc Flag Camper");
+    await page.locator("tr", { hasText: "E2E Doc Flag Camper" }).first().click();
+    await expect(page.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 10000 });
 
-    // Open the Documents tab
-    await page.locator("button", { hasText: "Documents" }).first().click();
+    // Open the Documents tab (button nav, not ARIA tab)
+    await page.getByRole("dialog").getByRole("button", { name: /Documents/ }).click();
 
     // Click Request Replacement
     await page.locator("text=Request Replacement").first().click();

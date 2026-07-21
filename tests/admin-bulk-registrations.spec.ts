@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, switchRegistrationsToListView } from "./helpers";
 
 test.describe("Admin: bulk registration actions", () => {
   test.describe.configure({ mode: "serial" });
@@ -70,16 +70,13 @@ test.describe("Admin: bulk registration actions", () => {
   test("admin can bulk-approve selected registrations", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/registrations");
+    await switchRegistrationsToListView(page);
 
-    // Filter to PENDING and select the row.
     await page.getByTestId("registration-status-filter").selectOption("PENDING");
     const row = page.locator("tbody tr").filter({ hasText: "E2E Bulk Reg Camper" });
     await expect(row).toBeVisible({ timeout: 10000 });
     await row.locator('input[type="checkbox"]').first().click();
 
-    // Scoped to the bulk-actions toolbar — the row itself also has an inline
-    // "Approve" action now (for quick single-row approval without selecting
-    // it), so an unscoped query would be ambiguous once a row is selected.
     await page.getByRole("toolbar", { name: "Bulk actions" }).getByRole("button", { name: "Approve", exact: true }).click();
 
     await expect.poll(async () => {
@@ -91,11 +88,11 @@ test.describe("Admin: bulk registration actions", () => {
   });
 
   test("admin can bulk-archive selected registrations", async ({ page }) => {
-    // Reset to approved from previous test.
     await prisma.registration.update({ where: { id: registrationId }, data: { status: "APPROVED" } });
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/registrations");
+    await switchRegistrationsToListView(page);
 
     await page.getByTestId("registration-status-filter").selectOption("APPROVED");
     const row = page.locator("tbody tr").filter({ hasText: "E2E Bulk Reg Camper" });
@@ -103,7 +100,7 @@ test.describe("Admin: bulk registration actions", () => {
     await row.locator('input[type="checkbox"]').first().click();
 
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Archive", exact: true }).click();
+    await page.getByRole("toolbar", { name: "Bulk actions" }).getByRole("button", { name: "Archive", exact: true }).click();
 
     await expect.poll(async () => {
       const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
@@ -114,6 +111,7 @@ test.describe("Admin: bulk registration actions", () => {
   test("archived registrations are visible via the Archived filter", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/registrations");
+    await switchRegistrationsToListView(page);
 
     await page.getByRole("button", { name: "Archived" }).click();
     await expect(page.locator("tr", { hasText: "E2E Bulk Reg Camper" })).toBeVisible({ timeout: 10000 });

@@ -84,13 +84,14 @@ test.describe("Two-step registration approval", () => {
   test("rep can endorse a PENDING registration — no status change, no acceptance email", async ({ page }) => {
     await loginWithPassword(page, repEmail, "password123");
     await page.goto("/campus-rep-dashboard/registrations");
+    await page.getByText("List View").click();
 
     const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailA}` });
     await expect(row).toBeVisible({ timeout: 10000 });
     await expect(row.getByRole("button", { name: "Approve" })).toHaveCount(0);
     await row.getByRole("button", { name: "Recommend" }).click();
 
-    await expect(row.getByText("Recommended ✓ awaiting admin approval")).toBeVisible({ timeout: 10000 });
+    await expect(row.getByText("Recommended", { exact: true })).toBeVisible({ timeout: 10000 });
 
     const review = await prisma.registrationReview.findUnique({ where: { registrationId: registrationEndorseId } });
     expect(review?.verificationStatus).toBe("COMPLETED");
@@ -119,32 +120,37 @@ test.describe("Two-step registration approval", () => {
   test("rep can reject a registration directly", async ({ page }) => {
     await loginWithPassword(page, repEmail, "password123");
     await page.goto("/campus-rep-dashboard/registrations");
+    await page.getByText("List View").click();
 
     const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailB}` });
     await expect(row).toBeVisible({ timeout: 10000 });
 
-    page.once("dialog", (dialog) => dialog.accept("Duplicate submission"));
     await row.getByRole("button", { name: "Reject" }).click();
+    await page.getByPlaceholder("Reason for rejection").fill("Duplicate submission");
+    await page.getByRole("dialog").getByRole("button", { name: "Reject" }).click();
 
     await expect(async () => {
       const registration = await prisma.registration.findUniqueOrThrow({ where: { id: registrationRejectId } });
       expect(registration.status).toBe("REJECTED");
     }).toPass({ timeout: 10000 });
 
-    const sideEffects = await prisma.sideEffect.findMany({ where: { registrationId: registrationRejectId, type: "REGISTRATION_REJECTED" } });
-    expect(sideEffects.length).toBeGreaterThan(0);
+    await expect(async () => {
+      const sideEffects = await prisma.sideEffect.findMany({ where: { registrationId: registrationRejectId, type: "REGISTRATION_REJECTED" } });
+      expect(sideEffects.length).toBeGreaterThan(0);
+    }).toPass({ timeout: 10000 });
   });
 
   test("admin sees the endorsed registration under Awaiting Final Approval and gives final approval", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/registrations");
 
-    await page.getByText("Awaiting Final Approval").click();
+    await page.getByRole("button", { name: "Awaiting Final Approval" }).click();
+    await page.getByText("List View").click();
     const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailA}` });
     await expect(row).toBeVisible({ timeout: 10000 });
     await row.click();
 
-    await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 5000 });
     await page.getByRole("dialog").getByRole("button", { name: "Approve", exact: true }).click();
 
     await expect(async () => {
@@ -165,14 +171,15 @@ test.describe("Two-step registration approval", () => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/registrations");
 
+    await page.getByText("List View").click();
     const search = page.getByPlaceholder("Name, email, or registration #");
     await search.fill(`E2E TwoStep Camper ${parentEmailC}`);
     const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailC}` });
     await expect(row).toBeVisible({ timeout: 10000 });
     await row.click();
 
-    await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible({ timeout: 5000 });
-    await page.getByRole("button", { name: "Change Status" }).click();
+    await expect(page.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 5000 });
+    await page.getByRole("dialog").getByRole("button", { name: "More Actions" }).click();
     await expect(page.getByText("This registration has not been recommended by a campus rep")).toBeVisible({ timeout: 5000 });
     await page.getByRole("button", { name: "Approve Registration" }).click();
 
@@ -190,6 +197,7 @@ test.describe("Two-step registration approval", () => {
     try {
       await loginWithPassword(page, repEmail, "password123");
       await page.goto("/campus-rep-dashboard/registrations");
+      await page.getByText("List View").click();
 
       const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailD}` });
       await expect(row).toBeVisible({ timeout: 10000 });

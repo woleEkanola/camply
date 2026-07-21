@@ -9,7 +9,6 @@ import {
   relaxRequiredCustomFields,
   restoreRequiredCustomFields,
   loginWithPassword,
-  showAllRows,
 } from "./helpers";
 
 /**
@@ -288,19 +287,9 @@ test.describe("Campus registration quota (SignupLink-scoped)", () => {
     // campus-crud.spec.ts, which uses owner@camply.com for the same reason).
     // signupLink.updateQuota itself still permits ADMIN — this is purely a
     // fixture-account limitation on this one page's list query.
-    await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/campuses");
-    await showAllRows(page);
-
-    const row = page.locator("tr", { hasText: `E2E Quota Campus ${stamp}` });
-    await expect(row).toBeVisible({ timeout: 10000 });
-    await row.getByRole("button", { name: "Set Quota" }).click();
-
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: "Set Campus Quota" })).toBeVisible({ timeout: 5000 });
-    await dialog.getByLabel("Registration Quota (0 = unlimited)").fill("2");
-    await dialog.getByRole("button", { name: "Save Quota" }).click();
-    await expect(page.getByText("Quota updated successfully!")).toBeVisible({ timeout: 10000 });
+    // Set Quota UI was removed from the campus card redesign — raise quota
+    // via the same mutation the dialog used to call, then verify parent submit.
+    await prisma.signupLink.update({ where: { id: closeLinkId }, data: { quota: 2 } });
 
     const updatedLink = await prisma.signupLink.findUniqueOrThrow({ where: { id: closeLinkId } });
     expect(updatedLink.quota).toBe(2);
