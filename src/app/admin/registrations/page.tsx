@@ -28,10 +28,32 @@ import { isEndorsed } from "@/server/registration/endorsement";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
 import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
 import { downloadBlob, exportUserDataToXlsx } from "@/lib/import-export/serialize";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
 import { MobileRegistrationCard, MobileRegistrationsView } from "@/components/staff/shared/MobileRegistrationsView";
 import { RegistrationDetailsDrawer } from "@/components/staff/shared/RegistrationDetailsDrawer";
+
+type ExtendedUser = {
+  id: string;
+  role: string;
+  organizationId?: string;
+  email?: string | null;
+};
+
+const STATUS_OPTIONS = [
+  "DRAFT",
+  "SUBMITTED",
+  "PENDING",
+  "REQUIRES_ACTION",
+  "APPROVED",
+  "REJECTED",
+  "WAITLISTED",
+  "CANCELLED",
+  "CHECKED_IN",
+  "COMPLETED",
+  "ARCHIVED",
+];
 
 function RegistrationDetail({ registrationId, onClose }: { registrationId: string; onClose: () => void }) {
   return <RegistrationDetailsDrawer registrationId={registrationId} onClose={onClose} />;
