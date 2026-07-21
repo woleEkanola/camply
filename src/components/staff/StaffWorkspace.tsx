@@ -10,9 +10,6 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import {
   ArrowLeftIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  EllipsisVerticalIcon,
 } from "@heroicons/react/24/outline";
 
 export interface StaffWorkspaceTab {
@@ -58,7 +55,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
       <div className="flex min-h-[450px] items-center justify-center p-8 text-neutral-500">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-600 border-t-transparent" />
-          <span className="text-sm font-medium">Loading staff workspace…</span>
+          <span className="text-sm font-medium">Loading…</span>
         </div>
       </div>
     );
@@ -75,37 +72,25 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
   const activeTabContent = tabs.find((t) => t.id === activeTab)?.content ?? tabs[0]?.content;
 
   return (
-    <div className="relative min-h-screen bg-neutral-50/60 pb-32">
-      {/* Sticky top utility header */}
-      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-200/80 bg-white/90 px-4 py-3 backdrop-blur md:px-6">
-        <button
-          type="button"
-          onClick={() => router.push(`/admin/${profile.type === "TEACHER" ? "teachers" : "volunteers"}`)}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-700 hover:text-accent-600 transition"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          <span className="hidden sm:inline">Back to {profile.type === "TEACHER" ? "Teachers" : "Volunteers"}</span>
-          <span className="sm:hidden">Back</span>
-        </button>
-
-        <div className="flex items-center gap-2">
-          {onPrevious && (
-            <Button variant="secondary" size="sm" onClick={onPrevious}>
-              <ChevronLeftIcon className="mr-1 h-3.5 w-3.5" /> Previous
-            </Button>
-          )}
-          {onNext && (
-            <Button variant="secondary" size="sm" onClick={onNext}>
-              Next <ChevronRightIcon className="ml-1 h-3.5 w-3.5" />
-            </Button>
-          )}
+    <div className="min-h-screen bg-neutral-50/60 pb-24">
+      {/* Utility header */}
+      <div className="sticky top-0 z-20 border-b border-neutral-200/80 bg-white/95 px-4 py-3 backdrop-blur md:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
           <button
             type="button"
-            className="p-1.5 text-neutral-500 hover:text-neutral-900 rounded-lg hover:bg-neutral-100"
-            aria-label="More options"
+            onClick={() => router.push(`/admin/${profile.type === "TEACHER" ? "teachers" : "volunteers"}`)}
+            className="inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-accent-600 transition"
           >
-            <EllipsisVerticalIcon className="h-5 w-5" />
+            <ArrowLeftIcon className="h-4 w-4" />
+            Back to {profile.type === "TEACHER" ? "Teachers" : "Volunteers"}
           </button>
+
+          {profile.status === "PENDING" && (
+            <div className="flex items-center gap-2">
+              <Button size="sm" data-testid="approve-button" loading={approve.isPending} onClick={() => approve.mutate({ id: staffId })}>Approve</Button>
+              <Button size="sm" variant="secondary" data-testid="reject-button" loading={reject.isPending} onClick={() => setRejectOpen(true)}>Reject</Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -114,7 +99,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
         <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-4">
-              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-accent-100 text-accent-700 font-bold text-xl overflow-hidden border border-accent-200">
+              <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-100 text-accent-700 font-bold text-xl overflow-hidden border border-accent-200">
                 {profile.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={profile.photoUrl} alt={name} className="h-full w-full object-cover" />
@@ -124,69 +109,45 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-bold text-neutral-900">{name}</h1>
+                  <h1 className="text-lg font-bold text-neutral-900">{name}</h1>
                   <StatusBadge status={profile.status} />
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-600">
                   {profile.email && <span>{profile.email}</span>}
                   {profile.phone && <span>{profile.phone}</span>}
                   {profile.preferredCampus?.name && (
-                    <span className="inline-flex items-center gap-1 text-accent-700 font-medium">
-                      {profile.preferredCampus.name}
-                    </span>
+                    <span className="inline-flex items-center gap-1 text-accent-700 font-medium">{profile.preferredCampus.name}</span>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 text-sm text-neutral-600">
+            <div className="flex flex-wrap gap-2 text-xs text-neutral-600">
               {profile.assignedVenue?.name && (
-                <div className="rounded-xl bg-neutral-50 px-3 py-1.5 border border-neutral-100">
+                <div className="rounded-lg bg-neutral-50 px-3 py-1.5 border border-neutral-100">
                   <span className="text-neutral-400">Venue</span>{" "}
                   <span className="font-semibold text-neutral-800">{profile.assignedVenue.name}</span>
                 </div>
               )}
               {profile.type === "TEACHER" && profile.assignedTribe?.name && (
-                <div className="rounded-xl bg-neutral-50 px-3 py-1.5 border border-neutral-100">
+                <div className="rounded-lg bg-neutral-50 px-3 py-1.5 border border-neutral-100">
                   <span className="text-neutral-400">Tribe</span>{" "}
                   <span className="font-semibold text-neutral-800">{profile.assignedTribe.name}</span>
                 </div>
               )}
               {profile.department?.name && (
-                <div className="rounded-xl bg-neutral-50 px-3 py-1.5 border border-neutral-100">
+                <div className="rounded-lg bg-neutral-50 px-3 py-1.5 border border-neutral-100">
                   <span className="text-neutral-400">Dept</span>{" "}
                   <span className="font-semibold text-neutral-800">{profile.department.name}</span>
                 </div>
               )}
             </div>
           </div>
-
-          {profile.status === "PENDING" && (
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                data-testid="approve-button"
-                loading={approve.isPending}
-                onClick={() => approve.mutate({ id: staffId })}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                data-testid="reject-button"
-                loading={reject.isPending}
-                onClick={() => setRejectOpen(true)}
-              >
-                Reject
-              </Button>
-            </div>
-          )}
         </div>
 
-        {/* Tabs */}
-        <div className="border-b border-neutral-200/80">
-          <nav className="flex space-x-6 overflow-x-auto">
+        {/* Tabs — match list page style */}
+        <div className="border-b border-neutral-200">
+          <nav className="flex space-x-6">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -194,13 +155,16 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
                 aria-selected={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "whitespace-nowrap pb-3 text-xs font-semibold border-b-2 transition",
+                  "relative pb-3 text-sm font-semibold transition",
                   activeTab === tab.id
-                    ? "border-accent-600 text-accent-700"
-                    : "border-transparent text-neutral-500 hover:text-neutral-900"
+                    ? "text-accent-700"
+                    : "text-neutral-500 hover:text-neutral-900"
                 )}
               >
                 {tab.label}
+                {activeTab === tab.id && (
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent-600" />
+                )}
               </button>
             ))}
           </nav>
@@ -210,24 +174,13 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
         <div className="space-y-6">{activeTabContent}</div>
       </div>
 
+      {/* Reject dialog */}
       <Dialog open={rejectOpen} onClose={() => setRejectOpen(false)} title="Reject staff profile" size="sm">
         <div className="space-y-4">
-          <Input
-            label="Rejection reason"
-            placeholder="Rejection reason"
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-          />
+          <Input label="Rejection reason" placeholder="Rejection reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setRejectOpen(false)}>Cancel</Button>
-            <Button
-              variant="danger"
-              loading={reject.isPending}
-              disabled={!rejectReason.trim()}
-              onClick={() => reject.mutate({ id: staffId, reason: rejectReason.trim() })}
-            >
-              Reject
-            </Button>
+            <Button variant="danger" loading={reject.isPending} disabled={!rejectReason.trim()} onClick={() => reject.mutate({ id: staffId, reason: rejectReason.trim() })}>Reject</Button>
           </div>
         </div>
       </Dialog>
