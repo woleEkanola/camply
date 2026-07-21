@@ -53,7 +53,7 @@ const CampusDetailsPage = () => {
     return (
       <AppShell area="admin">
         <div className="flex h-96 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-purple-600" />
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-accent-600" />
         </div>
       </AppShell>
     );
@@ -116,7 +116,7 @@ const CampusDetailsPage = () => {
 
         {/* CAMPUS IDENTITY EMBLEM & TITLE */}
         <div className="space-y-3 pt-2">
-          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-purple-100/70 text-purple-700 text-3xl font-medium shadow-2xs">
+          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-accent-100/70 text-accent-700 text-3xl font-medium shadow-2xs">
             ⛪
           </div>
 
@@ -144,7 +144,7 @@ const CampusDetailsPage = () => {
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`pb-3 text-xs font-semibold border-b-2 transition-all ${
                   activeTab === tab.id
-                    ? "border-purple-600 text-purple-700 font-bold"
+                    ? "border-accent-600 text-accent-700 font-bold"
                     : "border-transparent text-neutral-500 hover:text-neutral-900"
                 }`}
               >
@@ -161,7 +161,7 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs">
                     📍
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Campus Information</h3>
@@ -171,7 +171,7 @@ const CampusDetailsPage = () => {
                   href={`https://maps.google.com/?q=${encodeURIComponent(formattedAddress)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 hover:underline"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-accent-700 hover:underline"
                 >
                   <span>View on map</span>
                   <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
@@ -190,7 +190,7 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs">
                     🔗
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Signup Link</h3>
@@ -209,7 +209,7 @@ const CampusDetailsPage = () => {
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-purple-50 text-purple-700 font-semibold text-xs hover:bg-purple-100 transition-colors"
+                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50 text-accent-700 font-semibold text-xs hover:bg-accent-100 transition-colors"
                 >
                   <ClipboardDocumentIcon className="h-4 w-4" />
                   {copiedLink ? "Copied!" : "Copy Link"}
@@ -218,7 +218,7 @@ const CampusDetailsPage = () => {
                 <button
                   type="button"
                   onClick={() => setActiveTab("registrations")}
-                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-purple-50 text-purple-700 font-semibold text-xs hover:bg-purple-100 transition-colors"
+                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50 text-accent-700 font-semibold text-xs hover:bg-accent-100 transition-colors"
                 >
                   <ChartBarIcon className="h-4 w-4" />
                   View Link Analytics
@@ -230,7 +230,7 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs">
                     📊
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Registration Capacity</h3>
@@ -239,7 +239,7 @@ const CampusDetailsPage = () => {
                 <button
                   type="button"
                   onClick={() => router.push("/admin/campuses")}
-                  className="text-xs font-semibold text-purple-700 hover:underline"
+                  className="text-xs font-semibold text-accent-700 hover:underline"
                 >
                   Edit
                 </button>
@@ -273,7 +273,7 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs">
                     👥
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Campus Representatives</h3>
@@ -291,7 +291,7 @@ const CampusDetailsPage = () => {
                   {repsList.map((rep: any) => (
                     <div key={rep.id} className="flex items-center justify-between pt-2 first:pt-0">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-200 text-purple-900 text-xs font-bold">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-200 text-accent-900 text-xs font-bold">
                           {rep.firstName ? rep.firstName[0] : rep.email[0]}
                         </div>
                         <div className="min-w-0">
@@ -302,7 +302,7 @@ const CampusDetailsPage = () => {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-[10px] font-semibold text-purple-700">
+                        <span className="rounded-full bg-accent-50 px-2.5 py-0.5 text-[10px] font-semibold text-accent-700">
                           Campus Rep
                         </span>
                         <ChevronRightIcon className="h-4 w-4 text-neutral-400" />
@@ -316,7 +316,7 @@ const CampusDetailsPage = () => {
                 <button
                   type="button"
                   onClick={() => router.push("/admin/campuses")}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-purple-700 hover:text-purple-800"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-accent-700 hover:text-accent-800"
                 >
                   <PlusIcon className="h-4 w-4 stroke-[2.5]" />
                   <span>Add Representative</span>
@@ -329,7 +329,7 @@ const CampusDetailsPage = () => {
               <button
                 type="button"
                 onClick={() => router.push("/admin/campuses")}
-                className="flex-1 inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold text-xs transition-all active:scale-98"
+                className="flex-1 inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-accent-50 text-accent-700 hover:bg-accent-100 font-bold text-xs transition-all active:scale-98"
               >
                 <PencilIcon className="h-4 w-4" />
                 Edit Campus
@@ -365,7 +365,7 @@ const CampusDetailsPage = () => {
                       </p>
                       <p className="text-[11px] text-neutral-500">{rep.email}</p>
                     </div>
-                    <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-[10px] font-semibold text-purple-700">
+                    <span className="rounded-full bg-accent-50 px-2.5 py-0.5 text-[10px] font-semibold text-accent-700">
                       Campus Rep
                     </span>
                   </div>

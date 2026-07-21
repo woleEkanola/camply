@@ -90,7 +90,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
             type="button"
             onClick={() => setIsFilterMenuOpen((prev) => !prev)}
             className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl border border-neutral-200/80 bg-white text-neutral-600 hover:bg-neutral-50 transition-colors ${
-              statusFilter !== "ALL" ? "border-purple-500 text-purple-600 bg-purple-50/50" : ""
+              statusFilter !== "ALL" ? "border-accent-500 text-accent-600 bg-accent-50/50" : ""
             }`}
             title="Filter campuses"
           >
@@ -112,7 +112,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
                   }}
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold ${
                     statusFilter === opt
-                      ? "bg-purple-50 text-purple-700"
+                      ? "bg-accent-50 text-accent-700"
                       : "text-neutral-700 hover:bg-neutral-50"
                   }`}
                 >
@@ -128,7 +128,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
           <button
             type="button"
             onClick={onOpenCreateModal}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl bg-purple-600 text-white shadow-md hover:bg-purple-700 active:scale-95 transition-all"
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl bg-accent-600 text-white shadow-md hover:bg-accent-700 active:scale-95 transition-all"
             title="Add Campus"
           >
             <PlusIcon className="h-6 w-6 stroke-[2.5]" />
@@ -151,7 +151,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
           <button
             type="button"
             onClick={() => setIsSortMenuOpen((prev) => !prev)}
-            className="inline-flex items-center gap-1 font-semibold text-neutral-700 hover:text-purple-700 transition-colors"
+            className="inline-flex items-center gap-1 font-semibold text-neutral-700 hover:text-accent-700 transition-colors"
           >
             <span>Sort: {getSortLabel(sortBy)}</span>
             <ChevronDownIcon className="h-3.5 w-3.5 text-neutral-400" />
@@ -178,7 +178,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
                   }}
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold ${
                     sortBy === opt.id
-                      ? "bg-purple-50 text-purple-700"
+                      ? "bg-accent-50 text-accent-700"
                       : "text-neutral-700 hover:bg-neutral-50"
                   }`}
                 >
