@@ -14,6 +14,7 @@ import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickP
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { MobileRegistrationsView } from "./MobileRegistrationsView";
 import { RegistrationReviewWorkspace } from "./RegistrationReviewWorkspace";
+import { RegistrationDetailsDrawer } from "./RegistrationDetailsDrawer";
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   APPROVED: "success",
@@ -231,9 +232,9 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
 
   if (selectedRegistrationId) {
     return (
-      <RegistrationReviewWorkspace
+      <RegistrationDetailsDrawer
         registrationId={selectedRegistrationId}
-        onBack={() => setSelectedRegistrationId(null)}
+        onClose={() => setSelectedRegistrationId(null)}
       />
     );
   }
