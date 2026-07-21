@@ -74,6 +74,7 @@ test.describe("Teachers page: Campus column, filters, venue assignment", () => {
   test("Campus column renders and the Campus filter narrows the list", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/teachers");
+    await page.getByRole("button", { name: "List", exact: true }).click();
     await showAllRows(page);
 
     const row = page.locator("tr", { hasText: "FilterTeacher" });
@@ -95,6 +96,7 @@ test.describe("Teachers page: Campus column, filters, venue assignment", () => {
     try {
       await loginWithPassword(page, "owner@camply.com", "password123");
       await page.goto("/admin/teachers");
+      await page.getByRole("button", { name: "List", exact: true }).click();
       await showAllRows(page);
 
       const row = page.locator("tr", { hasText: "FilterTeacher" });
@@ -121,6 +123,7 @@ test.describe("Teachers page: Campus column, filters, venue assignment", () => {
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/teachers");
+    await page.getByRole("button", { name: "List", exact: true }).click();
     await showAllRows(page);
 
     const row = page.locator("tr", { hasText: "SoleVenueTeacher" });
