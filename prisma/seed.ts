@@ -276,35 +276,6 @@ async function main() {
     });
   }
 
-  // Document requirements for the demo camp
-  const existingDocRequirements = await prisma.documentRequirement.count({ where: { campId: camp.id } });
-  if (existingDocRequirements === 0) {
-    await prisma.documentRequirement.createMany({
-      data: [
-        {
-          campId: camp.id,
-          name: "Birth Certificate",
-          description: "A clear photo or scan of the camper's birth certificate.",
-          required: true,
-          acceptedFormats: "jpg,png",
-          maxSizeMb: 2,
-          scope: "CAMPER",
-          sortOrder: 0,
-        },
-        {
-          campId: camp.id,
-          name: "Parent Consent Form",
-          description: "Signed consent form for this camp.",
-          required: true,
-          acceptedFormats: "jpg,png",
-          maxSizeMb: 2,
-          scope: "REGISTRATION",
-          sortOrder: 1,
-        },
-      ],
-    });
-  }
-
   const campusRep = await prisma.user.upsert({
     where: { email: campusRepEmail },
     update: {},
