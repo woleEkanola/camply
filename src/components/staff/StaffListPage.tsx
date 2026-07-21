@@ -19,7 +19,6 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { Select, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { StaffDetailDrawer } from "@/components/staff/StaffDetailDrawer";
 import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 
@@ -50,21 +49,16 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const { data: activeYear } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
   const campId = activeYear?.id ?? "";
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const openStaffParam = searchParams.get("openStaff") || searchParams.get("staffId") || searchParams.get("userId") || searchParams.get("open") || searchParams.get("id");
   const queryParam = searchParams.get("q");
 
   useEffect(() => {
-    if (openStaffParam) {
-      setSelectedId(openStaffParam);
-    }
     if (queryParam) {
       setSearchQuery(queryParam);
     }
-  }, [openStaffParam, queryParam]);
+  }, [queryParam]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -463,7 +457,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         columns={columns}
         data={allLoadedItems}
         rowKey={(row) => row.id}
-        onRowClick={(row) => setSelectedId(row.id)}
+        onRowClick={(row) => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
         actions={actions}
         isLoading={isLoading && allLoadedItems.length === 0}
         emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
@@ -485,10 +479,6 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           ) : null
         }
       />
-
-      {selectedId && campId && (
-        <StaffDetailDrawer staffId={selectedId} organizationId={organizationId} campId={campId} onClose={() => setSelectedId(null)} />
-      )}
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
         <p className="text-sm text-neutral-500">

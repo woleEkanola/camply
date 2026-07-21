@@ -224,6 +224,7 @@ export const staffRouter = createTRPCRouter({
           directReports: { include: { user: true } },
           assignedHostel: true,
           assignedRoom: true,
+          assignedBed: true,
           fieldValues: { include: { field: true } },
           camperAssignments: { include: { registration: { include: { camper: true, tribe: true, room: true } } } },
         },
