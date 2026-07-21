@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { api } from "@/utils/trpc";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Table } from "@/components/ui/Table";
@@ -11,6 +11,9 @@ import { isEndorsed } from "@/server/registration/endorsement";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
 import { Dialog } from "@/components/ui/Dialog";
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
+import { useIsMobile } from "@/hooks/useMediaQuery";
+import { MobileRegistrationsView } from "./MobileRegistrationsView";
+import { RegistrationReviewWorkspace } from "./RegistrationReviewWorkspace";
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   APPROVED: "success",
@@ -42,13 +45,17 @@ interface RegistrationQueueProps {
 
 export function RegistrationQueue({ organizationId, managedCampuses }: RegistrationQueueProps) {
   const campusId = managedCampuses[0];
+  const isMobile = useIsMobile();
 
   const [statusFilter, setStatusFilter] = React.useState<string | "ALL">("ALL");
   const [consentFilter, setConsentFilter] = React.useState<"ALL" | "UPLOADED" | "NOT_UPLOADED">("ALL");
   const [reviewStateFilter, setReviewStateFilter] = React.useState<"ALL" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("ALL");
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [actionError, setActionError] = React.useState("");
   const [documentRegId, setDocumentRegId] = React.useState<string | null>(null);
   const [profileCamperId, setProfileCamperId] = React.useState<string | null>(null);
+  const [selectedRegistrationId, setSelectedRegistrationId] = React.useState<string | null>(null);
 
   const { data: org } = api.organization.getById.useQuery(
     { id: organizationId },
@@ -164,10 +171,6 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
     },
   ];
 
-  // Rendered via the Table's dedicated `actions` prop (a right-aligned
-  // footer row on desktop, a full-width footer row on the mobile card)
-  // rather than as a regular column — action buttons crammed into the
-  // mobile card's label/value body grid read poorly.
   const rowActions = (reg: Registration) => {
     const endorsed = isEndorsed(reg.review);
     return (
@@ -214,17 +217,26 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   }));
 
   const filteredRegs = allRegs.filter((reg) => {
-    const statusMatch = statusFilter === "ALL" || reg.status === statusFilter;
-    const consentMatch =
-      consentFilter === "ALL" ||
-      (consentFilter === "UPLOADED" && reg.parentConsent) ||
-      (consentFilter === "NOT_UPLOADED" && !reg.parentConsent);
-    return statusMatch && consentMatch;
+    const statusMatch = statusFilter === "ALL" || statusFilter === "" || reg.status === statusFilter;
+    const searchMatch = !searchQuery || JSON.stringify(reg).toLowerCase().includes(searchQuery.toLowerCase());
+    return statusMatch && searchMatch;
   });
 
   const approvedCount = allRegs.filter((r) => r.status === "APPROVED").length;
+  const pendingCount = allRegs.filter((r) => r.status === "PENDING").length;
+  const checkedInCount = allRegs.filter((r) => r.status === "CHECKED_IN").length;
+  const rejectedCount = allRegs.filter((r) => r.status === "REJECTED").length;
   const campusQuota = signupLink?.quota ?? 0;
   const quotaLabel = campusQuota > 0 ? `${approvedCount} / ${campusQuota}` : `${approvedCount} (no limit)`;
+
+  if (selectedRegistrationId) {
+    return (
+      <RegistrationReviewWorkspace
+        registrationId={selectedRegistrationId}
+        onBack={() => setSelectedRegistrationId(null)}
+      />
+    );
+  }
 
   return (
     <>
@@ -248,44 +260,82 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         </div>
       )}
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-3">
-          <Select label="Status" containerClassName="w-36" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
-            <option value="ALL">All</option>
-            <option value="PENDING">Pending</option>
-            <option value="REQUIRES_ACTION">Requires Action</option>
-            <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
-            <option value="CANCELLED">Cancelled</option>
-          </Select>
-
-          {/* Consent Form filter removed */}
-
-          {isTwoStep && (
-            <Select label="Review State" containerClassName="w-48" value={reviewStateFilter} onChange={(e) => setReviewStateFilter(e.target.value as any)}>
-              <option value="ALL">All</option>
-              <option value="AWAITING_VETTING">Awaiting Vetting</option>
-              <option value="AWAITING_FINAL">Awaiting Final Approval</option>
-              <option value="AWAITING_DOCUMENT_REPLACEMENT">Awaiting Document Replacement</option>
-            </Select>
-          )}
-        </div>
-        <div className="text-sm text-neutral-600">
-          Approved quota: <span className="font-medium">{quotaLabel}</span>
-        </div>
+      <div className="md:hidden">
+        <MobileRegistrationsView
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onOpenFilters={() => {}}
+          filterStatus={statusFilter === "ALL" ? "" : statusFilter}
+          onSelectStatusFilter={(st) => setStatusFilter(st || "ALL")}
+          stats={{
+            totalCount: allRegs.length,
+            pendingCount,
+            approvedCount,
+            checkedInCount,
+            rejectedCount,
+          }}
+          registrations={filteredRegs}
+          selectedIds={selectedIds}
+          onSelectRow={(id, checked) => {
+            if (checked) setSelectedIds((prev) => [...prev, id]);
+            else setSelectedIds((prev) => prev.filter((i) => i !== id));
+          }}
+          onCardClick={(reg) => setSelectedRegistrationId(reg.id)}
+          onApprove={(reg) => {
+            if (isTwoStep) endorseMutation.mutate({ registrationId: reg.id });
+            else approveMutation.mutate({ registrationId: reg.id });
+          }}
+          onReject={(reg) => handleReject(reg)}
+          onQuickAction={(reg, action) => {
+            if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
+              setProfileCamperId(reg.camper?.id || reg.id);
+            } else if (action === "DELETE") {
+              handleReject(reg);
+            }
+          }}
+          onClearSelection={() => setSelectedIds([])}
+          isLoading={isLoading}
+        />
       </div>
 
-      <Table
-        mode="local"
-        columns={columns}
-        data={filteredRegs}
-        rowKey={(reg) => reg.id}
-        onRowClick={(reg) => setProfileCamperId(reg.camper.id)}
-        actions={rowActions}
-        isLoading={isLoading}
-        emptyTitle="No registrations found"
-        emptyDescription="No registrations match your current filters."
-      />
+      <div className="hidden md:block">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-3">
+            <Select label="Status" containerClassName="w-36" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
+              <option value="ALL">All</option>
+              <option value="PENDING">Pending</option>
+              <option value="REQUIRES_ACTION">Requires Action</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
+              <option value="CANCELLED">Cancelled</option>
+            </Select>
+
+            {isTwoStep && (
+              <Select label="Review State" containerClassName="w-48" value={reviewStateFilter} onChange={(e) => setReviewStateFilter(e.target.value as any)}>
+                <option value="ALL">All</option>
+                <option value="AWAITING_VETTING">Awaiting Vetting</option>
+                <option value="AWAITING_FINAL">Awaiting Final Approval</option>
+                <option value="AWAITING_DOCUMENT_REPLACEMENT">Awaiting Document Replacement</option>
+              </Select>
+            )}
+          </div>
+          <div className="text-sm text-neutral-600">
+            Approved quota: <span className="font-medium">{quotaLabel}</span>
+          </div>
+        </div>
+
+        <Table
+          mode="local"
+          columns={columns}
+          data={filteredRegs}
+          rowKey={(reg) => reg.id}
+          onRowClick={(reg) => setProfileCamperId(reg.camper.id)}
+          actions={rowActions}
+          isLoading={isLoading}
+          emptyTitle="No registrations found"
+          emptyDescription="No registrations match your current filters."
+        />
+      </div>
 
       <Dialog open={!!documentRegId} onClose={() => setDocumentRegId(null)} title="Registration Documents">
         {documentRegId && <RegistrationDocumentPanel registrationId={documentRegId} />}

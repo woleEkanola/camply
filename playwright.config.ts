@@ -34,7 +34,12 @@ export default defineConfig({
     {
       name: "Mobile Chrome",
       testMatch: /mobile-.*\.spec\.ts$/,
-      use: { ...devices["Pixel 5"] },
+      use: {
+        ...devices["Pixel 5"],
+        launchOptions: {
+          args: ["--window-size=390,844"],
+        },
+      },
     },
   ],
   // The Systems Rule protocol boots the server itself (clean build -> start -> poll)

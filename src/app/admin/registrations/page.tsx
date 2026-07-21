@@ -32,6 +32,8 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { FunnelIcon } from "@heroicons/react/24/outline";
 import { CommunicationTimeline } from "@/components/communication/CommunicationTimeline";
+import { MobileRegistrationsView } from "@/components/staff/shared/MobileRegistrationsView";
+import { RegistrationReviewWorkspace } from "@/components/staff/shared/RegistrationReviewWorkspace";
 
 type ExtendedUser = {
   id: string;
@@ -537,105 +539,141 @@ function RegistrationsPage() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
-        <StatCard
-          label="Total Registrations"
-          value={statsTotalCount}
-          selected={filterStatus === "" && reviewStateFilter === ""}
-          onClick={() => {
+      {isMobile ? (
+        <MobileRegistrationsView
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onOpenFilters={() => setFiltersOpen(true)}
+          filterStatus={filterStatus}
+          onSelectStatusFilter={(s) => {
             setReviewStateFilter("");
-            setFilterStatus("");
+            setFilterStatus(s);
           }}
+          stats={{
+            totalCount: statsTotalCount,
+            pendingCount: kpi["PENDING"] ?? 0,
+            approvedCount: kpi["APPROVED"] ?? 0,
+            checkedInCount: kpi["CHECKED_IN"] ?? 0,
+            rejectedCount: kpi["REJECTED"] ?? 0,
+          }}
+          registrations={registrations}
+          selectedIds={selectedIds}
+          onSelectRow={(id, checked) => {
+            if (checked) setSelectedIds((prev) => [...prev, id]);
+            else setSelectedIds((prev) => prev.filter((i) => i !== id));
+          }}
+          onCardClick={(reg) => setSelectedRegistration(reg.id)}
+          onApprove={(reg) => bulkTransition.mutate({ ids: [reg.id], action: "APPROVE" })}
+          onReject={(reg) => {
+            setSelectedIds([reg.id]);
+            setBulkAction("REJECT");
+            setBulkReason("");
+          }}
+          onQuickAction={(reg, action) => {
+            if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
+              setSelectedRegistration(reg.id);
+            } else if (action === "DELETE") {
+              setSelectedIds([reg.id]);
+              setBulkAction("DELETE");
+            }
+          }}
+          onBulkApprove={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}
+          onBulkReject={() => {
+            setBulkAction("REJECT");
+            setBulkReason("");
+          }}
+          onBulkReassign={() => setBulkReassignOpen(true)}
+          onBulkDelete={() => setBulkAction("DELETE")}
+          onClearSelection={() => setSelectedIds([])}
+          isLoading={isLoading}
+          nextCursor={data?.nextCursor}
+          onLoadMore={() => setCursor(data?.nextCursor)}
         />
-        {isTwoStep && (
-          <>
+      ) : (
+        <div>
+          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
             <StatCard
-              label="Awaiting Vetting"
-              value={awaitingVettingCount}
-              selected={reviewStateFilter === "AWAITING_VETTING"}
+              label="Total Registrations"
+              value={statsTotalCount}
+              selected={filterStatus === "" && reviewStateFilter === ""}
               onClick={() => {
+                setReviewStateFilter("");
                 setFilterStatus("");
-                setReviewStateFilter(reviewStateFilter === "AWAITING_VETTING" ? "" : "AWAITING_VETTING");
               }}
             />
-            <StatCard
-              label="Awaiting Final Approval"
-              value={awaitingFinalCount}
-              selected={reviewStateFilter === "AWAITING_FINAL"}
-              onClick={() => {
-                setFilterStatus("");
-                setReviewStateFilter(reviewStateFilter === "AWAITING_FINAL" ? "" : "AWAITING_FINAL");
-              }}
-            />
-          </>
-        )}
-        {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"].map((s) => (
-          <StatCard
-            key={s}
-            label={s === "PENDING" && isTwoStep ? "Waiting Decision" : s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
-            value={kpi[s] ?? 0}
-            selected={filterStatus === s}
-            onClick={() => {
-              setReviewStateFilter("");
-              setFilterStatus(filterStatus === s ? "" : s);
-            }}
-          />
-        ))}
-      </div>
-
-      {bulkResult && (
-        <div className={cn("mb-4 rounded-md p-3 text-sm", bulkResult.type === "success" ? "bg-success-50 text-success-700" : "bg-danger-50 text-danger-700")}>
-          <span>{bulkResult.message}</span>
-          <button onClick={() => setBulkResult(null)} className="ml-3 text-xs underline">Dismiss</button>
-        </div>
-      )}
-
-      <BulkActionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
-        <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}>
-          Approve
-        </Button>
-        <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "WAITLIST" })}>
-          Waitlist
-        </Button>
-        <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT"); setBulkReason(""); }}>
-          Reject
-        </Button>
-        <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REQUEST_CORRECTION"); setBulkReason(""); }}>
-          Request Correction
-        </Button>
-        <Button size="sm" variant="secondary" loading={bulkTransition.isPending && bulkTransition.variables?.action === "ARCHIVE"} onClick={() => {
-          if (window.confirm(`Archive ${selectedIds.length} selected registration${selectedIds.length === 1 ? "" : "s"}?`)) {
-            bulkTransition.mutate({ ids: selectedIds, action: "ARCHIVE" });
-          }
-        }}>
-          Archive
-        </Button>
-        <Button size="sm" variant="secondary" onClick={() => setBulkReassignOpen(true)}>
-          Reassign Campus
-        </Button>
-        <Button size="sm" variant="danger" data-testid="bulk-delete-button" loading={bulkSoftDelete.isPending} onClick={() => setBulkAction("DELETE")}>
-          Delete
-        </Button>
-      </BulkActionBar>
-
-      <div className="mb-4 grid gap-3 md:grid-cols-3">
-        <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
-        {isMobile ? (
-          <Button
-            variant="secondary"
-            icon={<FunnelIcon className="h-4 w-4" />}
-            onClick={() => setFiltersOpen(true)}
-          >
-            {/* flex-1 alone (without overriding the button's own
-                justify-center) is enough to push the badge to the end —
-                cn() doesn't resolve two justify-* utilities predictably. */}
-            <span className="flex-1 text-left">Filters</span>
-            {(filterCampus || filterStatus) && (
-              <Badge tone="info">{[filterCampus, filterStatus].filter(Boolean).length}</Badge>
+            {isTwoStep && (
+              <>
+                <StatCard
+                  label="Awaiting Vetting"
+                  value={awaitingVettingCount}
+                  selected={reviewStateFilter === "AWAITING_VETTING"}
+                  onClick={() => {
+                    setFilterStatus("");
+                    setReviewStateFilter(reviewStateFilter === "AWAITING_VETTING" ? "" : "AWAITING_VETTING");
+                  }}
+                />
+                <StatCard
+                  label="Awaiting Final Approval"
+                  value={awaitingFinalCount}
+                  selected={reviewStateFilter === "AWAITING_FINAL"}
+                  onClick={() => {
+                    setFilterStatus("");
+                    setReviewStateFilter(reviewStateFilter === "AWAITING_FINAL" ? "" : "AWAITING_FINAL");
+                  }}
+                />
+              </>
             )}
-          </Button>
-        ) : (
-          <>
+            {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"].map((s) => (
+              <StatCard
+                key={s}
+                label={s === "PENDING" && isTwoStep ? "Waiting Decision" : s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
+                value={kpi[s] ?? 0}
+                selected={filterStatus === s}
+                onClick={() => {
+                  setReviewStateFilter("");
+                  setFilterStatus(filterStatus === s ? "" : s);
+                }}
+              />
+            ))}
+          </div>
+
+          {bulkResult && (
+            <div className={cn("mb-4 rounded-md p-3 text-sm", bulkResult.type === "success" ? "bg-success-50 text-success-700" : "bg-danger-50 text-danger-700")}>
+              <span>{bulkResult.message}</span>
+              <button onClick={() => setBulkResult(null)} className="ml-3 text-xs underline">Dismiss</button>
+            </div>
+          )}
+
+          <BulkActionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
+            <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}>
+              Approve
+            </Button>
+            <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "WAITLIST" })}>
+              Waitlist
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT"); setBulkReason(""); }}>
+              Reject
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REQUEST_CORRECTION"); setBulkReason(""); }}>
+              Request Correction
+            </Button>
+            <Button size="sm" variant="secondary" loading={bulkTransition.isPending && bulkTransition.variables?.action === "ARCHIVE"} onClick={() => {
+              if (window.confirm(`Archive ${selectedIds.length} selected registration${selectedIds.length === 1 ? "" : "s"}?`)) {
+                bulkTransition.mutate({ ids: selectedIds, action: "ARCHIVE" });
+              }
+            }}>
+              Archive
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setBulkReassignOpen(true)}>
+              Reassign Campus
+            </Button>
+            <Button size="sm" variant="danger" data-testid="bulk-delete-button" loading={bulkSoftDelete.isPending} onClick={() => setBulkAction("DELETE")}>
+              Delete
+            </Button>
+          </BulkActionBar>
+
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
             <Select value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
               <option value="">All Campuses</option>
               {campuses.map((c: any) => (
@@ -667,121 +705,62 @@ function RegistrationsPage() {
                 <option key={s} value={s}>{s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}</option>
               ))}
             </Select>
-          </>
-        )}
-      </div>
-
-      {/* Filter bottom-sheet — mobile only (see the "Filters" button above);
-          same filterCampus/filterStatus state as the desktop inline selects. */}
-      <Dialog
-        open={filtersOpen}
-        onClose={() => setFiltersOpen(false)}
-        title="Filters"
-        footer={
-          <div className="flex w-full gap-2">
-            {(filterCampus || filterStatus || reviewStateFilter) && (
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={() => { setFilterCampus(""); setFilterStatus(""); setReviewStateFilter(""); }}
-              >
-                Clear filters
-              </Button>
-            )}
-            <Button className="flex-1" onClick={() => setFiltersOpen(false)}>
-              Show results
-            </Button>
           </div>
-        }
-      >
-        <div className="space-y-4">
-          <Select label="Campus" value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
-            <option value="">All Campuses</option>
-            {campuses.map((c: any) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </Select>
-          <Select
-            label="Status"
-            data-testid="registration-status-filter"
-            value={reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val.startsWith("REVIEW_")) {
-                setFilterStatus("");
-                setReviewStateFilter(val.replace("REVIEW_", "") as any);
-              } else {
-                setFilterStatus(val);
-                setReviewStateFilter("");
-              }
-            }}
-          >
-            <option value="">All Statuses</option>
-            {isTwoStep && (
-              <>
-                <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval (Recommended)</option>
-                <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting (Pending)</option>
-              </>
-            )}
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>{s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}</option>
-            ))}
-          </Select>
-        </div>
-      </Dialog>
 
-      <Table
-        mode="controlled"
-        toolbar={
-          <span className="text-xs text-neutral-400">
-            Showing {registrations.length} of {data?.totalCount ?? 0} registration{(data?.totalCount ?? 0) === 1 ? "" : "s"}
-          </span>
-        }
-        columns={tableColumns}
-        data={registrations}
-        rowKey={(row) => row.id}
-        onRowClick={(row) => setSelectedRegistration(row.id)}
-        selectable
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-        isLoading={isLoading && registrations.length === 0}
-        emptyTitle="No registrations match your filters"
-        emptyDescription="Try adjusting search, centre, or status filters."
-        footer={
-          data?.nextCursor ? (
-            <div className="flex justify-center p-3 border-t border-neutral-100">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setCursor(data.nextCursor)}
-                loading={isLoading}
-              >
-                Load More
-              </Button>
-            </div>
-          ) : null
-        }
-        actions={(row) =>
-          row.status === "PENDING" ? (
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                size="sm"
-                loading={bulkTransition.isPending && bulkTransition.variables?.ids?.length === 1 && bulkTransition.variables.ids[0] === row.id && bulkTransition.variables.action === "APPROVE"}
-                onClick={() => bulkTransition.mutate({ ids: [row.id], action: "APPROVE" })}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
-              >
-                Reject
-              </Button>
-            </div>
-          ) : null
-        }
-      />
+          <Table
+            mode="controlled"
+            toolbar={
+              <span className="text-xs text-neutral-400">
+                Showing {registrations.length} of {data?.totalCount ?? 0} registration{(data?.totalCount ?? 0) === 1 ? "" : "s"}
+              </span>
+            }
+            columns={tableColumns}
+            data={registrations}
+            rowKey={(row) => row.id}
+            onRowClick={(row) => setSelectedRegistration(row.id)}
+            selectable
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            isLoading={isLoading && registrations.length === 0}
+            emptyTitle="No registrations match your filters"
+            emptyDescription="Try adjusting search, centre, or status filters."
+            footer={
+              data?.nextCursor ? (
+                <div className="flex justify-center p-3 border-t border-neutral-100">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setCursor(data.nextCursor)}
+                    loading={isLoading}
+                  >
+                    Load More
+                  </Button>
+                </div>
+              ) : null
+            }
+            actions={(row) =>
+              row.status === "PENDING" ? (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    size="sm"
+                    loading={bulkTransition.isPending && bulkTransition.variables?.ids?.length === 1 && bulkTransition.variables.ids[0] === row.id && bulkTransition.variables.action === "APPROVE"}
+                    onClick={() => bulkTransition.mutate({ ids: [row.id], action: "APPROVE" })}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
+        </div>
+      )}
 
       {selectedRegistration && (
         <RegistrationDetail registrationId={selectedRegistration} onClose={() => setSelectedRegistration(null)} />
