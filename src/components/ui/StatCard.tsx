@@ -37,7 +37,7 @@ export function StatCard({ label, value, insight, tone = "neutral", icon, onClic
       )}
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</span>
+        <span className="text-[11px] font-bold uppercase tracking-wide text-neutral-500 line-clamp-2 break-words leading-tight min-w-0 flex-1 pr-1">{label}</span>
         {icon && <span className={toneAccent[tone]}>{icon}</span>}
       </div>
       <span className="text-2xl font-semibold text-neutral-900">{value}</span>

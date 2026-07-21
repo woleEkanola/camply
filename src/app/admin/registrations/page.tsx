@@ -28,10 +28,9 @@ import { isEndorsed } from "@/server/registration/endorsement";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
 import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
 import { downloadBlob, exportUserDataToXlsx } from "@/lib/import-export/serialize";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import { FunnelIcon } from "@heroicons/react/24/outline";
-import { CommunicationTimeline } from "@/components/communication/CommunicationTimeline";
+import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
+import { MobileRegistrationCard, MobileRegistrationsView } from "@/components/staff/shared/MobileRegistrationsView";
 import { RegistrationDetailsDrawer } from "@/components/staff/shared/RegistrationDetailsDrawer";
 
 function RegistrationDetail({ registrationId, onClose }: { registrationId: string; onClose: () => void }) {
@@ -50,6 +49,7 @@ function RegistrationsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedRegistration, setSelectedRegistration] = useState<string | null>(null);
   const [filterCampus, setFilterCampus] = useState("");
@@ -318,7 +318,7 @@ function RegistrationsPage() {
         />
       ) : (
         <div>
-          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5">
             <StatCard
               label="Total Registrations"
               value={statsTotalCount}
@@ -399,93 +399,178 @@ function RegistrationsPage() {
             </Button>
           </BulkActionBar>
 
-          <div className="mb-4 grid gap-3 md:grid-cols-3">
-            <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
-            <Select value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
-              <option value="">All Campuses</option>
-              {campuses.map((c: any) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </Select>
-            <Select
-              data-testid="registration-status-filter"
-              value={reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val.startsWith("REVIEW_")) {
-                  setFilterStatus("");
-                  setReviewStateFilter(val.replace("REVIEW_", "") as any);
-                } else {
-                  setFilterStatus(val);
-                  setReviewStateFilter("");
-                }
-              }}
-            >
-              <option value="">All Statuses</option>
-              {isTwoStep && (
-                <>
-                  <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval (Recommended)</option>
-                  <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting (Pending)</option>
-                </>
-              )}
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}</option>
-              ))}
-            </Select>
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="grid flex-1 gap-3 md:grid-cols-3">
+              <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
+              <Select value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
+                <option value="">All Campuses</option>
+                {campuses.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </Select>
+              <Select
+                data-testid="registration-status-filter"
+                value={reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.startsWith("REVIEW_")) {
+                    setFilterStatus("");
+                    setReviewStateFilter(val.replace("REVIEW_", "") as any);
+                  } else {
+                    setFilterStatus(val);
+                    setReviewStateFilter("");
+                  }
+                }}
+              >
+                <option value="">All Statuses</option>
+                {isTwoStep && (
+                  <>
+                    <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval (Recommended)</option>
+                    <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting (Pending)</option>
+                  </>
+                )}
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}</option>
+                ))}
+              </Select>
+            </div>
+
+            {/* Desktop View Mode Toggle */}
+            <div className="flex items-center rounded-xl border border-neutral-200/80 bg-neutral-100/80 p-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode("card")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
+                  viewMode === "card"
+                    ? "bg-white text-purple-700 shadow-2xs"
+                    : "text-neutral-600 hover:text-neutral-900"
+                )}
+              >
+                <Squares2X2Icon className="h-4 w-4" />
+                <span>Card View</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
+                  viewMode === "list"
+                    ? "bg-white text-purple-700 shadow-2xs"
+                    : "text-neutral-600 hover:text-neutral-900"
+                )}
+              >
+                <TableCellsIcon className="h-4 w-4" />
+                <span>List View</span>
+              </button>
+            </div>
           </div>
 
-          <Table
-            mode="controlled"
-            toolbar={
-              <span className="text-xs text-neutral-400">
-                Showing {registrations.length} of {data?.totalCount ?? 0} registration{(data?.totalCount ?? 0) === 1 ? "" : "s"}
-              </span>
-            }
-            columns={tableColumns}
-            data={registrations}
-            rowKey={(row) => row.id}
-            onRowClick={(row) => setSelectedRegistration(row.id)}
-            selectable
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-            isLoading={isLoading && registrations.length === 0}
-            emptyTitle="No registrations match your filters"
-            emptyDescription="Try adjusting search, centre, or status filters."
-            footer={
-              data?.nextCursor ? (
-                <div className="flex justify-center p-3 border-t border-neutral-100">
+          {viewMode === "card" ? (
+            <div className="space-y-6">
+              {registrations.length === 0 ? (
+                <div className="rounded-2xl border border-neutral-200/80 bg-white p-12 text-center">
+                  <p className="text-base font-bold text-neutral-900">No registrations match your filters</p>
+                  <p className="mt-1 text-xs text-neutral-500">Try adjusting search, campus, or status filters.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {registrations.map((reg) => (
+                    <MobileRegistrationCard
+                      key={reg.id}
+                      registration={reg}
+                      isSelected={selectedIds.includes(reg.id)}
+                      onSelect={(id, checked) => {
+                        if (checked) setSelectedIds((prev) => Array.from(new Set([...prev, id])));
+                        else setSelectedIds((prev) => prev.filter((i) => i !== id));
+                      }}
+                      onClick={(r) => setSelectedRegistration(r.id)}
+                      onApprove={(r) => bulkTransition.mutate({ ids: [r.id], action: "APPROVE" })}
+                      onReject={(r) => {
+                        setSelectedIds([r.id]);
+                        setBulkAction("REJECT");
+                        setBulkReason("");
+                      }}
+                      onQuickAction={(r, action) => {
+                        if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
+                          setSelectedRegistration(r.id);
+                        } else if (action === "DELETE") {
+                          setSelectedIds([r.id]);
+                          setBulkAction("DELETE");
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {data?.nextCursor && (
+                <div className="flex justify-center pt-2">
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={() => setCursor(data.nextCursor)}
                     loading={isLoading}
                   >
-                    Load More
+                    Load More Registrations
                   </Button>
                 </div>
-              ) : null
-            }
-            actions={(row) =>
-              row.status === "PENDING" ? (
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button
-                    size="sm"
-                    loading={bulkTransition.isPending && bulkTransition.variables?.ids?.length === 1 && bulkTransition.variables.ids[0] === row.id && bulkTransition.variables.action === "APPROVE"}
-                    onClick={() => bulkTransition.mutate({ ids: [row.id], action: "APPROVE" })}
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
-                  >
-                    Reject
-                  </Button>
-                </div>
-              ) : null
-            }
-          />
+              )}
+            </div>
+          ) : (
+            <Table
+              mode="controlled"
+              toolbar={
+                <span className="text-xs text-neutral-400">
+                  Showing {registrations.length} of {data?.totalCount ?? 0} registration{(data?.totalCount ?? 0) === 1 ? "" : "s"}
+                </span>
+              }
+              columns={tableColumns}
+              data={registrations}
+              rowKey={(row) => row.id}
+              onRowClick={(row) => setSelectedRegistration(row.id)}
+              selectable
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              isLoading={isLoading && registrations.length === 0}
+              emptyTitle="No registrations match your filters"
+              emptyDescription="Try adjusting search, centre, or status filters."
+              footer={
+                data?.nextCursor ? (
+                  <div className="flex justify-center p-3 border-t border-neutral-100">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setCursor(data.nextCursor)}
+                      loading={isLoading}
+                    >
+                      Load More
+                    </Button>
+                  </div>
+                ) : null
+              }
+              actions={(row) =>
+                row.status === "PENDING" ? (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      size="sm"
+                      loading={bulkTransition.isPending && bulkTransition.variables?.ids?.length === 1 && bulkTransition.variables.ids[0] === row.id && bulkTransition.variables.action === "APPROVE"}
+                      onClick={() => bulkTransition.mutate({ ids: [row.id], action: "APPROVE" })}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                ) : null
+              }
+            />
+          )}
         </div>
       )}
 
