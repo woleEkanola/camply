@@ -20,6 +20,9 @@ import { Select, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
+import { StaffCardGrid } from "@/components/staff/StaffCardGrid";
+import { ViewModeToggle, type StaffViewMode } from "@/components/staff/ViewModeToggle";
+import { TeacherRecruitmentPanel } from "@/components/staff/TeacherRecruitmentPanel";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
@@ -60,6 +63,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     }
   }, [queryParam]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<StaffViewMode>("cards");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -403,18 +407,25 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <StatCard label="Assigned" value={stats?.assigned ?? 0} />
           <StatCard label="Unassigned" value={stats?.unassigned ?? 0} />
         </div>
-        <StaffLinkCard organizationId={organizationId} campId={campId} type={type} />
+        {type === "TEACHER" ? (
+          <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
+        ) : (
+          <StaffLinkCard organizationId={organizationId} campId={campId} type={type} />
+        )}
       </div>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-2">
-        <SearchBar placeholder="Name, email, or phone" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All Statuses</option>
-          <option value="PENDING">Pending</option>
-          <option value="APPROVED">Approved</option>
-          <option value="REJECTED">Rejected</option>
-          <option value="DEACTIVATED">Deactivated</option>
-        </Select>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-1 items-center gap-3">
+          <SearchBar placeholder="Name, email, or phone" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-auto min-w-[140px]">
+            <option value="">All Statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="DEACTIVATED">Deactivated</option>
+          </Select>
+        </div>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </div>
 
       <BulkActionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
@@ -451,34 +462,60 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         </Button>
       </BulkActionBar>
 
-      <Table
-        mode="controlled"
-        toolbar={<span className="text-xs text-neutral-400">{allLoadedItems.length} {type === "TEACHER" ? "teacher" : "volunteer"}{allLoadedItems.length === 1 ? "" : "s"}</span>}
-        columns={columns}
-        data={allLoadedItems}
-        rowKey={(row) => row.id}
-        onRowClick={(row) => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
-        actions={actions}
-        isLoading={isLoading && allLoadedItems.length === 0}
-        emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
-        emptyDescription="Try adjusting search or status filters, or share the registration link above."
-        selectable
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-        footer={
-          data?.nextCursor ? (
-            <div className="flex justify-center p-3 border-t border-neutral-200">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setCursor(data.nextCursor)}
-              >
+      {viewMode === "list" ? (
+        <Table
+          mode="controlled"
+          toolbar={<span className="text-xs text-neutral-400">{allLoadedItems.length} {type === "TEACHER" ? "teacher" : "volunteer"}{allLoadedItems.length === 1 ? "" : "s"}</span>}
+          columns={columns}
+          data={allLoadedItems}
+          rowKey={(row) => row.id}
+          onRowClick={(row) => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
+          actions={actions}
+          isLoading={isLoading && allLoadedItems.length === 0}
+          emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
+          emptyDescription="Try adjusting search or status filters, or share the registration link above."
+          selectable
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          footer={
+            data?.nextCursor ? (
+              <div className="flex justify-center p-3 border-t border-neutral-200">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setCursor(data.nextCursor)}
+                >
+                  Load More
+                </Button>
+              </div>
+            ) : null
+          }
+        />
+      ) : (
+        <>
+          <div className="mb-3 text-xs text-neutral-400">
+            {allLoadedItems.length} {type === "TEACHER" ? "teacher" : "volunteer"}{allLoadedItems.length === 1 ? "" : "s"}
+          </div>
+          <StaffCardGrid
+            items={allLoadedItems}
+            type={type}
+            onRowClick={(row) => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
+            actions={actions}
+            isLoading={isLoading && allLoadedItems.length === 0}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
+            emptyDescription="Try adjusting search or status filters, or share the registration link above."
+          />
+          {data?.nextCursor && (
+            <div className="flex justify-center p-3">
+              <Button variant="secondary" size="sm" onClick={() => setCursor(data.nextCursor)}>
                 Load More
               </Button>
             </div>
-          ) : null
-        }
-      />
+          )}
+        </>
+      )}
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
         <p className="text-sm text-neutral-500">
