@@ -5,6 +5,8 @@ import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/Button";
 import { BoltIcon, BoltSlashIcon } from "@heroicons/react/24/solid";
 
+import { normalizeScannedQRToken } from "@/lib/qr";
+
 interface CameraScannerProps {
   onScanSuccess: (decodedText: string) => void;
   onScanFailure?: (error: string) => void;
@@ -84,7 +86,8 @@ export function CameraScanner({ onScanSuccess, onScanFailure, active }: CameraSc
           },
           (decodedText) => {
             playBeep();
-            onScanSuccess(decodedText);
+            const normalized = normalizeScannedQRToken(decodedText);
+            onScanSuccess(normalized || decodedText);
           },
           (errorMessage) => {
             if (onScanFailure) onScanFailure(errorMessage);

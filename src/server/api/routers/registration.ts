@@ -7,6 +7,7 @@ import { RegistrationValidationError } from "../../registration/validation";
 import { IllegalTransitionError } from "../../registration/stateMachine";
 import { runSideEffectsNow } from "../../registration/effects";
 import { assertOrgAdminOrCampusRep, assertOrgAdmin } from "../trpc/scoping";
+import { normalizeScannedQRToken } from "@/lib/qr";
 
 function toTRPCError(error: unknown): TRPCError {
   if (error instanceof RegistrationValidationError) {
@@ -1344,21 +1345,51 @@ export const registrationRouter = createTRPCRouter({
       };
 
       let registrations: any[] = [];
-      if (input.qrToken) {
-        const registration = await ctx.prisma.registration.findFirst({
-          where: { ...baseWhere, qrToken: input.qrToken },
+      const rawToken = input.qrToken || input.query || "";
+      const normalizedToken = normalizeScannedQRToken(rawToken);
+
+      if (normalizedToken) {
+        let registration = await ctx.prisma.registration.findFirst({
+          where: {
+            ...baseWhere,
+            OR: [
+              { qrToken: normalizedToken },
+              { id: normalizedToken },
+              { registrationNumber: { equals: normalizedToken, mode: "insensitive" } },
+              { camperId: normalizedToken },
+            ],
+          },
           include,
         });
+
+        if (!registration) {
+          registration = await ctx.prisma.registration.findFirst({
+            where: {
+              campus: campusFilter,
+              deletedAt: null,
+              OR: [
+                { qrToken: normalizedToken },
+                { id: normalizedToken },
+                { registrationNumber: { equals: normalizedToken, mode: "insensitive" } },
+                { camperId: normalizedToken },
+                { registrationNumber: { contains: normalizedToken, mode: "insensitive" } },
+              ],
+            },
+            include,
+          });
+        }
+
         registrations = registration ? [registration] : [];
       } else if (input.query) {
+        const queryClean = input.query.trim();
         registrations = await ctx.prisma.registration.findMany({
           where: {
             ...baseWhere,
             OR: [
-              { registrationNumber: { contains: input.query, mode: "insensitive" } },
-              { camper: { name: { contains: input.query, mode: "insensitive" } } },
-              { camper: { user: { email: { contains: input.query, mode: "insensitive" } } } },
-              { camper: { user: { phone: { contains: input.query, mode: "insensitive" } } } },
+              { registrationNumber: { contains: queryClean, mode: "insensitive" } },
+              { camper: { name: { contains: queryClean, mode: "insensitive" } } },
+              { camper: { user: { email: { contains: queryClean, mode: "insensitive" } } } },
+              { camper: { user: { phone: { contains: queryClean, mode: "insensitive" } } } },
             ],
           },
           include,
