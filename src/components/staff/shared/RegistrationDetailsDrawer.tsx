@@ -85,6 +85,11 @@ export function RegistrationDetailsDrawer({
     { enabled: !!orgId }
   );
   const campuses = campusesData ?? [];
+  const { data: formFieldsData } = api.formField.list.useQuery(
+    { organizationId: orgId ?? "", audience: "CAMPER" },
+    { enabled: !!orgId }
+  );
+  const formFields = formFieldsData ?? [];
   const { data: commTimeline } = api.communication.timelineForRegistration.useQuery({ registrationId });
 
   const invalidate = () => {
@@ -518,7 +523,7 @@ export function RegistrationDetailsDrawer({
                 <div className="rounded-xl bg-info-50 p-3 text-xs text-info-700 border border-info-200">
                   <strong>Consent Form</strong> is tracked separately for camper authorization.
                 </div>
-                <CamperProfileView camper={registration.camper as any} />
+                <CamperProfileView camper={registration.camper as any} registration={registration as any} formFields={formFields as any} />
               </div>
             )}
 

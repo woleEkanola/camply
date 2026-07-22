@@ -6,6 +6,24 @@ import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 
 interface CamperProfileViewProps {
+  registration?: {
+    id?: string;
+    registrationNumber?: string | null;
+    status?: string | null;
+    camp?: { id: string; name: string } | null;
+    campus?: { id: string; name: string } | null;
+    venue?: { id: string; name: string } | null;
+    tribe?: { id: string; name: string } | null;
+  } | null;
+  formFields?: Array<{
+    id: string;
+    name: string;
+    label: string;
+    type: string;
+    source: string;
+    systemKey?: string | null;
+    groupLabel?: string | null;
+  }> | null;
   camper: {
     id: string;
     name: string;
@@ -76,8 +94,34 @@ function formatDate(dob: string | Date | null | undefined) {
   return new Date(dob).toLocaleDateString();
 }
 
-export function CamperProfileView({ camper }: CamperProfileViewProps) {
+export function CamperProfileView({ camper, registration, formFields }: CamperProfileViewProps) {
   const [isPhotoOpen, setIsPhotoOpen] = useState(false);
+
+  // Helper to format raw values (resolving campus CUIDs if matched)
+  const formatVal = (rawVal: any) => {
+    if (rawVal === null || rawVal === undefined) return null;
+    const s = String(rawVal);
+    if (registration?.campus?.id === s) return registration.campus.name;
+    if (camper.homeCampus?.id === s) return camper.homeCampus.name;
+    return s;
+  };
+
+  // Helper to resolve answer for a FormField
+  const resolveFieldValue = (field: any) => {
+    if (field.source === "CUSTOM") {
+      const fv = camper.fieldValues?.find((f: any) => f.fieldId === field.id || f.field?.name === field.name);
+      return formatVal(fv?.value);
+    }
+    if (field.systemKey) {
+      if (field.systemKey === "campusId") {
+        return registration?.campus?.name || camper.homeCampus?.name || null;
+      }
+      const val = (camper as any)[field.systemKey] ?? (registration as any)?.[field.systemKey];
+      if (val instanceof Date) return val.toLocaleDateString();
+      return formatVal(val);
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-4">
@@ -104,11 +148,47 @@ export function CamperProfileView({ camper }: CamperProfileViewProps) {
                 {[
                   age(camper.dateOfBirth) ? `${age(camper.dateOfBirth)} years old` : null,
                   camper.gender,
+                  registration?.campus?.name || camper.homeCampus?.name ? `Campus: ${registration?.campus?.name || camper.homeCampus?.name}` : null,
                 ]
                   .filter(Boolean)
                   .join(" · ") || "—"}
               </div>
             </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Campus & Registration Card */}
+      <Card>
+        <CardBody>
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+            Campus & Registration Details
+          </h4>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <div>
+              <span className="text-neutral-500 block text-[11px] uppercase font-semibold">Selected Campus</span>
+              <span className="text-neutral-900 font-semibold text-accent-700">
+                {registration?.campus?.name || camper.homeCampus?.name || "—"}
+              </span>
+            </div>
+            <div>
+              <span className="text-neutral-500 block text-[11px] uppercase font-semibold">Registration Number</span>
+              <span className="text-neutral-900 font-mono font-medium">{registration?.registrationNumber || "—"}</span>
+            </div>
+            <div>
+              <span className="text-neutral-500 block text-[11px] uppercase font-semibold">Camp</span>
+              <span className="text-neutral-900 font-medium">{registration?.camp?.name || "—"}</span>
+            </div>
+            <div>
+              <span className="text-neutral-500 block text-[11px] uppercase font-semibold">Assigned Tribe</span>
+              <span className="text-neutral-900 font-medium">{registration?.tribe?.name || "Unassigned"}</span>
+            </div>
+            {registration?.venue && (
+              <div>
+                <span className="text-neutral-500 block text-[11px] uppercase font-semibold">Venue</span>
+                <span className="text-neutral-900 font-medium">{registration.venue.name}</span>
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>
@@ -292,12 +372,39 @@ export function CamperProfileView({ camper }: CamperProfileViewProps) {
         </CardBody>
       </Card>
 
+      {/* All Dynamic Wizard Form Responses Card */}
+      {formFields && formFields.length > 0 && (
+        <Card>
+          <CardBody>
+            <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5 flex items-center justify-between">
+              <span>Dynamic Wizard Form Responses</span>
+              <span className="text-xs text-neutral-400 font-normal">{formFields.length} configured fields</span>
+            </h4>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              {formFields.map((field) => {
+                const val = resolveFieldValue(field);
+                return (
+                  <div key={field.id} className="space-y-0.5">
+                    <span className="text-neutral-500 block text-[11px] uppercase font-semibold">
+                      {field.label || field.name}
+                    </span>
+                    <span className={`font-medium ${val ? "text-neutral-900" : "text-neutral-400 italic"}`}>
+                      {val || "—"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
       {/* Custom Profile Details Card */}
       {camper.fieldValues && camper.fieldValues.length > 0 && (
         <Card>
           <CardBody>
             <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
-              Custom Registration Details
+              Additional Custom Fields
             </h4>
             <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               {camper.fieldValues.map((fv: any) => (

@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
+import { cn } from "@/lib/cn";
 import AppShell from "@/components/layout/AppShell";
 import React, { useState, useEffect } from "react";
 import StatCard from "../../components/StatCard";
@@ -315,13 +316,21 @@ const CampusDetailsPage = () => {
                 </span>
 
                 {stats?.quota && stats.quota > 0 ? (
-                  <span className="text-base font-bold text-emerald-600">{stats.percentUsed}%</span>
+                  <span className={cn(
+                    "text-base font-bold transition-colors",
+                    (stats.percentUsed ?? 0) >= 100 ? "text-rose-600" : (stats.percentUsed ?? 0) >= 80 ? "text-amber-600" : "text-emerald-600"
+                  )}>
+                    {stats.percentUsed}%
+                  </span>
                 ) : null}
               </div>
 
               <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
                 <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    (stats?.percentUsed ?? 0) >= 100 ? "bg-rose-500" : (stats?.percentUsed ?? 0) >= 80 ? "bg-amber-500" : "bg-emerald-500"
+                  )}
                   style={{ width: `${stats?.percentUsed ?? 0}%` }}
                 />
               </div>
