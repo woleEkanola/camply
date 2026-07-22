@@ -480,14 +480,17 @@ export const CampusCard: React.FC<CampusCardProps> = ({
               </button>
             )}
             {!isUnlimited && (
-              <span className="text-base font-bold text-emerald-600">
+              <span className={cn(
+                "text-base font-bold transition-colors",
+                percent >= 100 ? "text-rose-600" : percent >= 80 ? "text-amber-600" : "text-emerald-600"
+              )}>
                 {percent}%
               </span>
             )}
           </div>
         </div>
 
-        {/* Green Capacity Bar */}
+        {/* Dynamic Capacity Bar (Green -> Amber -> Red) */}
         <div className="space-y-2">
           {isUnlimited ? (
             <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
@@ -496,7 +499,10 @@ export const CampusCard: React.FC<CampusCardProps> = ({
           ) : (
             <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
               <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                className={cn(
+                  "h-full rounded-full transition-all duration-500",
+                  percent >= 100 ? "bg-rose-500" : percent >= 80 ? "bg-amber-500" : "bg-emerald-500"
+                )}
                 style={{ width: `${percent}%` }}
               />
             </div>

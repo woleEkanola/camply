@@ -163,6 +163,25 @@ export const importExportRouter = createTRPCRouter({
           };
         }
 
+        const [camperFormFields, orgCampuses] = await Promise.all([
+          ctx.prisma.formField.findMany({
+            where: { organizationId: input.organizationId, audience: "CAMPER", deletedAt: null },
+            orderBy: { sortOrder: "asc" },
+          }),
+          ctx.prisma.campus.findMany({
+            where: { organizationId: input.organizationId, deletedAt: null },
+            select: { id: true, name: true },
+          }),
+        ]);
+        const campusMap = new Map(orgCampuses.map((c) => [c.id, c.name]));
+
+        const formatVal = (v: any) => {
+          if (v === null || v === undefined) return "";
+          const s = String(v);
+          if (campusMap.has(s)) return campusMap.get(s)!;
+          return s;
+        };
+
         const campers: any[] = await ctx.prisma.camper.findMany({
           where: camperWhere,
           include: {
@@ -249,11 +268,32 @@ export const importExportRouter = createTRPCRouter({
             "Bed": reg?.bed?.label || "",
           };
 
-          // Append custom fields
+          // Dynamically attach all configured wizard FormFields
+          for (const ff of camperFormFields) {
+            const fieldLabel = ff.label || ff.name;
+            if (ff.source === "CUSTOM") {
+              const matchedFv = camper.fieldValues?.find(
+                (fv: any) => fv.fieldId === ff.id || fv.field?.name === ff.name
+              );
+              row[fieldLabel] = formatVal(matchedFv?.value);
+            } else if (ff.systemKey) {
+              // System-bound fields
+              const sysVal =
+                (camper as any)[ff.systemKey] ??
+                (reg as any)?.[ff.systemKey] ??
+                (camper.homeCampus?.name && ff.systemKey === "campusId" ? camper.homeCampus.name : null) ??
+                (reg?.campus?.name && ff.systemKey === "campusId" ? reg.campus.name : null);
+              row[fieldLabel] = sysVal ? formatVal(sysVal) : (row[fieldLabel] || "");
+            }
+          }
+
+          // Also catch any additional custom field values not explicitly in FormField list
           if (camper.fieldValues) {
             for (const fv of camper.fieldValues) {
               const label = fv.field?.label || fv.field?.name || fv.fieldId;
-              row[`Custom: ${label}`] = fv.value || "";
+              if (row[label] === undefined) {
+                row[label] = formatVal(fv.value);
+              }
             }
           }
 

@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import AppShell from "@/components/layout/AppShell";
@@ -134,7 +134,38 @@ function RegistrationsPage() {
   const { data: campuses = [] } = api.campus.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
   const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
   const { data: org } = api.organization.getById.useQuery({ id: organizationId }, { enabled: !!organizationId });
+  const { data: formFieldsData = [] } = api.formField.list.useQuery(
+    { organizationId, audience: "CAMPER" },
+    { enabled: !!organizationId }
+  );
+  const formFields = formFieldsData;
   const isTwoStep = (org as any)?.approvalWorkflow === "TWO_STEP";
+
+  const DEFAULT_COLUMNS = ["camper", "campus", "regNumber", "status", "updated"];
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_COLUMNS);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("camply_reg_columns_v1");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setVisibleColumns(parsed);
+        }
+      } catch (e) {}
+    }
+  }, []);
+
+  const toggleColumn = (key: string) => {
+    setVisibleColumns((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      if (typeof window !== "undefined") {
+        localStorage.setItem("camply_reg_columns_v1", JSON.stringify(next));
+      }
+      return next;
+    });
+  };
 
   const invalidateRegistrations = () => {
     setSelectedIds([]);
@@ -264,34 +295,221 @@ function RegistrationsPage() {
   const awaitingFinalCount = statsData?.awaitingFinal ?? 0;
   const statsTotalCount = statsData?.totalCount ?? 0;
 
-  const registrations = accumulatedItems;
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
-  const tableColumns: Column<any>[] = [
-    {
-      header: "Camper",
-      primary: true,
-      accessor: (row) => (
-        <div>
-          <div className="font-medium text-neutral-900">{row.camper?.name}</div>
-          <div className="text-xs text-neutral-500">{row.camper?.user?.email}</div>
-        </div>
-      ),
-    },
-    { header: "Campus", accessor: (row) => row.campus?.name },
-    { header: "Registration #", accessor: (row) => row.registrationNumber || "—" },
-    {
-      header: "Status",
-      accessor: (row) => (
-        <div className="flex flex-col gap-1">
-          <StatusBadge status={row.status} />
-          {isTwoStep && row.status === "PENDING" && isEndorsed(row.review) && (
-            <Badge tone="info">Recommended</Badge>
-          )}
-        </div>
-      ),
-    },
-    { header: "Updated", accessor: (row) => new Date(row.updatedAt).toLocaleDateString() },
-  ];
+  const handleColumnHeaderClick = (key: string) => {
+    if (sortKey === key) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortKey(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  };
+
+  const renderSortableHeader = (label: string, key: string) => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        handleColumnHeaderClick(key);
+      }}
+      className="group inline-flex items-center gap-1.5 font-bold hover:text-accent-700 focus:outline-none transition-colors text-left"
+    >
+      <span>{label}</span>
+      {sortKey === key ? (
+        <span className="text-accent-600 font-bold text-xs">
+          {sortDirection === "asc" ? "↑" : "↓"}
+        </span>
+      ) : (
+        <span className="text-neutral-400 opacity-40 group-hover:opacity-100 text-xs transition-opacity">
+          ↕
+        </span>
+      )}
+    </button>
+  );
+
+  const getSortValue = (row: any, key: string) => {
+    if (key === "camper") return row.camper?.name || "";
+    if (key === "campus") return row.campus?.name || row.camper?.homeCampus?.name || "";
+    if (key === "regNumber") return row.registrationNumber || "";
+    if (key === "status") return row.status || "";
+    if (key === "tribe") return row.tribe?.name || "";
+    if (key === "gender") return row.camper?.gender || "";
+    if (key === "dob") return row.camper?.dateOfBirth ? new Date(row.camper.dateOfBirth).getTime() : 0;
+    if (key === "email") return row.camper?.user?.email || "";
+    if (key === "updated") return new Date(row.updatedAt).getTime();
+
+    if (key.startsWith("ff_")) {
+      const ffId = key.replace("ff_", "");
+      const ff = formFields.find((f: any) => f.id === ffId);
+      if (!ff) return "";
+      if (ff.source === "CUSTOM") {
+        const fv = row.camper?.fieldValues?.find((f: any) => f.fieldId === ff.id || f.field?.name === ff.name);
+        return fv?.value || "";
+      }
+      if (ff.systemKey) {
+        if (ff.systemKey === "campusId") return row.campus?.name || row.camper?.homeCampus?.name || "";
+        const val = (row.camper as any)?.[ff.systemKey] ?? (row as any)?.[ff.systemKey];
+        if (val instanceof Date) return val.getTime();
+        return val ? String(val) : "";
+      }
+    }
+
+    return "";
+  };
+
+  const sortedRegistrations = useMemo(() => {
+    if (!sortKey) return accumulatedItems;
+
+    return [...accumulatedItems].sort((a, b) => {
+      const valA = getSortValue(a, sortKey);
+      const valB = getSortValue(b, sortKey);
+
+      if (valA === valB) return 0;
+      if (valA === "" || valA === null || valA === undefined) return 1;
+      if (valB === "" || valB === null || valB === undefined) return -1;
+
+      let cmp = 0;
+      if (typeof valA === "number" && typeof valB === "number") {
+        cmp = valA - valB;
+      } else {
+        cmp = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: "base" });
+      }
+
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+  }, [accumulatedItems, sortKey, sortDirection, formFields]);
+
+  const registrations = sortedRegistrations;
+
+  const buildTableColumns = (): Column<any>[] => {
+    const cols: Column<any>[] = [];
+    const campusMap = new Map((campuses as any[]).map((c) => [c.id, c.name]));
+    const formatVal = (v: any) => {
+      if (v === null || v === undefined) return "—";
+      const s = String(v);
+      if (campusMap.has(s)) return campusMap.get(s)!;
+      return s;
+    };
+
+    if (visibleColumns.includes("camper")) {
+      cols.push({
+        header: renderSortableHeader("Camper", "camper"),
+        primary: true,
+        accessor: (row) => (
+          <div>
+            <div className="font-medium text-neutral-900">{row.camper?.name}</div>
+            <div className="text-xs text-neutral-500">{row.camper?.user?.email}</div>
+          </div>
+        ),
+      });
+    }
+
+    if (visibleColumns.includes("campus")) {
+      cols.push({
+        header: renderSortableHeader("Campus", "campus"),
+        accessor: (row) => row.campus?.name || row.camper?.homeCampus?.name || "—",
+      });
+    }
+
+    if (visibleColumns.includes("regNumber")) {
+      cols.push({
+        header: renderSortableHeader("Registration #", "regNumber"),
+        accessor: (row) => row.registrationNumber || "—",
+      });
+    }
+
+    if (visibleColumns.includes("status")) {
+      cols.push({
+        header: renderSortableHeader("Status", "status"),
+        accessor: (row) => (
+          <div className="flex flex-col gap-1">
+            <StatusBadge status={row.status} />
+            {isTwoStep && row.status === "PENDING" && isEndorsed(row.review) && (
+              <Badge tone="info">Recommended</Badge>
+            )}
+          </div>
+        ),
+      });
+    }
+
+    if (visibleColumns.includes("tribe")) {
+      cols.push({
+        header: renderSortableHeader("Tribe", "tribe"),
+        accessor: (row) => row.tribe?.name || "—",
+      });
+    }
+
+    if (visibleColumns.includes("gender")) {
+      cols.push({
+        header: renderSortableHeader("Gender", "gender"),
+        accessor: (row) => row.camper?.gender || "—",
+      });
+    }
+
+    if (visibleColumns.includes("dob")) {
+      cols.push({
+        header: renderSortableHeader("Date of Birth", "dob"),
+        accessor: (row) => (row.camper?.dateOfBirth ? new Date(row.camper.dateOfBirth).toLocaleDateString() : "—"),
+      });
+    }
+
+    if (visibleColumns.includes("email")) {
+      cols.push({
+        header: renderSortableHeader("Parent Email", "email"),
+        accessor: (row) => row.camper?.user?.email || "—",
+      });
+    }
+
+    if (visibleColumns.includes("updated")) {
+      cols.push({
+        header: renderSortableHeader("Updated", "updated"),
+        accessor: (row) => new Date(row.updatedAt).toLocaleDateString(),
+      });
+    }
+
+    // Dynamic Form Field Columns
+    for (const ff of formFields) {
+      const colKey = `ff_${ff.id}`;
+      if (visibleColumns.includes(colKey)) {
+        const headerLabelText = ff.label || ff.name;
+        cols.push({
+          header: renderSortableHeader(headerLabelText, colKey),
+          accessor: (row) => {
+            if (ff.source === "CUSTOM") {
+              const fv = row.camper?.fieldValues?.find((f: any) => f.fieldId === ff.id || f.field?.name === ff.name);
+              return formatVal(fv?.value);
+            }
+            if (ff.systemKey) {
+              if (ff.systemKey === "campusId") return row.campus?.name || row.camper?.homeCampus?.name || "—";
+              const val = (row.camper as any)?.[ff.systemKey] ?? (row as any)?.[ff.systemKey];
+              if (val instanceof Date) return val.toLocaleDateString();
+              return formatVal(val);
+            }
+            return "—";
+          },
+        });
+      }
+    }
+
+    return cols.length > 0
+      ? cols
+      : [
+          {
+            header: renderSortableHeader("Camper", "camper"),
+            primary: true,
+            accessor: (row) => row.camper?.name || "—",
+          },
+        ];
+  };
+
+  const tableColumns = buildTableColumns();
 
   return (
     <AppShell area="admin">
@@ -474,34 +692,141 @@ function RegistrationsPage() {
               </Select>
             </div>
 
-            {/* Desktop View Mode Toggle */}
-            <div className="flex items-center rounded-xl border border-neutral-200/80 bg-neutral-100/80 p-1 shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewMode("card")}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
-                  viewMode === "card"
-                    ? "bg-white text-accent-700 shadow-2xs"
-                    : "text-neutral-600 hover:text-neutral-900"
+            {/* Desktop View Mode & Column Selector Controls */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Columns Selector Dropdown */}
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setColumnsOpen(!columnsOpen)}
+                  className="flex items-center gap-1.5"
+                >
+                  <TableCellsIcon className="h-4 w-4" />
+                  <span>Columns</span>
+                  <span className="ml-1 rounded-full bg-accent-100 px-1.5 py-0.5 text-[10px] font-bold text-accent-700">
+                    {visibleColumns.length}
+                  </span>
+                </Button>
+
+                {columnsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setColumnsOpen(false)} />
+                    <div className="absolute right-0 top-full mt-2 z-50 w-72 rounded-2xl border border-neutral-200 bg-white p-3 shadow-xl space-y-3">
+                      <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                        <span className="text-xs font-bold text-neutral-900">Configure Columns</span>
+                        <button
+                          type="button"
+                          className="text-[11px] font-bold text-accent-600 hover:underline"
+                          onClick={() => {
+                            const defaultCols = ["camper", "campus", "regNumber", "status", "updated"];
+                            setVisibleColumns(defaultCols);
+                            if (typeof window !== "undefined") {
+                              localStorage.setItem("camply_reg_columns_v1", JSON.stringify(defaultCols));
+                            }
+                          }}
+                        >
+                          Reset Defaults
+                        </button>
+                      </div>
+
+                      <div className="max-h-72 overflow-y-auto space-y-3 pr-1 text-xs">
+                        {/* Standard Columns */}
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-1.5">
+                            Standard Fields
+                          </span>
+                          <div className="space-y-1">
+                            {[
+                              { key: "camper", label: "Camper Name" },
+                              { key: "email", label: "Parent Email" },
+                              { key: "campus", label: "Selected Campus" },
+                              { key: "regNumber", label: "Registration #" },
+                              { key: "status", label: "Status" },
+                              { key: "tribe", label: "Assigned Tribe" },
+                              { key: "gender", label: "Gender" },
+                              { key: "dob", label: "Date of Birth" },
+                              { key: "updated", label: "Updated Date" },
+                            ].map((col) => (
+                              <label
+                                key={col.key}
+                                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-neutral-50 cursor-pointer text-neutral-700"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={visibleColumns.includes(col.key)}
+                                  onChange={() => toggleColumn(col.key)}
+                                  className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                                />
+                                <span>{col.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Dynamic Form Fields */}
+                        {formFields && formFields.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-1.5 border-t border-neutral-100 pt-2">
+                              Wizard Form Fields ({formFields.length})
+                            </span>
+                            <div className="space-y-1">
+                              {formFields.map((ff) => {
+                                const colKey = `ff_${ff.id}`;
+                                return (
+                                  <label
+                                    key={ff.id}
+                                    className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-neutral-50 cursor-pointer text-neutral-700"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={visibleColumns.includes(colKey)}
+                                      onChange={() => toggleColumn(colKey)}
+                                      className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                                    />
+                                    <span className="truncate">{ff.label || ff.name}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
-              >
-                <Squares2X2Icon className="h-4 w-4" />
-                <span>Card View</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
-                  viewMode === "list"
-                    ? "bg-white text-accent-700 shadow-2xs"
-                    : "text-neutral-600 hover:text-neutral-900"
-                )}
-              >
-                <TableCellsIcon className="h-4 w-4" />
-                <span>List View</span>
-              </button>
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center rounded-xl border border-neutral-200/80 bg-neutral-100/80 p-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("card")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
+                    viewMode === "card"
+                      ? "bg-white text-accent-700 shadow-2xs"
+                      : "text-neutral-600 hover:text-neutral-900"
+                  )}
+                >
+                  <Squares2X2Icon className="h-4 w-4" />
+                  <span>Card View</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
+                    viewMode === "list"
+                      ? "bg-white text-accent-700 shadow-2xs"
+                      : "text-neutral-600 hover:text-neutral-900"
+                  )}
+                >
+                  <TableCellsIcon className="h-4 w-4" />
+                  <span>List View</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -514,7 +839,7 @@ function RegistrationsPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {registrations.map((reg) => (
+                  {registrations.map((reg: any) => (
                     <MobileRegistrationCard
                       key={reg.id}
                       registration={reg}

@@ -114,6 +114,35 @@ export function Table<T>(props: TableProps<T>) {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [isColumnDropdownOpen, setIsColumnDropdownOpen] = useState(false);
 
+  const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
+  const [resizingColIndex, setResizingColIndex] = useState<number | null>(null);
+
+  const handleMouseDownResize = (index: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startX = e.clientX;
+    const thElement = (e.currentTarget.parentElement as HTMLElement);
+    const startWidth = thElement ? thElement.getBoundingClientRect().width : 150;
+
+    setResizingColIndex(index);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = Math.max(70, Math.min(800, startWidth + deltaX));
+      setColumnWidths((prev) => ({ ...prev, [index]: newWidth }));
+    };
+
+    const handleMouseUp = () => {
+      setResizingColIndex(null);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
   const activeColumns = useMemo(() => {
     if (!columnVisibility) return columns;
     return columns.filter((col) => {
@@ -292,24 +321,40 @@ export function Table<T>(props: TableProps<T>) {
                     <th
                       key={i}
                       scope="col"
+                      style={columnWidths[i] ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` } : undefined}
                       className={cn(
-                        "px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-neutral-500",
-                        column.sortable && "cursor-pointer select-none hover:bg-neutral-100",
+                        "relative px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-neutral-500 group select-none overflow-hidden",
+                        column.sortable && "cursor-pointer hover:bg-neutral-100",
                         column.className
                       )}
                     >
-                      {column.sortable && typeof column.accessor !== "function" ? (
-                        <button
-                          type="button"
-                          className="flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-                          onClick={() => handleSort(column.accessor as keyof T)}
-                        >
-                          {column.header}
-                          {sortConfig.key === column.accessor && <span>{sortConfig.direction === "asc" ? "↑" : "↓"}</span>}
-                        </button>
-                      ) : (
-                        column.header
-                      )}
+                      <div className="flex items-center justify-between min-w-0 pr-1">
+                        <div className="truncate min-w-0 flex-1">
+                          {column.sortable && typeof column.accessor !== "function" ? (
+                            <button
+                              type="button"
+                              className="flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                              onClick={() => handleSort(column.accessor as keyof T)}
+                            >
+                              {column.header}
+                              {sortConfig.key === column.accessor && <span>{sortConfig.direction === "asc" ? "↑" : "↓"}</span>}
+                            </button>
+                          ) : (
+                            column.header
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Column Drag-to-Resize Handle */}
+                      <div
+                        onMouseDown={(e) => handleMouseDownResize(i, e)}
+                        onClick={(e) => e.stopPropagation()}
+                        className={cn(
+                          "absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-accent-400/50 transition-colors z-20 group-hover:bg-neutral-300/60",
+                          resizingColIndex === i && "bg-accent-500"
+                        )}
+                        title="Drag to resize column width"
+                      />
                     </th>
                   ))}
                   {actions && <th scope="col" className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-neutral-500">Actions</th>}
@@ -359,9 +404,10 @@ export function Table<T>(props: TableProps<T>) {
                     {activeColumns.map((column, i) => (
                       <td
                         key={i}
+                        style={columnWidths[i] ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` } : undefined}
                         className={cn(
-                          "px-4 py-3 text-sm text-neutral-700",
-                          column.wrap ? "whitespace-normal break-words" : "whitespace-nowrap",
+                          "px-4 py-3 text-sm text-neutral-700 overflow-hidden",
+                          column.wrap ? "whitespace-normal break-words" : "truncate",
                           column.className
                         )}
                       >
