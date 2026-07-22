@@ -54,6 +54,7 @@ test.describe("Admin: staff approval and assignment", () => {
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/teachers");
+    await page.getByRole("button", { name: "List", exact: true }).click();
 
     // Scope by the unique email, not the static display name — "Approve
     // TargetE2E" isn't timestamp-suffixed like the email is, so a leftover
@@ -61,17 +62,13 @@ test.describe("Admin: staff approval and assignment", () => {
     // process) collides with this run's fixture and trips a strict-mode
     // "resolved to 2 elements" violation.
     await page.locator("tr", { hasText: email }).click();
-    // The list table behind the drawer can also contain APPROVED rows from
-    // other fixtures/orgs data, so scope status assertions to the drawer.
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("PENDING", { exact: true })).toBeVisible();
+    await page.waitForURL(/\/admin\/teachers\/[a-zA-Z0-9]+/);
+    await expect(page.getByText("PENDING", { exact: true }).first()).toBeVisible();
 
-    // Scoped to the drawer — the row behind it also has an inline "Approve"
-    // action now (for quick approval without opening the full drawer).
-    await dialog.getByRole("button", { name: "Approve", exact: true }).click();
-    await expect(dialog.getByText("APPROVED", { exact: true })).toBeVisible({ timeout: 10000 });
+    await page.getByTestId("approve-button").click();
+    await expect(page.getByText("APPROVED", { exact: true }).first()).toBeVisible({ timeout: 10000 });
 
-    await page.getByRole("tab", { name: "Assignment" }).click();
+    await page.getByRole("tab", { name: "Assignments" }).click();
     await fieldByLabel(page, "Venue").selectOption({ label: venue.name });
     await fieldByLabel(page, "Department").selectOption({ label: "E2E Test Department" });
     await page.getByText("Department Head", { exact: true }).click();
@@ -114,13 +111,16 @@ test.describe("Admin: staff approval and assignment", () => {
     try {
       await loginWithPassword(page, "owner@camply.com", "password123");
       await page.goto("/admin/volunteers");
+      await page.getByRole("button", { name: "List", exact: true }).click();
 
       await visibleText(page, "Reject TargetE2E").click();
+      await page.waitForURL(/\/admin\/volunteers\/[a-zA-Z0-9]+/);
+      await page.getByTestId("reject-button").click();
       const dialog = page.getByRole("dialog");
       await dialog.getByPlaceholder("Rejection reason").fill("E2E test rejection");
       await dialog.getByRole("button", { name: "Reject", exact: true }).click();
 
-      await expect(dialog.getByText("REJECTED", { exact: true })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText("REJECTED", { exact: true }).first()).toBeVisible({ timeout: 10000 });
 
       const updated = await prisma.staffProfile.findFirst({ where: { email: rejectEmail } });
       expect(updated?.status).toBe("REJECTED");

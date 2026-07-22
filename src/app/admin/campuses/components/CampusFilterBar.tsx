@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { FunnelIcon, PlusIcon, ChevronDownIcon, Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
+import { cn } from "@/lib/cn";
 
 export type StatusFilterOption = "ALL" | "ACTIVE" | "INACTIVE" | "FULL" | "CLOSED";
 export type SortOption = "order_asc" | "name_asc" | "name_desc" | "code_asc" | "quota_desc";
@@ -90,7 +91,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
             type="button"
             onClick={() => setIsFilterMenuOpen((prev) => !prev)}
             className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl border border-neutral-200/80 bg-white text-neutral-600 hover:bg-neutral-50 transition-colors ${
-              statusFilter !== "ALL" ? "border-purple-500 text-purple-600 bg-purple-50/50" : ""
+              statusFilter !== "ALL" ? "border-accent-500 text-accent-600 bg-accent-50/50" : ""
             }`}
             title="Filter campuses"
           >
@@ -112,7 +113,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
                   }}
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold ${
                     statusFilter === opt
-                      ? "bg-purple-50 text-purple-700"
+                      ? "bg-accent-50 text-accent-700"
                       : "text-neutral-700 hover:bg-neutral-50"
                   }`}
                 >
@@ -123,12 +124,44 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
           )}
         </div>
 
-        {/* Add Campus (+) Purple Button */}
+        {/* View Mode Toggle */}
+        {onViewModeChange && (
+          <div className="flex shrink-0 rounded-2xl border border-neutral-200/80 bg-neutral-50 p-0.5">
+            <button
+              type="button"
+              onClick={() => onViewModeChange("grid")}
+              className={cn(
+                "inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl transition-colors",
+                viewMode === "grid"
+                  ? "bg-white text-accent-600 shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-600"
+              )}
+              title="Card view"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewModeChange("table")}
+              className={cn(
+                "inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl transition-colors",
+                viewMode === "table"
+                  ? "bg-white text-accent-600 shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-600"
+              )}
+              title="Table view"
+            >
+              <TableCellsIcon className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+
+        {/* Add Campus (+) Button */}
         {onOpenCreateModal && (
           <button
             type="button"
             onClick={onOpenCreateModal}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl bg-purple-600 text-white shadow-md hover:bg-purple-700 active:scale-95 transition-all"
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl bg-accent-600 text-white shadow-md hover:bg-accent-700 active:scale-95 transition-all"
             title="Add Campus"
           >
             <PlusIcon className="h-6 w-6 stroke-[2.5]" />
@@ -151,7 +184,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
           <button
             type="button"
             onClick={() => setIsSortMenuOpen((prev) => !prev)}
-            className="inline-flex items-center gap-1 font-semibold text-neutral-700 hover:text-purple-700 transition-colors"
+            className="inline-flex items-center gap-1 font-semibold text-neutral-700 hover:text-accent-700 transition-colors"
           >
             <span>Sort: {getSortLabel(sortBy)}</span>
             <ChevronDownIcon className="h-3.5 w-3.5 text-neutral-400" />
@@ -178,7 +211,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
                   }}
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold ${
                     sortBy === opt.id
-                      ? "bg-purple-50 text-purple-700"
+                      ? "bg-accent-50 text-accent-700"
                       : "text-neutral-700 hover:bg-neutral-50"
                   }`}
                 >

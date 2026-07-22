@@ -165,7 +165,7 @@ export default function OrgProfileSettings({
             </div>
           </div>
           <p className="text-xs text-neutral-500 mt-1.5">
-            This theme color will be used for buttons, accent decorations, and links across your church's landing pages.
+            This theme color is used for buttons, accent decorations, and links across your Camply admin pages, registration flows, and public landing pages.
           </p>
         </div>
       </div>

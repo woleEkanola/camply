@@ -3,13 +3,15 @@
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
 import AppShell from "@/components/layout/AppShell";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import StatCard from "../../components/StatCard";
 import LineChart from "../../components/LineChart";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Dialog } from "@/components/ui/Dialog";
+import type { SignupLink } from "@/types/signupLink";
 import {
   ChevronLeftIcon,
   EllipsisVerticalIcon,
@@ -23,6 +25,7 @@ import {
   ChevronRightIcon,
   ArrowTopRightOnSquareIcon,
   PlusIcon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 
 const CampusDetailsPage = () => {
@@ -32,13 +35,28 @@ const CampusDetailsPage = () => {
   const [activeTab, setActiveTab] = useState<"overview" | "representatives" | "registrations" | "settings">("overview");
   const [copiedLink, setCopiedLink] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
+  const [quotaFormData, setQuotaFormData] = useState<{ quota: number; quotaFullBehavior: "CLOSE" | "WAITLIST" }>({
+    quota: 0,
+    quotaFullBehavior: "CLOSE",
+  });
+  const [accentColor, setAccentColor] = useState("#9333ea");
+  const [quotaError, setQuotaError] = useState("");
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const color = getComputedStyle(document.documentElement).getPropertyValue("--brand-primary").trim();
+      if (color) setAccentColor(color);
+    }
+  }, []);
+
 
   const { data: campus, isLoading, error } = api.campus.getById.useQuery(
     { id },
     { enabled: !!id }
   );
 
-  const { data: stats } = api.campus.getStats.useQuery(
+  const { data: stats, refetch: refetchStats } = api.campus.getStats.useQuery(
     { campusId: id },
     { enabled: !!id }
   );
@@ -49,11 +67,38 @@ const CampusDetailsPage = () => {
     },
   });
 
+  const { data: activeCamp } = api.camp.getActiveCamp.useQuery(
+    { organizationId: (campus as any)?.organizationId || "" },
+    { enabled: !!campus }
+  );
+
+  const { data: signupLinks = [] } = api.signupLink.getByOrganization.useQuery(
+    {
+      organizationId: (campus as any)?.organizationId || "",
+      campId: (activeCamp as any)?.id,
+    },
+    { enabled: !!campus && !!(activeCamp as any)?.id }
+  );
+
+  const signupLink: SignupLink | undefined = (signupLinks as SignupLink[]).find(
+    (link: SignupLink) => link.campusId === id
+  );
+
+  const updateQuotaMutation = api.signupLink.updateQuota.useMutation({
+    onSuccess: () => {
+      setIsQuotaModalOpen(false);
+      void refetchStats();
+    },
+    onError: (err) => {
+      setQuotaError(err.message);
+    },
+  });
+
   if (isLoading) {
     return (
       <AppShell area="admin">
         <div className="flex h-96 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-purple-600" />
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-accent-600" />
         </div>
       </AppShell>
     );
@@ -91,6 +136,25 @@ const CampusDetailsPage = () => {
     setTimeout(() => setCopiedLink(false), 3000);
   };
 
+  const handleOpenQuotaModal = () => {
+    if (!signupLink) return;
+    setQuotaError("");
+    setQuotaFormData({
+      quota: signupLink.quota ?? 0,
+      quotaFullBehavior: (signupLink.quotaFullBehavior as "CLOSE" | "WAITLIST") ?? "CLOSE",
+    });
+    setIsQuotaModalOpen(true);
+  };
+
+  const handleSaveQuota = () => {
+    if (!signupLink) return;
+    updateQuotaMutation.mutate({
+      id: signupLink.id,
+      quota: quotaFormData.quota,
+      quotaFullBehavior: quotaFormData.quotaFullBehavior,
+    });
+  };
+
   const repsList = Array.isArray((campus as any).reps) ? (campus as any).reps : [];
 
   return (
@@ -116,8 +180,8 @@ const CampusDetailsPage = () => {
 
         {/* CAMPUS IDENTITY EMBLEM & TITLE */}
         <div className="space-y-3 pt-2">
-          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-purple-100/70 text-purple-700 text-3xl font-medium shadow-2xs">
-            ⛪
+          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-accent-100/70 text-accent-700 shadow-2xs">
+            <BuildingOffice2Icon className="h-8 w-8" />
           </div>
 
           <div>
@@ -144,7 +208,7 @@ const CampusDetailsPage = () => {
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`pb-3 text-xs font-semibold border-b-2 transition-all ${
                   activeTab === tab.id
-                    ? "border-purple-600 text-purple-700 font-bold"
+                    ? "border-accent-600 text-accent-700 font-bold"
                     : "border-transparent text-neutral-500 hover:text-neutral-900"
                 }`}
               >
@@ -161,8 +225,8 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs">
-                    📍
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                    <MapPinIcon className="h-4 w-4" />
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Campus Information</h3>
                 </div>
@@ -171,7 +235,7 @@ const CampusDetailsPage = () => {
                   href={`https://maps.google.com/?q=${encodeURIComponent(formattedAddress)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 hover:underline"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-accent-700 hover:underline"
                 >
                   <span>View on map</span>
                   <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
@@ -190,8 +254,8 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs">
-                    🔗
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                    <LinkIcon className="h-4 w-4" />
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Signup Link</h3>
                 </div>
@@ -209,7 +273,7 @@ const CampusDetailsPage = () => {
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-purple-50 text-purple-700 font-semibold text-xs hover:bg-purple-100 transition-colors"
+                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50 text-accent-700 font-semibold text-xs hover:bg-accent-100 transition-colors"
                 >
                   <ClipboardDocumentIcon className="h-4 w-4" />
                   {copiedLink ? "Copied!" : "Copy Link"}
@@ -218,7 +282,7 @@ const CampusDetailsPage = () => {
                 <button
                   type="button"
                   onClick={() => setActiveTab("registrations")}
-                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-purple-50 text-purple-700 font-semibold text-xs hover:bg-purple-100 transition-colors"
+                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50 text-accent-700 font-semibold text-xs hover:bg-accent-100 transition-colors"
                 >
                   <ChartBarIcon className="h-4 w-4" />
                   View Link Analytics
@@ -230,16 +294,16 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs">
-                    📊
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                    <ChartBarIcon className="h-4 w-4" />
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Registration Capacity</h3>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => router.push("/admin/campuses")}
-                  className="text-xs font-semibold text-purple-700 hover:underline"
+                  onClick={handleOpenQuotaModal}
+                  className="text-xs font-semibold text-accent-700 hover:underline"
                 >
                   Edit
                 </button>
@@ -273,8 +337,8 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 text-xs">
-                    👥
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                    <UserGroupIcon className="h-4 w-4" />
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Campus Representatives</h3>
                 </div>
@@ -291,7 +355,7 @@ const CampusDetailsPage = () => {
                   {repsList.map((rep: any) => (
                     <div key={rep.id} className="flex items-center justify-between pt-2 first:pt-0">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-200 text-purple-900 text-xs font-bold">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-200 text-accent-900 text-xs font-bold">
                           {rep.firstName ? rep.firstName[0] : rep.email[0]}
                         </div>
                         <div className="min-w-0">
@@ -302,7 +366,7 @@ const CampusDetailsPage = () => {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-[10px] font-semibold text-purple-700">
+                        <span className="rounded-full bg-accent-50 px-2.5 py-0.5 text-[10px] font-semibold text-accent-700">
                           Campus Rep
                         </span>
                         <ChevronRightIcon className="h-4 w-4 text-neutral-400" />
@@ -316,7 +380,7 @@ const CampusDetailsPage = () => {
                 <button
                   type="button"
                   onClick={() => router.push("/admin/campuses")}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-purple-700 hover:text-purple-800"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-accent-700 hover:text-accent-800"
                 >
                   <PlusIcon className="h-4 w-4 stroke-[2.5]" />
                   <span>Add Representative</span>
@@ -329,7 +393,7 @@ const CampusDetailsPage = () => {
               <button
                 type="button"
                 onClick={() => router.push("/admin/campuses")}
-                className="flex-1 inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold text-xs transition-all active:scale-98"
+                className="flex-1 inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-accent-50 text-accent-700 hover:bg-accent-100 font-bold text-xs transition-all active:scale-98"
               >
                 <PencilIcon className="h-4 w-4" />
                 Edit Campus
@@ -365,7 +429,7 @@ const CampusDetailsPage = () => {
                       </p>
                       <p className="text-[11px] text-neutral-500">{rep.email}</p>
                     </div>
-                    <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-[10px] font-semibold text-purple-700">
+                    <span className="rounded-full bg-accent-50 px-2.5 py-0.5 text-[10px] font-semibold text-accent-700">
                       Campus Rep
                     </span>
                   </div>
@@ -381,7 +445,7 @@ const CampusDetailsPage = () => {
             {stats?.trend && (
               <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
                 <h3 className="text-xs font-bold text-neutral-900">Registrations Trend</h3>
-                <LineChart data={stats.trend.map((item: any) => item.count)} color="#9333ea" />
+                <LineChart data={stats.trend.map((item: any) => item.count)} color={accentColor} />
               </div>
             )}
           </div>
@@ -402,6 +466,41 @@ const CampusDetailsPage = () => {
           </div>
         )}
       </div>
+
+      {/* QUOTA / CAPACITY MODAL */}
+      <Dialog open={isQuotaModalOpen} onClose={() => setIsQuotaModalOpen(false)} title="Edit Registration Capacity" size="sm">
+        {quotaError && <div className="mb-4 rounded-xl bg-danger-50 p-3 text-xs text-danger-700">{quotaError}</div>}
+        <div className="space-y-4">
+          <Input
+            label="Registration Capacity / Quota (0 = Unlimited)"
+            type="number"
+            id="quota"
+            value={quotaFormData.quota}
+            onChange={(e) => setQuotaFormData({ ...quotaFormData, quota: parseInt(e.target.value, 10) || 0 })}
+          />
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-600 mb-1">
+              When Capacity Reached
+            </label>
+            <select
+              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-800 bg-white focus:ring-2 focus:ring-accent-500"
+              value={quotaFormData.quotaFullBehavior}
+              onChange={(e) => setQuotaFormData({ ...quotaFormData, quotaFullBehavior: e.target.value as "CLOSE" | "WAITLIST" })}
+            >
+              <option value="CLOSE">Close — Block new registrations once full</option>
+              <option value="WAITLIST">Waitlist — Accept submissions and waitlist excess</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2 border-t border-neutral-100 pt-3">
+          <Button variant="secondary" onClick={() => setIsQuotaModalOpen(false)}>
+            Cancel
+          </Button>
+          <Button loading={updateQuotaMutation.isPending} onClick={handleSaveQuota}>
+            Save Capacity
+          </Button>
+        </div>
+      </Dialog>
 
       {/* DELETE DIALOG */}
       <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Delete Campus" size="sm">

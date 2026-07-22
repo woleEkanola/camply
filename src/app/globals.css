@@ -28,6 +28,11 @@
   --foreground: #18181b;
   --font-geist-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Brand primary color — overridden at runtime by BrandColorProvider
+     from the organization's settings.colorTheme value. Default matches
+     the historical Camply orange (#E67E22). */
+  --brand-primary: #e67e22;
 }
 
 @theme inline {
@@ -48,16 +53,19 @@
   --color-neutral-900: #18181b;
   --color-neutral-950: #09090b;
 
-  --color-accent-50: #fef6ec;
-  --color-accent-100: #fdead2;
-  --color-accent-200: #fad2a5;
-  --color-accent-300: #f6b06d;
-  --color-accent-400: #f18f3f;
-  --color-accent-500: #ea7f24;
-  --color-accent-600: #e67e22;
-  --color-accent-700: #c2620f;
-  --color-accent-800: #9a4d10;
-  --color-accent-900: #7c3f11;
+  /* Accent scale is derived dynamically from --brand-primary so the admin
+     UI follows the brand color chosen in Settings. No accent-* utility is
+     hardcoded to a specific hue. */
+  --color-accent-50: color-mix(in srgb, var(--brand-primary) 10%, white);
+  --color-accent-100: color-mix(in srgb, var(--brand-primary) 20%, white);
+  --color-accent-200: color-mix(in srgb, var(--brand-primary) 35%, white);
+  --color-accent-300: color-mix(in srgb, var(--brand-primary) 50%, white);
+  --color-accent-400: color-mix(in srgb, var(--brand-primary) 70%, white);
+  --color-accent-500: color-mix(in srgb, var(--brand-primary) 90%, white);
+  --color-accent-600: var(--brand-primary);
+  --color-accent-700: color-mix(in srgb, var(--brand-primary) 85%, black);
+  --color-accent-800: color-mix(in srgb, var(--brand-primary) 65%, black);
+  --color-accent-900: color-mix(in srgb, var(--brand-primary) 45%, black);
 
   --color-success-50: #f0fdf4;
   --color-success-100: #dcfce7;

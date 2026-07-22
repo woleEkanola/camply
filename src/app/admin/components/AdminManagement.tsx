@@ -218,7 +218,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
           {admin.permissions.map((permission: string) => (
             <span
               key={permission}
-              className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800"
+              className="inline-flex items-center rounded-full bg-accent-100 px-2.5 py-0.5 text-xs font-medium text-accent-800"
             >
               {permission.replace(/_/g, " ")}
             </span>
@@ -241,7 +241,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
         {!isAddingAdmin && (
           <button
             onClick={() => setIsAddingAdmin(true)}
-            className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="inline-flex items-center rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2"
           >
             <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
             Add Admin User
@@ -306,7 +306,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
                   name="email"
                   value={adminForm.email}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-accent-500"
                   required
                   disabled={isEditingAdmin} // Can't change email when editing
                 />
@@ -322,7 +322,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
                     name="password"
                     value={adminForm.password}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-accent-500"
                     required={!isEditingAdmin}
                   />
                 </div>
@@ -339,7 +339,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
                       id={`permission-${permission.type}`}
                       checked={adminForm.permissions.includes(permission.type)}
                       onChange={() => handlePermissionChange(permission.type)}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="h-4 w-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500"
                     />
                     <label
                       htmlFor={`permission-${permission.type}`}
@@ -356,13 +356,13 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
               <button
                 type="button"
                 onClick={handleCancelForm}
-                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="inline-flex items-center rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2"
                 disabled={createAdminMutation.isPending || updatePermissionsMutation.isPending}
               >
                 {createAdminMutation.isPending || updatePermissionsMutation.isPending
@@ -387,7 +387,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
           <div className="flex justify-end space-x-2">
             <button
               onClick={() => handleEditAdmin(admin)}
-              className="rounded p-1 text-blue-600 hover:bg-blue-100"
+              className="rounded p-1 text-accent-600 hover:bg-accent-50"
               title="Edit"
             >
               <PencilIcon className="h-5 w-5" />

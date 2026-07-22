@@ -3,6 +3,7 @@ import "./globals.css";
 import { TRPCProvider } from "./providers";
 import { AuthProvider } from "./auth-provider";
 import { ToastProvider } from "@/components/ui/Toast";
+import { BrandColorProvider } from "@/components/theme/BrandColorProvider";
 import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
 import { extractRouterConfig } from "uploadthing/server";
 import { ourFileRouter } from "./api/uploadthing/core";
@@ -41,11 +42,13 @@ export default function RootLayout({
       >
         <AuthProvider>
           <TRPCProvider>
-            <Suspense>
-              <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
-            </Suspense>
-            <ToastProvider>{children}</ToastProvider>
-            <Analytics />
+            <BrandColorProvider>
+              <Suspense>
+                <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
+              </Suspense>
+              <ToastProvider>{children}</ToastProvider>
+              <Analytics />
+            </BrandColorProvider>
           </TRPCProvider>
         </AuthProvider>
       </body>

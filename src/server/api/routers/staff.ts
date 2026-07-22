@@ -114,7 +114,41 @@ export const staffRouter = createTRPCRouter({
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED" } }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED", assignedVenueId: { not: null } } }),
       ]);
-      return { total, pending, approved, assigned, unassigned: Math.max(approved - assigned, 0) };
+
+      const result: Record<string, any> = {
+        total,
+        pending,
+        approved,
+        assigned,
+        unassigned: Math.max(approved - assigned, 0),
+      };
+
+      // Teacher recruitment quota summary for the recruitment panel.
+      if (input.type === "TEACHER") {
+        const quotas = await ctx.prisma.teacherCampusQuota.findMany({
+          where: { campId: input.campId },
+        });
+        const totalQuota = quotas.reduce((sum, q) => sum + (q.quota > 0 ? q.quota : 0), 0);
+        const unlimitedCampuses = quotas.filter((q) => q.quota <= 0).length;
+        const usedCount = await ctx.prisma.staffProfile.count({
+          where: {
+            organizationId: input.organizationId,
+            campId: input.campId,
+            type: "TEACHER",
+            deletedAt: null,
+            status: { in: ["APPROVED", "PENDING"] },
+          },
+        });
+        result.quotaSummary = {
+          totalQuota: totalQuota > 0 ? totalQuota : null,
+          unlimitedCampuses,
+          usedCount,
+          remaining: totalQuota > 0 ? Math.max(0, totalQuota - usedCount) : null,
+          hasAnyQuota: totalQuota > 0,
+        };
+      }
+
+      return result;
     }),
 
   adminList: protectedProcedure
@@ -158,20 +192,23 @@ export const staffRouter = createTRPCRouter({
         }),
       };
 
-      const items = await ctx.prisma.staffProfile.findMany({
-        where,
-        include: { assignedVenue: true, assignedTribe: true, preferredCampus: true },
-        orderBy: { createdAt: "desc" },
-        take: input.limit + 1,
-        ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
-      });
+      const [items, totalCount] = await Promise.all([
+        ctx.prisma.staffProfile.findMany({
+          where,
+          include: { assignedVenue: true, assignedTribe: true, preferredCampus: true },
+          orderBy: { createdAt: "desc" },
+          take: input.limit + 1,
+          ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+        }),
+        ctx.prisma.staffProfile.count({ where }),
+      ]);
 
       let nextCursor: string | undefined;
       if (items.length > input.limit) {
         const next = items.pop();
         nextCursor = next?.id;
       }
-      return { items, nextCursor };
+      return { items, nextCursor, totalCount };
     }),
 
   getById: protectedProcedure
@@ -190,6 +227,7 @@ export const staffRouter = createTRPCRouter({
           directReports: { include: { user: true } },
           assignedHostel: true,
           assignedRoom: true,
+          assignedBed: true,
           fieldValues: { include: { field: true } },
           camperAssignments: { include: { registration: { include: { camper: true, tribe: true, room: true } } } },
         },

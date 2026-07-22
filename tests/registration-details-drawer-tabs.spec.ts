@@ -144,7 +144,7 @@ test.describe("Registration Details Drawer Tabs", () => {
     await page.waitForTimeout(500);
 
     // Communication tab should be active (purple border)
-    await expect(commTab).toHaveClass(/border-purple-600/);
+    await expect(commTab).toHaveClass(/border-accent-600/);
   });
 
   test("back button closes the drawer", async ({ page }) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Drawer } from "@/components/ui/Drawer";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import StatCard from "../../components/StatCard";
@@ -31,6 +31,15 @@ export const CampusAnalyticsModal: React.FC<CampusAnalyticsModalProps> = ({
   stats,
   isLoading = false,
 }) => {
+  const [accentColor, setAccentColor] = useState("#e67e22");
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const color = getComputedStyle(document.documentElement).getPropertyValue("--brand-primary").trim();
+      if (color) setAccentColor(color);
+    }
+  }, []);
+
   return (
     <Drawer
       open={isOpen}
@@ -132,7 +141,7 @@ export const CampusAnalyticsModal: React.FC<CampusAnalyticsModalProps> = ({
               <h3 className="font-semibold text-sm text-neutral-900 mb-3">Registrations Trend</h3>
               <LineChart
                 data={stats.trend.map((item) => item.count)}
-                color="#e67e22"
+                color={accentColor}
               />
             </div>
           )}
