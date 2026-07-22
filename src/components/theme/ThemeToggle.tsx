@@ -30,16 +30,16 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       type="button"
       onClick={toggleTheme}
       className={cn(
-        "relative flex h-8 w-8 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-600 shadow-xs transition-all hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700 dark:hover:text-white",
+        "relative flex h-8 w-8 items-center justify-center rounded-md border border-border-default bg-surface text-txt-secondary shadow-xs transition-all hover:bg-surface-raised hover:text-txt-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500",
         className
       )}
-      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      title={isDark ? "Dark mode active (click for light mode)" : "Light mode active (click for dark mode)"}
+      aria-label={isDark ? "Dark mode active" : "Light mode active"}
     >
       {isDark ? (
-        <SunIcon className="h-4 w-4 text-amber-400 transition-transform duration-200 hover:rotate-45" />
+        <MoonIcon className="h-4 w-4 text-accent-400 transition-transform duration-200 hover:-rotate-12" />
       ) : (
-        <MoonIcon className="h-4 w-4 text-neutral-600 transition-transform duration-200 hover:-rotate-12" />
+        <SunIcon className="h-4 w-4 text-amber-500 transition-transform duration-200 hover:rotate-45" />
       )}
     </button>
   );
