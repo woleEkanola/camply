@@ -30,18 +30,18 @@ export function StatCard({ label, value, insight, tone = "neutral", icon, onClic
     <Comp
       onClick={onClick}
       className={cn(
-        "flex flex-col gap-1 rounded-lg border bg-white p-4 text-left transition-colors",
-        selected ? "border-accent-500 ring-1 ring-accent-500" : "border-neutral-200",
-        onClick && "hover:border-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500",
+        "flex flex-col gap-1 rounded-lg border bg-surface p-4 text-left transition-all",
+        selected ? "border-accent-500 ring-1 ring-accent-500 bg-accent-50/10" : "border-border-default hover:border-neutral-400",
+        onClick && "cursor-pointer hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500",
         className
       )}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-wide text-neutral-500 line-clamp-2 break-words leading-tight min-w-0 flex-1 pr-1">{label}</span>
+        <span className="text-[11px] font-bold uppercase tracking-wide text-txt-secondary line-clamp-2 break-words leading-tight min-w-0 flex-1 pr-1">{label}</span>
         {icon && <span className={toneAccent[tone]}>{icon}</span>}
       </div>
-      <span className="text-2xl font-semibold text-neutral-900">{value}</span>
-      {insight && <span className={cn("text-xs", toneAccent[tone])}>{insight}</span>}
+      <span className="text-2xl font-bold text-txt-primary tracking-tight">{value}</span>
+      {insight && <span className={cn("text-xs font-medium", toneAccent[tone])}>{insight}</span>}
     </Comp>
   );
 }

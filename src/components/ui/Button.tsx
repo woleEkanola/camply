@@ -7,11 +7,11 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-accent-600 text-white hover:bg-accent-700 disabled:bg-accent-300",
+  primary: "bg-accent-600 text-white hover:bg-accent-700 disabled:opacity-50 shadow-xs",
   secondary:
-    "bg-white text-neutral-800 border border-neutral-300 hover:bg-neutral-50 disabled:text-neutral-400 disabled:bg-neutral-50",
-  ghost: "bg-transparent text-neutral-700 hover:bg-neutral-100 disabled:text-neutral-400",
-  danger: "bg-danger-600 text-white hover:bg-danger-700 disabled:bg-danger-300",
+    "bg-surface text-txt-primary border border-border-default hover:bg-surface-raised disabled:text-txt-muted disabled:bg-surface-raised shadow-xs",
+  ghost: "bg-transparent text-txt-secondary hover:bg-surface-raised hover:text-txt-primary disabled:text-txt-muted",
+  danger: "bg-danger-600 text-white hover:bg-danger-700 disabled:opacity-50 shadow-xs",
 };
 
 // Mobile heights hit the ~44-48px touch-target guideline; `md:` reverts to

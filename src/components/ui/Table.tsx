@@ -214,8 +214,8 @@ export function Table<T>(props: TableProps<T>) {
   const hideableColumns = useMemo(() => columns.filter((col) => col.hideable), [columns]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-      <div className="flex flex-col gap-2 border-b border-neutral-200 p-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="overflow-hidden rounded-lg border border-border-default bg-surface">
+      <div className="flex flex-col gap-2 border-b border-border-default p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           {isControlled ? (
             props.toolbar
@@ -241,9 +241,9 @@ export function Table<T>(props: TableProps<T>) {
               type="button"
               id="column-visibility-menu-button"
               onClick={() => setIsColumnDropdownOpen((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-accent-500"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-surface px-3 py-1.5 text-xs font-medium text-txt-secondary shadow-xs hover:bg-surface-raised focus:outline-none focus:ring-2 focus:ring-accent-500"
             >
-              <svg className="h-4 w-4 text-neutral-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <svg className="h-4 w-4 text-txt-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
               </svg>
@@ -256,8 +256,8 @@ export function Table<T>(props: TableProps<T>) {
                   className="fixed inset-0 z-10"
                   onClick={() => setIsColumnDropdownOpen(false)}
                 />
-                <div className="absolute right-0 z-20 mt-1.5 w-48 rounded-lg border border-neutral-200 bg-white p-2 shadow-lg ring-1 ring-black/5">
-                  <div className="mb-1.5 px-2 py-1 text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                <div className="absolute right-0 z-20 mt-1.5 w-48 rounded-lg border border-elevated-border bg-elevated p-2 shadow-xl">
+                  <div className="mb-1.5 px-2 py-1 text-xs font-semibold uppercase tracking-wider text-txt-muted">
                     Visible Columns
                   </div>
                   <div className="space-y-1">
@@ -268,13 +268,13 @@ export function Table<T>(props: TableProps<T>) {
                       return (
                         <label
                           key={colId}
-                          className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100"
+                          className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-txt-secondary hover:bg-surface-raised"
                         >
                           <input
                             type="checkbox"
                             checked={isVisible}
                             onChange={() => columnVisibility.onToggle(colId)}
-                            className="rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                            className="rounded border-input-border text-accent-600 focus:ring-accent-500"
                           />
                           <span>{labelText}</span>
                         </label>
@@ -303,14 +303,14 @@ export function Table<T>(props: TableProps<T>) {
         <>
           {/* Desktop: unchanged table, gated to md+. */}
           <div className="hidden overflow-x-auto md:block">
-            <table className="min-w-full divide-y divide-neutral-200">
-              <thead className="bg-neutral-50">
+            <table className="min-w-full divide-y divide-border-default">
+              <thead className="bg-surface-raised">
                 <tr>
                   {selectable && (
                     <th scope="col" className="w-10 px-4 py-2.5">
                       <input
                         type="checkbox"
-                        className="rounded border-neutral-300 text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                        className="rounded border-input-border text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                         checked={allOnPageSelected}
                         onChange={(e) => toggleSelectAllOnPage(e.target.checked)}
                         aria-label="Select all rows on this page"
@@ -323,8 +323,8 @@ export function Table<T>(props: TableProps<T>) {
                       scope="col"
                       style={columnWidths[i] ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` } : undefined}
                       className={cn(
-                        "relative px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-neutral-500 group select-none overflow-hidden",
-                        column.sortable && "cursor-pointer hover:bg-neutral-100",
+                        "relative px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-txt-secondary group select-none overflow-hidden",
+                        column.sortable && "cursor-pointer hover:bg-surface-hover",
                         column.className
                       )}
                     >
@@ -357,17 +357,17 @@ export function Table<T>(props: TableProps<T>) {
                       />
                     </th>
                   ))}
-                  {actions && <th scope="col" className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-neutral-500">Actions</th>}
+                  {actions && <th scope="col" className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-txt-secondary">Actions</th>}
                 </tr>
                 {activeColumns.some((c) => c.filter) && (
-                  <tr className="border-t border-neutral-100 bg-neutral-50">
+                  <tr className="border-t border-border-default bg-surface-raised">
                     {selectable && <th scope="col" className="px-4 py-1.5" />}
                     {activeColumns.map((column, i) => (
                       <th key={i} scope="col" className="px-4 py-1.5 font-normal">
                         {column.filter && (
                           <select
                             aria-label={typeof column.header === "string" ? `Filter by ${column.header}` : undefined}
-                            className="w-full rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-neutral-600 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+                            className="w-full rounded border border-input-border bg-input-bg px-1.5 py-1 text-xs text-txt-primary focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
                             value={column.filter.value}
                             onChange={(e) => column.filter!.onChange(e.target.value)}
                           >
@@ -383,12 +383,12 @@ export function Table<T>(props: TableProps<T>) {
                   </tr>
                 )}
               </thead>
-              <tbody className="divide-y divide-neutral-100 bg-white">
+              <tbody className="divide-y divide-border-subtle bg-surface">
                 {pageData.map((row) => (
                   <tr
                     key={rowKey(row)}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    className={cn(onRowClick && "cursor-pointer hover:bg-neutral-50")}
+                    className={cn("transition-colors", onRowClick && "cursor-pointer hover:bg-surface-hover")}
                   >
                     {selectable && (
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>

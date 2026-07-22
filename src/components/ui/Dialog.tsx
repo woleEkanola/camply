@@ -47,19 +47,19 @@ export function Dialog({ open, onClose, title, children, footer, size = "md" }: 
             <HeadlessDialog.Panel
               data-testid="dialog-panel"
               className={cn(
-                "flex max-h-[90vh] w-full flex-col bg-white shadow-lg",
+                "flex max-h-[90vh] w-full flex-col bg-elevated text-txt-primary border border-elevated-border shadow-2xl",
                 "rounded-t-2xl pb-[env(safe-area-inset-bottom)] md:max-h-[85vh] md:rounded-lg md:pb-0",
                 sizeClasses[size]
               )}
             >
               {/* Grab handle signals the sheet is dismissible/draggable-feeling on mobile; desktop keeps the plain card. */}
-              <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-neutral-300 md:hidden" aria-hidden="true" />
+              <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-border-default md:hidden" aria-hidden="true" />
               {title && (
-                <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
-                  <HeadlessDialog.Title className="text-sm font-semibold text-neutral-900">{title}</HeadlessDialog.Title>
+                <div className="flex items-center justify-between border-b border-elevated-border px-5 py-4">
+                  <HeadlessDialog.Title className="text-sm font-semibold text-txt-primary">{title}</HeadlessDialog.Title>
                   <button
                     onClick={onClose}
-                    className="-mr-1.5 rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                    className="-mr-1.5 rounded-md p-2 text-txt-muted hover:bg-surface-raised hover:text-txt-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                     aria-label="Close"
                   >
                     <XMarkIcon className="h-5 w-5" />
@@ -67,7 +67,7 @@ export function Dialog({ open, onClose, title, children, footer, size = "md" }: 
                 </div>
               )}
               <div className="overflow-y-auto px-5 py-4">{children}</div>
-              {footer && <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-4">{footer}</div>}
+              {footer && <div className="flex justify-end gap-2 border-t border-elevated-border px-5 py-4">{footer}</div>}
             </HeadlessDialog.Panel>
           </Transition.Child>
         </div>
