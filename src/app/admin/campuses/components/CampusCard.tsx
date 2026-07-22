@@ -13,6 +13,7 @@ import {
   ChartBarIcon,
   PencilIcon,
   ChevronRightIcon,
+  ChevronDownIcon,
   DocumentDuplicateIcon,
   TrashIcon,
   ClockIcon,
@@ -20,6 +21,7 @@ import {
   ClipboardDocumentIcon,
   SparklesIcon,
   AdjustmentsHorizontalIcon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 
 export interface CampusRepInfo {
@@ -126,6 +128,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
   onDuplicateCampus,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAddressExpanded, setIsAddressExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -182,9 +185,8 @@ export const CampusCard: React.FC<CampusCardProps> = ({
               </div>
             )}
 
-            {/* Lavender Church Emblem */}
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-100/70 text-accent-700 text-xl font-medium shadow-2xs group-hover:bg-accent-100 transition-colors">
-              ⛪
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-100/70 text-accent-700 shadow-2xs group-hover:bg-accent-100 transition-colors">
+              <BuildingOffice2Icon className="h-6 w-6" />
             </div>
 
             <div className="min-w-0 flex-1">
@@ -339,8 +341,8 @@ export const CampusCard: React.FC<CampusCardProps> = ({
           className="flex items-center justify-between gap-2 rounded-xl p-1 -mx-1 hover:bg-neutral-50 transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs shrink-0">
-              👥
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 shrink-0">
+              <UserGroupIcon className="h-4 w-4" />
             </div>
             <span className="text-[13px] font-semibold text-neutral-800 truncate">
               {campus.reps && campus.reps.length > 0 ? `${campus.reps.length} Representatives` : "No Reps Assigned"}
@@ -369,32 +371,48 @@ export const CampusCard: React.FC<CampusCardProps> = ({
         </div>
 
         {/* Address Row */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs shrink-0">
-              📍
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 shrink-0">
+                <MapPinIcon className="h-4 w-4" />
+              </div>
+              <span className="text-[13px] font-semibold text-neutral-800 truncate">Address</span>
             </div>
-            <span className="text-[13px] font-semibold text-neutral-800 truncate">Address</span>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsAddressExpanded((prev) => !prev);
+              }}
+              className="inline-flex items-center gap-0.5 text-xs font-semibold text-neutral-500 hover:text-accent-700 transition-colors"
+            >
+              <span>{isAddressExpanded ? "Hide address" : "View address"}</span>
+              <ChevronDownIcon className={cn(
+                "h-3.5 w-3.5 text-neutral-400 transition-transform",
+                isAddressExpanded && "rotate-180"
+              )} />
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenDetails?.(campus.id);
-            }}
-            className="inline-flex items-center gap-0.5 text-xs font-semibold text-neutral-500 hover:text-accent-700 transition-colors"
-          >
-            <span>View address</span>
-            <ChevronRightIcon className="h-3.5 w-3.5 text-neutral-400" />
-          </button>
+          {isAddressExpanded && (
+            <div className="rounded-xl bg-neutral-50 border border-neutral-100 px-3.5 py-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
+              <p className="text-xs text-neutral-700 leading-relaxed">
+                {formattedAddress}
+                {campus.state && `, ${campus.state}`}
+                {campus.zipCode && ` ${campus.zipCode}`}
+                {campus.country && `, ${campus.country}`}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Signup Link Row */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs shrink-0">
-              🔗
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 shrink-0">
+              <LinkIcon className="h-4 w-4" />
             </div>
             <span className="text-[13px] font-semibold text-neutral-800 truncate">Signup Link</span>
           </div>

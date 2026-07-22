@@ -3,13 +3,15 @@
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
 import AppShell from "@/components/layout/AppShell";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import StatCard from "../../components/StatCard";
 import LineChart from "../../components/LineChart";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Dialog } from "@/components/ui/Dialog";
+import type { SignupLink } from "@/types/signupLink";
 import {
   ChevronLeftIcon,
   EllipsisVerticalIcon,
@@ -23,6 +25,7 @@ import {
   ChevronRightIcon,
   ArrowTopRightOnSquareIcon,
   PlusIcon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 
 const CampusDetailsPage = () => {
@@ -32,13 +35,28 @@ const CampusDetailsPage = () => {
   const [activeTab, setActiveTab] = useState<"overview" | "representatives" | "registrations" | "settings">("overview");
   const [copiedLink, setCopiedLink] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
+  const [quotaFormData, setQuotaFormData] = useState<{ quota: number; quotaFullBehavior: "CLOSE" | "WAITLIST" }>({
+    quota: 0,
+    quotaFullBehavior: "CLOSE",
+  });
+  const [accentColor, setAccentColor] = useState("#9333ea");
+  const [quotaError, setQuotaError] = useState("");
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const color = getComputedStyle(document.documentElement).getPropertyValue("--brand-primary").trim();
+      if (color) setAccentColor(color);
+    }
+  }, []);
+
 
   const { data: campus, isLoading, error } = api.campus.getById.useQuery(
     { id },
     { enabled: !!id }
   );
 
-  const { data: stats } = api.campus.getStats.useQuery(
+  const { data: stats, refetch: refetchStats } = api.campus.getStats.useQuery(
     { campusId: id },
     { enabled: !!id }
   );
@@ -46,6 +64,33 @@ const CampusDetailsPage = () => {
   const deleteCampusMutation = api.campus.delete.useMutation({
     onSuccess: () => {
       router.push("/admin/campuses");
+    },
+  });
+
+  const { data: activeCamp } = api.camp.getActiveCamp.useQuery(
+    { organizationId: (campus as any)?.organizationId || "" },
+    { enabled: !!campus }
+  );
+
+  const { data: signupLinks = [] } = api.signupLink.getByOrganization.useQuery(
+    {
+      organizationId: (campus as any)?.organizationId || "",
+      campId: (activeCamp as any)?.id,
+    },
+    { enabled: !!campus && !!(activeCamp as any)?.id }
+  );
+
+  const signupLink: SignupLink | undefined = (signupLinks as SignupLink[]).find(
+    (link: SignupLink) => link.campusId === id
+  );
+
+  const updateQuotaMutation = api.signupLink.updateQuota.useMutation({
+    onSuccess: () => {
+      setIsQuotaModalOpen(false);
+      void refetchStats();
+    },
+    onError: (err) => {
+      setQuotaError(err.message);
     },
   });
 
@@ -91,6 +136,25 @@ const CampusDetailsPage = () => {
     setTimeout(() => setCopiedLink(false), 3000);
   };
 
+  const handleOpenQuotaModal = () => {
+    if (!signupLink) return;
+    setQuotaError("");
+    setQuotaFormData({
+      quota: signupLink.quota ?? 0,
+      quotaFullBehavior: (signupLink.quotaFullBehavior as "CLOSE" | "WAITLIST") ?? "CLOSE",
+    });
+    setIsQuotaModalOpen(true);
+  };
+
+  const handleSaveQuota = () => {
+    if (!signupLink) return;
+    updateQuotaMutation.mutate({
+      id: signupLink.id,
+      quota: quotaFormData.quota,
+      quotaFullBehavior: quotaFormData.quotaFullBehavior,
+    });
+  };
+
   const repsList = Array.isArray((campus as any).reps) ? (campus as any).reps : [];
 
   return (
@@ -116,8 +180,8 @@ const CampusDetailsPage = () => {
 
         {/* CAMPUS IDENTITY EMBLEM & TITLE */}
         <div className="space-y-3 pt-2">
-          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-accent-100/70 text-accent-700 text-3xl font-medium shadow-2xs">
-            ⛪
+          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-accent-100/70 text-accent-700 shadow-2xs">
+            <BuildingOffice2Icon className="h-8 w-8" />
           </div>
 
           <div>
@@ -161,8 +225,8 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs">
-                    📍
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                    <MapPinIcon className="h-4 w-4" />
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Campus Information</h3>
                 </div>
@@ -190,8 +254,8 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs">
-                    🔗
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                    <LinkIcon className="h-4 w-4" />
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Signup Link</h3>
                 </div>
@@ -230,15 +294,15 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs">
-                    📊
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                    <ChartBarIcon className="h-4 w-4" />
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Registration Capacity</h3>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => router.push("/admin/campuses")}
+                  onClick={handleOpenQuotaModal}
                   className="text-xs font-semibold text-accent-700 hover:underline"
                 >
                   Edit
@@ -273,8 +337,8 @@ const CampusDetailsPage = () => {
             <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 text-xs">
-                    👥
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                    <UserGroupIcon className="h-4 w-4" />
                   </div>
                   <h3 className="text-xs font-bold text-neutral-900">Campus Representatives</h3>
                 </div>
@@ -381,7 +445,7 @@ const CampusDetailsPage = () => {
             {stats?.trend && (
               <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
                 <h3 className="text-xs font-bold text-neutral-900">Registrations Trend</h3>
-                <LineChart data={stats.trend.map((item: any) => item.count)} color="#9333ea" />
+                <LineChart data={stats.trend.map((item: any) => item.count)} color={accentColor} />
               </div>
             )}
           </div>
@@ -402,6 +466,41 @@ const CampusDetailsPage = () => {
           </div>
         )}
       </div>
+
+      {/* QUOTA / CAPACITY MODAL */}
+      <Dialog open={isQuotaModalOpen} onClose={() => setIsQuotaModalOpen(false)} title="Edit Registration Capacity" size="sm">
+        {quotaError && <div className="mb-4 rounded-xl bg-danger-50 p-3 text-xs text-danger-700">{quotaError}</div>}
+        <div className="space-y-4">
+          <Input
+            label="Registration Capacity / Quota (0 = Unlimited)"
+            type="number"
+            id="quota"
+            value={quotaFormData.quota}
+            onChange={(e) => setQuotaFormData({ ...quotaFormData, quota: parseInt(e.target.value, 10) || 0 })}
+          />
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-600 mb-1">
+              When Capacity Reached
+            </label>
+            <select
+              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-800 bg-white focus:ring-2 focus:ring-accent-500"
+              value={quotaFormData.quotaFullBehavior}
+              onChange={(e) => setQuotaFormData({ ...quotaFormData, quotaFullBehavior: e.target.value as "CLOSE" | "WAITLIST" })}
+            >
+              <option value="CLOSE">Close — Block new registrations once full</option>
+              <option value="WAITLIST">Waitlist — Accept submissions and waitlist excess</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2 border-t border-neutral-100 pt-3">
+          <Button variant="secondary" onClick={() => setIsQuotaModalOpen(false)}>
+            Cancel
+          </Button>
+          <Button loading={updateQuotaMutation.isPending} onClick={handleSaveQuota}>
+            Save Capacity
+          </Button>
+        </div>
+      </Dialog>
 
       {/* DELETE DIALOG */}
       <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Delete Campus" size="sm">

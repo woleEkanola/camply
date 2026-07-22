@@ -246,13 +246,13 @@ export default function LoginPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
+        className="w-full rounded-full bg-accent-600 text-white py-3 font-medium hover:bg-accent-700 transition disabled:opacity-50 cursor-pointer"
       >
         {loading ? "Sending..." : "Next"}
       </button>
@@ -268,7 +268,7 @@ export default function LoginPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <div className="mb-4">
@@ -278,13 +278,13 @@ export default function LoginPage() {
           value={passwordValue}
           onChange={(e) => setPasswordValue(e.target.value)}
           required
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
+        className="w-full rounded-full bg-accent-600 text-white py-3 font-medium hover:bg-accent-700 transition disabled:opacity-50 cursor-pointer"
       >
         {loading ? "Logging in..." : "Login"}
       </button>
@@ -293,7 +293,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleForgotPassword}
           disabled={forgotLoading || forgotResendCooldown > 0}
-          className="text-[#E67E22] hover:underline font-medium disabled:opacity-50 cursor-pointer"
+          className="text-accent-600 hover:underline font-medium disabled:opacity-50 cursor-pointer"
         >
           {forgotLoading ? "Sending..." : forgotResendCooldown > 0 ? `Try again in ${forgotResendCooldown}s` : "Forgot password?"}
         </button>
@@ -312,7 +312,7 @@ export default function LoginPage() {
       <button
         type="submit"
         disabled={loading || authValue.length !== 6}
-        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
+        className="w-full rounded-full bg-accent-600 text-white py-3 font-medium hover:bg-accent-700 transition disabled:opacity-50 cursor-pointer"
       >
         {loading ? "Logging in..." : "Login"}
       </button>
@@ -354,7 +354,7 @@ export default function LoginPage() {
           onChange={(e) => setNewPassword(e.target.value)}
           required
           minLength={8}
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <div className="mb-5">
@@ -365,13 +365,13 @@ export default function LoginPage() {
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
           minLength={8}
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <button
         type="submit"
         disabled={resetLoading || resetOtp.length !== 6}
-        className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 cursor-pointer"
+        className="w-full rounded-full bg-accent-600 text-white py-3 font-medium hover:bg-accent-700 transition disabled:opacity-50 cursor-pointer"
       >
         {resetLoading ? "Updating..." : "Reset Password"}
       </button>
@@ -387,7 +387,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleForgotPassword}
           disabled={forgotLoading || forgotResendCooldown > 0}
-          className="text-[#E67E22] hover:underline font-medium disabled:opacity-50 cursor-pointer"
+          className="text-accent-600 hover:underline font-medium disabled:opacity-50 cursor-pointer"
         >
           {forgotLoading ? "Resending..." : forgotResendCooldown > 0 ? `Resend code (${forgotResendCooldown}s)` : "Resend code"}
         </button>
@@ -416,7 +416,7 @@ export default function LoginPage() {
         }}
         className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
           loginType === "password"
-            ? "border-[#E67E22] text-[#E67E22]"
+            ? "border-accent-500 text-accent-600"
             : "border-transparent text-gray-500 hover:text-gray-900"
         }`}
       >
@@ -432,7 +432,7 @@ export default function LoginPage() {
         }}
         className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
           loginType === "otp"
-            ? "border-[#E67E22] text-[#E67E22]"
+            ? "border-accent-500 text-accent-600"
             : "border-transparent text-gray-500 hover:text-gray-900"
         }`}
       >
@@ -454,7 +454,7 @@ export default function LoginPage() {
         </div>
       )}
       {hint && (
-        <div className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-700">
+        <div className="mb-4 rounded-md bg-accent-50 p-3 text-sm text-accent-700">
           {hint}
         </div>
       )}
@@ -466,7 +466,7 @@ export default function LoginPage() {
       {/* Mobile View */}
       <div className="md:hidden relative h-screen overflow-hidden font-sans">
         {/* Full screen orange background with image */}
-        <div className="absolute inset-0 bg-[#E67E22] flex flex-col items-center">
+        <div className="absolute inset-0 bg-accent-600 flex flex-col items-center">
           {/* Logo and group image positioning */}
           <div className="mt-6 mb-6">
             <Image src="/logo.png" alt="Logo" width={100} height={100} />
@@ -498,7 +498,7 @@ export default function LoginPage() {
             {step !== 3 && (
               <div className="mt-4 text-center text-sm text-neutral-500">
                 Are you a church owner?{" "}
-                <Link href="/signup-org" className="text-[#E67E22] hover:underline font-semibold">
+                <Link href="/signup-org" className="text-accent-600 hover:underline font-semibold">
                   Register your church
                 </Link>
               </div>
@@ -519,7 +519,7 @@ export default function LoginPage() {
       <div className="hidden md:flex h-screen overflow-hidden font-sans">
         {/* Left Panel */}
         <div className="w-[50%] h-full flex items-center justify-center p-4">
-          <div className="ml-[5%] w-[76%] h-[90vh] bg-[#E67E22] flex flex-col items-center justify-center p-6 text-white rounded-2xl">
+          <div className="ml-[5%] w-[76%] h-[90vh] bg-accent-600 flex flex-col items-center justify-center p-6 text-white rounded-2xl">
             <h1 className="text-4xl md:text-5xl font-bold tracking-wide">JESUS TRIBE</h1>
             <h2 className="text-2xl md:text-3xl font-medium mt-1">Teens Camp</h2>
 
@@ -542,7 +542,7 @@ export default function LoginPage() {
           </div>
         </div>
         {/* Right Panel */}
-        <div className="w-[44%] h-full flex items-center justify-center bg-[#FDFDFD] p-4">
+        <div className="w-[44%] h-full flex items-center justify-center bg-neutral-50 p-4">
           <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
             <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">{heading}</h2>
 
@@ -553,7 +553,7 @@ export default function LoginPage() {
             {step !== 3 && (
               <div className="mt-5 text-center text-sm text-neutral-500">
                 Are you a church owner?{" "}
-                <Link href="/signup-org" className="text-[#E67E22] hover:underline font-semibold">
+                <Link href="/signup-org" className="text-accent-600 hover:underline font-semibold">
                   Register your church
                 </Link>
               </div>

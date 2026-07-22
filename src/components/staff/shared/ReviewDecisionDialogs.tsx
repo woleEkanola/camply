@@ -36,7 +36,7 @@ export function ApproveDecisionDialog({
             type="checkbox"
             checked={sendEmail}
             onChange={(e) => setSendEmail(e.target.checked)}
-            className="h-4 w-4 rounded border-neutral-300 text-purple-600 focus:ring-purple-500"
+            className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
           />
           <span>Send approval confirmation email to parent immediately</span>
         </label>

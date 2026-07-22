@@ -90,7 +90,7 @@ export function getStatusStyle(status: string) {
     case "COMPLETED":
       return {
         label: "• COMPLETED",
-        badgeClass: "bg-purple-50 text-purple-700 border border-purple-200/80 font-bold",
+        badgeClass: "bg-accent-50 text-accent-700 border border-accent-200/80 font-bold",
       };
     case "REJECTED":
       return {
@@ -156,7 +156,7 @@ export function MobileRegistrationCard({
       onClick={() => onClick(registration)}
       className={cn(
         "group relative flex flex-col justify-between rounded-2xl border bg-white p-4 shadow-sm transition-all duration-200 active:scale-[0.99] cursor-pointer max-w-full overflow-hidden",
-        isSelected ? "border-purple-500 ring-2 ring-purple-500/20 bg-purple-50/10" : "border-neutral-200/80 hover:border-neutral-300"
+        isSelected ? "border-accent-500 ring-2 ring-purple-500/20 bg-accent-50/10" : "border-neutral-200/80 hover:border-neutral-300"
       )}
     >
       {/* SECTION 1 — IDENTITY & STATUS */}
@@ -176,7 +176,7 @@ export function MobileRegistrationCard({
                 e.stopPropagation();
                 onSelect(registration.id, e.target.checked);
               }}
-              className="h-5 w-5 rounded border-neutral-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+              className="h-5 w-5 rounded border-neutral-300 text-accent-600 focus:ring-purple-500 cursor-pointer"
               aria-label={`Select ${camperName}`}
             />
           </div>
@@ -189,7 +189,7 @@ export function MobileRegistrationCard({
               className="h-11 w-11 rounded-full object-cover shrink-0 border border-neutral-200"
             />
           ) : (
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-purple-100/80 text-purple-800 font-bold text-base shadow-2xs">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-100/80 text-accent-800 font-bold text-base shadow-2xs">
               {(camperName[0] || "C").toUpperCase()}
             </div>
           )}
@@ -200,7 +200,7 @@ export function MobileRegistrationCard({
               {camperName}
             </h3>
             <div className="mt-1 flex items-center gap-1.5">
-              <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+              <span className="inline-flex items-center rounded-md bg-accent-50 px-2 py-0.5 text-[11px] font-semibold text-accent-700">
                 {relationship}
               </span>
               {age !== null && (
@@ -229,7 +229,7 @@ export function MobileRegistrationCard({
       <div className="mt-3 pt-2.5 border-t border-neutral-100 flex items-center justify-between text-[12px] font-medium text-neutral-600">
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1 min-w-0 text-neutral-700">
-            <MapPinIcon className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+            <MapPinIcon className="h-3.5 w-3.5 text-accent-600 shrink-0" />
             <span className="truncate font-semibold">{campusName}</span>
           </div>
           <span className="font-mono text-xs text-neutral-400"># {regNumber}</span>
@@ -245,7 +245,7 @@ export function MobileRegistrationCard({
           <span>
             Documents: {uploadedCount} of {totalRequired} uploaded
           </span>
-          <span className="font-bold text-purple-600">
+          <span className="font-bold text-accent-600">
             {docPercent}%
           </span>
         </div>
@@ -265,7 +265,7 @@ export function MobileRegistrationCard({
         <button
           type="button"
           onClick={() => onClick(registration)}
-          className="flex-1 inline-flex min-h-[38px] items-center justify-center gap-1 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold text-xs transition-all active:scale-98"
+          className="flex-1 inline-flex min-h-[38px] items-center justify-center gap-1 rounded-xl bg-accent-50 text-accent-700 hover:bg-purple-100 font-bold text-xs transition-all active:scale-98"
         >
           <span>View Review</span>
           <span>→</span>
@@ -302,7 +302,7 @@ export function MobileRegistrationCard({
                     setMenuOpen(false);
                     onClick(registration);
                   }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-purple-900"
                 >
                   <UserIcon className="h-4 w-4 text-neutral-500" />
                   View Registration
@@ -313,7 +313,7 @@ export function MobileRegistrationCard({
                     setMenuOpen(false);
                     onQuickAction?.(registration, "EDIT");
                   }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-purple-900"
                 >
                   <PencilIcon className="h-4 w-4 text-neutral-500" />
                   Edit Registration
@@ -324,7 +324,7 @@ export function MobileRegistrationCard({
                     setMenuOpen(false);
                     onQuickAction?.(registration, "TRIBE");
                   }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-purple-900"
                 >
                   <UserGroupIcon className="h-4 w-4 text-neutral-500" />
                   Assign Tribe
@@ -335,7 +335,7 @@ export function MobileRegistrationCard({
                     setMenuOpen(false);
                     onQuickAction?.(registration, "EMAIL");
                   }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-purple-50 hover:text-purple-900"
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-purple-900"
                 >
                   <EnvelopeIcon className="h-4 w-4 text-neutral-500" />
                   Send Email
@@ -428,7 +428,7 @@ export function MobileRegistrationsView({
     { label: "Pending", key: "PENDING", dotColor: "bg-amber-500" },
     { label: "Approved", key: "APPROVED", dotColor: "bg-emerald-500" },
     { label: "Checked In", key: "CHECKED_IN", dotColor: "bg-sky-500" },
-    { label: "Completed", key: "COMPLETED", dotColor: "bg-purple-500" },
+    { label: "Completed", key: "COMPLETED", dotColor: "bg-accent-500" },
     { label: "Rejected", key: "REJECTED", dotColor: "bg-rose-500" },
     { label: "Waitlisted", key: "WAITLISTED", dotColor: "bg-indigo-500" },
     { label: "Requires Action", key: "REQUIRES_ACTION", dotColor: "bg-amber-600" },
@@ -447,7 +447,7 @@ export function MobileRegistrationsView({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search by name, email, phone, reg #..."
-            className="w-full min-h-[46px] rounded-2xl border border-neutral-200/80 bg-neutral-100/80 pl-10 pr-4 text-sm font-medium text-neutral-900 placeholder:text-neutral-500 focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all"
+            className="w-full min-h-[46px] rounded-2xl border border-neutral-200/80 bg-neutral-100/80 pl-10 pr-4 text-sm font-medium text-neutral-900 placeholder:text-neutral-500 focus:border-accent-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all"
           />
         </div>
 
@@ -473,7 +473,7 @@ export function MobileRegistrationsView({
               className={cn(
                 "flex min-w-[100px] flex-col justify-between rounded-2xl border p-3.5 text-left transition-all shrink-0 active:scale-95 shadow-2xs",
                 isSelected
-                  ? "border-purple-600 bg-purple-50/60 ring-2 ring-purple-500/20"
+                  ? "border-purple-600 bg-accent-50/60 ring-2 ring-purple-500/20"
                   : "border-neutral-200/80 bg-white hover:border-neutral-300"
               )}
             >

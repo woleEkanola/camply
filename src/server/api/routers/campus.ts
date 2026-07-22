@@ -75,7 +75,7 @@ export const campusRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input, ctx }) => {
-      const campus = await prisma.campus.findUnique({ where: { id: input.id } });
+      const campus = await prisma.campus.findUnique({ where: { id: input.id }, include: { reps: true } });
       if (!campus || campus.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
       }

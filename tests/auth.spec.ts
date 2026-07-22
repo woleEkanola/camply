@@ -87,7 +87,7 @@ test.describe("Authentication", () => {
     await loginButton(page).click();
 
     await expect(
-      page.locator("div.bg-blue-50:visible", { hasText: /verification code|Email OTP|reset your password/i })
+      page.locator("div.bg-accent-50:visible", { hasText: /verification code|Email OTP|reset your password/i })
     ).toBeVisible({ timeout: 10000 });
   });
 });

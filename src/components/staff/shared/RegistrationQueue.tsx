@@ -470,7 +470,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
                   viewMode === "card"
-                    ? "bg-white text-purple-700 shadow-2xs"
+                    ? "bg-white text-accent-700 shadow-2xs"
                     : "text-neutral-600 hover:text-neutral-900"
                 )}
               >
@@ -483,7 +483,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
                   viewMode === "list"
-                    ? "bg-white text-purple-700 shadow-2xs"
+                    ? "bg-white text-accent-700 shadow-2xs"
                     : "text-neutral-600 hover:text-neutral-900"
                 )}
               >

@@ -218,7 +218,7 @@ export default function AccessControl({ organizationId }: { organizationId: stri
                 <li 
                   key={user.id} 
                   className={`cursor-pointer py-3 hover:bg-gray-50 ${
-                    selectedUser === user.id ? 'bg-blue-50' : ''
+                    selectedUser === user.id ? 'bg-accent-50' : ''
                   }`}
                   onClick={() => canManageUserPermissions(user.role) && handleUserSelect(user.id)}
                 >
@@ -279,7 +279,7 @@ export default function AccessControl({ organizationId }: { organizationId: stri
                             id={`permission-${permission}`}
                             checked={permissionForm.permissions.includes(permission)}
                             onChange={(e) => handlePermissionChange(permission, e.target.checked)}
-                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="h-4 w-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500"
                           />
                           <label
                             htmlFor={`permission-${permission}`}
@@ -294,7 +294,7 @@ export default function AccessControl({ organizationId }: { organizationId: stri
                     <div className="mt-6 flex justify-end">
                       <button
                         type="submit"
-                        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                        className="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700"
                         disabled={updatePermissionsMutation.isPending}
                       >
                         {updatePermissionsMutation.isPending ? "Saving..." : "Save Permissions"}

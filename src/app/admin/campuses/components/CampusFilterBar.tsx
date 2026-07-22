@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { FunnelIcon, PlusIcon, ChevronDownIcon, Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
+import { cn } from "@/lib/cn";
 
 export type StatusFilterOption = "ALL" | "ACTIVE" | "INACTIVE" | "FULL" | "CLOSED";
 export type SortOption = "order_asc" | "name_asc" | "name_desc" | "code_asc" | "quota_desc";
@@ -123,7 +124,39 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
           )}
         </div>
 
-        {/* Add Campus (+) Purple Button */}
+        {/* View Mode Toggle */}
+        {onViewModeChange && (
+          <div className="flex shrink-0 rounded-2xl border border-neutral-200/80 bg-neutral-50 p-0.5">
+            <button
+              type="button"
+              onClick={() => onViewModeChange("grid")}
+              className={cn(
+                "inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl transition-colors",
+                viewMode === "grid"
+                  ? "bg-white text-accent-600 shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-600"
+              )}
+              title="Card view"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewModeChange("table")}
+              className={cn(
+                "inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl transition-colors",
+                viewMode === "table"
+                  ? "bg-white text-accent-600 shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-600"
+              )}
+              title="Table view"
+            >
+              <TableCellsIcon className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+
+        {/* Add Campus (+) Button */}
         {onOpenCreateModal && (
           <button
             type="button"
