@@ -4,6 +4,7 @@ import { TRPCProvider } from "./providers";
 import { AuthProvider } from "./auth-provider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { BrandColorProvider } from "@/components/theme/BrandColorProvider";
 import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
 import { extractRouterConfig } from "uploadthing/server";
 import { ourFileRouter } from "./api/uploadthing/core";
