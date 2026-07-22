@@ -8,6 +8,7 @@ import { ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, UserIcon } from "@hero
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import NotificationBell from "@/components/NotificationBell";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { getNavGroups, getBottomNavItems, type Role } from "./navConfig";
 import { CommandPalette } from "./CommandPalette";
 import { BottomNav } from "./BottomNav";
@@ -185,8 +186,9 @@ export default function AppShell({ area, children }: AppShellProps) {
           </button>
           <div className="flex items-center gap-2">
             <NotificationBell />
+            <ThemeToggle />
             {session?.user?.email && (
-              <Menu as="div" className="relative ml-3">
+              <Menu as="div" className="relative ml-1 sm:ml-2">
                 <div>
                   <Menu.Button className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2">
                     {userProfile?.photoUrl ? (

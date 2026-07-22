@@ -114,6 +114,77 @@ body {
   font-family: var(--font-geist-sans);
 }
 
+/* Dark mode theme variables and surface overrides */
+.dark {
+  color-scheme: dark;
+  --background: #09090b;
+  --foreground: #f4f4f5;
+
+  --color-neutral-50: #121215;
+  --color-neutral-100: #18181b;
+  --color-neutral-200: #27272a;
+  --color-neutral-300: #3f3f46;
+  --color-neutral-400: #71717a;
+  --color-neutral-500: #a1a1aa;
+  --color-neutral-600: #d4d4d8;
+  --color-neutral-700: #e4e4e7;
+  --color-neutral-800: #f4f4f5;
+  --color-neutral-900: #fafafa;
+  --color-neutral-950: #ffffff;
+
+  --color-accent-50: color-mix(in srgb, var(--brand-primary) 18%, #18181b);
+  --color-accent-100: color-mix(in srgb, var(--brand-primary) 30%, #18181b);
+}
+
+.dark .bg-white {
+  background-color: #18181b !important;
+}
+
+.dark .bg-neutral-50 {
+  background-color: #09090b !important;
+}
+
+.dark .bg-neutral-100 {
+  background-color: #1e1e24 !important;
+}
+
+.dark .border-neutral-200,
+.dark .border-neutral-100,
+.dark .border-neutral-200\/80 {
+  border-color: #27272a !important;
+}
+
+.dark .text-neutral-900 {
+  color: #f4f4f5 !important;
+}
+
+.dark .text-neutral-800,
+.dark .text-neutral-700 {
+  color: #e4e4e7 !important;
+}
+
+.dark .text-neutral-600,
+.dark .text-neutral-500 {
+  color: #a1a1aa !important;
+}
+
+.dark .text-neutral-400 {
+  color: #71717a !important;
+}
+
+.dark .divide-neutral-200 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-neutral-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #27272a !important;
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea {
+  background-color: #18181b !important;
+  color: #f4f4f5 !important;
+  border-color: #27272a !important;
+}
+
 @layer base {
   /* iOS Safari zooms the viewport when a focused control's font-size is
      under 16px. Shared primitives (Input/SearchBar/Button) already set
