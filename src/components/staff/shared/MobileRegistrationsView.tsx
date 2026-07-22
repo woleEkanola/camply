@@ -74,43 +74,43 @@ export function getStatusStyle(status: string) {
     case "APPROVED":
       return {
         label: "• APPROVED",
-        badgeClass: "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold",
+        badgeClass: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold",
       };
     case "PENDING":
       return {
         label: "• PENDING",
-        badgeClass: "bg-amber-50 text-amber-700 border border-amber-200/80 font-bold",
+        badgeClass: "bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold",
       };
     case "CHECKED_IN":
     case "CHECKED IN":
       return {
         label: "• CHECKED IN",
-        badgeClass: "bg-sky-50 text-sky-700 border border-sky-200/80 font-bold",
+        badgeClass: "bg-sky-500/10 text-sky-400 border border-sky-500/20 font-bold",
       };
     case "COMPLETED":
       return {
         label: "• COMPLETED",
-        badgeClass: "bg-accent-50 text-accent-700 border border-accent-200/80 font-bold",
+        badgeClass: "bg-accent-500/10 text-accent-400 border border-accent-500/20 font-bold",
       };
     case "REJECTED":
       return {
         label: "• REJECTED",
-        badgeClass: "bg-rose-50 text-rose-700 border border-rose-200/80 font-bold",
+        badgeClass: "bg-rose-500/10 text-rose-400 border border-rose-500/20 font-bold",
       };
     case "WAITLISTED":
       return {
         label: "• WAITLISTED",
-        badgeClass: "bg-indigo-50 text-indigo-700 border border-indigo-200/80 font-bold",
+        badgeClass: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold",
       };
     case "REQUIRES_ACTION":
       return {
         label: "• ACTION REQ",
-        badgeClass: "bg-amber-100 text-amber-900 border border-amber-300 font-bold",
+        badgeClass: "bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold",
       };
     default:
       return {
         label: `• ${status?.replace(/_/g, " ") || "DRAFT"}`,
-        badgeClass: "bg-neutral-100 text-neutral-600 border border-neutral-200 font-bold",
+        badgeClass: "bg-surface-raised text-txt-muted border border-border-default font-bold",
       };
   }
 }
@@ -155,8 +155,10 @@ export function MobileRegistrationCard({
     <div
       onClick={() => onClick(registration)}
       className={cn(
-        "group relative flex flex-col justify-between rounded-2xl border bg-white p-4 shadow-sm transition-all duration-200 active:scale-[0.99] cursor-pointer max-w-full overflow-hidden",
-        isSelected ? "border-accent-500 ring-2 ring-purple-500/20 bg-accent-50/10" : "border-neutral-200/80 hover:border-neutral-300"
+        "group relative flex flex-col justify-between rounded-2xl border bg-surface p-4 shadow-xs transition-all duration-200 active:scale-[0.99] cursor-pointer max-w-full overflow-hidden",
+        isSelected
+          ? "border-accent-500 ring-1 ring-accent-500 bg-accent-500/10"
+          : "border-border-default hover:border-neutral-700 hover:bg-surface-hover"
       )}
     >
       {/* SECTION 1 — IDENTITY & STATUS */}
@@ -176,7 +178,7 @@ export function MobileRegistrationCard({
                 e.stopPropagation();
                 onSelect(registration.id, e.target.checked);
               }}
-              className="h-5 w-5 rounded border-neutral-300 text-accent-600 focus:ring-purple-500 cursor-pointer"
+              className="h-5 w-5 rounded border-input-border text-accent-600 focus:ring-purple-500 cursor-pointer"
               aria-label={`Select ${camperName}`}
             />
           </div>
@@ -186,30 +188,30 @@ export function MobileRegistrationCard({
             <img
               src={photoUrl}
               alt=""
-              className="h-11 w-11 rounded-full object-cover shrink-0 border border-neutral-200"
+              className="h-11 w-11 rounded-full object-cover shrink-0 border border-border-default"
             />
           ) : (
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-100/80 text-accent-800 font-bold text-base shadow-2xs">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-500/20 text-accent-400 font-bold text-base shadow-2xs border border-accent-500/30">
               {(camperName[0] || "C").toUpperCase()}
             </div>
           )}
 
           {/* Name & Relationship */}
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-[17px] font-bold text-neutral-900 leading-tight">
+            <h3 className="truncate text-[17px] font-bold text-txt-primary leading-tight">
               {camperName}
             </h3>
             <div className="mt-1 flex items-center gap-1.5">
-              <span className="inline-flex items-center rounded-md bg-accent-50 px-2 py-0.5 text-[11px] font-semibold text-accent-700">
+              <span className="inline-flex items-center rounded-md bg-accent-500/15 border border-accent-500/30 px-2 py-0.5 text-[11px] font-semibold text-accent-400">
                 {relationship}
               </span>
               {age !== null && (
-                <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                <span className="inline-flex items-center rounded-md bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 text-[11px] font-semibold text-sky-400">
                   {age}y
                 </span>
               )}
               {parentName && (
-                <span className="truncate text-xs font-medium text-neutral-500">
+                <span className="truncate text-xs font-medium text-txt-muted">
                   {parentName}
                 </span>
               )}
@@ -226,15 +228,15 @@ export function MobileRegistrationCard({
       </div>
 
       {/* SECTION 2 — QUICK INFORMATION (Concise Metadata) */}
-      <div className="mt-3 pt-2.5 border-t border-neutral-100 flex items-center justify-between text-[12px] font-medium text-neutral-600">
+      <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-[12px] font-medium text-txt-secondary">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="flex items-center gap-1 min-w-0 text-neutral-700">
-            <MapPinIcon className="h-3.5 w-3.5 text-accent-600 shrink-0" />
-            <span className="truncate font-semibold">{campusName}</span>
+          <div className="flex items-center gap-1 min-w-0 text-txt-secondary">
+            <MapPinIcon className="h-3.5 w-3.5 text-accent-500 shrink-0" />
+            <span className="truncate font-semibold text-txt-primary">{campusName}</span>
           </div>
-          <span className="font-mono text-xs text-neutral-400"># {regNumber}</span>
+          <span className="font-mono text-xs text-txt-muted"># {regNumber}</span>
         </div>
-        <span className="text-[11px] font-semibold text-neutral-400 shrink-0 ml-2">
+        <span className="text-[11px] font-semibold text-txt-muted shrink-0 ml-2">
           {updatedTime}
         </span>
       </div>
