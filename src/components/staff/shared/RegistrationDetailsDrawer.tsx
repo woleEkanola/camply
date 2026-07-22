@@ -133,7 +133,7 @@ export function RegistrationDetailsDrawer({
     return (
       <Drawer open onClose={onClose} title="Registration Details">
         <div className="flex h-64 items-center justify-center p-6 text-sm text-neutral-500">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-600 border-t-transparent" />
         </div>
       </Drawer>
     );
@@ -204,7 +204,7 @@ export function RegistrationDetailsDrawer({
                       setMoreActionsOpen(false);
                       setStatusDialogOpen(true);
                     }}
-                    className="flex w-full items-center px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-purple-50"
+                    className="flex w-full items-center px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-accent-50"
                   >
                     Change Status
                   </button>
@@ -266,7 +266,7 @@ export function RegistrationDetailsDrawer({
           <div className="bg-white p-5 border-b border-neutral-200/80">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3.5">
-                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-800 font-extrabold text-xl overflow-hidden border border-purple-200">
+                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent-100 text-accent-800 font-extrabold text-xl overflow-hidden border border-accent-200">
                   {camper?.photoUrl ? (
                     <img src={camper.photoUrl} alt={camperName} className="h-full w-full object-cover" />
                   ) : (
@@ -275,7 +275,7 @@ export function RegistrationDetailsDrawer({
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-neutral-900 leading-tight">{camperName}</h1>
-                  <span className="inline-block mt-0.5 rounded-full bg-purple-50 px-2.5 py-0.5 text-[11px] font-semibold text-purple-700">
+                  <span className="inline-block mt-0.5 rounded-full bg-accent-50 px-2.5 py-0.5 text-[11px] font-semibold text-accent-700">
                     Parent
                   </span>
                   <div className="mt-1 space-y-0.5 text-xs text-neutral-500 font-medium">
@@ -315,7 +315,7 @@ export function RegistrationDetailsDrawer({
                 className={cn(
                   "py-3 border-b-2 transition whitespace-nowrap",
                   activeTab === tab.id
-                    ? "border-purple-600 text-purple-600 font-bold"
+                    ? "border-accent-600 text-accent-600 font-bold"
                     : "border-transparent text-neutral-500 hover:text-neutral-800"
                 )}
               >
@@ -332,7 +332,7 @@ export function RegistrationDetailsDrawer({
                 {/* 1. Registration Information Card */}
                 <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
                   <div className="flex items-center gap-2 text-neutral-900 font-bold text-sm border-b border-neutral-100 pb-2.5">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-50 text-purple-600">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-50 text-accent-600">
                       <InformationCircleIcon className="h-4 w-4" />
                     </div>
                     <span>Registration Information</span>
@@ -380,7 +380,7 @@ export function RegistrationDetailsDrawer({
                 {/* 2. Status Timeline Card */}
                 <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
                   <div className="flex items-center gap-2 text-neutral-900 font-bold text-sm border-b border-neutral-100 pb-2.5">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-50 text-purple-600">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-50 text-accent-600">
                       <ClockIcon className="h-4 w-4" />
                     </div>
                     <span>Status Timeline</span>
@@ -410,7 +410,7 @@ export function RegistrationDetailsDrawer({
                 {/* 3. Quick Actions Grid */}
                 <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
                   <div className="flex items-center gap-2 text-neutral-900 font-bold text-sm border-b border-neutral-100 pb-2.5">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-50 text-purple-600">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-50 text-accent-600">
                       <Squares2X2Icon className="h-4 w-4" />
                     </div>
                     <span>Quick Actions</span>
@@ -420,10 +420,10 @@ export function RegistrationDetailsDrawer({
                     <button
                       type="button"
                       onClick={() => setActiveTab("details")}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-purple-50 hover:border-purple-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
-                        <PencilIcon className="h-4 w-4 text-purple-600" />
+                        <PencilIcon className="h-4 w-4 text-accent-600" />
                         <span>Edit Registration</span>
                       </div>
                       <span className="text-neutral-400">›</span>
@@ -432,10 +432,10 @@ export function RegistrationDetailsDrawer({
                     <button
                       type="button"
                       onClick={() => setActiveTab("assignments")}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-purple-50 hover:border-purple-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
-                        <UserGroupIcon className="h-4 w-4 text-purple-600" />
+                        <UserGroupIcon className="h-4 w-4 text-accent-600" />
                         <span>Assign Tribe</span>
                       </div>
                       <span className="text-neutral-400">›</span>
@@ -444,10 +444,10 @@ export function RegistrationDetailsDrawer({
                     <button
                       type="button"
                       onClick={() => setActiveTab("assignments")}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-purple-50 hover:border-purple-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
-                        <BuildingOfficeIcon className="h-4 w-4 text-purple-600" />
+                        <BuildingOfficeIcon className="h-4 w-4 text-accent-600" />
                         <span>Assign Hostel</span>
                       </div>
                       <span className="text-neutral-400">›</span>
@@ -456,10 +456,10 @@ export function RegistrationDetailsDrawer({
                     <button
                       type="button"
                       onClick={() => setActiveTab("communication")}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-purple-50 hover:border-purple-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
-                        <PaperAirplaneIcon className="h-4 w-4 text-purple-600" />
+                        <PaperAirplaneIcon className="h-4 w-4 text-accent-600" />
                         <span>Send Email / SMS</span>
                       </div>
                       <span className="text-neutral-400">›</span>
@@ -468,10 +468,10 @@ export function RegistrationDetailsDrawer({
                     <button
                       type="button"
                       onClick={handlePrintBadge}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-purple-50 hover:border-purple-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
-                        <PrinterIcon className="h-4 w-4 text-purple-600" />
+                        <PrinterIcon className="h-4 w-4 text-accent-600" />
                         <span>Print Badge</span>
                       </div>
                       <span className="text-neutral-400">›</span>
@@ -480,10 +480,10 @@ export function RegistrationDetailsDrawer({
                     <button
                       type="button"
                       onClick={() => setQrModalOpen(true)}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-purple-50 hover:border-purple-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
-                        <QrCodeIcon className="h-4 w-4 text-purple-600" />
+                        <QrCodeIcon className="h-4 w-4 text-accent-600" />
                         <span>View QR Code</span>
                       </div>
                       <span className="text-neutral-400">›</span>
@@ -528,7 +528,7 @@ export function RegistrationDetailsDrawer({
                 <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
                   <h3 className="font-bold text-neutral-900 text-sm border-b border-neutral-100 pb-2">Tribe Assignment</h3>
                   {tribeSuggestion && !(registration as any).tribeId && (
-                    <div className="rounded-xl bg-purple-50 p-3 text-xs text-purple-700 border border-purple-200">
+                    <div className="rounded-xl bg-accent-50 p-3 text-xs text-accent-700 border border-accent-200">
                       Suggested: <strong>{tribeSuggestion.tribeName}</strong> ({tribeSuggestion.confidence}% confidence)
                     </div>
                   )}

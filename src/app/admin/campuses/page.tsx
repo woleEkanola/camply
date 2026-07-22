@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/Input";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Fab } from "@/components/ui/Fab";
 import { Table, type Column } from "@/components/ui/Table";
-import { PlusIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, BuildingOffice2Icon } from "@heroicons/react/24/outline";
 
 // Import custom redesign components
 import { CampusCard, type CampusCardData } from "./components/CampusCard";
@@ -797,8 +797,8 @@ export default function CampusesPage() {
         </div>
       ) : filteredCampuses.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-12 text-center shadow-2xs">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 text-2xl">
-            🏛
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 text-neutral-400">
+            <BuildingOffice2Icon className="h-6 w-6" />
           </div>
           <h3 className="text-base font-semibold text-neutral-900">No campuses found</h3>
           <p className="mt-1 text-xs text-neutral-500 max-w-sm mx-auto">

@@ -13,7 +13,7 @@ export default function NavBar() {
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/" className="text-xl font-bold text-blue-600">
+              <Link href="/" className="text-xl font-bold text-accent-600">
                 Appointment App
               </Link>
             </div>
@@ -48,13 +48,13 @@ export default function NavBar() {
               <div className="flex items-center space-x-4">
                 <Link
                   href="/login"
-                  className="text-sm text-blue-600 hover:text-blue-800"
+                  className="text-sm text-accent-600 hover:text-accent-800"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/auth/signup"
-                  className="px-3 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                  className="px-3 py-2 rounded-md text-sm font-medium text-white bg-accent-600 hover:bg-accent-700"
                 >
                   Sign Up
                 </Link>

@@ -74,7 +74,7 @@ export default function SignupOrgPage() {
   return (
     <>
       {/* Mobile View */}
-      <div className="md:hidden relative min-h-screen font-sans bg-[#E67E22] flex flex-col justify-between py-6">
+      <div className="md:hidden relative min-h-screen font-sans bg-accent-600 flex flex-col justify-between py-6">
         <div className="flex flex-col items-center">
           <div className="mt-4 mb-4">
             <Image src="/logo.png" alt="Logo" width={80} height={80} />
@@ -101,7 +101,7 @@ export default function SignupOrgPage() {
                 value={churchName}
                 onChange={(e) => setChurchName(e.target.value)}
                 required
-                className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
               />
               <div className="grid grid-cols-2 gap-3">
                 <input
@@ -110,7 +110,7 @@ export default function SignupOrgPage() {
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
                 <input
                   type="text"
@@ -118,7 +118,7 @@ export default function SignupOrgPage() {
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
               </div>
               <input
@@ -127,7 +127,7 @@ export default function SignupOrgPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
               />
               <input
                 type="password"
@@ -135,19 +135,19 @@ export default function SignupOrgPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
               />
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-full bg-[#E67E22] text-white py-2.5 font-medium hover:bg-[#D35400] transition disabled:opacity-50 text-sm shadow"
+                className="w-full rounded-full bg-accent-600 text-white py-2.5 font-medium hover:bg-accent-700 transition disabled:opacity-50 text-sm shadow"
               >
                 {loading ? "Registering..." : "Create Account"}
               </button>
             </form>
             <div className="mt-4 text-center text-xs text-neutral-500">
               Already have an account?{" "}
-              <Link href="/login" className="text-[#E67E22] hover:underline font-semibold">
+              <Link href="/login" className="text-accent-600 hover:underline font-semibold">
                 Login here
               </Link>
             </div>
@@ -164,7 +164,7 @@ export default function SignupOrgPage() {
       <div className="hidden md:flex h-screen overflow-hidden font-sans">
         {/* Left Panel */}
         <div className="w-[50%] h-full flex items-center justify-center p-4">
-          <div className="ml-[5%] w-[76%] h-[90vh] bg-[#E67E22] flex flex-col items-center justify-center p-6 text-white rounded-2xl shadow">
+          <div className="ml-[5%] w-[76%] h-[90vh] bg-accent-600 flex flex-col items-center justify-center p-6 text-white rounded-2xl shadow">
             <h1 className="text-4xl md:text-5xl font-bold tracking-wide">JESUS TRIBE</h1>
             <h2 className="text-2xl md:text-3xl font-medium mt-1">Teens Camp</h2>
 
@@ -188,7 +188,7 @@ export default function SignupOrgPage() {
         </div>
 
         {/* Right Panel */}
-        <div className="w-[44%] h-full flex items-center justify-center bg-[#FDFDFD] p-4">
+        <div className="w-[44%] h-full flex items-center justify-center bg-neutral-50 p-4">
           <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
             <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Register Your Church</h2>
 
@@ -212,7 +212,7 @@ export default function SignupOrgPage() {
                   value={churchName}
                   onChange={(e) => setChurchName(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
               </div>
               
@@ -225,7 +225,7 @@ export default function SignupOrgPage() {
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     required
-                    className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                    className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                   />
                 </div>
                 <div>
@@ -236,7 +236,7 @@ export default function SignupOrgPage() {
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     required
-                    className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                    className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                   />
                 </div>
               </div>
@@ -249,7 +249,7 @@ export default function SignupOrgPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
               </div>
 
@@ -261,21 +261,21 @@ export default function SignupOrgPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-[#E67E22] focus:ring-[#E67E22] focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-full bg-[#E67E22] text-white py-3 font-medium hover:bg-[#D35400] transition disabled:opacity-50 shadow mt-2"
+                className="w-full rounded-full bg-accent-600 text-white py-3 font-medium hover:bg-accent-700 transition disabled:opacity-50 shadow mt-2"
               >
                 {loading ? "Registering..." : "Create Account"}
               </button>
             </form>
             <div className="mt-6 text-center text-sm text-neutral-500">
               Already have an account?{" "}
-              <Link href="/login" className="text-[#E67E22] hover:underline font-semibold">
+              <Link href="/login" className="text-accent-600 hover:underline font-semibold">
                 Login here
               </Link>
             </div>

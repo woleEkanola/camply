@@ -124,7 +124,7 @@ export function RegistrationReviewWorkspace({
     return (
       <div className="flex min-h-[450px] items-center justify-center p-8 text-neutral-500">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-600 border-t-transparent" />
           <span className="text-sm font-medium">Loading Registration Review Workspace…</span>
         </div>
       </div>
@@ -164,7 +164,7 @@ export function RegistrationReviewWorkspace({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-700 hover:text-purple-600 transition"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-700 hover:text-accent-600 transition"
         >
           <ArrowLeftIcon className="h-4 w-4" />
           <span>Back to Registrations</span>
@@ -193,7 +193,7 @@ export function RegistrationReviewWorkspace({
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             {/* Left: Avatar + Title */}
             <div className="flex items-start gap-4">
-              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-purple-100 text-purple-700 font-bold text-xl overflow-hidden border border-purple-200">
+              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-accent-100 text-accent-700 font-bold text-xl overflow-hidden border border-accent-200">
                 {camper?.photoUrl ? (
                   <img src={camper.photoUrl} alt={camperName} className="h-full w-full object-cover" />
                 ) : (
@@ -214,7 +214,7 @@ export function RegistrationReviewWorkspace({
                   <span>•</span>
                   <span className="font-mono text-neutral-800"># {regNumber}</span>
                   <span>•</span>
-                  <span className="text-purple-700">{campusName}</span>
+                  <span className="text-accent-700">{campusName}</span>
                   <span>•</span>
                   <span>Registered {regDate}</span>
                 </div>
@@ -246,29 +246,29 @@ export function RegistrationReviewWorkspace({
           <button
             type="button"
             onClick={() => setActiveTab("overview")}
-            className={cn("pb-3 border-b-2 transition", activeTab === "overview" ? "border-purple-600 text-purple-600 font-bold" : "border-transparent hover:text-neutral-900")}
+            className={cn("pb-3 border-b-2 transition", activeTab === "overview" ? "border-accent-600 text-accent-600 font-bold" : "border-transparent hover:text-neutral-900")}
           >
             Overview
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("documents")}
-            className={cn("pb-3 border-b-2 transition flex items-center gap-1.5", activeTab === "documents" ? "border-purple-600 text-purple-600 font-bold" : "border-transparent hover:text-neutral-900")}
+            className={cn("pb-3 border-b-2 transition flex items-center gap-1.5", activeTab === "documents" ? "border-accent-600 text-accent-600 font-bold" : "border-transparent hover:text-neutral-900")}
           >
             <span>Documents</span>
-            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700 font-bold">{uploadedCount}/{totalRequired}</span>
+            <span className="rounded-full bg-accent-100 px-2 py-0.5 text-xs text-accent-700 font-bold">{uploadedCount}/{totalRequired}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("timeline")}
-            className={cn("pb-3 border-b-2 transition", activeTab === "timeline" ? "border-purple-600 text-purple-600 font-bold" : "border-transparent hover:text-neutral-900")}
+            className={cn("pb-3 border-b-2 transition", activeTab === "timeline" ? "border-accent-600 text-accent-600 font-bold" : "border-transparent hover:text-neutral-900")}
           >
             Timeline
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("notes")}
-            className={cn("pb-3 border-b-2 transition", activeTab === "notes" ? "border-purple-600 text-purple-600 font-bold" : "border-transparent hover:text-neutral-900")}
+            className={cn("pb-3 border-b-2 transition", activeTab === "notes" ? "border-accent-600 text-accent-600 font-bold" : "border-transparent hover:text-neutral-900")}
           >
             Notes
           </button>
@@ -396,7 +396,7 @@ export function RegistrationReviewWorkspace({
                             className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3.5 shadow-2xs hover:border-neutral-300 transition"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600 border border-purple-100">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-600 border border-purple-100">
                                 <DocumentIcon className="h-5 w-5" />
                               </div>
                               <div className="min-w-0">
