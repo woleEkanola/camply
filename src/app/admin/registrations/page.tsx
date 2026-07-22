@@ -76,6 +76,7 @@ function RegistrationsPage() {
   const [selectedRegistration, setSelectedRegistration] = useState<string | null>(null);
   const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -222,7 +223,7 @@ function RegistrationsPage() {
   useEffect(() => {
     setCursor(undefined);
     setAccumulatedItems([]);
-  }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery]);
+  }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery, duplicatesOnly]);
 
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
@@ -231,6 +232,7 @@ function RegistrationsPage() {
       campusId: filterCampus || undefined,
       status: filterStatus || undefined,
       reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
+      duplicatesOnly: duplicatesOnly || undefined,
       q: debouncedSearchQuery || undefined,
       cursor,
       limit: 50,
@@ -404,7 +406,14 @@ function RegistrationsPage() {
         primary: true,
         accessor: (row) => (
           <div>
-            <div className="font-medium text-neutral-900">{row.camper?.name}</div>
+            <div className="flex items-center gap-2 font-medium text-neutral-900">
+              <span>{row.camper?.name}</span>
+              {row.isDuplicate && (
+                <Badge tone="warning">
+                  Duplicate
+                </Badge>
+              )}
+            </div>
             <div className="text-xs text-neutral-500">{row.camper?.user?.email}</div>
           </div>
         ),
@@ -575,14 +584,25 @@ function RegistrationsPage() {
         />
       ) : (
         <div>
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-6">
             <StatCard
               label="Total Registrations"
               value={statsTotalCount}
-              selected={filterStatus === "" && reviewStateFilter === ""}
+              selected={filterStatus === "" && reviewStateFilter === "" && !duplicatesOnly}
               onClick={() => {
                 setReviewStateFilter("");
                 setFilterStatus("");
+                setDuplicatesOnly(false);
+              }}
+            />
+            <StatCard
+              label="Duplicates"
+              value={statsData?.duplicateCount ?? 0}
+              selected={duplicatesOnly}
+              onClick={() => {
+                setReviewStateFilter("");
+                setFilterStatus("");
+                setDuplicatesOnly(!duplicatesOnly);
               }}
             />
             {isTwoStep && (
@@ -593,6 +613,7 @@ function RegistrationsPage() {
                   selected={reviewStateFilter === "AWAITING_VETTING"}
                   onClick={() => {
                     setFilterStatus("");
+                    setDuplicatesOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_VETTING" ? "" : "AWAITING_VETTING");
                   }}
                 />
@@ -602,6 +623,7 @@ function RegistrationsPage() {
                   selected={reviewStateFilter === "AWAITING_FINAL"}
                   onClick={() => {
                     setFilterStatus("");
+                    setDuplicatesOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_FINAL" ? "" : "AWAITING_FINAL");
                   }}
                 />
@@ -612,9 +634,10 @@ function RegistrationsPage() {
                 key={s}
                 label={s === "PENDING" && isTwoStep ? "Waiting Decision" : s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
                 value={kpi[s] ?? 0}
-                selected={filterStatus === s}
+                selected={filterStatus === s && !duplicatesOnly}
                 onClick={() => {
                   setReviewStateFilter("");
+                  setDuplicatesOnly(false);
                   setFilterStatus(filterStatus === s ? "" : s);
                 }}
               />
@@ -667,19 +690,26 @@ function RegistrationsPage() {
               </Select>
               <Select
                 data-testid="registration-status-filter"
-                value={reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
+                value={duplicatesOnly ? "FILTER_DUPLICATES" : reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (val.startsWith("REVIEW_")) {
+                  if (val === "FILTER_DUPLICATES") {
+                    setFilterStatus("");
+                    setReviewStateFilter("");
+                    setDuplicatesOnly(true);
+                  } else if (val.startsWith("REVIEW_")) {
+                    setDuplicatesOnly(false);
                     setFilterStatus("");
                     setReviewStateFilter(val.replace("REVIEW_", "") as any);
                   } else {
+                    setDuplicatesOnly(false);
                     setFilterStatus(val);
                     setReviewStateFilter("");
                   }
                 }}
               >
                 <option value="">All Statuses</option>
+                <option value="FILTER_DUPLICATES">Duplicates Only ({statsData?.duplicateCount ?? 0})</option>
                 {isTwoStep && (
                   <>
                     <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval (Recommended)</option>

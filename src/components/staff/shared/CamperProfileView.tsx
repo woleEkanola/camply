@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
+import { CamperPhotoCropperModal } from "./CamperPhotoCropperModal";
 
 interface CamperProfileViewProps {
   registration?: {
@@ -136,11 +137,17 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
                 alt=""
                 className="h-16 w-16 rounded-full object-cover cursor-pointer border border-neutral-200 hover:scale-105 transition-transform"
                 onClick={() => setIsPhotoOpen(true)}
+                title="Click to view/crop photo"
               />
             ) : (
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-100 text-xl font-semibold text-accent-700">
+              <button
+                type="button"
+                onClick={() => setIsPhotoOpen(true)}
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-100 text-xl font-semibold text-accent-700 cursor-pointer hover:scale-105 transition-transform"
+                title="Click to view/crop photo"
+              >
                 {camper.name?.[0]}
-              </span>
+              </button>
             )}
             <div>
               <h3 className="text-xl font-bold text-neutral-900">{camper.name}</h3>
@@ -420,16 +427,14 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
         </Card>
       )}
 
-      {/* Full Photo Modal */}
-      <Dialog open={isPhotoOpen} onClose={() => setIsPhotoOpen(false)} title="Camper Photo">
-        <div className="flex justify-center p-2 bg-neutral-900 rounded-lg overflow-hidden border border-neutral-800">
-          <img
-            src={camper.photoUrl || undefined}
-            alt={camper.name || ""}
-            className="max-h-[70vh] max-w-full object-contain rounded-md"
-          />
-        </div>
-      </Dialog>
+      {/* Full Photo & Cropper Modal */}
+      <CamperPhotoCropperModal
+        open={isPhotoOpen}
+        onClose={() => setIsPhotoOpen(false)}
+        camperId={camper.id}
+        camperName={camper.name}
+        photoUrl={camper.photoUrl}
+      />
     </div>
   );
 }

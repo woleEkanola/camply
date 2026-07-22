@@ -115,7 +115,7 @@ export async function validateSubmission(
         campusId: registration.campusId,
         campId: registration.campId,
         id: { not: registration.id },
-        status: { in: ["SUBMITTED", "PENDING", "APPROVED"] },
+        status: { notIn: ["DRAFT", "CANCELLED", "REJECTED", "ARCHIVED"] },
         deletedAt: null,
       },
     });

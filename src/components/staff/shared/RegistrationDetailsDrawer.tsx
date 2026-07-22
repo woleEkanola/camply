@@ -19,6 +19,7 @@ import VerifierAssignment from "@/app/admin/registrations/components/VerifierAss
 import ChangesSinceReview from "@/app/admin/registrations/components/ChangesSinceReview";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
 import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
+import { CamperPhotoCropperModal } from "@/components/staff/shared/CamperPhotoCropperModal";
 import { CommunicationTimeline } from "@/components/communication/CommunicationTimeline";
 
 import {
@@ -62,6 +63,7 @@ export function RegistrationDetailsDrawer({
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
+  const [photoModalOpen, setPhotoModalOpen] = useState(false);
 
   // Queries
   const { data: registration, refetch } = api.registration.getById.useQuery({ id: registrationId });
@@ -271,13 +273,21 @@ export function RegistrationDetailsDrawer({
           <div className="bg-white p-5 border-b border-neutral-200/80">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3.5">
-                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent-100 text-accent-800 font-extrabold text-xl overflow-hidden border border-accent-200">
+                <button
+                  type="button"
+                  onClick={() => setPhotoModalOpen(true)}
+                  className="group relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent-100 text-accent-800 font-extrabold text-xl overflow-hidden border border-accent-200 cursor-pointer hover:ring-2 hover:ring-accent-500/60 transition-all"
+                  title="Click to view/crop photo"
+                >
                   {camper?.photoUrl ? (
-                    <img src={camper.photoUrl} alt={camperName} className="h-full w-full object-cover" />
+                    <img src={camper.photoUrl} alt={camperName} className="h-full w-full object-cover group-hover:scale-105 transition-transform" />
                   ) : (
                     <span>{camperName.charAt(0)}</span>
                   )}
-                </div>
+                  <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <PencilIcon className="h-4 w-4 text-white drop-shadow-xs" />
+                  </div>
+                </button>
                 <div>
                   <h1 className="text-lg font-bold text-neutral-900 leading-tight">{camperName}</h1>
                   <span className="inline-block mt-0.5 rounded-full bg-accent-50 px-2.5 py-0.5 text-[11px] font-semibold text-accent-700">
@@ -730,6 +740,16 @@ export function RegistrationDetailsDrawer({
           });
           setStatusDialogOpen(false);
         }}
+      />
+
+      {/* CAMPER PHOTO EXPAND & CROP MODAL */}
+      <CamperPhotoCropperModal
+        open={photoModalOpen}
+        onClose={() => setPhotoModalOpen(false)}
+        camperId={camper?.id || ""}
+        camperName={camperName}
+        photoUrl={camper?.photoUrl}
+        onPhotoUpdated={() => refetch()}
       />
     </>
   );

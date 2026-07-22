@@ -263,7 +263,7 @@ export const campusRouter = createTRPCRouter({
               campusId: input.campusId,
               campId: activeCampId,
               deletedAt: null,
-              status: { in: ["SUBMITTED", "PENDING", "APPROVED"] },
+              status: { notIn: ["DRAFT", "CANCELLED", "REJECTED", "ARCHIVED"] },
             },
           });
           approvedCount = await prisma.registration.count({

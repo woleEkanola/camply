@@ -459,7 +459,10 @@ export const CampusCard: React.FC<CampusCardProps> = ({
 
       {/* SECTION 3 — REGISTRATION CAPACITY */}
       <div className="py-3.5 border-b border-neutral-100 space-y-2.5">
-        <p className="text-[14px] font-bold text-neutral-900">Registrations</p>
+        <div className="flex items-center justify-between">
+          <p className="text-[14px] font-bold text-neutral-900">Registrations</p>
+          <span className="text-[11px] font-medium text-neutral-500">Submitted (Drafts excluded)</span>
+        </div>
 
         <div className="flex items-center justify-between">
           <span className="text-xl font-extrabold text-neutral-900 tracking-tight">
