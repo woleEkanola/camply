@@ -16,6 +16,13 @@ const geistMono = { variable: "font-mono" };
 export const metadata: Metadata = {
   title: "Camply",
   description: "Camp management platform for registration, check-in, and staff operations",
+  icons: {
+    icon: [
+      { url: "/icon.png", type: "image/png" },
+      { url: "/favicon.ico" },
+    ],
+    apple: [{ url: "/apple-icon.png", type: "image/png" }],
+  },
 };
 
 // viewportFit: "cover" lets fixed mobile chrome (bottom nav, bottom-sheet
