@@ -15,13 +15,22 @@ import { Input } from "@/components/ui/Input";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Fab } from "@/components/ui/Fab";
 import { Table, type Column } from "@/components/ui/Table";
-import { PlusIcon, BuildingOffice2Icon } from "@heroicons/react/24/outline";
+import { PlusIcon, BuildingOffice2Icon, PencilIcon, UserGroupIcon, ChartBarIcon, TrashIcon } from "@heroicons/react/24/outline";
 
 // Import custom redesign components
 import { CampusCard, type CampusCardData } from "./components/CampusCard";
 import { CampusFilterBar, type StatusFilterOption, type SortOption } from "./components/CampusFilterBar";
 import { CampusRepsSheet } from "./components/CampusRepsSheet";
 import { CampusAnalyticsModal } from "./components/CampusAnalyticsModal";
+
+function getInitials(nameOrEmail?: string | null): string {
+  if (!nameOrEmail) return "?";
+  const clean = nameOrEmail.trim();
+  if (clean.includes("@")) return clean.slice(0, 2).toUpperCase();
+  const parts = clean.split(" ").filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return clean.slice(0, 2).toUpperCase();
+}
 
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
 
