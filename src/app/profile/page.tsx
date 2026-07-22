@@ -10,10 +10,11 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Button } from "@/components/ui/Button";
-import { CameraIcon, PhotoIcon, KeyIcon, UserIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
+import { CameraIcon, PhotoIcon, KeyIcon, UserIcon, ShieldCheckIcon, SunIcon } from "@heroicons/react/24/outline";
 import { Dialog } from "@/components/ui/Dialog";
 import { useUploadThing } from "@/utils/uploadthing-hook";
 import { compressImage } from "@/lib/compressImage";
+import { ThemeSettingsCard } from "@/components/theme/ThemeSettingsCard";
 
 // Helper function to crop, resize and compress client-side images
 const compressAndResizeImage = (fileOrBlob: File | Blob): Promise<Blob> => {
@@ -521,13 +522,25 @@ export default function ProfilePage() {
               Security
             </button>
 
+            <button
+              onClick={() => setActiveTab("appearance")}
+              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                activeTab === "appearance"
+                  ? "bg-accent-50 dark:bg-accent-950/70 text-accent-700 dark:text-accent-300"
+                  : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white"
+              }`}
+            >
+              <SunIcon className="h-5 w-5 shrink-0" />
+              Appearance
+            </button>
+
             {isStaff && (
               <button
                 onClick={() => setActiveTab("staff")}
                 className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   activeTab === "staff"
-                    ? "bg-accent-50 text-accent-700"
-                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                    ? "bg-accent-50 dark:bg-accent-950/70 text-accent-700 dark:text-accent-300"
+                    : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white"
                 }`}
               >
                 <ShieldCheckIcon className="h-5 w-5 shrink-0" />
@@ -794,6 +807,8 @@ export default function ProfilePage() {
                 </Card>
               </>
             )}
+
+            {activeTab === "appearance" && <ThemeSettingsCard />}
 
             {activeTab === "staff" && isStaff && (
               <Card>

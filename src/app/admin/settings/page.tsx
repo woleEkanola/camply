@@ -8,6 +8,8 @@ import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody } from "@/components/ui/Card";
 
+import { ThemeSettingsCard } from "@/components/theme/ThemeSettingsCard";
+
 const AgeRangeSettings = dynamic(() => import("../settings-age-range"), { ssr: false });
 const OrgProfileSettings = dynamic(() => import("../settings-org-profile"), { ssr: false });
 const ApprovalWorkflowSettings = dynamic(() => import("../settings-approval-workflow"), { ssr: false });
@@ -85,6 +87,9 @@ export default function AdminSettingsPage() {
             />
           </CardBody>
         </Card>
+
+        {/* Theme & Appearance Card */}
+        <ThemeSettingsCard />
       </div>
     </AppShell>
   );
