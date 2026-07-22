@@ -79,7 +79,7 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
 
   const profileTab = (
     <div className="space-y-4">
-      {actionError && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{actionError}</div>}
+      {actionError && <div className="rounded-md status-danger">{actionError}</div>}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <div><span className="text-neutral-500">Phone</span><div className="font-medium text-neutral-900">{profile.phone}</div></div>
         <div><span className="text-neutral-500">Gender</span><div className="font-medium text-neutral-900">{profile.gender || "—"}</div></div>
@@ -203,19 +203,19 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
         )}
       </div>
 
-      <div className="border-t border-neutral-100 pt-4">
+      <div className="border-t border-border-subtle pt-4">
         <label className="mb-1 block text-sm font-semibold text-neutral-900">Campus Representative</label>
         <p className="mb-2 text-xs text-neutral-500">
           Assign this {profile.type === "TEACHER" ? "teacher" : "volunteer"} to manage registrations for specific campuses:
         </p>
-        <div className="space-y-1.5 max-h-40 overflow-y-auto rounded border border-neutral-200 p-2 bg-neutral-50">
+        <div className="space-y-1.5 max-h-40 overflow-y-auto rounded border border-border-default p-2 bg-surface-raised">
           {allCampuses.length === 0 ? (
             <p className="text-xs text-neutral-500">No campuses found.</p>
           ) : (
             allCampuses.map((c: any) => {
               const isAssigned = userData?.managedCampuses?.some((mc: any) => mc.id === c.id) ?? false;
               return (
-                <label key={c.id} className="flex items-center gap-2 text-xs text-neutral-700 cursor-pointer py-0.5 hover:bg-neutral-100 rounded px-1">
+                <label key={c.id} className="flex items-center gap-2 text-xs text-neutral-700 cursor-pointer py-0.5 hover:bg-surface-hover rounded px-1">
                   <input
                     type="checkbox"
                     checked={isAssigned}

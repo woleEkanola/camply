@@ -66,25 +66,25 @@ export function TeacherRecruitmentPanel({ organizationId, campId }: TeacherRecru
   return (
     <div className="space-y-4">
       {/* Recruitment link card */}
-      <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+      <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <UsersIcon className="h-5 w-5 text-accent-600" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Teacher Recruitment</h2>
           </div>
-          <ArrowTopRightOnSquareIcon className="h-4 w-4 text-neutral-400" />
+          <ArrowTopRightOnSquareIcon className="h-4 w-4 text-txt-muted" />
         </div>
 
         <div className="mb-4">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-sm font-semibold text-neutral-900">Registration Link</span>
-            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", isActive ? "bg-success-100 text-success-700" : "bg-neutral-100 text-neutral-600")}>
+            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", isActive ? "bg-success-100 text-success-700" : "bg-surface-raised text-txt-secondary")}>
               {isActive ? "Active" : "Inactive"}
             </span>
           </div>
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-2">
-            <LinkIcon className="h-4 w-4 shrink-0 text-neutral-400" />
-            <span className="min-w-0 flex-1 truncate text-xs text-neutral-600">{linkUrl || "No link generated"}</span>
+          <div className="flex items-center gap-2 rounded-xl border border-border-default bg-surface-raised p-2">
+            <LinkIcon className="h-4 w-4 shrink-0 text-txt-muted" />
+            <span className="min-w-0 flex-1 truncate text-xs text-txt-secondary">{linkUrl || "No link generated"}</span>
             <Button size="sm" variant="secondary" className="shrink-0" disabled={!linkUrl} onClick={() => linkUrl && navigator.clipboard.writeText(linkUrl)}>
               Copy
             </Button>
@@ -92,30 +92,30 @@ export function TeacherRecruitmentPanel({ organizationId, campId }: TeacherRecru
         </div>
 
         <div className="grid grid-cols-4 gap-2">
-          <button className="flex flex-col items-center gap-1 rounded-xl bg-neutral-50 p-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
+          <button className="flex flex-col items-center gap-1 rounded-xl bg-surface-raised p-2 text-xs font-medium text-neutral-700 hover:bg-surface-hover">
             <ShareIcon className="h-4 w-4" /> Share
           </button>
-          <button className="flex flex-col items-center gap-1 rounded-xl bg-neutral-50 p-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
+          <button className="flex flex-col items-center gap-1 rounded-xl bg-surface-raised p-2 text-xs font-medium text-neutral-700 hover:bg-surface-hover">
             <NoSymbolIcon className="h-4 w-4" /> Disable
           </button>
-          <button className="flex flex-col items-center gap-1 rounded-xl bg-neutral-50 p-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
+          <button className="flex flex-col items-center gap-1 rounded-xl bg-surface-raised p-2 text-xs font-medium text-neutral-700 hover:bg-surface-hover">
             <ArrowPathIcon className="h-4 w-4" /> Regenerate
           </button>
-          <button className="flex flex-col items-center gap-1 rounded-xl bg-neutral-50 p-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
+          <button className="flex flex-col items-center gap-1 rounded-xl bg-surface-raised p-2 text-xs font-medium text-neutral-700 hover:bg-surface-hover">
             <ChartBarIcon className="h-4 w-4" /> Analytics
           </button>
         </div>
       </div>
 
       {/* Campus quotas */}
-      <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+      <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Campus Quotas</h2>
           <Button variant="secondary" size="sm">Manage All</Button>
         </div>
 
         {isLoading ? (
-          <div className="h-40 animate-pulse rounded-xl bg-neutral-100" />
+          <div className="h-40 animate-pulse rounded-xl bg-surface-raised" />
         ) : (
           <div className="space-y-4">
             {quotas?.map((q: any) => {
@@ -130,7 +130,7 @@ export function TeacherRecruitmentPanel({ organizationId, campId }: TeacherRecru
                       <span className="font-semibold text-neutral-700">{q.isUnlimited ? "" : `${pct}%`}</span>
                     </span>
                   </div>
-                  <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-neutral-100">
+                  <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-surface-raised">
                     <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${Math.min(pct, 100)}%` }} />
                   </div>
                   {editingId === q.campusId ? (
@@ -152,12 +152,12 @@ export function TeacherRecruitmentPanel({ organizationId, campId }: TeacherRecru
             })}
 
             {totalCapacity > 0 && (
-              <div className="border-t border-neutral-100 pt-3">
+              <div className="border-t border-border-subtle pt-3">
                 <div className="mb-1 flex items-center justify-between text-sm">
                   <span className="font-medium text-neutral-900">Overall</span>
                   <span className="text-neutral-500">{totalUsed} / {totalCapacity} <span className="font-semibold text-neutral-700">{overallProgress}%</span></span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-100">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-surface-raised">
                   <div className="h-full rounded-full bg-accent-500 transition-all" style={{ width: `${Math.min(overallProgress, 100)}%` }} />
                 </div>
               </div>

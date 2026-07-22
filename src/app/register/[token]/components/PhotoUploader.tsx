@@ -147,7 +147,7 @@ export function PhotoUploader({ label, required, value, onChange }: PhotoUploade
 
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-neutral-700">
+      <label className="mb-1 block text-sm font-medium text-txt-secondary">
         {label}
         {required && <span className="ml-0.5 text-danger-600">*</span>}
       </label>
@@ -155,8 +155,8 @@ export function PhotoUploader({ label, required, value, onChange }: PhotoUploade
       {/* Crop UI overlay */}
       {cropMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="rounded-2xl bg-white p-4 shadow-xl max-w-sm w-full">
-            <p className="mb-3 text-sm font-semibold text-neutral-900">Crop Photo</p>
+          <div className="rounded-2xl bg-surface p-4 shadow-xl max-w-sm w-full">
+            <p className="mb-3 text-sm font-semibold text-txt-primary">Crop Photo</p>
             <div
               className="relative mx-auto overflow-hidden rounded-lg border-2 border-accent-500"
               style={{ width: CROP_SIZE, height: CROP_SIZE }}
@@ -168,7 +168,7 @@ export function PhotoUploader({ label, required, value, onChange }: PhotoUploade
               <canvas ref={cropCanvasRef} className="block cursor-move" />
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <span className="text-xs text-neutral-500">Zoom</span>
+              <span className="text-xs text-txt-secondary">Zoom</span>
               <input
                 type="range"
                 min={0.5}
@@ -183,7 +183,7 @@ export function PhotoUploader({ label, required, value, onChange }: PhotoUploade
               <button
                 type="button"
                 onClick={cancelCrop}
-                className="flex-1 rounded-lg border border-neutral-300 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                className="flex-1 rounded-lg border border-input-border py-2 text-sm font-medium text-txt-secondary hover:bg-neutral-50"
               >
                 Cancel
               </button>
@@ -200,7 +200,7 @@ export function PhotoUploader({ label, required, value, onChange }: PhotoUploade
       )}
 
       {/* Photo slot */}
-      <div className="mb-2 flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50">
+      <div className="mb-2 flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-input-border bg-neutral-50">
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={preview} alt="Uploaded photo" className="h-full w-full object-cover" />
@@ -232,7 +232,7 @@ export function PhotoUploader({ label, required, value, onChange }: PhotoUploade
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 shadow-sm transition hover:bg-neutral-50 disabled:opacity-50 min-h-[36px]"
+          className="rounded border border-input-border bg-surface px-3 py-1.5 text-sm font-medium text-txt-secondary shadow-sm transition hover:bg-neutral-50 disabled:opacity-50 min-h-[36px]"
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
         >
@@ -240,7 +240,7 @@ export function PhotoUploader({ label, required, value, onChange }: PhotoUploade
         </button>
         <button
           type="button"
-          className="rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 shadow-sm transition hover:bg-neutral-50 disabled:opacity-50 min-h-[36px]"
+          className="rounded border border-input-border bg-surface px-3 py-1.5 text-sm font-medium text-txt-secondary shadow-sm transition hover:bg-neutral-50 disabled:opacity-50 min-h-[36px]"
           onClick={() => cameraInputRef.current?.click()}
           disabled={isUploading}
         >
@@ -250,7 +250,7 @@ export function PhotoUploader({ label, required, value, onChange }: PhotoUploade
           <>
             <button
               type="button"
-              className="rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 shadow-sm transition hover:bg-neutral-50 disabled:opacity-50 min-h-[36px]"
+              className="rounded border border-input-border bg-surface px-3 py-1.5 text-sm font-medium text-txt-secondary shadow-sm transition hover:bg-neutral-50 disabled:opacity-50 min-h-[36px]"
               onClick={() => {
                 if (fileInputRef.current) fileInputRef.current.click();
               }}

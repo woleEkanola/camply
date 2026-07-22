@@ -183,11 +183,11 @@ export function RegistrationDetailsDrawer({
       <Drawer open onClose={onClose} title="">
         <div className="flex flex-col h-full bg-neutral-50/50 pb-20">
           {/* 1. TOP HEADER BAR */}
-          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-200/80 bg-white px-4 py-3">
+          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border-default bg-surface px-4 py-3">
             <button
               type="button"
               onClick={onClose}
-              className="p-1 text-neutral-600 hover:text-neutral-900 rounded-lg hover:bg-neutral-100 transition"
+              className="p-1 text-txt-secondary hover:text-neutral-900 rounded-lg hover:bg-surface-raised transition"
               aria-label="Back"
             >
               <ChevronLeftIcon className="h-5 w-5" />
@@ -197,14 +197,14 @@ export function RegistrationDetailsDrawer({
               <button
                 type="button"
                 onClick={() => setMoreActionsOpen((prev) => !prev)}
-                className="p-1 text-neutral-600 hover:text-neutral-900 rounded-lg hover:bg-neutral-100 transition"
+                className="p-1 text-txt-secondary hover:text-neutral-900 rounded-lg hover:bg-surface-raised transition"
                 aria-label="More options"
               >
                 <EllipsisVerticalIcon className="h-5 w-5" />
               </button>
 
               {moreActionsOpen && (
-                <div className="absolute right-0 top-8 z-30 w-48 rounded-xl border border-neutral-200 bg-white py-1 shadow-lg ring-1 ring-black/5">
+                <div className="absolute right-0 top-8 z-30 w-48 rounded-xl border border-border-default bg-surface py-1 shadow-lg ring-1 ring-black/5">
                   <button
                     type="button"
                     onClick={() => {
@@ -243,7 +243,7 @@ export function RegistrationDetailsDrawer({
                       setMoreActionsOpen(false);
                       cancelReg.mutate({ registrationId });
                     }}
-                    className="flex w-full items-center px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-100"
+                    className="flex w-full items-center px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-surface-raised"
                   >
                     Cancel Registration
                   </button>
@@ -253,7 +253,7 @@ export function RegistrationDetailsDrawer({
                       setMoreActionsOpen(false);
                       archive.mutate({ registrationId });
                     }}
-                    className="flex w-full items-center px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-100"
+                    className="flex w-full items-center px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-surface-raised"
                   >
                     Archive
                   </button>
@@ -270,7 +270,7 @@ export function RegistrationDetailsDrawer({
           )}
 
           {/* 2. CAMPER / PARENT PROFILE BANNER */}
-          <div className="bg-white p-5 border-b border-neutral-200/80">
+          <div className="bg-surface p-5 border-b border-border-default">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3.5">
                 <button
@@ -295,11 +295,11 @@ export function RegistrationDetailsDrawer({
                   </span>
                   <div className="mt-1 space-y-0.5 text-xs text-neutral-500 font-medium">
                     <div className="flex items-center gap-1.5">
-                      <EnvelopeIcon className="h-3.5 w-3.5 text-neutral-400" />
+                      <EnvelopeIcon className="h-3.5 w-3.5 text-txt-muted" />
                       <span>{parentEmail}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <PhoneIcon className="h-3.5 w-3.5 text-neutral-400" />
+                      <PhoneIcon className="h-3.5 w-3.5 text-txt-muted" />
                       <span>{parentPhone}</span>
                     </div>
                   </div>
@@ -313,7 +313,7 @@ export function RegistrationDetailsDrawer({
           </div>
 
           {/* 3. NAVIGATION TABS */}
-          <div className="bg-white border-b border-neutral-200 flex gap-5 px-5 overflow-x-auto no-scrollbar text-xs font-semibold">
+          <div className="bg-surface border-b border-border-default flex gap-5 px-5 overflow-x-auto no-scrollbar text-xs font-semibold">
             {[
               { id: "overview", label: "Overview" },
               { id: "details", label: "Details" },
@@ -345,8 +345,8 @@ export function RegistrationDetailsDrawer({
             {activeTab === "overview" && (
               <div className="space-y-4">
                 {/* 1. Registration Information Card */}
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
-                  <div className="flex items-center gap-2 text-neutral-900 font-bold text-sm border-b border-neutral-100 pb-2.5">
+                <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+                  <div className="flex items-center gap-2 text-neutral-900 font-bold text-sm border-b border-border-subtle pb-2.5">
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-50 text-accent-600">
                       <InformationCircleIcon className="h-4 w-4" />
                     </div>
@@ -393,8 +393,8 @@ export function RegistrationDetailsDrawer({
                 </div>
 
                 {/* 2. Status Timeline Card */}
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
-                  <div className="flex items-center gap-2 text-neutral-900 font-bold text-sm border-b border-neutral-100 pb-2.5">
+                <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+                  <div className="flex items-center gap-2 text-neutral-900 font-bold text-sm border-b border-border-subtle pb-2.5">
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-50 text-accent-600">
                       <ClockIcon className="h-4 w-4" />
                     </div>
@@ -411,7 +411,7 @@ export function RegistrationDetailsDrawer({
                           <div className="font-bold text-neutral-900 capitalize">{item.action.replace(/_/g, " ").toLowerCase()}</div>
                           <div className="text-[11px] text-neutral-500">by Staff Reviewer</div>
                         </div>
-                        <div className="text-[11px] text-neutral-400 shrink-0 font-medium">
+                        <div className="text-[11px] text-txt-muted shrink-0 font-medium">
                           {new Date(item.createdAt).toLocaleDateString("en-GB")}
                         </div>
                       </div>
@@ -423,8 +423,8 @@ export function RegistrationDetailsDrawer({
                 </div>
 
                 {/* 3. Quick Actions Grid */}
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
-                  <div className="flex items-center gap-2 text-neutral-900 font-bold text-sm border-b border-neutral-100 pb-2.5">
+                <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+                  <div className="flex items-center gap-2 text-neutral-900 font-bold text-sm border-b border-border-subtle pb-2.5">
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-50 text-accent-600">
                       <Squares2X2Icon className="h-4 w-4" />
                     </div>
@@ -435,85 +435,85 @@ export function RegistrationDetailsDrawer({
                     <button
                       type="button"
                       onClick={() => setActiveTab("details")}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
                         <PencilIcon className="h-4 w-4 text-accent-600" />
                         <span>Edit Registration</span>
                       </div>
-                      <span className="text-neutral-400">›</span>
+                      <span className="text-txt-muted">›</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setActiveTab("assignments")}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
                         <UserGroupIcon className="h-4 w-4 text-accent-600" />
                         <span>Assign Tribe</span>
                       </div>
-                      <span className="text-neutral-400">›</span>
+                      <span className="text-txt-muted">›</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setActiveTab("assignments")}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
                         <BuildingOfficeIcon className="h-4 w-4 text-accent-600" />
                         <span>Assign Hostel</span>
                       </div>
-                      <span className="text-neutral-400">›</span>
+                      <span className="text-txt-muted">›</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setActiveTab("communication")}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
                         <PaperAirplaneIcon className="h-4 w-4 text-accent-600" />
                         <span>Send Email / SMS</span>
                       </div>
-                      <span className="text-neutral-400">›</span>
+                      <span className="text-txt-muted">›</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handlePrintBadge}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
                         <PrinterIcon className="h-4 w-4 text-accent-600" />
                         <span>Print Badge</span>
                       </div>
-                      <span className="text-neutral-400">›</span>
+                      <span className="text-txt-muted">›</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setQrModalOpen(true)}
-                      className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
+                      className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
                         <QrCodeIcon className="h-4 w-4 text-accent-600" />
                         <span>View QR Code</span>
                       </div>
-                      <span className="text-neutral-400">›</span>
+                      <span className="text-txt-muted">›</span>
                     </button>
                   </div>
                 </div>
 
                 {/* 4. Internal Notes */}
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
-                  <h3 className="font-bold text-neutral-900 text-sm border-b border-neutral-100 pb-2">Internal Notes</h3>
+                <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+                  <h3 className="font-bold text-neutral-900 text-sm border-b border-border-subtle pb-2">Internal Notes</h3>
                   <div className="max-h-32 overflow-y-auto space-y-1.5 text-xs">
                     {Array.isArray(registration.internalNotes) && (registration.internalNotes as any[]).map((n, i) => (
-                      <div key={i} className="rounded-lg bg-neutral-50 p-2 text-neutral-700">
+                      <div key={i} className="rounded-lg bg-surface-raised p-2 text-neutral-700">
                         <span>{n.text}</span>
-                        <span className="block text-[10px] text-neutral-400 mt-0.5">{new Date(n.at).toLocaleString()}</span>
+                        <span className="block text-[10px] text-txt-muted mt-0.5">{new Date(n.at).toLocaleString()}</span>
                       </div>
                     ))}
                   </div>
@@ -540,8 +540,8 @@ export function RegistrationDetailsDrawer({
             {/* ASSIGNMENTS TAB */}
             {activeTab === "assignments" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
-                  <h3 className="font-bold text-neutral-900 text-sm border-b border-neutral-100 pb-2">Tribe Assignment</h3>
+                <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+                  <h3 className="font-bold text-neutral-900 text-sm border-b border-border-subtle pb-2">Tribe Assignment</h3>
                   {tribeSuggestion && !(registration as any).tribeId && (
                     <div className="rounded-xl bg-accent-50 p-3 text-xs text-accent-700 border border-accent-200">
                       Suggested: <strong>{tribeSuggestion.tribeName}</strong> ({tribeSuggestion.confidence}% confidence)
@@ -579,12 +579,12 @@ export function RegistrationDetailsDrawer({
 
             {/* ACTIVITY TAB */}
             {activeTab === "activity" && (
-              <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-2xs space-y-3">
-                <h3 className="font-bold text-neutral-900 text-sm border-b border-neutral-100 pb-2">Activity Log</h3>
+              <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+                <h3 className="font-bold text-neutral-900 text-sm border-b border-border-subtle pb-2">Activity Log</h3>
                 <ul className="space-y-2 text-xs">
                   {(timeline ?? []).map((event: any) => (
-                    <li key={event.id} className="text-neutral-600 border-b border-neutral-100 pb-1.5">
-                      <span className="text-[10px] text-neutral-400 block">{new Date(event.createdAt).toLocaleString()}</span>
+                    <li key={event.id} className="text-txt-secondary border-b border-border-subtle pb-1.5">
+                      <span className="text-[10px] text-txt-muted block">{new Date(event.createdAt).toLocaleString()}</span>
                       <span className="font-semibold text-neutral-900 capitalize">{event.action.replace(/_/g, " ").toLowerCase()}</span>
                     </li>
                   ))}
@@ -624,7 +624,7 @@ export function RegistrationDetailsDrawer({
           </div>
 
           {/* 5. FIXED BOTTOM ACTION BAR */}
-          <div className="fixed bottom-0 inset-x-0 z-30 border-t border-neutral-200/80 bg-white p-3.5 shadow-2xl">
+          <div className="fixed bottom-0 inset-x-0 z-30 border-t border-border-default bg-surface p-3.5 shadow-2xl">
             <div className="flex items-center gap-2 max-w-lg mx-auto">
               <Button
                 variant="secondary"
@@ -659,7 +659,7 @@ export function RegistrationDetailsDrawer({
       {/* QR CODE MODAL */}
       <Dialog open={qrModalOpen} onClose={() => setQrModalOpen(false)} title="Camper QR Code" size="sm">
         <div className="flex flex-col items-center justify-center p-4 text-center space-y-3">
-          <div className="p-3 bg-white border border-neutral-200 rounded-2xl shadow-xs">
+          <div className="p-3 bg-surface border border-border-default rounded-2xl shadow-xs">
             <img
               src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(regNumber)}`}
               alt="QR Code"

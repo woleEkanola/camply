@@ -72,14 +72,14 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
   const activeTabContent = tabs.find((t) => t.id === activeTab)?.content ?? tabs[0]?.content;
 
   return (
-    <div className="min-h-screen bg-neutral-50/60 pb-24">
+    <div className="min-h-screen bg-surface-raised/60 pb-24">
       {/* Utility header */}
-      <div className="sticky top-0 z-20 border-b border-neutral-200/80 bg-white/95 px-4 py-3 backdrop-blur md:px-6">
+      <div className="sticky top-0 z-20 border-b border-border-default bg-surface px-4 py-3 backdrop-blur md:px-6">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <button
             type="button"
             onClick={() => router.push(`/admin/${profile.type === "TEACHER" ? "teachers" : "volunteers"}`)}
-            className="inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-accent-600 transition"
+            className="inline-flex items-center gap-2 text-sm font-medium text-txt-secondary hover:text-accent-600 transition"
           >
             <ArrowLeftIcon className="h-4 w-4" />
             Back to {profile.type === "TEACHER" ? "Teachers" : "Volunteers"}
@@ -96,7 +96,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
 
       <div className="mx-auto max-w-7xl px-4 pt-6 md:px-6 space-y-6">
         {/* Profile banner */}
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+        <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-4">
               <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-100 text-accent-700 font-bold text-xl overflow-hidden border border-accent-200">
@@ -112,7 +112,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
                   <h1 className="text-lg font-bold text-neutral-900">{name}</h1>
                   <StatusBadge status={profile.status} />
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-600">
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-txt-secondary">
                   {profile.email && <span>{profile.email}</span>}
                   {profile.phone && <span>{profile.phone}</span>}
                   {profile.preferredCampus?.name && (
@@ -122,22 +122,22 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 text-xs text-neutral-600">
+            <div className="flex flex-wrap gap-2 text-xs text-txt-secondary">
               {profile.assignedVenue?.name && (
-                <div className="rounded-lg bg-neutral-50 px-3 py-1.5 border border-neutral-100">
-                  <span className="text-neutral-400">Venue</span>{" "}
+                <div className="rounded-lg bg-surface-raised px-3 py-1.5 border border-border-subtle">
+                  <span className="text-txt-muted">Venue</span>{" "}
                   <span className="font-semibold text-neutral-800">{profile.assignedVenue.name}</span>
                 </div>
               )}
               {profile.type === "TEACHER" && profile.assignedTribe?.name && (
-                <div className="rounded-lg bg-neutral-50 px-3 py-1.5 border border-neutral-100">
-                  <span className="text-neutral-400">Tribe</span>{" "}
+                <div className="rounded-lg bg-surface-raised px-3 py-1.5 border border-border-subtle">
+                  <span className="text-txt-muted">Tribe</span>{" "}
                   <span className="font-semibold text-neutral-800">{profile.assignedTribe.name}</span>
                 </div>
               )}
               {profile.department?.name && (
-                <div className="rounded-lg bg-neutral-50 px-3 py-1.5 border border-neutral-100">
-                  <span className="text-neutral-400">Dept</span>{" "}
+                <div className="rounded-lg bg-surface-raised px-3 py-1.5 border border-border-subtle">
+                  <span className="text-txt-muted">Dept</span>{" "}
                   <span className="font-semibold text-neutral-800">{profile.department.name}</span>
                 </div>
               )}
@@ -146,7 +146,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
         </div>
 
         {/* Tabs — match list page style */}
-        <div className="border-b border-neutral-200">
+        <div className="border-b border-border-default">
           <nav className="flex space-x-6">
             {tabs.map((tab) => (
               <button

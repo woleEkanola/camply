@@ -425,7 +425,7 @@ export function ScanCenterShell({
     <div className="mx-auto max-w-4xl space-y-6">
       
       {/* ═══ TOP STATUS HEADERS ═══ */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-neutral-100 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border-subtle pb-4">
         <div>
           <PageHeader title={getStationLabel()} />
         </div>
@@ -474,27 +474,27 @@ export function ScanCenterShell({
           {/* Operations Live Metrics Widget */}
           {operationalStats && !isVolunteer && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="bg-white border-neutral-200">
+              <Card className="bg-surface border-border-default">
                 <CardBody className="p-4 text-center">
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Total Registered</span>
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Total Registered</span>
                   <span className="text-2xl font-black text-neutral-900">{operationalStats.registered}</span>
                 </CardBody>
               </Card>
-              <Card className="bg-white border-neutral-200">
+              <Card className="bg-surface border-border-default">
                 <CardBody className="p-4 text-center">
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">In Camp (Arrived)</span>
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">In Camp (Arrived)</span>
                   <span className="text-2xl font-black text-emerald-600">{operationalStats.checkedIn}</span>
                 </CardBody>
               </Card>
-              <Card className="bg-white border-neutral-200">
+              <Card className="bg-surface border-border-default">
                 <CardBody className="p-4 text-center">
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Pending Arrival</span>
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Pending Arrival</span>
                   <span className="text-2xl font-black text-neutral-500">{operationalStats.pendingArrival}</span>
                 </CardBody>
               </Card>
-              <Card className="bg-white border-neutral-200">
+              <Card className="bg-surface border-border-default">
                 <CardBody className="p-4 text-center">
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Departed (Checked-out)</span>
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Departed (Checked-out)</span>
                   <span className="text-2xl font-black text-blue-600">{operationalStats.checkedOutCount}</span>
                 </CardBody>
               </Card>
@@ -520,7 +520,7 @@ export function ScanCenterShell({
           )}
 
           {/* Configuration Form */}
-          <Card className="border-neutral-200 bg-neutral-50/50">
+          <Card className="border-border-default bg-neutral-50/50">
             <CardBody className="p-6 space-y-4">
               <h3 className="text-sm font-bold text-neutral-700 uppercase tracking-wider">Device & Desk Config</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -538,7 +538,7 @@ export function ScanCenterShell({
                 />
               </div>
 
-              <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-neutral-200 shadow-sm mt-2">
+              <div className="flex items-center gap-3 bg-surface p-3 rounded-lg border border-border-default shadow-sm mt-2">
                 <input
                   type="checkbox"
                   id="skipMedicalAlerts"
@@ -550,7 +550,7 @@ export function ScanCenterShell({
                   <label htmlFor="skipMedicalAlerts" className="text-sm font-bold text-neutral-700 select-none cursor-pointer block">
                     Disable Medical Alerts Warning Screen
                   </label>
-                  <span className="text-xs text-neutral-400">Ignore warnings and automatically proceed with scans.</span>
+                  <span className="text-xs text-txt-muted">Ignore warnings and automatically proceed with scans.</span>
                 </div>
               </div>
             </CardBody>
@@ -566,14 +566,14 @@ export function ScanCenterShell({
                   <button
                     key={preset.id}
                     onClick={() => handleStationSelect(preset.id)}
-                    className="flex items-center gap-4 p-4 bg-white border border-neutral-200 hover:border-accent-500 hover:shadow-md rounded-xl transition text-left group"
+                    className="flex items-center gap-4 p-4 bg-surface border border-border-default hover:border-accent-500 hover:shadow-md rounded-xl transition text-left group"
                   >
                     <div className={`p-3 rounded-lg text-white ${preset.color} transition-transform group-hover:scale-105`}>
                       <Icon className="h-6 w-6" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <span className="block font-bold text-neutral-900 truncate">{preset.name}</span>
-                      <span className="block text-xs text-neutral-400">Tap to start scans</span>
+                      <span className="block text-xs text-txt-muted">Tap to start scans</span>
                     </div>
                     <ChevronRightIcon className="h-4 w-4 text-neutral-300 group-hover:text-accent-500 transition-colors" />
                   </button>
@@ -583,13 +583,13 @@ export function ScanCenterShell({
           </div>
 
           {/* Custom Station Configuration Option */}
-          <Card className="border-neutral-200">
+          <Card className="border-border-default">
             <CardBody className="p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
               <div className="flex items-center gap-3">
-                <BookOpenIcon className="h-6 w-6 text-neutral-400" />
+                <BookOpenIcon className="h-6 w-6 text-txt-muted" />
                 <div>
                   <span className="block font-bold text-neutral-900">Custom Attendance / Event Checkpoint</span>
-                  <span className="block text-xs text-neutral-400">e.g. Bible Study, Swimming, Bus Boarding</span>
+                  <span className="block text-xs text-txt-muted">e.g. Bible Study, Swimming, Bus Boarding</span>
                 </div>
               </div>
               <form onSubmit={handleCustomStationSave} className="flex gap-2 w-full sm:w-auto">
@@ -620,14 +620,14 @@ export function ScanCenterShell({
               <div>
                 <span className="block font-black text-lg">{getStationLabel()}</span>
                 {stationLocation && (
-                  <span className="block text-xs text-neutral-400">Location: {stationLocation}</span>
+                  <span className="block text-xs text-txt-muted">Location: {stationLocation}</span>
                 )}
               </div>
             </div>
             <Button
               size="sm"
               variant="secondary"
-              className="bg-white/10 hover:bg-white/20 text-white border-none font-bold"
+              className="bg-surface/10 hover:bg-surface/20 text-white border-none font-bold"
               onClick={handleChangeStation}
             >
               Change Station
@@ -635,7 +635,7 @@ export function ScanCenterShell({
           </div>
 
           {/* Scanner Card Viewport */}
-          <Card className="overflow-hidden border-neutral-200">
+          <Card className="overflow-hidden border-border-default">
             <CardBody className="p-6 text-center space-y-4">
               <div className="max-w-md mx-auto">
                 <Button
@@ -646,7 +646,7 @@ export function ScanCenterShell({
                   <QrCodeIcon className="h-6 w-6" />
                   {scannerActive ? "Close Camera Scanner" : "Launch Camera Scanner"}
                 </Button>
-                <p className="mt-1.5 text-xs text-neutral-400">Allows instant hands-free camper lookup/check-in</p>
+                <p className="mt-1.5 text-xs text-txt-muted">Allows instant hands-free camper lookup/check-in</p>
               </div>
 
               {scannerActive && (
@@ -662,11 +662,11 @@ export function ScanCenterShell({
           </Card>
 
           {/* Fallback Manual Query Search */}
-          <Card className="border-neutral-200">
+          <Card className="border-border-default">
             <CardBody className="p-4">
               <form onSubmit={handleSearchSubmit} className="flex gap-3">
                 <div className="relative flex-1">
-                  <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-neutral-400" />
+                  <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-txt-muted" />
                   <Input
                     ref={searchInputRef}
                     containerClassName="w-full"
@@ -675,7 +675,7 @@ export function ScanCenterShell({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
-                  <span className="absolute right-3 top-2.5 text-xs text-neutral-400 pointer-events-none hidden md:inline">
+                  <span className="absolute right-3 top-2.5 text-xs text-txt-muted pointer-events-none hidden md:inline">
                     Press [/] to search
                   </span>
                 </div>
@@ -686,9 +686,9 @@ export function ScanCenterShell({
 
           {/* Recent Scans Activity Logs & Quick Undo Timer (30s) */}
           {recentScans.length > 0 && (
-            <Card className="border-neutral-200">
+            <Card className="border-border-default">
               <CardBody className="p-6 space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-wider text-neutral-400">
+                <h3 className="text-xs font-black uppercase tracking-wider text-txt-muted">
                   Recent Station Activity
                 </h3>
                 <div className="divide-y divide-neutral-100">
@@ -758,7 +758,7 @@ export function ScanCenterShell({
               />
             )}
 
-            <div className="grid grid-cols-2 gap-4 w-full bg-white/10 backdrop-blur rounded-xl p-4 text-left text-sm border border-white/10">
+            <div className="grid grid-cols-2 gap-4 w-full bg-surface/10 backdrop-blur rounded-xl p-4 text-left text-sm border border-white/10">
               {successData.tribe && (
                 <div>
                   <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Tribe</span>
@@ -816,9 +816,9 @@ export function ScanCenterShell({
               />
             )}
 
-            <div className="bg-white/10 backdrop-blur rounded-xl p-5 text-left text-sm border border-white/10 space-y-3 w-full">
+            <div className="bg-surface/10 backdrop-blur rounded-xl p-5 text-left text-sm border border-white/10 space-y-3 w-full">
               {duplicateData.message && (
-                <div className="text-white font-bold text-sm bg-white/10 rounded-lg p-2.5 mb-2">
+                <div className="text-white font-bold text-sm bg-surface/10 rounded-lg p-2.5 mb-2">
                   {duplicateData.message}
                 </div>
               )}
@@ -878,7 +878,7 @@ export function ScanCenterShell({
               </div>
             )}
 
-            <div className="bg-white/10 backdrop-blur rounded-xl p-5 text-left space-y-4 border border-white/10 text-base">
+            <div className="bg-surface/10 backdrop-blur rounded-xl p-5 text-left space-y-4 border border-white/10 text-base">
               <div>
                 <span className="block text-xs uppercase opacity-85 font-black text-red-200">Medical Conditions</span>
                 <span className="font-black text-2xl text-white block mt-0.5">
@@ -938,7 +938,7 @@ export function ScanCenterShell({
                   className="h-20 w-20 rounded-2xl object-cover border-2 border-white/20 shadow-md"
                 />
               ) : (
-                <div className="h-20 w-20 rounded-2xl bg-white/15 flex items-center justify-center text-3xl font-black">
+                <div className="h-20 w-20 rounded-2xl bg-surface/15 flex items-center justify-center text-3xl font-black">
                   {lookupData.registration.camper.name.charAt(0)}
                 </div>
               )}
@@ -950,7 +950,7 @@ export function ScanCenterShell({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-sm bg-white/5 rounded-xl p-4 border border-white/10">
+            <div className="grid grid-cols-2 gap-4 text-sm bg-surface/5 rounded-xl p-4 border border-white/10">
               <div>
                 <span className="block text-xs uppercase opacity-60 font-semibold">Tribe</span>
                 <span className="font-bold text-purple-50">{lookupData.registration.tribe?.name || "—"}</span>
@@ -1007,7 +1007,7 @@ export function ScanCenterShell({
               <div className="space-y-2.5 max-h-48 overflow-y-auto">
                 {lookupData.history && lookupData.history.length > 0 ? (
                   lookupData.history.map((h: any) => (
-                    <div key={h.id} className="flex gap-3 text-xs bg-white/5 border border-white/5 rounded-lg p-2.5">
+                    <div key={h.id} className="flex gap-3 text-xs bg-surface/5 border border-white/5 rounded-lg p-2.5">
                       <span className="font-black text-purple-300">{new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       <div className="flex-1">
                         <span className="font-bold block text-white">{h.station}</span>
@@ -1036,7 +1036,7 @@ export function ScanCenterShell({
               <p className="text-xl md:text-2xl font-bold opacity-95">{medicalData.registration.camper.name}</p>
             </div>
 
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4 text-left space-y-4 border border-white/10 text-sm md:text-base">
+            <div className="bg-surface/10 backdrop-blur rounded-xl p-4 text-left space-y-4 border border-white/10 text-sm md:text-base">
               {medicalData.registration.camper.allergies && (
                 <div>
                   <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Allergies</span>
@@ -1060,7 +1060,7 @@ export function ScanCenterShell({
             <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full">
               <Button
                 size="lg"
-                className="flex-1 bg-white text-amber-700 hover:bg-neutral-100 font-bold py-4 text-base border-none shadow-lg"
+                className="flex-1 bg-surface text-amber-700 hover:bg-surface-raised font-bold py-4 text-base border-none shadow-lg"
                 onClick={() => {
                   const payload = {
                     qrToken: medicalData.qrToken,
@@ -1076,7 +1076,7 @@ export function ScanCenterShell({
               <Button
                 size="lg"
                 variant="secondary"
-                className="flex-1 bg-transparent hover:bg-white/10 text-white font-bold py-4 text-base border border-white/40"
+                className="flex-1 bg-transparent hover:bg-surface/10 text-white font-bold py-4 text-base border border-white/40"
                 onClick={() => {
                   setMedicalData(null);
                   setScannerActive(true);
@@ -1102,7 +1102,7 @@ export function ScanCenterShell({
                   className="h-16 w-16 rounded-xl object-cover border-2 border-white/20"
                 />
               ) : (
-                <div className="h-16 w-16 rounded-xl bg-white/15 flex items-center justify-center text-2xl font-black">
+                <div className="h-16 w-16 rounded-xl bg-surface/15 flex items-center justify-center text-2xl font-black">
                   {checkoutTargetReg.camper.name.charAt(0)}
                 </div>
               )}
@@ -1118,7 +1118,7 @@ export function ScanCenterShell({
                   label="Approved Guardians"
                   value={collectorType}
                   onChange={(e) => handleGuardianChange(e.target.value)}
-                  className="text-neutral-900 bg-white"
+                  className="text-neutral-900 bg-surface"
                 >
                   <option value="PARENT">Parent/Guardian</option>
                   {checkoutTargetReg.camper.emergencyContactName && (
@@ -1132,7 +1132,7 @@ export function ScanCenterShell({
                   placeholder="Guardian full name..."
                   value={collectorName}
                   onChange={(e) => setCollectorName(e.target.value)}
-                  className="text-neutral-950 bg-white"
+                  className="text-neutral-950 bg-surface"
                   disabled={collectorType !== "OTHER"}
                   required
                 />
@@ -1144,7 +1144,7 @@ export function ScanCenterShell({
                   placeholder="e.g. Uncle, Aunt, Driver"
                   value={collectorRelationship}
                   onChange={(e) => setCollectorRelationship(e.target.value)}
-                  className="text-neutral-950 bg-white"
+                  className="text-neutral-950 bg-surface"
                   disabled={collectorType !== "OTHER"}
                   required
                 />
@@ -1155,7 +1155,7 @@ export function ScanCenterShell({
                   type="password"
                   value={parentPin}
                   onChange={(e) => setParentPin(e.target.value)}
-                  className="text-neutral-950 bg-white"
+                  className="text-neutral-950 bg-surface"
                 />
               </div>
 
@@ -1173,7 +1173,7 @@ export function ScanCenterShell({
             <div className="flex gap-4 pt-2">
               <Button
                 size="lg"
-                className="flex-1 bg-white text-blue-900 hover:bg-neutral-100 font-bold border-none"
+                className="flex-1 bg-surface text-blue-900 hover:bg-surface-raised font-bold border-none"
                 disabled={!collectorName || !collectorRelationship || !signatureData}
                 onClick={handleConfirmCheckout}
               >
@@ -1182,7 +1182,7 @@ export function ScanCenterShell({
               <Button
                 size="lg"
                 variant="secondary"
-                className="flex-1 bg-transparent hover:bg-white/10 text-white font-bold border border-white/40"
+                className="flex-1 bg-transparent hover:bg-surface/10 text-white font-bold border border-white/40"
                 onClick={() => {
                   setCheckoutTargetReg(null);
                   setScannerActive(true);

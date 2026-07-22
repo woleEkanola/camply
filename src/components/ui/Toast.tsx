@@ -30,10 +30,10 @@ export interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 const TONE_STYLES: Record<ToastTone, { icon: typeof CheckCircleIcon; className: string; iconClassName: string }> = {
-  success: { icon: CheckCircleIcon, className: "bg-success-50 text-success-700 border-success-200", iconClassName: "text-success-600" },
-  danger: { icon: XCircleIcon, className: "bg-danger-50 text-danger-700 border-danger-200", iconClassName: "text-danger-600" },
-  warning: { icon: ExclamationTriangleIcon, className: "bg-warning-50 text-warning-700 border-warning-200", iconClassName: "text-warning-600" },
-  info: { icon: InformationCircleIcon, className: "bg-info-50 text-info-700 border-info-200", iconClassName: "text-info-600" },
+  success: { icon: CheckCircleIcon, className: "status-success", iconClassName: "icon-success" },
+  danger: { icon: XCircleIcon, className: "status-danger", iconClassName: "icon-danger" },
+  warning: { icon: ExclamationTriangleIcon, className: "status-warning", iconClassName: "icon-warning" },
+  info: { icon: InformationCircleIcon, className: "status-info", iconClassName: "icon-info" },
 };
 
 const AUTO_DISMISS_MS = 4000;
@@ -96,7 +96,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             >
               <div
                 className={cn(
-                  "pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border px-4 py-3 text-sm shadow-lg",
+                  "pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border border-current/15 px-4 py-3 text-sm shadow-lg dark:shadow-2xl",
                   className
                 )}
               >

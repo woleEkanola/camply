@@ -26,12 +26,12 @@ export function ApproveDecisionDialog({
   return (
     <Dialog open={open} onClose={onClose} title="Approve Registration?" size="sm">
       <div className="space-y-4">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-txt-secondary">
           Are you sure you want to approve registration for <strong className="text-neutral-900">{camperName || "this camper"}</strong>?
           This will update the registration status to <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">APPROVED</span>.
         </p>
 
-        <label className="flex items-center gap-2.5 rounded-xl border border-neutral-200 bg-neutral-50/70 p-3 text-sm font-medium text-neutral-700 cursor-pointer hover:bg-neutral-100/70 transition">
+        <label className="flex items-center gap-2.5 rounded-xl border border-border-default bg-neutral-50/70 p-3 text-sm font-medium text-neutral-700 cursor-pointer hover:bg-neutral-100/70 transition">
           <input
             type="checkbox"
             checked={sendEmail}
@@ -109,12 +109,12 @@ export function RequestCorrectionDecisionDialog({
   return (
     <Dialog open={open} onClose={onClose} title="Request Correction" size="md">
       <div className="space-y-4">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-txt-secondary">
           Select items requiring attention and provide clear instructions for the parent.
         </p>
 
         <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">
+          <label className="block text-xs font-bold uppercase tracking-wider text-txt-secondary mb-2">
             Correction Category / Reasons
           </label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -128,7 +128,7 @@ export function RequestCorrectionDecisionDialog({
                   className={`flex items-center gap-2 rounded-xl border p-2.5 text-xs font-semibold transition text-left ${
                     isChecked
                       ? "border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-500/20"
-                      : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300"
+                      : "border-border-default bg-surface text-neutral-700 hover:border-neutral-300"
                   }`}
                 >
                   <input
@@ -145,7 +145,7 @@ export function RequestCorrectionDecisionDialog({
         </div>
 
         <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+          <label className="block text-xs font-bold uppercase tracking-wider text-txt-secondary mb-1.5">
             Correction Message for Parent <span className="text-rose-500">*</span>
           </label>
           <Textarea
@@ -161,7 +161,7 @@ export function RequestCorrectionDecisionDialog({
           </div>
         </div>
 
-        <label className="flex items-center gap-2 text-xs font-medium text-neutral-600 cursor-pointer">
+        <label className="flex items-center gap-2 text-xs font-medium text-txt-secondary cursor-pointer">
           <input
             type="checkbox"
             checked={saveTemplate}
@@ -225,12 +225,12 @@ export function RejectDecisionDialog({
   return (
     <Dialog open={open} onClose={onClose} title="Reject Registration?" size="sm">
       <div className="space-y-4">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-txt-secondary">
           This registration will be rejected. Please select a documented reason to include in the notification to the parent.
         </p>
 
         <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+          <label className="block text-xs font-bold uppercase tracking-wider text-txt-secondary mb-1.5">
             Primary Rejection Reason
           </label>
           <Select
@@ -246,7 +246,7 @@ export function RejectDecisionDialog({
         </div>
 
         <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+          <label className="block text-xs font-bold uppercase tracking-wider text-txt-secondary mb-1.5">
             Additional Rejection Notes
           </label>
           <Textarea

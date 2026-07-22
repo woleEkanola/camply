@@ -28,12 +28,12 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
 
   return (
     <div className="space-y-3">
-      {actionError && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{actionError}</div>}
+      {actionError && <div className="rounded-md status-danger p-3 text-sm">{actionError}</div>}
       <DocumentZoomModal isOpen={!!zoomDoc} onClose={() => setZoomDoc(null)} {...(zoomDoc || { url: "", fileName: "" })} />
       {(documents ?? []).map((doc: any) => {
         const activeAction = doc.documentActions?.[0]?.status === "REQUIRES_ACTION" ? doc.documentActions[0] : null;
         return (
-          <div key={doc.id} className={`rounded-md border p-3 text-sm ${activeAction ? "border-warning-300 bg-warning-50" : "border-neutral-200"}`}>
+          <div key={doc.id} className={`rounded-md border p-3 text-sm ${activeAction ? "border-warning-300 bg-warning-50" : "border-border-default"}`}>
             <div className="flex items-center justify-between">
               <span className="text-neutral-700 font-medium truncate pr-2">
                 {doc.fileName}
@@ -52,17 +52,17 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
               </div>
             </div>
             {previewDocId === doc.id && (
-              <div className="mt-3 relative group flex justify-center bg-neutral-50 p-2 rounded-md border border-neutral-200 cursor-pointer overflow-hidden"
+              <div className="mt-3 relative group flex justify-center bg-surface-raised p-2 rounded-md border border-border-default cursor-pointer overflow-hidden"
                 onClick={() => setZoomDoc({ url: doc.url, fileName: doc.fileName, fileType: doc.fileType })}
               >
                 {doc.fileType?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(doc.url || "") ? (
                   <img
                     src={doc.url}
                     alt={doc.fileName}
-                    className="max-h-85 max-w-full object-contain rounded-md shadow-sm border border-neutral-200 bg-white group-hover:opacity-90 transition"
+                    className="max-h-85 max-w-full object-contain rounded-md shadow-sm border border-border-default bg-surface group-hover:opacity-90 transition"
                   />
                 ) : (
-                  <iframe src={doc.url} className="h-85 w-full rounded-md border border-neutral-200 bg-white" title={doc.fileName} />
+                  <iframe src={doc.url} className="h-85 w-full rounded-md border border-border-default bg-surface" title={doc.fileName} />
                 )}
                 <div className="absolute inset-0 bg-neutral-950/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                   <span className="bg-neutral-900/80 text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">

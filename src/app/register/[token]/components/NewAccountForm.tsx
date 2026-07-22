@@ -162,12 +162,12 @@ export function NewAccountForm({
           <button onClick={() => setStep("form")} className="mb-1 text-sm font-medium text-accent-600 hover:text-accent-700">
             ← Back
           </button>
-          <h2 className="text-xl font-bold text-neutral-900">Check your email</h2>
-          <p className="mt-1 text-sm text-neutral-500">
+          <h2 className="text-xl font-bold text-txt-primary">Check your email</h2>
+          <p className="mt-1 text-sm text-txt-secondary">
             We sent a 6-digit code to <strong>{email.trim().toLowerCase()}</strong>
           </p>
         </div>
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <div className="rounded-2xl bg-surface p-6 shadow-sm">
           {error && (
             <div className="mb-4 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</div>
           )}
@@ -175,7 +175,7 @@ export function NewAccountForm({
             disabled={loading}
             onComplete={handleOtpComplete}
           />
-          <p className="mt-4 text-center text-sm text-neutral-500">
+          <p className="mt-4 text-center text-sm text-txt-secondary">
             Didn&apos;t receive it?{" "}
             <button
               type="button"
@@ -197,14 +197,14 @@ export function NewAccountForm({
         <button onClick={onBack} className="mb-1 text-sm font-medium text-accent-600 hover:text-accent-700">
           ← Back
         </button>
-        <h1 className="text-2xl font-bold text-neutral-900">Welcome!</h1>
-        <p className="mt-1 text-sm text-neutral-500">Let&apos;s create your account.</p>
+        <h1 className="text-2xl font-bold text-txt-primary">Welcome!</h1>
+        <p className="mt-1 text-sm text-txt-secondary">Let&apos;s create your account.</p>
       </div>
 
-      <div className="rounded-2xl bg-white p-6 shadow-sm">
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="reg-firstname" className="mb-1 block text-sm font-medium text-neutral-700">First Name</label>
+            <label htmlFor="reg-firstname" className="mb-1 block text-sm font-medium text-txt-secondary">First Name</label>
             <input
               id="reg-firstname"
               type="text"
@@ -213,12 +213,12 @@ export function NewAccountForm({
               autoComplete="given-name"
               autoFocus
               required
-              className="block w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              className="block w-full rounded-xl border border-input-border bg-surface px-4 py-3 text-sm text-txt-primary placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
             />
           </div>
 
           <div>
-            <label htmlFor="reg-lastname" className="mb-1 block text-sm font-medium text-neutral-700">Last Name</label>
+            <label htmlFor="reg-lastname" className="mb-1 block text-sm font-medium text-txt-secondary">Last Name</label>
             <input
               id="reg-lastname"
               type="text"
@@ -226,14 +226,14 @@ export function NewAccountForm({
               onChange={(e) => onLastNameChange(e.target.value)}
               autoComplete="family-name"
               required
-              className="block w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              className="block w-full rounded-xl border border-input-border bg-surface px-4 py-3 text-sm text-txt-primary placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
             />
           </div>
 
           <fieldset>
-            <legend className="mb-2 text-sm font-medium text-neutral-700">How would you like to sign in next time?</legend>
+            <legend className="mb-2 text-sm font-medium text-txt-secondary">How would you like to sign in next time?</legend>
             <div className="space-y-2">
-              <label className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50">
+              <label className="flex items-center gap-3 rounded-xl border border-border-default px-4 py-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50">
                 <input
                   type="radio"
                   name="authMethod"
@@ -241,9 +241,9 @@ export function NewAccountForm({
                   onChange={() => onAuthMethodChange("password")}
                   className="h-4 w-4 text-accent-600"
                 />
-                <span className="text-sm text-neutral-700">Create a password</span>
+                <span className="text-sm text-txt-secondary">Create a password</span>
               </label>
-              <label className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50">
+              <label className="flex items-center gap-3 rounded-xl border border-border-default px-4 py-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50">
                 <input
                   type="radio"
                   name="authMethod"
@@ -251,7 +251,7 @@ export function NewAccountForm({
                   onChange={() => onAuthMethodChange("otp")}
                   className="h-4 w-4 text-accent-600"
                 />
-                <span className="text-sm text-neutral-700">Use a verification code</span>
+                <span className="text-sm text-txt-secondary">Use a verification code</span>
               </label>
             </div>
           </fieldset>
@@ -259,7 +259,7 @@ export function NewAccountForm({
           {authMethod === "password" && (
             <div className="space-y-3">
               <div>
-                <label htmlFor="reg-pw" className="mb-1 block text-sm font-medium text-neutral-700">Password</label>
+                <label htmlFor="reg-pw" className="mb-1 block text-sm font-medium text-txt-secondary">Password</label>
                 <input
                   id="reg-pw"
                   type="password"
@@ -269,11 +269,11 @@ export function NewAccountForm({
                   autoComplete="new-password"
                   required
                   minLength={8}
-                  className="block w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                  className="block w-full rounded-xl border border-input-border bg-surface px-4 py-3 text-sm text-txt-primary placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 />
               </div>
               <div>
-                <label htmlFor="reg-pw-confirm" className="mb-1 block text-sm font-medium text-neutral-700">Confirm Password</label>
+                <label htmlFor="reg-pw-confirm" className="mb-1 block text-sm font-medium text-txt-secondary">Confirm Password</label>
                 <input
                   id="reg-pw-confirm"
                   type="password"
@@ -282,7 +282,7 @@ export function NewAccountForm({
                   placeholder="Re-enter password"
                   autoComplete="new-password"
                   required
-                  className="block w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                  className="block w-full rounded-xl border border-input-border bg-surface px-4 py-3 text-sm text-txt-primary placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 />
               </div>
             </div>
@@ -307,7 +307,7 @@ export function NewAccountForm({
           </button>
         </form>
 
-        <p className="mt-4 text-center text-xs text-neutral-400">
+        <p className="mt-4 text-center text-xs text-txt-muted">
           By continuing, you agree to our Terms and Privacy Policy.
         </p>
       </div>

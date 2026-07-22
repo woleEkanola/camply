@@ -160,7 +160,7 @@ export function RegistrationReviewWorkspace({
   return (
     <div className="relative min-h-screen bg-neutral-50/60 pb-32">
       {/* 1. TOP UTILITY HEADER */}
-      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-200/80 bg-white/90 px-4 py-3 backdrop-blur md:px-6">
+      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border-default bg-surface/90 px-4 py-3 backdrop-blur md:px-6">
         <button
           type="button"
           onClick={onBack}
@@ -181,7 +181,7 @@ export function RegistrationReviewWorkspace({
               Next <ChevronRightIcon className="ml-1 h-3.5 w-3.5" />
             </Button>
           )}
-          <button type="button" className="p-1.5 text-neutral-500 hover:text-neutral-900 rounded-lg hover:bg-neutral-100">
+          <button type="button" className="p-1.5 text-neutral-500 hover:text-neutral-900 rounded-lg hover:bg-surface-raised">
             <EllipsisVerticalIcon className="h-5 w-5" />
           </button>
         </div>
@@ -189,7 +189,7 @@ export function RegistrationReviewWorkspace({
 
       <div className="mx-auto max-w-7xl px-4 pt-6 md:px-6 space-y-6">
         {/* 2. HEADER CAMPER PROFILE BANNER */}
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+        <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             {/* Left: Avatar + Title */}
             <div className="flex items-start gap-4">
@@ -222,18 +222,18 @@ export function RegistrationReviewWorkspace({
             </div>
 
             {/* Right: Parent Info Card */}
-            <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/70 p-3.5 min-w-[280px]">
+            <div className="rounded-xl border border-border-default bg-neutral-50/70 p-3.5 min-w-[280px]">
               <span className="block text-[11px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
                 Parent / Guardian
               </span>
               <div className="font-bold text-neutral-900 text-sm">{parentName}</div>
-              <div className="mt-1 space-y-1 text-xs font-medium text-neutral-600">
+              <div className="mt-1 space-y-1 text-xs font-medium text-txt-secondary">
                 <div className="flex items-center gap-2">
-                  <PhoneIcon className="h-3.5 w-3.5 text-neutral-400" />
+                  <PhoneIcon className="h-3.5 w-3.5 text-txt-muted" />
                   <span>{parentPhone}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <EnvelopeIcon className="h-3.5 w-3.5 text-neutral-400" />
+                  <EnvelopeIcon className="h-3.5 w-3.5 text-txt-muted" />
                   <span>{parentEmail}</span>
                 </div>
               </div>
@@ -242,7 +242,7 @@ export function RegistrationReviewWorkspace({
         </div>
 
         {/* 3. WORKSPACE TABS */}
-        <div className="border-b border-neutral-200 flex gap-6 text-sm font-semibold text-neutral-500">
+        <div className="border-b border-border-default flex gap-6 text-sm font-semibold text-neutral-500">
           <button
             type="button"
             onClick={() => setActiveTab("overview")}
@@ -281,8 +281,8 @@ export function RegistrationReviewWorkspace({
               {/* LEFT COLUMN: Camper Info & Registration Info */}
               <div className="space-y-6">
                 {/* Camper Info Card */}
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs space-y-4">
-                  <h3 className="font-bold text-neutral-900 text-base border-b border-neutral-100 pb-3">
+                <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs space-y-4">
+                  <h3 className="font-bold text-neutral-900 text-base border-b border-border-subtle pb-3">
                     Camper Information
                   </h3>
                   <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
@@ -326,8 +326,8 @@ export function RegistrationReviewWorkspace({
                 </div>
 
                 {/* Registration Info Card */}
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs space-y-4">
-                  <h3 className="font-bold text-neutral-900 text-base border-b border-neutral-100 pb-3">
+                <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs space-y-4">
+                  <h3 className="font-bold text-neutral-900 text-base border-b border-border-subtle pb-3">
                     Registration Information
                   </h3>
                   <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
@@ -359,15 +359,15 @@ export function RegistrationReviewWorkspace({
 
               {/* RIGHT COLUMN: Uploaded Documents Section */}
               <div className="space-y-6">
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+                <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-border-subtle pb-3">
                     <h3 className="font-bold text-neutral-900 text-base">Uploaded Documents</h3>
                     <span className="text-xs font-semibold text-neutral-500">{uploadedCount} of {totalRequired} uploaded</span>
                   </div>
 
                   {/* Document Progress Bar */}
                   <div className="space-y-1">
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-100">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-surface-raised">
                       <div
                         className={cn(
                           "h-full transition-all duration-300",
@@ -393,7 +393,7 @@ export function RegistrationReviewWorkspace({
                         return (
                           <div
                             key={foundDoc.id}
-                            className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white p-3.5 shadow-2xs hover:border-neutral-300 transition"
+                            className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3.5 shadow-2xs hover:border-neutral-300 transition"
                           >
                             <div className="flex items-center gap-3 min-w-0">
                               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-600 border border-purple-100">
@@ -402,7 +402,7 @@ export function RegistrationReviewWorkspace({
                               <div className="min-w-0">
                                 <div className="font-bold text-neutral-900 text-xs truncate">{docTitle}</div>
                                 <div className="text-[11px] font-mono text-neutral-500 truncate">{foundDoc.fileName}</div>
-                                <div className="text-[10px] text-neutral-400">Uploaded Jul 19, 2026 • 2.3 MB</div>
+                                <div className="text-[10px] text-txt-muted">Uploaded Jul 19, 2026 • 2.3 MB</div>
                               </div>
                             </div>
 
@@ -429,7 +429,7 @@ export function RegistrationReviewWorkspace({
                                 href={foundDoc.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="p-1.5 text-neutral-400 hover:text-neutral-800 rounded-lg hover:bg-neutral-100 transition"
+                                className="p-1.5 text-txt-muted hover:text-neutral-800 rounded-lg hover:bg-surface-raised transition"
                                 title="Download Document"
                               >
                                 <ArrowDownTrayIcon className="h-4 w-4" />
@@ -442,15 +442,15 @@ export function RegistrationReviewWorkspace({
                       return (
                         <div
                           key={docTitle}
-                          className="flex items-center justify-between rounded-xl border border-dashed border-neutral-200 bg-neutral-50/50 p-3.5"
+                          className="flex items-center justify-between rounded-xl border border-dashed border-border-default bg-neutral-50/50 p-3.5"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-400">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-raised text-txt-muted">
                               <DocumentIcon className="h-5 w-5" />
                             </div>
                             <div>
                               <div className="font-bold text-neutral-700 text-xs">{docTitle}</div>
-                              <div className="text-[11px] text-neutral-400">Not uploaded yet</div>
+                              <div className="text-[11px] text-txt-muted">Not uploaded yet</div>
                             </div>
                           </div>
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
@@ -465,8 +465,8 @@ export function RegistrationReviewWorkspace({
             </div>
 
             {/* 5. REVIEW NOTES SECTION */}
-            <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs space-y-4">
-              <h3 className="font-bold text-neutral-900 text-base border-b border-neutral-100 pb-3">
+            <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs space-y-4">
+              <h3 className="font-bold text-neutral-900 text-base border-b border-border-subtle pb-3">
                 Review Notes & Correction Instructions
               </h3>
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -474,9 +474,9 @@ export function RegistrationReviewWorkspace({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700">
-                      Internal Notes <span className="font-normal text-neutral-400">(Visible only to admins)</span>
+                      Internal Notes <span className="font-normal text-txt-muted">(Visible only to admins)</span>
                     </label>
-                    <span className="text-[10px] text-neutral-400">{internalNoteText.length}/500</span>
+                    <span className="text-[10px] text-txt-muted">{internalNoteText.length}/500</span>
                   </div>
                   <Textarea
                     value={internalNoteText}
@@ -502,9 +502,9 @@ export function RegistrationReviewWorkspace({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700">
-                      Correction Message <span className="font-normal text-neutral-400">(Sent to parent)</span>
+                      Correction Message <span className="font-normal text-txt-muted">(Sent to parent)</span>
                     </label>
-                    <span className="text-[10px] text-neutral-400">{correctionMsgText.length}/500</span>
+                    <span className="text-[10px] text-txt-muted">{correctionMsgText.length}/500</span>
                   </div>
                   <Textarea
                     value={correctionMsgText}
@@ -520,11 +520,11 @@ export function RegistrationReviewWorkspace({
         )}
 
         {activeTab === "documents" && (
-          <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="font-bold text-neutral-900 text-base border-b border-neutral-100 pb-3">All Documents</h3>
+          <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs space-y-4">
+            <h3 className="font-bold text-neutral-900 text-base border-b border-border-subtle pb-3">All Documents</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {uploadedDocs.map((doc: any) => (
-                <div key={doc.id} className="rounded-xl border border-neutral-200 p-4 space-y-3">
+                <div key={doc.id} className="rounded-xl border border-border-default p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-sm text-neutral-900 truncate">{doc.fileName}</span>
                     <Button size="sm" variant="secondary" onClick={() => setSelectedDocForViewer(doc)}>Preview</Button>
@@ -536,20 +536,20 @@ export function RegistrationReviewWorkspace({
         )}
 
         {activeTab === "timeline" && (
-          <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="font-bold text-neutral-900 text-base border-b border-neutral-100 pb-3">Audit Timeline & Activity</h3>
+          <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs space-y-4">
+            <h3 className="font-bold text-neutral-900 text-base border-b border-border-subtle pb-3">Audit Timeline & Activity</h3>
             <AuditTimeline events={timeline ?? []} />
           </div>
         )}
 
         {activeTab === "notes" && (
-          <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="font-bold text-neutral-900 text-base border-b border-neutral-100 pb-3">Internal Notes History</h3>
+          <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs space-y-4">
+            <h3 className="font-bold text-neutral-900 text-base border-b border-border-subtle pb-3">Internal Notes History</h3>
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {Array.isArray((registration as any).internalNotes) && ((registration as any).internalNotes as any[]).map((n, i) => (
-                <div key={i} className="rounded-xl bg-neutral-50 p-3 text-xs border border-neutral-200">
+                <div key={i} className="rounded-xl bg-surface-raised p-3 text-xs border border-border-default">
                   <div className="font-medium text-neutral-800">{n.text}</div>
-                  <div className="mt-1 text-[10px] text-neutral-400">{new Date(n.at).toLocaleString()}</div>
+                  <div className="mt-1 text-[10px] text-txt-muted">{new Date(n.at).toLocaleString()}</div>
                 </div>
               ))}
             </div>
@@ -558,7 +558,7 @@ export function RegistrationReviewWorkspace({
       </div>
 
       {/* 6. STICKY BOTTOM REVIEW ACTIONS BAR */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-neutral-200/80 bg-white/95 px-4 py-3.5 backdrop-blur shadow-2xl">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border-default bg-surface/95 px-4 py-3.5 backdrop-blur shadow-2xl">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
           {/* Reject Button */}
           <Button

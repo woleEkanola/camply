@@ -19,7 +19,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
 
   if (!mounted) {
     return (
-      <div className="h-8 w-8 rounded-md border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-800" />
+      <div className="h-8 w-8 rounded-md border border-border-default bg-surface" />
     );
   }
 

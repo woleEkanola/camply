@@ -754,7 +754,7 @@ export default function CampusesPage() {
           {tableSortDirection === "asc" ? "↑" : "↓"}
         </span>
       ) : (
-        <span className="text-neutral-400 opacity-40 group-hover:opacity-100 text-xs transition-opacity">
+        <span className="text-txt-muted opacity-40 group-hover:opacity-100 text-xs transition-opacity">
           ↕
         </span>
       )}
@@ -808,7 +808,7 @@ export default function CampusesPage() {
             checked={selectedCampusIds.includes(campus.id)}
             onChange={() => handleSelectCampus(campus.id)}
             onClick={(e) => e.stopPropagation()}
-            className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+            className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500 cursor-pointer"
             aria-label={`Select campus ${campus.name}`}
           />
         ),
@@ -826,8 +826,8 @@ export default function CampusesPage() {
               <BuildingOffice2Icon className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <div className="font-bold text-neutral-900 truncate text-sm">{c.name}</div>
-              <div className="text-xs text-neutral-500 truncate">
+              <div className="font-bold text-txt-primary truncate text-sm">{c.name}</div>
+              <div className="text-xs text-txt-secondary truncate">
                 {[c.city, c.state, c.country].filter(Boolean).join(", ") || c.address}
               </div>
             </div>
@@ -841,11 +841,11 @@ export default function CampusesPage() {
         header: renderSortableHeader("Code", "code"),
         accessor: (c) =>
           c.campusCode ? (
-            <span className="inline-flex items-center rounded-lg bg-neutral-100 px-2 py-1 text-xs font-mono font-bold text-neutral-700">
+            <span className="inline-flex items-center rounded-lg bg-surface-raised px-2 py-1 text-xs font-mono font-bold text-txt-secondary">
               {c.campusCode}
             </span>
           ) : (
-            <span className="text-neutral-400 text-xs">—</span>
+            <span className="text-txt-muted text-xs">—</span>
           ),
       });
     }
@@ -903,8 +903,8 @@ export default function CampusesPage() {
           return (
             <div className="space-y-1.5 w-44">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-extrabold text-neutral-900">
-                  {used} <span className="font-normal text-neutral-400">/ {isUnlimited ? "∞" : limit}</span>
+                <span className="font-extrabold text-txt-primary">
+                  {used} <span className="font-normal text-txt-muted">/ {isUnlimited ? "∞" : limit}</span>
                 </span>
                 {!isUnlimited && (
                   <span className={cn("font-bold text-xs", tone.text)}>
@@ -913,11 +913,11 @@ export default function CampusesPage() {
                 )}
               </div>
               {isUnlimited ? (
-                <div className="h-2 w-full rounded-full bg-neutral-100 overflow-hidden">
+                <div className="h-2 w-full rounded-full bg-surface-raised overflow-hidden">
                   <div className="h-full bg-accent-400/40 w-full animate-pulse" />
                 </div>
               ) : (
-                <div className="h-2 w-full rounded-full bg-neutral-100 overflow-hidden">
+                <div className="h-2 w-full rounded-full bg-surface-raised overflow-hidden">
                   <div
                     className={cn("h-full rounded-full transition-all duration-500", tone.bar)}
                     style={{ width: `${pct}%` }}
@@ -965,7 +965,7 @@ export default function CampusesPage() {
                 {isGenerating ? "Creating..." : "Create Link"}
               </Button>
             ) : (
-              <span className="text-xs font-semibold text-neutral-400">• Not Created</span>
+              <span className="text-xs font-semibold text-txt-muted">• Not Created</span>
             );
           }
 
@@ -992,7 +992,7 @@ export default function CampusesPage() {
       cols.push({
         header: renderSortableHeader("Order #", "order"),
         accessor: (c) => (
-          <span className="text-xs font-semibold text-neutral-600">
+          <span className="text-xs font-semibold text-txt-secondary">
             #{c.displayOrder ?? 0}
           </span>
         ),
@@ -1016,7 +1016,7 @@ export default function CampusesPage() {
                 <button
                   type="button"
                   onClick={() => openEditModal(c.id)}
-                  className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+                  className="p-1.5 rounded-lg text-txt-secondary hover:text-txt-primary hover:bg-surface-raised transition-colors"
                   title="Edit Campus"
                 >
                   <PencilIcon className="h-4 w-4" />
@@ -1026,7 +1026,7 @@ export default function CampusesPage() {
                 <button
                   type="button"
                   onClick={() => openAdminModal(c.id)}
-                  className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+                  className="p-1.5 rounded-lg text-txt-secondary hover:text-txt-primary hover:bg-surface-raised transition-colors"
                   title="Manage Reps"
                 >
                   <UserGroupIcon className="h-4 w-4" />
@@ -1035,7 +1035,7 @@ export default function CampusesPage() {
               <button
                 type="button"
                 onClick={() => setAnalyticsCampusId(c.id)}
-                className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+                className="p-1.5 rounded-lg text-txt-secondary hover:text-txt-primary hover:bg-surface-raised transition-colors"
                 title="View Analytics"
               >
                 <ChartBarIcon className="h-4 w-4" />
@@ -1083,7 +1083,7 @@ export default function CampusesPage() {
 
       {/* FEEDBACK ALERTS */}
       {error && (
-        <div className="mb-4 rounded-xl bg-danger-50 p-4 text-sm font-medium text-danger-700 flex items-center justify-between shadow-2xs">
+        <div className="mb-4 rounded-xl status-danger p-4 text-sm font-medium flex items-center justify-between shadow-2xs">
           <span>{error}</span>
           <button onClick={() => setError("")} className="text-xs underline font-semibold">
             Dismiss
@@ -1092,7 +1092,7 @@ export default function CampusesPage() {
       )}
 
       {success && (
-        <div className="mb-4 rounded-xl bg-success-50 p-4 text-sm font-medium text-success-700 shadow-2xs">
+        <div className="mb-4 rounded-xl status-success p-4 text-sm font-medium shadow-2xs">
           {success}
         </div>
       )}
@@ -1136,7 +1136,7 @@ export default function CampusesPage() {
             >
               {isBulkActionLoading ? "Disabling..." : "Disable Signup Links"}
             </Button>
-            <button onClick={handleSelectAll} className="ml-auto text-xs text-neutral-300 underline font-medium">
+            <button onClick={handleSelectAll} className="ml-auto text-xs text-txt-muted underline font-medium">
               {selectAll ? "Deselect all" : "Select all"}
             </button>
           </div>
@@ -1147,16 +1147,16 @@ export default function CampusesPage() {
       {isLoadingCampuses ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[1, 2, 3, 4, 5, 6].map((n) => (
-            <div key={n} className="h-72 rounded-2xl bg-neutral-100 animate-pulse" />
+            <div key={n} className="h-72 rounded-2xl bg-surface-raised animate-pulse" />
           ))}
         </div>
       ) : filteredCampuses.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-12 text-center shadow-2xs">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 text-neutral-400">
+        <div className="rounded-2xl border border-dashed border-input-border bg-surface p-12 text-center shadow-2xs">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-raised text-txt-muted">
             <BuildingOffice2Icon className="h-6 w-6" />
           </div>
-          <h3 className="text-base font-semibold text-neutral-900">No campuses found</h3>
-          <p className="mt-1 text-xs text-neutral-500 max-w-sm mx-auto">
+          <h3 className="text-base font-semibold text-txt-primary">No campuses found</h3>
+          <p className="mt-1 text-xs text-txt-secondary max-w-sm mx-auto">
             {searchQuery || statusFilter !== "ALL"
               ? "No campuses match your active search or filter criteria. Try resetting filters."
               : "Get started by adding your organization's first campus."}
@@ -1229,7 +1229,7 @@ export default function CampusesPage() {
         title={selectedCampus ? "Edit Campus" : "Add New Campus"}
         size="md"
       >
-        {error && <div className="mb-4 rounded-xl bg-danger-50 p-3.5 text-xs text-danger-700 font-medium">{error}</div>}
+        {error && <div className="mb-4 rounded-xl status-danger p-3.5 text-xs font-medium">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input label="Campus Name" id="name" name="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
           <div className="grid grid-cols-2 gap-4">
@@ -1251,7 +1251,7 @@ export default function CampusesPage() {
             <Input label="Email" id="email" name="email" value={formData.email ?? ""} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
+          <div className="flex justify-end gap-2 pt-3 border-t border-border-subtle">
             <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
@@ -1264,8 +1264,8 @@ export default function CampusesPage() {
 
       {/* DELETE CONFIRMATION MODAL */}
       <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Delete Campus" size="sm">
-        {error && <div className="mb-4 rounded-xl bg-danger-50 p-3 text-xs text-danger-700">{error}</div>}
-        <p className="text-xs text-neutral-600">
+        {error && <div className="mb-4 rounded-xl status-danger p-3 text-xs ">{error}</div>}
+        <p className="text-xs text-txt-secondary">
           Are you sure you want to delete this campus? This action cannot be undone and will affect associated records.
         </p>
         <div className="mt-5 flex justify-end gap-2">
@@ -1299,7 +1299,7 @@ export default function CampusesPage() {
 
       {/* CAPACITY MODAL */}
       <Dialog open={isQuotaModalOpen} onClose={() => setIsQuotaModalOpen(false)} title="Edit Registration Capacity" size="sm">
-        {error && <div className="mb-4 rounded-xl bg-danger-50 p-3 text-xs text-danger-700">{error}</div>}
+        {error && <div className="mb-4 rounded-xl status-danger p-3 text-xs ">{error}</div>}
         <div className="space-y-4">
           <Input
             label="Registration Capacity / Quota (0 = Unlimited)"
@@ -1309,11 +1309,11 @@ export default function CampusesPage() {
             onChange={(e) => setQuotaFormData({ ...quotaFormData, quota: parseInt(e.target.value, 10) || 0 })}
           />
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-txt-secondary mb-1">
               When Capacity Reached
             </label>
             <select
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-800 bg-white focus:ring-2 focus:ring-accent-500"
+              className="w-full border border-border-default rounded-xl px-3 py-2 text-xs font-medium text-txt-primary bg-surface focus:ring-2 focus:ring-accent-500"
               value={quotaFormData.quotaFullBehavior}
               onChange={(e) => setQuotaFormData({ ...quotaFormData, quotaFullBehavior: e.target.value as "CLOSE" | "WAITLIST" })}
             >
@@ -1322,7 +1322,7 @@ export default function CampusesPage() {
             </select>
           </div>
         </div>
-        <div className="mt-5 flex justify-end gap-2 border-t border-neutral-100 pt-3">
+        <div className="mt-5 flex justify-end gap-2 border-t border-border-subtle pt-3">
           <Button variant="secondary" onClick={() => setIsQuotaModalOpen(false)}>
             Cancel
           </Button>
@@ -1354,35 +1354,35 @@ export default function CampusesPage() {
           </div>
         ) : !clickLogData || clickLogData.items.length === 0 ? (
           <div className="py-12 text-center">
-            <p className="text-xs font-semibold text-neutral-600">No clicks recorded yet</p>
-            <p className="mt-1 text-xs text-neutral-400">Clicks will appear here as users access this signup link.</p>
+            <p className="text-xs font-semibold text-txt-secondary">No clicks recorded yet</p>
+            <p className="mt-1 text-xs text-txt-muted">Clicks will appear here as users access this signup link.</p>
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-xs font-semibold text-neutral-500">{clickLogData.total} total link click(s)</p>
-            <div className="overflow-x-auto rounded-xl border border-neutral-200">
+            <p className="text-xs font-semibold text-txt-secondary">{clickLogData.total} total link click(s)</p>
+            <div className="overflow-x-auto rounded-xl border border-border-default">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-neutral-200 bg-neutral-50 font-semibold uppercase tracking-wider text-neutral-500">
+                  <tr className="border-b border-border-default bg-surface-raised font-semibold uppercase tracking-wider text-txt-secondary">
                     <th className="px-3.5 py-2.5">Time</th>
                     <th className="px-3.5 py-2.5">Visitor</th>
                     <th className="px-3.5 py-2.5">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-100">
+                <tbody className="divide-y divide-border-subtle">
                   {clickLogData.items.map((click) => (
                     <tr key={click.id}>
-                      <td className="px-3.5 py-2.5 text-neutral-700">
+                      <td className="px-3.5 py-2.5 text-txt-secondary">
                         {new Date(click.clickedAt).toLocaleString()}
                       </td>
-                      <td className="px-3.5 py-2.5 text-neutral-900 font-medium">
+                      <td className="px-3.5 py-2.5 text-txt-primary font-medium">
                         {click.name || click.email || "Anonymous Visitor"}
                       </td>
                       <td className="px-3.5 py-2.5">
                         {click.registered ? (
                           <span className="text-success-700 font-semibold">Registered</span>
                         ) : (
-                          <span className="text-neutral-400">Clicked only</span>
+                          <span className="text-txt-muted">Clicked only</span>
                         )}
                       </td>
                     </tr>

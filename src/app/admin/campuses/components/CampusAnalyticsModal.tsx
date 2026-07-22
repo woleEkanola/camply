@@ -50,7 +50,7 @@ export const CampusAnalyticsModal: React.FC<CampusAnalyticsModalProps> = ({
       {isLoading || !stats ? (
         <div className="flex flex-col items-center justify-center py-12 space-y-3">
           <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-accent-600" />
-          <p className="text-xs text-neutral-500 font-medium">Loading analytics data...</p>
+          <p className="text-xs text-txt-secondary font-medium">Loading analytics data...</p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -81,12 +81,12 @@ export const CampusAnalyticsModal: React.FC<CampusAnalyticsModalProps> = ({
 
           {/* QUOTA & CAPACITY BREAKDOWN */}
           {stats.quota !== null && (
-            <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-2xs space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-txt-secondary">
                 Capacity Overview
               </h3>
               <div className="flex items-center justify-between text-sm">
-                <span className="font-semibold text-neutral-900">
+                <span className="font-semibold text-txt-primary">
                   {stats.approvedCount} approved {stats.quota > 0 ? `of ${stats.quota} capacity` : "(no limit)"}
                 </span>
                 {stats.quota > 0 && (
@@ -96,7 +96,7 @@ export const CampusAnalyticsModal: React.FC<CampusAnalyticsModalProps> = ({
 
               {stats.quota > 0 && <ProgressBar percent={stats.percentUsed} className="h-3 rounded-full" />}
 
-              <div className="text-xs text-neutral-500 pt-1">
+              <div className="text-xs text-txt-secondary pt-1">
                 {stats.quota > 0 ? (
                   <span>
                     {Math.max(0, stats.quota - stats.approvedCount)} remaining capacity slots before limit triggers.
@@ -110,20 +110,20 @@ export const CampusAnalyticsModal: React.FC<CampusAnalyticsModalProps> = ({
 
           {/* STATUS BREAKDOWN GRID */}
           <div>
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-txt-secondary">
               Registration Status Breakdown
             </h3>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
-                { label: "Approved", key: "APPROVED", color: "border-success-200 bg-success-50/40 text-success-800" },
-                { label: "Pending Review", key: "PENDING", color: "border-warning-200 bg-warning-50/40 text-warning-800" },
-                { label: "Checked In", key: "CHECKED_IN", color: "border-success-200 bg-success-50/40 text-success-800" },
+                { label: "Approved", key: "APPROVED", color: "border-success-200 status-success/40 text-success-800" },
+                { label: "Pending Review", key: "PENDING", color: "border-warning-200 status-warning/40 text-warning-800" },
+                { label: "Checked In", key: "CHECKED_IN", color: "border-success-200 status-success/40 text-success-800" },
                 { label: "Waitlisted", key: "WAITLISTED", color: "border-attention-200 bg-attention-50/40 text-attention-800" },
-                { label: "Draft", key: "DRAFT", color: "border-neutral-200 bg-neutral-50/60 text-neutral-700" },
-                { label: "Requires Action", key: "REQUIRES_ACTION", color: "border-warning-200 bg-warning-50/40 text-warning-800" },
-                { label: "Rejected", key: "REJECTED", color: "border-danger-200 bg-danger-50/40 text-danger-800" },
-                { label: "Archived", key: "ARCHIVED", color: "border-neutral-200 bg-neutral-50/60 text-neutral-600" },
+                { label: "Draft", key: "DRAFT", color: "border-border-default bg-surface-raised/60 text-txt-secondary" },
+                { label: "Requires Action", key: "REQUIRES_ACTION", color: "border-warning-200 status-warning/40 text-warning-800" },
+                { label: "Rejected", key: "REJECTED", color: "border-danger-200 status-danger/40 text-danger-800" },
+                { label: "Archived", key: "ARCHIVED", color: "border-border-default bg-surface-raised/60 text-txt-secondary" },
               ].map((item) => (
                 <div key={item.key} className={`rounded-xl border p-3.5 transition-all ${item.color}`}>
                   <div className="text-[11px] font-semibold uppercase tracking-wider opacity-80">{item.label}</div>
@@ -137,8 +137,8 @@ export const CampusAnalyticsModal: React.FC<CampusAnalyticsModalProps> = ({
 
           {/* TREND CHART */}
           {stats.trend && stats.trend.length > 0 && (
-            <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-2xs">
-              <h3 className="font-semibold text-sm text-neutral-900 mb-3">Registrations Trend</h3>
+            <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs">
+              <h3 className="font-semibold text-sm text-txt-primary mb-3">Registrations Trend</h3>
               <LineChart
                 data={stats.trend.map((item) => item.count)}
                 color={accentColor}

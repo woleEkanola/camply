@@ -310,7 +310,7 @@ export function Table<T>(props: TableProps<T>) {
                     <th scope="col" className="w-10 px-4 py-2.5">
                       <input
                         type="checkbox"
-                        className="rounded border-input-border text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                        className="h-5 w-5 rounded border-input-border text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                         checked={allOnPageSelected}
                         onChange={(e) => toggleSelectAllOnPage(e.target.checked)}
                         aria-label="Select all rows on this page"
@@ -394,7 +394,7 @@ export function Table<T>(props: TableProps<T>) {
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
-                          className="rounded border-neutral-300 text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                          className="rounded border-input-border text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                           checked={selectedIds?.includes(rowKey(row)) ?? false}
                           onChange={(e) => toggleSelectRow(row, e.target.checked)}
                           aria-label="Select row"
@@ -405,8 +405,8 @@ export function Table<T>(props: TableProps<T>) {
                       <td
                         key={i}
                         style={columnWidths[i] ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` } : undefined}
-                        className={cn(
-                          "px-4 py-3 text-sm text-neutral-700 overflow-hidden",
+                      className={cn(
+                        "px-4 py-3 text-sm text-txt-primary overflow-hidden",
                           column.wrap ? "whitespace-normal break-words" : "truncate",
                           column.className
                         )}
@@ -428,16 +428,16 @@ export function Table<T>(props: TableProps<T>) {
           {/* Mobile: card list built from the same columns/pageData/getCellValue. */}
           <div className="md:hidden">
             {(filterableCols.length > 0 || (!isControlled && sortableCols.length > 0) || selectable) && (
-              <div className="flex flex-wrap items-center gap-2 border-b border-neutral-100 bg-neutral-50 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle bg-surface-raised px-3 py-2">
                 {selectable && (
-                  <label className="flex min-h-[44px] items-center gap-2 pr-1 text-xs font-medium text-neutral-600">
-                    <input
-                      type="checkbox"
-                      className="h-5 w-5 rounded border-neutral-300 text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-                      checked={allOnPageSelected}
-                      onChange={(e) => toggleSelectAllOnPage(e.target.checked)}
-                      aria-label="Select all rows on this page"
-                    />
+                  <label className="flex min-h-[44px] items-center gap-2 pr-1 text-xs font-medium text-txt-secondary">
+                         <input
+                           type="checkbox"
+                           className="rounded border-input-border text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                           checked={allOnPageSelected}
+                           onChange={(e) => toggleSelectAllOnPage(e.target.checked)}
+                           aria-label="Select all rows on this page"
+                         />
                     All
                   </label>
                 )}
@@ -445,7 +445,7 @@ export function Table<T>(props: TableProps<T>) {
                   <select
                     key={i}
                     aria-label={typeof column.header === "string" ? `Filter by ${column.header}` : undefined}
-                    className="min-h-[40px] flex-1 rounded border border-neutral-200 bg-white px-2 text-sm text-neutral-600 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+                    className="min-h-[40px] flex-1 rounded border border-input-border bg-input-bg px-2 text-sm text-txt-primary focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
                     value={column.filter!.value}
                     onChange={(e) => column.filter!.onChange(e.target.value)}
                   >
@@ -458,7 +458,7 @@ export function Table<T>(props: TableProps<T>) {
                 {!isControlled && sortableCols.length > 0 && (
                   <select
                     aria-label="Sort by"
-                    className="min-h-[40px] flex-1 rounded border border-neutral-200 bg-white px-2 text-sm text-neutral-600 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+                    className="min-h-[40px] flex-1 rounded border border-input-border bg-input-bg px-2 text-sm text-txt-primary focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
                     value={sortConfig.key ? `${String(sortConfig.key)}:${sortConfig.direction}` : ""}
                     onChange={(e) => {
                       const [key, direction] = e.target.value.split(":");
@@ -485,7 +485,7 @@ export function Table<T>(props: TableProps<T>) {
               </div>
             )}
 
-            <ul className="divide-y divide-neutral-100">
+            <ul className="divide-y divide-border-subtle">
               {pageData.map((row) => {
                 const clickable = !!onRowClick;
                 const isSelected = selectedIds?.includes(rowKey(row)) ?? false;
@@ -556,14 +556,14 @@ export function Table<T>(props: TableProps<T>) {
       )}
 
       {!isControlled && processed.length > 0 && totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-neutral-200 px-4 py-2.5">
-          <div className="flex items-center gap-3 text-sm text-neutral-500">
+        <div className="flex items-center justify-between border-t border-border-default px-4 py-2.5">
+          <div className="flex items-center gap-3 text-sm text-txt-secondary">
             <span>
               {Math.min(processed.length, (currentPage - 1) * itemsPerPage + 1)}–
               {Math.min(processed.length, currentPage * itemsPerPage)} of {processed.length}
             </span>
             <select
-              className="rounded border border-neutral-300 px-1.5 py-0.5 text-sm"
+              className="rounded border border-input-border bg-input-bg px-1.5 py-0.5 text-sm text-txt-primary"
               value={itemsPerPage}
               onChange={(e) => {
                 setItemsPerPage(Number(e.target.value));
@@ -579,16 +579,16 @@ export function Table<T>(props: TableProps<T>) {
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+              className="rounded-md p-1.5 text-txt-secondary hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-txt-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
               aria-label="Previous page"
             >
               <ChevronLeftIcon className="h-4 w-4" />
             </button>
-            <span className="text-sm text-neutral-500">{currentPage} / {totalPages}</span>
+            <span className="text-sm text-txt-secondary">{currentPage} / {totalPages}</span>
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+              className="rounded-md p-1.5 text-txt-secondary hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-txt-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
               aria-label="Next page"
             >
               <ChevronRightIcon className="h-4 w-4" />

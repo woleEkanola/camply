@@ -212,8 +212,8 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
 
   if (!activeTeen) {
     return (
-      <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
-        <p className="text-neutral-500">No teen selected.</p>
+      <div className="rounded-2xl bg-surface p-8 text-center shadow-sm">
+        <p className="text-txt-secondary">No teen selected.</p>
         <button onClick={() => dispatch({ type: "GO_BACK" })} className="mt-3 text-sm font-medium text-accent-600 hover:text-accent-700">
           ← Go back
         </button>
@@ -224,21 +224,21 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-neutral-900">{activeTeen.firstName} {activeTeen.lastName}</h1>
+        <h1 className="text-xl font-bold text-txt-primary">{activeTeen.firstName} {activeTeen.lastName}</h1>
       </div>
 
-      <div className="rounded-2xl bg-white p-6 shadow-sm">
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
         {!fields ? (
           <div className="animate-pulse space-y-4">
             {[1, 2, 3].map((i) => (
               <div key={i} className="space-y-2">
                 <div className="h-4 w-24 rounded bg-neutral-200" />
-                <div className="h-10 rounded-xl bg-neutral-100" />
+                <div className="h-10 rounded-xl bg-surface-raised" />
               </div>
             ))}
           </div>
         ) : visibleFields.length === 0 ? (
-          <p className="text-sm text-neutral-500">No fields configured.</p>
+          <p className="text-sm text-txt-secondary">No fields configured.</p>
         ) : (
           <DynamicFieldGroup
             fields={visibleFields}
@@ -258,7 +258,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
               <button
                 type="button"
                 onClick={() => dispatch({ type: "GO_BACK" })}
-                className="flex h-12 items-center justify-center rounded-xl border border-neutral-300 bg-white px-6 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+                className="flex h-12 items-center justify-center rounded-xl border border-input-border bg-surface px-6 text-sm font-medium text-txt-secondary transition-colors hover:bg-neutral-50"
               >
                 ← Back
               </button>
@@ -275,14 +275,14 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
               </button>
             </div>
             {isUploading && (
-              <p className="text-xs text-neutral-500">Please wait for uploads to finish.</p>
+              <p className="text-xs text-txt-secondary">Please wait for uploads to finish.</p>
             )}
           </div>
         </div>
       </div>
 
       <div className="mt-6 text-center">
-        <a href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-600 underline">
+        <a href="/dashboard" className="text-sm text-txt-muted hover:text-txt-primary underline">
           Go to Dashboard
         </a>
       </div>

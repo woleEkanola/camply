@@ -40,13 +40,13 @@ export default function DeliveryLogsPage() {
         <PageHeader title="Delivery Logs" description="Permanent email delivery history" />
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold">{stats?.total ?? 0}</div><div className="text-xs text-neutral-500">Total</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold">{stats?.total ?? 0}</div><div className="text-xs text-txt-secondary">Total</div></div>
           <div className="rounded-lg bg-green-50 p-3 text-center"><div className="text-xl font-bold text-green-600">{stats?.delivered ?? 0}</div><div className="text-xs text-green-500">Delivered</div></div>
           <div className="rounded-lg bg-indigo-50 p-3 text-center"><div className="text-xl font-bold text-indigo-600">{stats?.opened ?? 0}</div><div className="text-xs text-indigo-500">Opened</div></div>
         </div>
 
         {!data?.items?.length ? (
-          <Card><CardBody><p className="text-center text-neutral-500">No delivery logs yet</p></CardBody></Card>
+          <Card><CardBody><p className="text-center text-txt-secondary">No delivery logs yet</p></CardBody></Card>
         ) : (
           <div className="space-y-1">
             {data.items.map((item: any) => (
@@ -54,14 +54,14 @@ export default function DeliveryLogsPage() {
                 <CardBody className="flex items-center justify-between py-2 text-sm">
                   <div className="flex-1 min-w-0">
                     <span className="font-medium">{item.email}</span>
-                    <span className="text-neutral-400 mx-2">·</span>
-                    <span className="text-neutral-500 truncate">{item.campaign?.name || "Campaign"}</span>
+                    <span className="text-txt-muted mx-2">·</span>
+                    <span className="text-txt-secondary truncate">{item.campaign?.name || "Campaign"}</span>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
                     {item.openedAt && <span className="text-xs text-indigo-500">Opened</span>}
                     {item.clickedAt && <span className="text-xs text-rose-500">Clicked</span>}
                     <Badge tone={statusTone(item.deliveryStatus)}>{item.deliveryStatus}</Badge>
-                    <span className="text-xs text-neutral-400">{new Date(item.createdAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-txt-muted">{new Date(item.createdAt).toLocaleDateString()}</span>
                   </div>
                 </CardBody>
               </Card>

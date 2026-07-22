@@ -88,7 +88,7 @@ export default function TribesConfigPage() {
         <PageHeader title={`Tribes: ${camp?.name ?? ""}`} />
 
         {error && (
-          <div className="rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+          <div className="rounded-md status-danger p-4 text-sm ">
             <span>{error}</span>
             <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
           </div>
@@ -97,8 +97,8 @@ export default function TribesConfigPage() {
         <Card>
           <CardHeader><CardTitle>Allocation Settings</CardTitle></CardHeader>
           <CardBody className="space-y-4">
-            <label className="flex items-center gap-2 text-sm text-neutral-700">
-              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500" />
+            <label className="flex items-center gap-2 text-sm text-txt-secondary">
+              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500" />
               Enable tribe allocation for this camp
             </label>
 
@@ -111,17 +111,17 @@ export default function TribesConfigPage() {
                 </Select>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-neutral-700">Allocation Criteria (priority = order below)</label>
+                  <label className="mb-2 block text-sm font-medium text-txt-secondary">Allocation Criteria (priority = order below)</label>
                   <div className="space-y-1">
                     {CRITERIA.map((c) => (
-                      <label key={c.key} className="flex items-center gap-2 text-sm text-neutral-700">
+                      <label key={c.key} className="flex items-center gap-2 text-sm text-txt-secondary">
                         <input
                           type="checkbox"
                           checked={!!rules.find((r) => r.criterion === c.key)?.enabled}
                           onChange={(e) =>
                             setRules((prev) => prev.map((r) => (r.criterion === c.key ? { ...r, enabled: e.target.checked } : r)))
                           }
-                          className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                          className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
                         />
                         {c.label}
                       </label>
@@ -145,11 +145,11 @@ export default function TribesConfigPage() {
           <CardBody className="space-y-4">
             <div className="space-y-2">
               {(tribes ?? []).map((tribe: any) => (
-                <div key={tribe.id} className="flex items-center justify-between rounded-md border border-neutral-200 p-3">
+                <div key={tribe.id} className="flex items-center justify-between rounded-md border border-border-default p-3">
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ backgroundColor: tribe.color || "#999" }} />
-                    <span className="font-medium text-neutral-900">{tribe.name}</span>
-                    <span className="text-xs text-neutral-500">
+                    <span className="font-medium text-txt-primary">{tribe.name}</span>
+                    <span className="text-xs text-txt-secondary">
                       {tribe.population} camper{tribe.population === 1 ? "" : "s"}
                       {tribe.maxCapacity ? ` / ${tribe.maxCapacity}` : ""}
                     </span>
@@ -166,14 +166,14 @@ export default function TribesConfigPage() {
                   </div>
                 </div>
               ))}
-              {(tribes ?? []).length === 0 && <p className="text-sm text-neutral-500">No tribes created yet.</p>}
+              {(tribes ?? []).length === 0 && <p className="text-sm text-txt-secondary">No tribes created yet.</p>}
             </div>
 
-            <div className="grid grid-cols-4 items-end gap-2 border-t border-neutral-200 pt-4">
+            <div className="grid grid-cols-4 items-end gap-2 border-t border-border-default pt-4">
               <Input containerClassName="col-span-2" label="Tribe Name" value={newTribe.name} onChange={(e) => setNewTribe({ ...newTribe, name: e.target.value })} placeholder="e.g. Green House" />
               <div>
-                <label className="mb-1 block text-sm font-medium text-neutral-700">Color</label>
-                <input type="color" className="h-10 w-full rounded-md border border-neutral-300" value={newTribe.color} onChange={(e) => setNewTribe({ ...newTribe, color: e.target.value })} />
+                <label className="mb-1 block text-sm font-medium text-txt-secondary">Color</label>
+                <input type="color" className="h-10 w-full rounded-md border border-input-border" value={newTribe.color} onChange={(e) => setNewTribe({ ...newTribe, color: e.target.value })} />
               </div>
               <Input label="Max Capacity" type="number" value={newTribe.maxCapacity} onChange={(e) => setNewTribe({ ...newTribe, maxCapacity: e.target.value })} />
               <Button
@@ -198,7 +198,7 @@ export default function TribesConfigPage() {
         <Card>
           <CardHeader><CardTitle>Bulk Allocation</CardTitle></CardHeader>
           <CardBody>
-            <p className="mb-3 text-sm text-neutral-500">Automatically assign a tribe to every approved camper who doesn&apos;t have one yet.</p>
+            <p className="mb-3 text-sm text-txt-secondary">Automatically assign a tribe to every approved camper who doesn&apos;t have one yet.</p>
             {bulkResult && <div className="mb-2 text-sm text-success-700">{bulkResult}</div>}
             <Button loading={bulkAssign.isPending} onClick={() => bulkAssign.mutate({ campId })}>Run Bulk Auto-Allocation</Button>
           </CardBody>
@@ -206,7 +206,7 @@ export default function TribesConfigPage() {
       </div>
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-txt-secondary">
           Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? This action cannot be undone.
         </p>
         <div className="mt-5 flex justify-end gap-2">

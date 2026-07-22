@@ -242,14 +242,14 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             : undefined
         }
         actions={
-          <div className="text-sm text-neutral-600">
+          <div className="text-sm text-txt-secondary">
             Approved quota: <span className="font-medium">{quotaLabel}</span>
           </div>
         }
       />
 
       {actionError && (
-        <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+        <div className="mb-4 rounded-md status-danger">
           <span>{actionError}</span>
           <button onClick={() => setActionError("")} className="ml-3 text-xs underline">
             Dismiss
@@ -257,7 +257,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         </div>
       )}
       {error && (
-        <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+        <div className="mb-4 rounded-md status-danger">
           Error loading registrations: {error.message}
         </div>
       )}
@@ -463,15 +463,15 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
               </Select>
             </div>
 
-            <div className="flex items-center rounded-xl border border-neutral-200/80 bg-neutral-100/80 p-1 shrink-0">
+            <div className="flex items-center rounded-xl border border-border-default bg-neutral-100/80 p-1 shrink-0">
               <button
                 type="button"
                 onClick={() => setViewMode("card")}
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
                   viewMode === "card"
-                    ? "bg-white text-accent-700 shadow-2xs"
-                    : "text-neutral-600 hover:text-neutral-900"
+                    ? "bg-surface text-accent-700 shadow-2xs"
+                    : "text-txt-secondary hover:text-neutral-900"
                 )}
               >
                 <Squares2X2Icon className="h-4 w-4" />
@@ -483,8 +483,8 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
                   viewMode === "list"
-                    ? "bg-white text-accent-700 shadow-2xs"
-                    : "text-neutral-600 hover:text-neutral-900"
+                    ? "bg-surface text-accent-700 shadow-2xs"
+                    : "text-txt-secondary hover:text-neutral-900"
                 )}
               >
                 <TableCellsIcon className="h-4 w-4" />
@@ -496,7 +496,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
           {viewMode === "card" ? (
             <div className="space-y-6">
               {registrations.length === 0 ? (
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-12 text-center">
+                <div className="rounded-2xl border border-border-default bg-surface p-12 text-center">
                   <p className="text-base font-bold text-neutral-900">No registrations match your filters</p>
                   <p className="mt-1 text-xs text-neutral-500">Try adjusting search or status filters.</p>
                 </div>
@@ -551,7 +551,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             <Table
               mode="controlled"
               toolbar={
-                <span className="text-xs text-neutral-400">
+                <span className="text-xs text-txt-muted">
                   Showing {registrations.length} of {data?.totalCount ?? 0} registration{(data?.totalCount ?? 0) === 1 ? "" : "s"}
                 </span>
               }
@@ -567,7 +567,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
               emptyDescription="Try adjusting search or status filters."
               footer={
                 data?.nextCursor ? (
-                  <div className="flex justify-center border-t border-neutral-100 p-3">
+                  <div className="flex justify-center border-t border-border-subtle p-3">
                     <Button
                       variant="secondary"
                       size="sm"

@@ -48,16 +48,16 @@ export function Drawer({ open, onClose, title, subtitle, children, width = "lg" 
             leaveFrom="translate-x-0"
             leaveTo="translate-x-full"
           >
-            <HeadlessDialog.Panel className={cn("h-full w-full overflow-y-auto bg-white shadow-xl scrollbar-hide", widthClasses[width])}>
+            <HeadlessDialog.Panel className={cn("h-full w-full overflow-y-auto bg-surface shadow-xl scrollbar-hide", widthClasses[width])}>
               {(title || subtitle) && (
-                <div className="sticky top-0 z-10 flex items-start justify-between border-b border-neutral-200 bg-white px-6 py-4">
+                <div className="sticky top-0 z-10 flex items-start justify-between border-b border-border-default bg-surface px-6 py-4">
                   <div>
-                    {title && <HeadlessDialog.Title className="text-base font-semibold text-neutral-900">{title}</HeadlessDialog.Title>}
-                    {subtitle && <div className="mt-0.5 text-sm text-neutral-500">{subtitle}</div>}
+                    {title && <HeadlessDialog.Title className="text-base font-semibold text-txt-primary">{title}</HeadlessDialog.Title>}
+                    {subtitle && <div className="mt-0.5 text-sm text-txt-secondary">{subtitle}</div>}
                   </div>
                   <button
                     onClick={onClose}
-                    className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                    className="rounded-md p-1.5 text-txt-muted hover:bg-surface-raised hover:text-txt-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                     aria-label="Close"
                   >
                     <XMarkIcon className="h-5 w-5" />

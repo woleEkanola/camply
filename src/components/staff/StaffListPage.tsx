@@ -206,7 +206,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <div>
             <div className="text-sm font-semibold text-neutral-900">{row.firstName} {row.lastName}</div>
             <div className="text-xs text-neutral-500">{row.email}</div>
-            <div className="text-xs text-neutral-400">{row.phone}</div>
+            <div className="text-xs text-txt-muted">{row.phone}</div>
           </div>
         </div>
       ),
@@ -217,7 +217,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       accessor: (row) => (
         <div className="text-sm text-neutral-700">
           <div>{row.assignedVenue?.name || "—"}</div>
-          {type === "TEACHER" && <div className="text-xs text-neutral-400">{row.department?.name || row.volunteerCategory || "—"}</div>}
+          {type === "TEACHER" && <div className="text-xs text-txt-muted">{row.department?.name || row.volunteerCategory || "—"}</div>}
         </div>
       ),
     },
@@ -231,7 +231,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             </span>
           ))}
           {(row.skills || []).length > 2 && (
-            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-neutral-600">+{row.skills.length - 2}</span>
+            <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[10px] font-semibold text-txt-secondary">+{row.skills.length - 2}</span>
           )}
         </div>
       ),
@@ -252,7 +252,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           </button>
           <button
             onClick={() => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
-            className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
+            className="rounded-md p-1.5 text-neutral-500 hover:bg-surface-raised"
             title="Open"
           >
             <EllipsisVerticalIcon className="h-4 w-4" />
@@ -262,7 +262,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       {row.status !== "PENDING" && (
         <button
           onClick={() => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
-          className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
+          className="rounded-md p-1.5 text-neutral-500 hover:bg-surface-raised"
           title="Open"
         >
           <EllipsisVerticalIcon className="h-4 w-4" />
@@ -330,7 +330,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           {/* Main content */}
           <div className="lg:col-span-3 space-y-4">
             {/* Status tabs */}
-            <div className="border-b border-neutral-200">
+            <div className="border-b border-border-default">
               <nav className="flex space-x-6">
                 {STATUS_TABS.map((tab) => {
                   const value = tab === "All" ? "" : tab.toUpperCase();
@@ -372,7 +372,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 <option value="REJECTED">Rejected</option>
                 <option value="DEACTIVATED">Deactivated</option>
               </Select>
-              <button className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+              <button className="inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-surface px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-surface-hover">
                 <FunnelIcon className="h-4 w-4" /> Filters
               </button>
             </div>
@@ -390,19 +390,19 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             )}
 
             {/* Toolbar */}
-            <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3">
+            <div className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-neutral-700">{selectedIds.length} selected</span>
                 {selectedIds.length > 0 && (
                   <Menu as="div" className="relative">
-                    <Menu.Button className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+                    <Menu.Button className="inline-flex items-center gap-1 rounded-lg border border-border-default bg-surface px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-surface-hover">
                       Bulk Actions <EllipsisVerticalIcon className="h-4 w-4" />
                     </Menu.Button>
                     <Transition as={Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100" leave="transition ease-in duration-75" leaveFrom="transform opacity-100 scale-100" leaveTo="transform opacity-0 scale-95">
-                      <Menu.Items className="absolute left-0 z-10 mt-2 w-48 rounded-lg border border-neutral-100 bg-white py-1 shadow-lg">
-                        <Menu.Item>{({ active }) => <button onClick={() => bulkApprove.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-neutral-50" : "")}><CheckIcon className="h-4 w-4 text-success-600" /> Approve</button>}</Menu.Item>
-                        <Menu.Item>{({ active }) => <button onClick={() => bulkReject.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-neutral-50" : "")}><XMarkIcon className="h-4 w-4 text-danger-600" /> Reject</button>}</Menu.Item>
-                        <Menu.Item>{({ active }) => <button onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-neutral-50" : "")}><TrashIcon className="h-4 w-4 text-danger-600" /> Delete</button>}</Menu.Item>
+                      <Menu.Items className="absolute left-0 z-10 mt-2 w-48 rounded-lg border border-border-subtle bg-surface py-1 shadow-lg">
+                        <Menu.Item>{({ active }) => <button onClick={() => bulkApprove.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><CheckIcon className="h-4 w-4 text-success-600" /> Approve</button>}</Menu.Item>
+                        <Menu.Item>{({ active }) => <button onClick={() => bulkReject.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><XMarkIcon className="h-4 w-4 text-danger-600" /> Reject</button>}</Menu.Item>
+                        <Menu.Item>{({ active }) => <button onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><TrashIcon className="h-4 w-4 text-danger-600" /> Delete</button>}</Menu.Item>
                       </Menu.Items>
                     </Transition>
                   </Menu>
@@ -449,13 +449,13 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             )}
 
             {/* Pagination */}
-            <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3">
+            <div className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3">
               <span className="text-xs text-neutral-500">Showing {allLoadedItems.length > 0 ? 1 : 0} to {allLoadedItems.length} of {totalItems} {type === "TEACHER" ? "teachers" : "volunteers"}</span>
               <div className="flex items-center gap-1">
-                <button disabled={cursor === undefined && allLoadedItems.length <= 10} className="rounded-lg border border-neutral-200 p-1.5 text-neutral-500 hover:bg-neutral-50 disabled:opacity-40">
+                <button disabled={cursor === undefined && allLoadedItems.length <= 10} className="rounded-lg border border-border-default p-1.5 text-neutral-500 hover:bg-surface-hover disabled:opacity-40">
                   <ChevronLeftIcon className="h-4 w-4" />
                 </button>
-                <button onClick={() => data?.nextCursor && setCursor(data.nextCursor)} disabled={!data?.nextCursor} className="rounded-lg border border-neutral-200 p-1.5 text-neutral-500 hover:bg-neutral-50 disabled:opacity-40">
+                <button onClick={() => data?.nextCursor && setCursor(data.nextCursor)} disabled={!data?.nextCursor} className="rounded-lg border border-border-default p-1.5 text-neutral-500 hover:bg-surface-hover disabled:opacity-40">
                   <ChevronRightIcon className="h-4 w-4" />
                 </button>
               </div>
@@ -475,12 +475,12 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
 
       {/* Fixed bottom bulk action bar */}
       <div className={cn(
-        "fixed bottom-0 left-0 right-0 z-30 border-t border-neutral-200 bg-white p-3 shadow-lg transition-transform md:left-64",
+        "fixed bottom-0 left-0 right-0 z-30 border-t border-border-default bg-surface p-3 shadow-lg transition-transform md:left-64",
         selectedIds.length > 0 ? "translate-y-0" : "translate-y-full"
       )}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-100 text-accent-700">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full brand-tint-strong">
               <UserGroupIcon className="h-5 w-5" />
             </div>
             <div>
@@ -515,7 +515,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         <div className="space-y-4">
           {error && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
           <Input id="manual-email" label="Email Address" type="email" required value={addEmail} onChange={(e) => setAddEmail(e.target.value)} />
-          <div className="max-h-[50vh] overflow-y-auto border-t border-b border-neutral-100 py-4 my-2">
+          <div className="max-h-[50vh] overflow-y-auto border-t border-b border-border-subtle py-4 my-2">
             <DynamicFieldGroup fields={visibleFields} values={addFormValues} onChange={(key, val) => setAddFormValues((v) => ({ ...v, [key]: val }))} />
           </div>
           <div className="flex justify-end gap-2 pt-2">

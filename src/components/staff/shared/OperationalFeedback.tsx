@@ -96,7 +96,7 @@ export function ErrorOverlay({ title = "Check-in Failed", message, onDismiss }: 
         <div className="pt-4 w-full">
           <Button
             size="lg"
-            className="w-full bg-white text-rose-700 hover:bg-neutral-100 font-bold py-4 text-lg border-none"
+            className="w-full bg-surface text-rose-700 hover:bg-surface-raised font-bold py-4 text-lg border-none"
             onClick={(e) => {
               e.stopPropagation();
               onDismiss();
@@ -202,7 +202,7 @@ export function MedicalOverlay({
         <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full">
           <Button
             size="lg"
-            className="flex-1 bg-white text-amber-700 hover:bg-neutral-100 font-bold py-4 text-base border-none shadow-lg"
+            className="flex-1 bg-surface text-amber-700 hover:bg-surface-raised font-bold py-4 text-base border-none shadow-lg"
             onClick={onAcknowledge}
           >
             Acknowledge & Confirm Check-in

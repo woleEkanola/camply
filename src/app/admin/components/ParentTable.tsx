@@ -26,7 +26,7 @@ export const ParentTable: React.FC<ParentTableProps> = ({ organizationId }) => {
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full bg-white border border-gray-200 rounded shadow">
+      <table className="min-w-full bg-surface border border-gray-200 rounded shadow">
         <thead>
           <tr>
             <th className="px-4 py-2 border-b">Email</th>

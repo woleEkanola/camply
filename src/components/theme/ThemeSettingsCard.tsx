@@ -21,24 +21,24 @@ const themeOptions: ThemeOption[] = [
     label: "Light Mode",
     description: "Clean, bright appearance optimized for daylight conditions.",
     icon: SunIcon,
-    previewBg: "bg-neutral-100 border-neutral-200",
-    previewCard: "bg-white border-neutral-200",
+    previewBg: "bg-[#f1f5f9] border-[#cbd5e1]",
+    previewCard: "bg-white border-[#cbd5e1]",
   },
   {
     id: "dark",
     label: "Dark Mode",
     description: "Sleek, low-contrast dark interface designed for low light.",
     icon: MoonIcon,
-    previewBg: "bg-neutral-950 border-neutral-800",
-    previewCard: "bg-neutral-900 border-neutral-800",
+    previewBg: "bg-[#0d0f17] border-[#24283b]",
+    previewCard: "bg-[#181b29] border-[#24283b]",
   },
   {
     id: "system",
     label: "System Preference",
     description: "Automatically matches your operating system's theme.",
     icon: ComputerDesktopIcon,
-    previewBg: "bg-gradient-to-r from-neutral-100 to-neutral-950 border-neutral-300",
-    previewCard: "bg-gradient-to-r from-white to-neutral-900 border-neutral-300",
+    previewBg: "bg-gradient-to-r from-[#f1f5f9] to-[#0d0f17] border-[#cbd5e1]",
+    previewCard: "bg-gradient-to-r from-white to-[#181b29] border-[#cbd5e1]",
   },
 ];
 
@@ -70,15 +70,15 @@ export function ThemeSettingsCard() {
                 className={cn(
                   "group relative flex flex-col justify-between rounded-xl border p-4 text-left transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent-500",
                   isSelected
-                    ? "border-accent-500 bg-accent-50/20 ring-1 ring-accent-500 dark:bg-accent-950/30"
-                    : "border-neutral-200 bg-white hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
+                    ? "border-accent-500 bg-[var(--color-accent-50)]/20 ring-1 ring-accent-500"
+                    : "border-border-default bg-surface hover:border-input-border"
                 )}
               >
                 <div>
                   <div className="flex items-center justify-between pb-2">
                     <div className="flex items-center gap-2">
-                      <Icon className={cn("h-5 w-5", isSelected ? "text-accent-600" : "text-neutral-500")} />
-                      <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                      <Icon className={cn("h-5 w-5", isSelected ? "text-accent-600" : "text-txt-muted")} />
+                      <span className="text-sm font-semibold text-txt-primary">
                         {option.label}
                       </span>
                     </div>
@@ -88,7 +88,7 @@ export function ThemeSettingsCard() {
                     )}
                   </div>
 
-                  <p className="text-xs text-neutral-500 leading-relaxed mb-3">
+                  <p className="text-xs text-txt-secondary leading-relaxed mb-3">
                     {option.description}
                   </p>
                 </div>

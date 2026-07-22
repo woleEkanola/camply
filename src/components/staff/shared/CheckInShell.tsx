@@ -329,27 +329,27 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
       {/* ═══ STEP 1: DASHBOARD PROGRESS WIDGET (HIDES FOR VOLUNTEER) ═══ */}
       {!isVolunteer && stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card className="bg-white border-neutral-200">
+          <Card className="bg-surface border-border-default">
             <CardBody className="p-4 text-center">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Approved</span>
+              <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Approved</span>
               <span className="text-2xl font-black text-neutral-900">{stats.approved}</span>
             </CardBody>
           </Card>
-          <Card className="bg-white border-neutral-200">
+          <Card className="bg-surface border-border-default">
             <CardBody className="p-4 text-center">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Checked In</span>
+              <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Checked In</span>
               <span className="text-2xl font-black text-emerald-600">{stats.checkedIn}</span>
             </CardBody>
           </Card>
-          <Card className="bg-white border-neutral-200">
+          <Card className="bg-surface border-border-default">
             <CardBody className="p-4 text-center">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Remaining</span>
+              <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Remaining</span>
               <span className="text-2xl font-black text-neutral-900">{stats.remaining}</span>
             </CardBody>
           </Card>
-          <Card className="bg-white border-neutral-200">
+          <Card className="bg-surface border-border-default">
             <CardBody className="p-4 text-center">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Progress</span>
+              <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Progress</span>
               <span className="text-2xl font-black text-accent-600">{stats.percentage}%</span>
             </CardBody>
           </Card>
@@ -357,7 +357,7 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
       )}
 
       {/* ═══ STEP 2: SCANNER & WEBCAM INTERFACE ═══ */}
-      <Card className="overflow-hidden border-neutral-200">
+      <Card className="overflow-hidden border-border-default">
         <CardBody className="p-6 text-center space-y-4">
           <div className="max-w-md mx-auto">
             <Button
@@ -368,7 +368,7 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
               <QrCodeIcon className="h-6 w-6" />
               {scannerActive ? "Close Camera Scanner" : "Scan Camper QR Code"}
             </Button>
-            <p className="mt-1.5 text-xs text-neutral-400">Press [Space] on your keyboard to toggle camera scanner</p>
+            <p className="mt-1.5 text-xs text-txt-muted">Press [Space] on your keyboard to toggle camera scanner</p>
           </div>
 
           {scannerActive && (
@@ -384,11 +384,11 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
       </Card>
 
       {/* ═══ STEP 3: UNIVERSAL MANUAL SEARCH ═══ */}
-      <Card className="border-neutral-200">
+      <Card className="border-border-default">
         <CardBody className="p-6">
           <form onSubmit={handleSearchSubmit} className="flex gap-3">
             <div className="relative flex-1">
-              <MagnifyingGlassIcon className="absolute left-3 top-3 h-5 w-5 text-neutral-400" />
+              <MagnifyingGlassIcon className="absolute left-3 top-3 h-5 w-5 text-txt-muted" />
               <Input
                 ref={searchInputRef}
                 containerClassName="w-full"
@@ -397,7 +397,7 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
-              <span className="absolute right-3 top-3.5 text-xs text-neutral-400 pointer-events-none hidden md:inline">
+              <span className="absolute right-3 top-3.5 text-xs text-txt-muted pointer-events-none hidden md:inline">
                 Press [/] to focus
               </span>
             </div>
@@ -431,11 +431,11 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
         const hasMedical = !!(r.allergies || r.medicalConditions || r.camper?.allergies || r.camper?.medicalConditions);
         
         return (
-          <Card key={regId} className="border-neutral-200 hover:shadow-md transition-shadow animate-fade-in">
+          <Card key={regId} className="border-border-default hover:shadow-md transition-shadow animate-fade-in">
             <CardBody className="p-6 space-y-4">
               <div className="flex items-start gap-4">
                 {photo ? (
-                  <img src={photo} alt={camperName} className="h-16 w-16 rounded-xl object-cover border border-neutral-200 shadow-sm" />
+                  <img src={photo} alt={camperName} className="h-16 w-16 rounded-xl object-cover border border-border-default shadow-sm" />
                 ) : (
                   <div className="h-16 w-16 rounded-xl bg-accent-50 border border-accent-100 text-accent-700 font-bold flex items-center justify-center text-xl shadow-sm">
                     {camperName?.charAt(0).toUpperCase()}
@@ -474,36 +474,36 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
 
               {/* Dynamic details for non-volunteers */}
               {!isVolunteer && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm border-t border-neutral-100 pt-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm border-t border-border-subtle pt-3">
                   <div>
-                    <span className="block text-xs text-neutral-400 uppercase font-semibold">Camp</span>
+                    <span className="block text-xs text-txt-muted uppercase font-semibold">Camp</span>
                     <span className="font-semibold text-neutral-800">{r.camp?.name || r.year?.name || "—"}</span>
                   </div>
                   <div>
-                    <span className="block text-xs text-neutral-400 uppercase font-semibold">Campus</span>
+                    <span className="block text-xs text-txt-muted uppercase font-semibold">Campus</span>
                     <span className="font-semibold text-neutral-800">{r.campus?.name || r.centreName || "—"}</span>
                   </div>
                   {r.tribe && (
                     <div>
-                      <span className="block text-xs text-neutral-400 uppercase font-semibold">Tribe</span>
+                      <span className="block text-xs text-txt-muted uppercase font-semibold">Tribe</span>
                       <span className="font-semibold text-neutral-800">{r.tribe?.name || "—"}</span>
                     </div>
                   )}
                   {r.room && (
                     <div>
-                      <span className="block text-xs text-neutral-400 uppercase font-semibold">Room & Bed</span>
+                      <span className="block text-xs text-txt-muted uppercase font-semibold">Room & Bed</span>
                       <span className="font-semibold text-neutral-800">{r.room?.name} / {r.bed?.label || "—"}</span>
                     </div>
                   )}
                   {gender && (
                     <div>
-                      <span className="block text-xs text-neutral-400 uppercase font-semibold">Gender</span>
+                      <span className="block text-xs text-txt-muted uppercase font-semibold">Gender</span>
                       <span className="font-semibold text-neutral-800">{gender}</span>
                     </div>
                   )}
                   {dob && (
                     <div>
-                      <span className="block text-xs text-neutral-400 uppercase font-semibold">DOB</span>
+                      <span className="block text-xs text-txt-muted uppercase font-semibold">DOB</span>
                       <span className="font-semibold text-neutral-800">{new Date(dob).toLocaleDateString()}</span>
                     </div>
                   )}
@@ -549,9 +549,9 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
 
       {/* ═══ STEP 5: RECENT ACTIVITY & UNDO LIST ═══ */}
       {recentScans.length > 0 && (
-        <Card className="border-neutral-200">
+        <Card className="border-border-default">
           <CardBody className="p-6 space-y-4">
-            <h2 className="text-xs font-black uppercase tracking-wider text-neutral-400">Recent Activity</h2>
+            <h2 className="text-xs font-black uppercase tracking-wider text-txt-muted">Recent Activity</h2>
             <div className="divide-y divide-neutral-100">
               {recentScans.map((scan) => {
                 const elapsedSeconds = Math.floor((timeTick - scan.timestamp) / 1000);
@@ -568,7 +568,7 @@ export function CheckInShell({ organizationId, title = "Check-in" }: { organizat
                       <Button
                         size="sm"
                         variant="secondary"
-                        className="bg-neutral-100 hover:bg-rose-50 text-rose-600 hover:text-rose-700 border-none font-bold"
+                        className="bg-surface-raised hover:bg-rose-50 text-rose-600 hover:text-rose-700 border-none font-bold"
                         loading={undoCheckInMutation.isPending}
                         onClick={() => undoCheckInMutation.mutate({ registrationId: scan.registrationId, reason: "Accidental scan / Operator error" })}
                       >

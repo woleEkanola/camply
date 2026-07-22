@@ -56,27 +56,27 @@ export function TeenEntryForm({ onSubmit, onCancel, loading, campData }: TeenEnt
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="teen-fn" className="mb-1 block text-sm font-medium text-neutral-700">First Name</label>
+        <label htmlFor="teen-fn" className="mb-1 block text-sm font-medium text-txt-secondary">First Name</label>
         <input
           id="teen-fn"
           type="text"
           value={firstName}
           onChange={(e) => { setFirstName(e.target.value); setErrors((p) => ({ ...p, firstName: "" })); }}
           autoFocus
-          className="block w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          className="block w-full rounded-xl border border-input-border bg-surface px-4 py-3 text-sm text-txt-primary focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
           aria-invalid={!!errors.firstName}
         />
         {errors.firstName && <p className="mt-1 text-xs text-danger-600">{errors.firstName}</p>}
       </div>
 
       <div>
-        <label htmlFor="teen-ln" className="mb-1 block text-sm font-medium text-neutral-700">Last Name</label>
+        <label htmlFor="teen-ln" className="mb-1 block text-sm font-medium text-txt-secondary">Last Name</label>
         <input
           id="teen-ln"
           type="text"
           value={lastName}
           onChange={(e) => { setLastName(e.target.value); setErrors((p) => ({ ...p, lastName: "" })); }}
-          className="block w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          className="block w-full rounded-xl border border-input-border bg-surface px-4 py-3 text-sm text-txt-primary focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
           aria-invalid={!!errors.lastName}
         />
         {errors.lastName && <p className="mt-1 text-xs text-danger-600">{errors.lastName}</p>}
@@ -91,12 +91,12 @@ export function TeenEntryForm({ onSubmit, onCancel, loading, campData }: TeenEnt
       />
 
       <fieldset>
-        <legend className="mb-2 text-sm font-medium text-neutral-700">Gender</legend>
+        <legend className="mb-2 text-sm font-medium text-txt-secondary">Gender</legend>
         <div className="flex gap-3">
           {["Male", "Female"].map((g) => (
             <label
               key={g}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-neutral-300 px-4 py-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50"
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input-border px-4 py-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50"
             >
               <input
                 type="radio"
@@ -106,7 +106,7 @@ export function TeenEntryForm({ onSubmit, onCancel, loading, campData }: TeenEnt
                 onChange={() => { setGender(g); setErrors((p) => ({ ...p, gender: "" })); }}
                 className="h-4 w-4 text-accent-600"
               />
-              <span className="text-sm text-neutral-700">{g}</span>
+              <span className="text-sm text-txt-secondary">{g}</span>
             </label>
           ))}
         </div>
@@ -115,7 +115,7 @@ export function TeenEntryForm({ onSubmit, onCancel, loading, campData }: TeenEnt
 
       <div className="flex gap-3">
         {onCancel && (
-          <button type="button" onClick={onCancel} className="flex h-12 flex-1 items-center justify-center rounded-xl border border-neutral-300 bg-white text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50">
+          <button type="button" onClick={onCancel} className="flex h-12 flex-1 items-center justify-center rounded-xl border border-input-border bg-surface text-sm font-medium text-txt-secondary transition-colors hover:bg-neutral-50">
             Cancel
           </button>
         )}

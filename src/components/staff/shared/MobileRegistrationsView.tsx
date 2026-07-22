@@ -251,7 +251,7 @@ export function MobileRegistrationCard({
             {docPercent}%
           </span>
         </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-raised">
           <div
             className={cn(
               "h-full transition-all duration-300",
@@ -263,7 +263,7 @@ export function MobileRegistrationCard({
       </div>
 
       {/* SECTION 3 — ACTIONS ROW */}
-      <div className="mt-3 pt-2.5 border-t border-neutral-100 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => onClick(registration)}
@@ -278,7 +278,7 @@ export function MobileRegistrationCard({
           <button
             type="button"
             onClick={() => setMenuOpen((prev) => !prev)}
-            className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl bg-neutral-50 border border-neutral-200/80 text-neutral-600 hover:bg-neutral-100 transition-colors"
+            className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl bg-surface-raised border border-border-default text-txt-secondary hover:bg-surface-hover transition-colors"
             aria-label="More options"
           >
             <EllipsisVerticalIcon className="h-5 w-5" />
@@ -295,7 +295,7 @@ export function MobileRegistrationCard({
                 }}
               />
               <div
-                className="absolute right-0 bottom-11 z-30 w-56 rounded-2xl border border-neutral-200 bg-white py-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100"
+                className="absolute right-0 bottom-11 z-30 w-56 rounded-2xl border border-border-default bg-surface py-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
@@ -342,7 +342,7 @@ export function MobileRegistrationCard({
                   <EnvelopeIcon className="h-4 w-4 text-neutral-500" />
                   Send Email
                 </button>
-                <div className="my-1 border-t border-neutral-100" />
+                <div className="my-1 border-t border-border-subtle" />
                 <button
                   type="button"
                   onClick={() => {
@@ -441,7 +441,7 @@ export function MobileRegistrationsView({
       {/* 1. SEARCH SECTION */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-neutral-400">
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-txt-muted">
             <MagnifyingGlassIcon className="h-5 w-5" />
           </div>
           <input
@@ -449,14 +449,14 @@ export function MobileRegistrationsView({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search by name, email, phone, reg #..."
-            className="w-full min-h-[46px] rounded-2xl border border-neutral-200/80 bg-neutral-100/80 pl-10 pr-4 text-sm font-medium text-neutral-900 placeholder:text-neutral-500 focus:border-accent-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all"
+            className="w-full min-h-[46px] rounded-2xl border border-border-default bg-neutral-100/80 pl-10 pr-4 text-sm font-medium text-neutral-900 placeholder:text-neutral-500 focus:border-accent-500 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all"
           />
         </div>
 
         <button
           type="button"
           onClick={onOpenFilters}
-          className="inline-flex min-h-[46px] min-w-[46px] items-center justify-center rounded-2xl border border-neutral-200/80 bg-white text-neutral-700 hover:bg-neutral-50 transition-colors shadow-2xs"
+          className="inline-flex min-h-[46px] min-w-[46px] items-center justify-center rounded-2xl border border-border-default bg-surface text-neutral-700 hover:bg-surface-hover transition-colors shadow-2xs"
           aria-label="Filter"
         >
           <FunnelIcon className="h-5 w-5" />
@@ -476,13 +476,13 @@ export function MobileRegistrationsView({
                 "flex min-w-[100px] flex-col justify-between rounded-2xl border p-3.5 text-left transition-all shrink-0 active:scale-95 shadow-2xs",
                 isSelected
                   ? "border-purple-600 bg-accent-50/60 ring-2 ring-purple-500/20"
-                  : "border-neutral-200/80 bg-white hover:border-neutral-300"
+                  : "border-border-default bg-surface hover:border-neutral-300"
               )}
             >
               <span className={cn("text-2xl font-extrabold tracking-tight", stat.valueColor)}>
                 {stat.value}
               </span>
-              <span className="mt-1 text-xs font-semibold text-neutral-600">
+              <span className="mt-1 text-xs font-semibold text-txt-secondary">
                 {stat.label}
               </span>
             </button>
@@ -503,7 +503,7 @@ export function MobileRegistrationsView({
                 "inline-flex items-center gap-1.5 shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all active:scale-95",
                 isSelected
                   ? "bg-purple-600 text-white shadow-xs"
-                  : "bg-white border border-neutral-200/80 text-neutral-700 hover:bg-neutral-50"
+                  : "bg-surface border border-border-default text-neutral-700 hover:bg-surface-hover"
               )}
             >
               {chip.dotColor && (
@@ -517,7 +517,7 @@ export function MobileRegistrationsView({
 
       {/* 4. REGISTRATION CARDS LIST */}
       {registrations.length === 0 ? (
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-8 text-center">
+        <div className="rounded-2xl border border-border-default bg-surface p-8 text-center">
           <p className="text-sm font-bold text-neutral-900">No registrations found</p>
           <p className="mt-1 text-xs text-neutral-500">Try adjusting your search or filters.</p>
         </div>
@@ -545,7 +545,7 @@ export function MobileRegistrationsView({
             type="button"
             onClick={onLoadMore}
             disabled={isLoading}
-            className="w-full rounded-2xl border border-neutral-200/80 bg-white py-3 text-xs font-bold text-neutral-700 shadow-2xs hover:bg-neutral-50 transition-colors"
+            className="w-full rounded-2xl border border-border-default bg-surface py-3 text-xs font-bold text-neutral-700 shadow-2xs hover:bg-surface-hover transition-colors"
           >
             {isLoading ? "Loading..." : "Load More Registrations"}
           </button>
@@ -603,7 +603,7 @@ export function MobileRegistrationsView({
               <button
                 type="button"
                 onClick={onClearSelection}
-                className="rounded-xl px-2 py-1.5 text-xs font-semibold text-neutral-400 hover:text-white"
+                className="rounded-xl px-2 py-1.5 text-xs font-semibold text-txt-muted hover:text-white"
               >
                 Cancel
               </button>

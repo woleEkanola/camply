@@ -126,23 +126,23 @@ function UserDashboard() {
         </div>
 
         {justVerified && (
-          <div className="rounded-lg border border-success-200 bg-success-50 p-3 text-sm text-success-700">
+          <div className="rounded-lg border border-current/15 status-success p-3 text-sm">
             Email verified successfully.
           </div>
         )}
 
         {/* Summary row */}
         <div className="flex gap-4 text-sm">
-          <div className="rounded-lg border border-neutral-200 bg-white px-4 py-2">
+          <div className="rounded-lg border border-border-default bg-surface px-4 py-2">
             <span className="font-semibold text-neutral-900">{campers?.length ?? 0}</span>{" "}
             <span className="text-neutral-500">{(campers?.length ?? 0) === 1 ? "Profile" : "Profiles"}</span>
           </div>
-          <div className="rounded-lg border border-neutral-200 bg-white px-4 py-2">
+          <div className="rounded-lg border border-border-default bg-surface px-4 py-2">
             <span className="font-semibold text-neutral-900">{activeRegs.length}</span>{" "}
             <span className="text-neutral-500">{activeRegs.length === 1 ? "Registration" : "Registrations"}</span>
           </div>
           {needsAction > 0 && (
-            <div className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-2">
+            <div className="rounded-lg border border-current/15 status-warning px-4 py-2">
               <span className="font-semibold text-warning-700">{needsAction}</span>{" "}
               <span className="text-warning-600">need action</span>
             </div>
@@ -152,14 +152,14 @@ function UserDashboard() {
         {/* PRIMARY: Camper Profiles */}
         <Card>
           <CardBody>
-            <h2 className="mb-4 text-base font-semibold text-neutral-900">Camper Profiles</h2>
+            <h2 className="mb-4 text-base font-semibold text-txt-primary">Camper Profiles</h2>
             {!campers?.length ? (
-              <div className="rounded-lg border border-dashed border-neutral-300 py-10 text-center">
-                <svg className="mx-auto mb-3 h-10 w-10 text-neutral-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <div className="rounded-lg border border-dashed border-border-default py-10 text-center">
+                <svg className="mx-auto mb-3 h-10 w-10 text-txt-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                 </svg>
-                <p className="text-sm font-medium text-neutral-700">No camper profiles yet</p>
-                <p className="mt-1 text-xs text-neutral-500">Create a camper profile before starting a camp registration.</p>
+                <p className="text-sm font-medium text-txt-primary">No camper profiles yet</p>
+                <p className="mt-1 text-xs text-txt-secondary">Create a camper profile before starting a camp registration.</p>
                 <Link href={wizardUrl || "/dashboard/profiles/new"} className="mt-3 inline-flex h-9 items-center rounded-lg bg-accent-600 px-4 text-sm font-medium text-white hover:bg-accent-700">
                   Create Camper Profile
                 </Link>
@@ -175,23 +175,23 @@ function UserDashboard() {
                   return (
                     <div
                       key={camper.id}
-                      className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-3 rounded-lg border border-border-default bg-surface p-4 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <h3 className="font-medium text-neutral-900 truncate">{camper.name}</h3>
+                          <h3 className="font-medium text-txt-primary truncate">{camper.name}</h3>
                           {!complete && (
-                            <span className="shrink-0 rounded-full bg-warning-100 px-2 py-0.5 text-xs font-medium text-warning-700">Incomplete</span>
+                            <span className="shrink-0 rounded-full status-warning px-2 py-0.5 text-xs font-medium">Incomplete</span>
                           )}
                         </div>
-                        <p className="text-xs text-neutral-500">{activeReg?.campus?.name ?? camper.homeCampus?.name ?? "No campus"}</p>
+                        <p className="text-xs text-txt-secondary">{activeReg?.campus?.name ?? camper.homeCampus?.name ?? "No campus"}</p>
                         {activeReg ? (
                           <div className="mt-1 flex items-center gap-2">
-                            <span className="text-xs text-neutral-500">{activeReg.camp?.name}</span>
+                            <span className="text-xs text-txt-secondary">{activeReg.camp?.name}</span>
                             <StatusBadge status={activeReg.status} labelOverrides={PARENT_STATUS_LABELS} />
                           </div>
                         ) : (
-                          <p className="mt-1 text-xs text-neutral-400">Not registered for current camp</p>
+                          <p className="mt-1 text-xs text-txt-muted">Not registered for current camp</p>
                         )}
                       </div>
                       <div className="shrink-0 flex items-center gap-2">
@@ -211,7 +211,7 @@ function UserDashboard() {
                             }
                           }}
                           disabled={deleting === camper.id}
-                          className="rounded border border-danger-200 px-2 py-1 text-xs font-medium text-danger-600 transition-colors hover:bg-danger-50 disabled:opacity-50"
+                          className="rounded border border-current/15 status-danger px-2 py-1 text-xs font-medium transition-colors hover:opacity-80 disabled:opacity-50"
                         >
                           {deleting === camper.id ? "..." : "Delete"}
                         </button>
@@ -228,21 +228,21 @@ function UserDashboard() {
         {(registrations ?? []).filter((r: any) => !r.deletedAt).length > 0 && (
           <Card>
             <CardBody>
-              <h2 className="mb-3 text-sm font-semibold text-neutral-700">Camp Registrations</h2>
+              <h2 className="mb-3 text-sm font-semibold text-txt-secondary">Camp Registrations</h2>
               <div className="space-y-1">
                 {(registrations ?? []).filter((r: any) => !r.deletedAt).slice(0, 5).map((r: any) => (
                   <Link
                     key={r.id}
                     href={r.status === "DRAFT" || r.status === "REQUIRES_ACTION" ? (wizardUrl || `/dashboard/register/${r.id}`) : `/dashboard/register/${r.id}`}
-                    className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-neutral-50"
+                    className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-surface-raised"
                   >
                     <div className="min-w-0 flex-1">
-                      <span className="font-medium text-neutral-800 truncate">{r.camper?.name ?? "Camper"}</span>
-                      <span className="ml-2 text-neutral-400">·</span>
-                      <span className="ml-2 text-neutral-500">{r.camp?.name}</span>
+                      <span className="font-medium text-txt-primary truncate">{r.camper?.name ?? "Camper"}</span>
+                      <span className="ml-2 text-txt-muted">·</span>
+                      <span className="ml-2 text-txt-secondary">{r.camp?.name}</span>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-xs text-neutral-400">{r.campus?.name}</span>
+                      <span className="text-xs text-txt-muted">{r.campus?.name}</span>
                       <StatusBadge status={r.status} labelOverrides={PARENT_STATUS_LABELS} />
                     </div>
                   </Link>
@@ -253,8 +253,8 @@ function UserDashboard() {
         )}
 
         {!registrations?.length && campers?.length ? (
-          <div className="rounded-lg border border-dashed border-neutral-200 py-6 text-center">
-            <p className="text-sm text-neutral-500">Registrations will appear here after you start or submit a camp registration.</p>
+          <div className="rounded-lg border border-dashed border-border-default py-6 text-center">
+            <p className="text-sm text-txt-secondary">Registrations will appear here after you start or submit a camp registration.</p>
           </div>
         ) : null}
       </div>

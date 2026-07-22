@@ -200,11 +200,11 @@ export default function AppShell({ area, children }: AppShellProps) {
                         className="h-8 w-8 rounded-full object-cover border border-neutral-200"
                       />
                     ) : (
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-100 text-sm font-medium text-accent-700 border border-accent-200">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full brand-tint-strong text-sm font-medium">
                         {session.user.email.charAt(0).toUpperCase()}
                       </span>
                     )}
-                    <span className="hidden text-sm font-medium text-neutral-700 sm:inline">
+                    <span className="hidden text-sm font-medium text-txt-primary sm:inline">
                       {userProfile ? `${userProfile.firstName ?? ""} ${userProfile.lastName ?? ""}`.trim() || session.user.email : session.user.email}
                     </span>
                   </Menu.Button>
@@ -218,21 +218,21 @@ export default function AppShell({ area, children }: AppShellProps) {
                   leaveFrom="transform opacity-100 scale-100"
                   leaveTo="transform opacity-0 scale-95"
                 >
-                  <Menu.Items className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none border border-neutral-100">
-                    <div className="px-4 py-2 border-b border-neutral-100">
-                      <p className="text-xs text-neutral-400">Signed in as</p>
-                      <p className="truncate text-xs font-semibold text-neutral-700">{session.user.email}</p>
+                  <Menu.Items className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-elevated py-1 shadow-lg ring-1 ring-black/5 focus:outline-none border border-elevated-border">
+                    <div className="px-4 py-2 border-b border-elevated-border">
+                      <p className="text-xs text-txt-muted">Signed in as</p>
+                      <p className="truncate text-xs font-semibold text-txt-primary">{session.user.email}</p>
                     </div>
                     <Menu.Item>
                       {({ active }) => (
                         <Link
                           href="/profile"
                           className={cn(
-                            active ? "bg-neutral-50 text-neutral-900" : "text-neutral-700",
+                            active ? "bg-surface-raised text-txt-primary" : "text-txt-secondary",
                             "flex items-center gap-2 px-4 py-2 text-sm"
                           )}
                         >
-                          <UserIcon className="h-4 w-4 text-neutral-400" />
+                          <UserIcon className="h-4 w-4 text-txt-muted" />
                           My Profile
                         </Link>
                       )}
@@ -242,11 +242,11 @@ export default function AppShell({ area, children }: AppShellProps) {
                         <button
                           onClick={handleLogout}
                           className={cn(
-                            active ? "bg-neutral-50 text-neutral-900" : "text-neutral-700",
+                            active ? "bg-surface-raised text-txt-primary" : "text-txt-secondary",
                             "flex w-full items-center gap-2 px-4 py-2 text-left text-sm"
                           )}
                         >
-                          <ArrowRightOnRectangleIcon className="h-4 w-4 text-neutral-400" />
+                          <ArrowRightOnRectangleIcon className="h-4 w-4 text-txt-muted" />
                           Log out
                         </button>
                       )}

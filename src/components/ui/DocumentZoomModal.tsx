@@ -319,7 +319,7 @@ export function DocumentZoomModal({
                   width: "90%",
                   height: "90%",
                 }}
-                className="flex items-center justify-center bg-white rounded-lg shadow-2xl overflow-hidden"
+                className="flex items-center justify-center bg-surface rounded-lg shadow-2xl overflow-hidden"
               >
                 <iframe
                   src={`${url}#toolbar=1`}

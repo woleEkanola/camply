@@ -133,7 +133,7 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
       };
       return (
         <div>
-          <label className="mb-1 block text-sm font-medium text-neutral-700">
+          <label className="mb-1 block text-sm font-medium text-txt-secondary">
             {field.label}
             {field.required && <span className="ml-0.5 text-danger-600">*</span>}
           </label>
@@ -148,15 +148,15 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
                   selected.includes(opt.value)
                     ? "border-accent-600 bg-accent-50 text-accent-700 font-medium"
                     : error 
-                      ? "border-danger-300 text-neutral-600 hover:border-danger-400" 
-                      : "border-neutral-300 text-neutral-600 hover:border-neutral-400"
+                      ? "border-danger-300 text-txt-secondary hover:border-danger-400" 
+                      : "border-input-border text-txt-secondary hover:border-neutral-400"
                 }`}
               >
                 {opt.label}
               </button>
             ))}
           </div>
-          {field.helpText && !error && <p className="mt-1 text-xs text-neutral-500">{field.helpText}</p>}
+          {field.helpText && !error && <p className="mt-1 text-xs text-txt-secondary">{field.helpText}</p>}
           {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
         </div>
       );
@@ -165,13 +165,13 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
     case "RADIO":
       return (
         <div>
-          <label className="mb-1 block text-sm font-medium text-neutral-700">
+          <label className="mb-1 block text-sm font-medium text-txt-secondary">
             {field.label}
             {field.required && <span className="ml-0.5 text-danger-600">*</span>}
           </label>
           <div className="space-y-1">
             {options.map((opt) => (
-              <label key={opt.value} className="flex min-h-[44px] cursor-pointer items-center gap-2 py-1.5 text-sm text-neutral-700 md:min-h-0 md:py-0">
+              <label key={opt.value} className="flex min-h-[44px] cursor-pointer items-center gap-2 py-1.5 text-sm text-txt-secondary md:min-h-0 md:py-0">
                 <input
                   type="radio"
                   name={fieldId}
@@ -179,14 +179,14 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
                   checked={value === opt.value}
                   onChange={() => onChange(opt.value)}
                   className={`h-5 w-5 text-accent-600 focus:ring-accent-500 md:h-4 md:w-4 ${
-                    error ? "border-danger-300" : "border-neutral-300"
+                    error ? "border-danger-300" : "border-input-border"
                   }`}
                 />
                 {opt.label}
               </label>
             ))}
           </div>
-          {field.helpText && !error && <p className="mt-1 text-xs text-neutral-500">{field.helpText}</p>}
+          {field.helpText && !error && <p className="mt-1 text-xs text-txt-secondary">{field.helpText}</p>}
           {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
         </div>
       );
@@ -207,9 +207,9 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
               <div className={`h-6 w-11 rounded-full bg-neutral-200 transition peer-checked:bg-accent-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-500 ${
                 error ? "border border-danger-300" : ""
               }`} />
-              <div className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+              <div className="absolute left-1 top-1 h-4 w-4 rounded-full bg-surface shadow transition-transform peer-checked:translate-x-5" />
             </label>
-            <span className="select-none text-sm text-neutral-900">{field.label}{field.required && <span className="ml-0.5 text-danger-600">*</span>}</span>
+            <span className="select-none text-sm text-txt-primary">{field.label}{field.required && <span className="ml-0.5 text-danger-600">*</span>}</span>
           </div>
           {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
         </div>
@@ -220,14 +220,14 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
       const checked = value === true || value === "true";
       return (
         <div>
-          <label className="flex min-h-[44px] cursor-pointer items-center gap-2 py-1.5 text-sm text-neutral-700 md:min-h-0 md:py-0">
+          <label className="flex min-h-[44px] cursor-pointer items-center gap-2 py-1.5 text-sm text-txt-secondary md:min-h-0 md:py-0">
             <input
               type="checkbox"
               checked={checked}
               disabled={disabled}
               onChange={(e) => onChange(e.target.checked)}
               className={`h-5 w-5 rounded text-accent-600 focus:ring-accent-500 md:h-4 md:w-4 ${
-                error ? "border-danger-300" : "border-neutral-300"
+                error ? "border-danger-300" : "border-input-border"
               }`}
             />
             {field.label}

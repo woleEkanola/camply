@@ -289,7 +289,7 @@ export default function SuperAdminDashboard() {
   const someSelectedOrgs = selectedOrgIds.length > 0 && (!organizations || selectedOrgIds.length < organizations.length);
 
   if (status === "loading") {
-    return <div className="flex h-screen items-center justify-center bg-neutral-50 text-neutral-500 font-medium">Loading Super Admin...</div>;
+    return <div className="flex h-screen items-center justify-center bg-page-bg text-txt-secondary font-medium">Loading Super Admin...</div>;
   }
 
   // Columns definition
@@ -298,7 +298,7 @@ export default function SuperAdminDashboard() {
       header: (
         <input
           type="checkbox"
-          className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+          className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500 cursor-pointer"
           ref={(el) => {
             if (el) {
               el.indeterminate = someSelectedOrgs;
@@ -311,7 +311,7 @@ export default function SuperAdminDashboard() {
       accessor: (org) => (
         <input
           type="checkbox"
-          className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+          className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500 cursor-pointer"
           checked={selectedOrgIds.includes(org.id)}
           onChange={(e) => handleSelectOneOrg(org.id, e.target.checked)}
           onClick={(e) => e.stopPropagation()}
@@ -321,13 +321,13 @@ export default function SuperAdminDashboard() {
     },
     { header: "Name", accessor: "name", className: "font-semibold text-neutral-900" },
     { header: "ID", accessor: "id", className: "text-xs font-mono text-neutral-500" },
-    { header: "Created", accessor: (org) => new Date(org.createdAt).toLocaleDateString(), className: "text-sm text-neutral-600" },
+    { header: "Created", accessor: (org) => new Date(org.createdAt).toLocaleDateString(), className: "text-sm text-txt-secondary" },
   ];
 
   const ownerColumns: Column<any>[] = [
     { header: "Email", accessor: "email", className: "font-semibold text-neutral-900" },
     { header: "ID", accessor: "id", className: "text-xs font-mono text-neutral-500" },
-    { header: "Created", accessor: (owner) => (owner.createdAt ? new Date(owner.createdAt).toLocaleDateString() : "-"), className: "text-sm text-neutral-600" },
+    { header: "Created", accessor: (owner) => (owner.createdAt ? new Date(owner.createdAt).toLocaleDateString() : "-"), className: "text-sm text-txt-secondary" },
   ];
 
   const userColumns: Column<any>[] = [
@@ -339,11 +339,11 @@ export default function SuperAdminDashboard() {
         </span>
       ),
     },
-    { header: "Email", accessor: "email", className: "text-neutral-600 font-medium" },
+    { header: "Email", accessor: "email", className: "text-txt-secondary font-medium" },
     {
       header: "Organization",
       accessor: (u) => (
-        <span className="text-sm font-medium text-neutral-700 bg-neutral-105 px-2 py-0.5 rounded">
+        <span className="text-sm font-medium text-neutral-700 bg-surface-raised px-2 py-0.5 rounded">
           {u.organization?.name ?? "Super Admin / System"}
         </span>
       ),
@@ -352,11 +352,11 @@ export default function SuperAdminDashboard() {
       header: "Role",
       accessor: (u) => (
         <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-          u.role === "SUPER_ADMIN" ? "bg-purple-100 text-purple-800" :
-          u.role === "OWNER" ? "bg-indigo-100 text-indigo-800" :
-          u.role === "ADMIN" ? "bg-blue-100 text-blue-800" :
-          u.role === "CAMPUS_REPRESENTATIVE" ? "bg-teal-100 text-teal-800" :
-          "bg-emerald-100 text-emerald-800"
+          u.role === "SUPER_ADMIN" ? "status-attention" :
+          u.role === "OWNER" ? "status-info" :
+          u.role === "ADMIN" ? "status-info" :
+          u.role === "CAMPUS_REPRESENTATIVE" ? "status-success" :
+          "status-success"
         }`}>
           {u.role.replace("_", " ")}
         </span>
@@ -369,8 +369,8 @@ export default function SuperAdminDashboard() {
           onClick={() => handleToggleUserActive(u.id, u.active)}
           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm transition-colors cursor-pointer ${
             u.active 
-              ? "bg-green-105 text-green-800 hover:bg-green-200" 
-              : "bg-red-105 text-red-800 hover:bg-red-200"
+              ? "status-success hover:opacity-80" 
+              : "status-danger hover:opacity-80"
           }`}
           title="Click to toggle status"
         >
@@ -388,17 +388,17 @@ export default function SuperAdminDashboard() {
         description="Global system administration. Monitor platform statistics, manage tenants, configure options, and override accounts."
       />
 
-      {error && <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700 border border-danger-200 shadow-sm">{error}</div>}
-      {success && <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700 border border-success-200 shadow-sm">{success}</div>}
+      {error && <div className="mb-4 rounded-md status-danger border border-current/15 p-4 text-sm shadow-sm">{error}</div>}
+      {success && <div className="mb-4 rounded-md status-success border border-current/15 p-4 text-sm shadow-sm">{success}</div>}
 
       {/* Tabs Menu Navigation */}
-      <div className="flex border-b border-neutral-200 mb-6 gap-6">
+      <div className="flex border-b border-border-default mb-6 gap-6">
         <button
           onClick={() => setActiveTab("overview")}
           className={`flex items-center gap-2 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
             activeTab === "overview"
               ? "border-accent-600 text-accent-700"
-              : "border-transparent text-neutral-500 hover:text-neutral-900"
+              : "border-transparent text-txt-muted hover:text-txt-primary"
           }`}
         >
           <ChartBarIcon className="h-5 w-5" />
@@ -409,7 +409,7 @@ export default function SuperAdminDashboard() {
           className={`flex items-center gap-2 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
             activeTab === "organizations"
               ? "border-accent-600 text-accent-700"
-              : "border-transparent text-neutral-500 hover:text-neutral-900"
+              : "border-transparent text-txt-muted hover:text-txt-primary"
           }`}
         >
           <BuildingOfficeIcon className="h-5 w-5" />
@@ -420,7 +420,7 @@ export default function SuperAdminDashboard() {
           className={`flex items-center gap-2 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
             activeTab === "users"
               ? "border-accent-600 text-accent-700"
-              : "border-transparent text-neutral-500 hover:text-neutral-900"
+              : "border-transparent text-txt-muted hover:text-txt-primary"
           }`}
         >
           <UsersIcon className="h-5 w-5" />
@@ -431,7 +431,7 @@ export default function SuperAdminDashboard() {
           className={`flex items-center gap-2 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
             activeTab === "tools"
               ? "border-accent-600 text-accent-700"
-              : "border-transparent text-neutral-500 hover:text-neutral-900"
+              : "border-transparent text-txt-muted hover:text-txt-primary"
           }`}
         >
           <WrenchScrewdriverIcon className="h-5 w-5" />
@@ -444,50 +444,50 @@ export default function SuperAdminDashboard() {
         <div className="space-y-6">
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-            <Card className="bg-gradient-to-br from-accent-50/20 to-transparent">
+            <Card className="">
               <CardBody className="flex items-center gap-4">
-                <span className="p-3 bg-accent-100 text-accent-600 rounded-lg">
+                <span className="p-3 brand-tint-icon rounded-lg">
                   <BuildingOfficeIcon className="h-6 w-6" />
                 </span>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Organizations</p>
-                  <p className="text-2xl font-bold text-neutral-950 mt-0.5">{metrics?.totalOrganizations ?? 0}</p>
+                  <p className="text-2xl font-bold text-txt-primary mt-0.5">{metrics?.totalOrganizations ?? 0}</p>
                 </div>
               </CardBody>
             </Card>
 
-            <Card className="bg-gradient-to-br from-blue-50/20 to-transparent">
+            <Card className="">
               <CardBody className="flex items-center gap-4">
-                <span className="p-3 bg-blue-100 text-blue-600 rounded-lg">
+                <span className="p-3 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-lg">
                   <UsersIcon className="h-6 w-6" />
                 </span>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">System Users</p>
-                  <p className="text-2xl font-bold text-neutral-950 mt-0.5">{metrics?.totalUsers ?? 0}</p>
+                  <p className="text-2xl font-bold text-txt-primary mt-0.5">{metrics?.totalUsers ?? 0}</p>
                 </div>
               </CardBody>
             </Card>
 
-            <Card className="bg-gradient-to-br from-purple-50/20 to-transparent">
+            <Card className="">
               <CardBody className="flex items-center gap-4">
-                <span className="p-3 bg-purple-100 text-purple-600 rounded-lg">
+                <span className="p-3 bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 rounded-lg">
                   <UsersIcon className="h-6 w-6" />
                 </span>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Active Campers</p>
-                  <p className="text-2xl font-bold text-neutral-950 mt-0.5">{metrics?.totalCampers ?? 0}</p>
+                  <p className="text-2xl font-bold text-txt-primary mt-0.5">{metrics?.totalCampers ?? 0}</p>
                 </div>
               </CardBody>
             </Card>
 
-            <Card className="bg-gradient-to-br from-emerald-50/20 to-transparent">
+            <Card className="">
               <CardBody className="flex items-center gap-4">
-                <span className="p-3 bg-emerald-100 text-emerald-600 rounded-lg">
+                <span className="p-3 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-lg">
                   <ChartBarIcon className="h-6 w-6" />
                 </span>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Registrations</p>
-                  <p className="text-2xl font-bold text-neutral-950 mt-0.5">{metrics?.totalRegistrations ?? 0}</p>
+                  <p className="text-2xl font-bold text-txt-primary mt-0.5">{metrics?.totalRegistrations ?? 0}</p>
                 </div>
               </CardBody>
             </Card>
@@ -496,32 +496,32 @@ export default function SuperAdminDashboard() {
           {/* Sub-distribution Section */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Card>
-              <CardHeader className="border-b border-neutral-100">
+              <CardHeader className="border-b border-border-subtle">
                 <CardTitle>Registration Breakdown</CardTitle>
               </CardHeader>
               <CardBody className="space-y-4">
-                <div className="flex justify-between items-center text-sm font-medium border-b border-neutral-50 pb-2">
+                <div className="flex justify-between items-center text-sm font-medium border-b border-border-subtle pb-2">
                   <span className="text-neutral-500 flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-amber-500" /> Pending Approval
                   </span>
-                  <span className="text-neutral-850 font-bold bg-amber-50 px-2 py-0.5 rounded text-xs">{metrics?.pendingRegistrations ?? 0}</span>
+                  <span className="text-txt-primary font-bold bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded text-xs">{metrics?.pendingRegistrations ?? 0}</span>
                 </div>
-                <div className="flex justify-between items-center text-sm font-medium border-b border-neutral-50 pb-2">
+                <div className="flex justify-between items-center text-sm font-medium border-b border-border-subtle pb-2">
                   <span className="text-neutral-500 flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-green-500" /> Approved
                   </span>
-                  <span className="text-neutral-850 font-bold bg-green-50 px-2 py-0.5 rounded text-xs">{metrics?.approvedRegistrations ?? 0}</span>
+                  <span className="text-txt-primary font-bold bg-green-50 dark:bg-green-950 px-2 py-0.5 rounded text-xs">{metrics?.approvedRegistrations ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm font-medium pt-1">
-                  <span className="text-neutral-900 font-bold">Total Active Registrations</span>
-                  <span className="text-neutral-950 font-black">{metrics?.totalRegistrations ?? 0}</span>
+                  <span className="text-txt-primary font-bold">Total Active Registrations</span>
+                  <span className="text-txt-primary font-black">{metrics?.totalRegistrations ?? 0}</span>
                 </div>
               </CardBody>
             </Card>
 
             <Card className="flex flex-col justify-center">
               <CardBody className="text-center space-y-2 p-6">
-                <h4 className="text-base font-semibold text-neutral-800">Need help resolving system issues?</h4>
+                <h4 className="text-base font-semibold text-txt-primary">Need help resolving system issues?</h4>
                 <p className="text-xs text-neutral-500 max-w-sm mx-auto">
                   You can browse all user accounts, reset passwords, change user active states, or perform system email checks under the different tabs above.
                 </p>
@@ -679,7 +679,7 @@ export default function SuperAdminDashboard() {
             <CardBody>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-base font-bold text-neutral-900">User Accounts Directory</h2>
-                <span className="text-xs text-neutral-500 font-semibold bg-neutral-100 px-2 py-1 rounded">
+                <span className="text-xs text-neutral-500 font-semibold bg-surface-raised px-2 py-1 rounded">
                   Showing {filteredUsers.length} of {allUsers?.length ?? 0} users
                 </span>
               </div>
@@ -812,10 +812,10 @@ export default function SuperAdminDashboard() {
         title="Confirm Organization Deletion"
       >
         <div className="space-y-4">
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-txt-secondary">
             Are you sure you want to delete {orgsToDelete.length} selected organization(s)?
           </p>
-          <p className="text-xs text-danger-600 font-semibold bg-danger-50 p-2.5 rounded border border-danger-200">
+          <p className="status-danger border border-current/15 p-2.5 rounded text-xs font-semibold">
             WARNING: This action is irreversible. All users, camps, campers, locations, and registrations under these organizations will be permanently deleted.
           </p>
           <div className="mt-5 flex justify-end gap-3">
@@ -851,47 +851,47 @@ export default function SuperAdminDashboard() {
         title="User Account Details"
       >
         {selectedUserForDetails && (
-          <div className="space-y-4 text-sm text-neutral-600">
-            <div className="grid grid-cols-2 gap-4 border-b border-neutral-100 pb-3">
+          <div className="space-y-4 text-sm text-txt-secondary">
+            <div className="grid grid-cols-2 gap-4 border-b border-border-subtle pb-3">
               <div>
-                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">First Name</p>
+                <p className="text-xs font-semibold text-txt-muted uppercase tracking-wider">First Name</p>
                 <p className="font-semibold text-neutral-900 mt-0.5">{selectedUserForDetails.firstName ?? "-"}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Last Name</p>
+                <p className="text-xs font-semibold text-txt-muted uppercase tracking-wider">Last Name</p>
                 <p className="font-semibold text-neutral-900 mt-0.5">{selectedUserForDetails.lastName ?? "-"}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 border-b border-neutral-100 pb-3">
+            <div className="grid grid-cols-2 gap-4 border-b border-border-subtle pb-3">
               <div>
-                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Email Address</p>
+                <p className="text-xs font-semibold text-txt-muted uppercase tracking-wider">Email Address</p>
                 <p className="font-semibold text-neutral-900 mt-0.5">{selectedUserForDetails.email}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Phone Number</p>
+                <p className="text-xs font-semibold text-txt-muted uppercase tracking-wider">Phone Number</p>
                 <p className="font-semibold text-neutral-900 mt-0.5">{selectedUserForDetails.phone ?? "-"}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 border-b border-neutral-100 pb-3">
+            <div className="grid grid-cols-2 gap-4 border-b border-border-subtle pb-3">
               <div>
-                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">System Role</p>
+                <p className="text-xs font-semibold text-txt-muted uppercase tracking-wider">System Role</p>
                 <p className="font-semibold text-neutral-900 mt-0.5 uppercase tracking-wide">{selectedUserForDetails.role.replace("_", " ")}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Tenant (Org)</p>
+                <p className="text-xs font-semibold text-txt-muted uppercase tracking-wider">Tenant (Org)</p>
                 <p className="font-semibold text-neutral-900 mt-0.5">{selectedUserForDetails.organization?.name ?? "Super Admin / System"}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Account ID</p>
+                <p className="text-xs font-semibold text-txt-muted uppercase tracking-wider">Account ID</p>
                 <p className="font-mono text-xs text-neutral-500 mt-0.5">{selectedUserForDetails.id}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Joined Date</p>
+                <p className="text-xs font-semibold text-txt-muted uppercase tracking-wider">Joined Date</p>
                 <p className="font-semibold text-neutral-900 mt-0.5">{new Date(selectedUserForDetails.createdAt).toLocaleDateString()}</p>
               </div>
             </div>
@@ -915,7 +915,7 @@ export default function SuperAdminDashboard() {
       >
         <form onSubmit={handleOverridePasswordSubmit} className="space-y-4">
           <p className="text-xs text-neutral-500">
-            You are setting a new password directly for <span className="font-semibold text-neutral-800">{selectedUserForPasswordReset?.email}</span>. The user will be able to log in immediately with this new password.
+            You are setting a new password directly for <span className="font-semibold text-txt-primary">{selectedUserForPasswordReset?.email}</span>. The user will be able to log in immediately with this new password.
           </p>
           <Input
             type="password"
@@ -957,10 +957,10 @@ export default function SuperAdminDashboard() {
         title="Confirm User Deletion"
       >
         <div className="space-y-4">
-          <p className="text-sm text-neutral-600">
-            Are you sure you want to delete <span className="font-semibold text-neutral-800">{selectedUserForDelete?.email}</span>?
+          <p className="text-sm text-txt-secondary">
+            Are you sure you want to delete <span className="font-semibold text-txt-primary">{selectedUserForDelete?.email}</span>?
           </p>
-          <p className="text-xs text-red-600 font-semibold bg-red-50 p-2.5 rounded border border-red-200">
+          <p className="status-danger border border-current/15 p-2.5 rounded text-xs font-semibold">
             WARNING: This user will be soft-deleted. All their camper profiles, registrations, applications, and documents will be placed in the Trash and permanently purged after 60 days.
           </p>
           <div className="mt-5 flex justify-end gap-3">

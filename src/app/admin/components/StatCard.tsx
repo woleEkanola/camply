@@ -65,14 +65,14 @@ export default function StatCard({
   const colorClasses = getColorClasses();
 
   return (
-    <div className="rounded-lg bg-white p-6 shadow-sm">
+    <div className="rounded-lg bg-surface p-6 shadow-sm">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <div className={`flex h-12 w-12 items-center justify-center rounded-full ${colorClasses.bg}`}>
             {getIcon()}
           </div>
           <div className="ml-4">
-            <h3 className="text-sm font-medium text-gray-500">{title}</h3>
+            <h3 className="text-sm font-medium text-txt-secondary">{title}</h3>
             <p className="text-2xl font-bold">{value}</p>
           </div>
         </div>
@@ -86,7 +86,7 @@ export default function StatCard({
         <span className={`ml-1 text-sm ${colorClasses.text}`}>
           {isPositive ? "+" : ""}{Math.abs(change)}%
         </span>
-        <span className="ml-1 text-sm text-gray-500">
+        <span className="ml-1 text-sm text-txt-secondary">
           {isPositive ? "Increased by" : "less earnings"}
         </span>
       </div>

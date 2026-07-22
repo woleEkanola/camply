@@ -14,38 +14,38 @@
   /* Brand primary color — default Camply orange (#e67e22 / #f97316) */
   --brand-primary: #e67e22;
 
-  /* LIGHT THEME SEMANTIC TOKENS */
-  --page-bg: #f8fafc;
+  /* LIGHT THEME SEMANTIC TOKENS — refined for soft, modern SaaS dashboard */
+  --page-bg: #f5f6fa;
   --page-fg: #0f172a;
 
-  --sidebar-bg: #ffffff;
-  --sidebar-border: #e2e8f0;
+  --sidebar-bg: #fafbfc;
+  --sidebar-border: #e8ecf1;
   --sidebar-fg: #64748b;
   --sidebar-active-bg: color-mix(in srgb, var(--brand-primary) 10%, white);
-  --sidebar-active-fg: color-mix(in srgb, var(--brand-primary) 90%, black);
+  --sidebar-active-fg: color-mix(in srgb, var(--brand-primary) 85%, black);
 
   --surface-bg: #ffffff;
-  --surface-raised: #f1f5f9;
-  --surface-hover: #f1f5f9;
-  --surface-border: #e2e8f0;
+  --surface-raised: #f4f6f9;
+  --surface-hover: #f0f3f8;
+  --surface-border: #e8ecf1;
 
   --elevated-bg: #ffffff;
-  --elevated-border: #cbd5e1;
+  --elevated-border: #cfd8e3;
 
   --input-bg: #ffffff;
-  --input-border: #cbd5e1;
+  --input-border: #cfd8e3;
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-muted: #64748b;
+  --text-muted: #94a3b8;
 
-  --border-subtle: #f1f5f9;
+  --border-subtle: #f0f3f8;
   --border-default: #e2e8f0;
 
-  --status-success-bg: #f0fdf4;
-  --status-success-fg: #15803d;
-  --status-warning-bg: #fffbeb;
-  --status-warning-fg: #b45309;
+  --status-success-bg: #ecfdf5;
+  --status-success-fg: #166534;
+  --status-warning-bg: #fefce8;
+  --status-warning-fg: #a16207;
   --status-danger-bg: #fef2f2;
   --status-danger-fg: #b91c1c;
   --status-info-bg: #eff6ff;
@@ -157,6 +157,37 @@
     display: none;
   }
 }
+
+/*
+ * Status surface utilities — tokenize the common bg-green-50 text-green-700 etc.
+ * patterns so pages pick up dark-mode adaptations automatically.
+ */
+@utility status-success { background: var(--status-success-bg); color: var(--status-success-fg); }
+@utility status-warning { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+@utility status-danger { background: var(--status-danger-bg); color: var(--status-danger-fg); }
+@utility status-info { background: var(--status-info-bg); color: var(--status-info-fg); }
+@utility status-attention { background: var(--status-attention-bg); color: var(--status-attention-fg); }
+
+/*
+ * Brand accent tint utilities — follow the active org brand color set via
+ * Settings → Church Profile → Brand Color Theme (BrandColorProvider).
+ */
+@utility brand-tint { background: var(--color-accent-50); color: var(--color-accent-700); }
+@utility brand-tint-strong { background: var(--color-accent-100); color: var(--color-accent-700); border-color: var(--color-accent-200); }
+@utility brand-tint-icon { background: var(--color-accent-100); color: var(--color-accent-600); }
+
+/*
+ * Status icon utilities — resolved colors for the icon component of status
+ * banners (Alert, Toast). Lighter than the body text so the icon doesn't
+ * compete for attention.
+ */
+@utility icon-success { color: var(--status-success-fg); opacity: 0.8; }
+@utility icon-warning { color: var(--status-warning-fg); opacity: 0.8; }
+@utility icon-danger { color: var(--status-danger-fg); opacity: 0.8; }
+@utility icon-info { color: var(--status-info-fg); opacity: 0.8; }
+@utility icon-attention { color: var(--status-attention-fg); opacity: 0.8; }
+@utility icon-brand { color: var(--color-accent-500); opacity: 0.8; }
+@utility icon-neutral { color: var(--text-muted); opacity: 0.8; }
 
 body {
   background: var(--page-bg);

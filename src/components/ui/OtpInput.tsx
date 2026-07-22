@@ -67,7 +67,7 @@ export function OtpInput({ disabled, onComplete }: OtpInputProps) {
           onKeyDown={(e) => handleKeyDown(i, e)}
           disabled={disabled}
           aria-label={`Digit ${i + 1} of ${length}`}
-          className="h-14 w-12 rounded-xl border border-neutral-300 text-center text-xl font-bold text-neutral-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
+          className="h-14 w-12 rounded-xl border border-neutral-300 bg-input-bg text-center text-xl font-bold text-neutral-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
         />
       ))}
     </div>

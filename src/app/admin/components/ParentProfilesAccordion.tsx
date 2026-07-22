@@ -33,20 +33,20 @@ export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = (
   const [openUserId, setOpenUserId] = useState<string | null>(null);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-lg border border-border-default bg-surface shadow-sm">
       <table className="min-w-full divide-y divide-neutral-200">
-        <thead className="bg-neutral-50">
+        <thead className="bg-surface-raised">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-txt-secondary">
               Account Email
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-txt-secondary">
               Parent Name
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-txt-secondary">
               Created Date
             </th>
-            <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-txt-secondary">
               Campers
             </th>
           </tr>
@@ -55,28 +55,28 @@ export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = (
           {users.map((user) => (
             <React.Fragment key={user.id}>
               <tr
-                className={`hover:bg-neutral-50 cursor-pointer transition-colors ${
+                className={`hover:bg-surface-hover cursor-pointer transition-colors ${
                   openUserId === user.id ? "bg-accent-50/40" : ""
                 }`}
                 onClick={() => setOpenUserId(openUserId === user.id ? null : user.id)}
               >
-                <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-neutral-900">
+                <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-txt-primary">
                   <div className="flex items-center gap-2">
-                    <span className="text-neutral-400 text-xs">
+                    <span className="text-txt-muted text-xs">
                       {openUserId === user.id ? "▼" : "▶"}
                     </span>
                     {user.email}
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm text-neutral-600">
+                <td className="whitespace-nowrap px-6 py-4 text-sm text-txt-secondary">
                   {user.firstName || user.lastName
                     ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim()
-                    : <span className="text-neutral-400 italic">Not set</span>}
+                    : <span className="text-txt-muted italic">Not set</span>}
                 </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm text-neutral-500">
+                <td className="whitespace-nowrap px-6 py-4 text-sm text-txt-secondary">
                   {new Date(user.createdAt).toLocaleDateString()}
                 </td>
-                <td className="whitespace-nowrap px-6 py-4 text-center text-sm font-semibold text-neutral-700">
+                <td className="whitespace-nowrap px-6 py-4 text-center text-sm font-semibold text-txt-primary">
                   <Badge tone={user.camperCount > 0 ? "success" : "neutral"}>
                     {user.camperCount}
                   </Badge>
@@ -84,7 +84,7 @@ export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = (
               </tr>
               {openUserId === user.id && (
                 <tr>
-                  <td colSpan={4} className="bg-neutral-50/70 p-4 border-b border-neutral-200">
+                  <td colSpan={4} className="bg-neutral-50/70 p-4 border-b border-border-default">
                     <ProfilesList userId={user.id} />
                   </td>
                 </tr>
@@ -93,7 +93,7 @@ export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = (
           ))}
           {users.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-8 text-center text-sm text-neutral-400">
+              <td colSpan={4} className="py-8 text-center text-sm text-txt-muted">
                 No parent accounts found.
               </td>
             </tr>
@@ -108,23 +108,23 @@ const ProfilesList: React.FC<{ userId: string }> = ({ userId }) => {
   const { data, isLoading, error } = api.camper.getByUser.useQuery({ userId });
 
   if (isLoading) {
-    return <div className="text-center py-4 text-sm text-neutral-500">Loading campers...</div>;
+    return <div className="text-center py-4 text-sm text-txt-secondary">Loading campers...</div>;
   }
   if (error) {
     return <div className="text-center py-4 text-sm text-danger-600">Error loading profiles: {error.message}</div>;
   }
   if (!data || data.length === 0) {
-    return <div className="text-center py-4 text-sm text-neutral-400">No campers linked to this account.</div>;
+    return <div className="text-center py-4 text-sm text-txt-muted">No campers linked to this account.</div>;
   }
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-3 shadow-inner max-w-2xl mx-auto">
-      <span className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+    <div className="rounded-lg border border-border-default bg-surface p-3 shadow-inner max-w-2xl mx-auto">
+      <span className="block text-xs font-semibold text-txt-muted uppercase tracking-wider mb-2">
         Linked Campers ({data.length})
       </span>
       <table className="min-w-full divide-y divide-neutral-100 text-sm">
         <thead>
-          <tr className="text-neutral-500 text-xs">
+          <tr className="text-txt-secondary text-xs">
             <th className="px-4 py-2 text-left font-medium">Camper Name</th>
             <th className="px-4 py-2 text-left font-medium">Calculated Age</th>
             <th className="px-4 py-2 text-left font-medium">Gender</th>
@@ -137,8 +137,8 @@ const ProfilesList: React.FC<{ userId: string }> = ({ userId }) => {
             const locationName = profile.location?.name || "None assigned";
             
             return (
-              <tr key={profile.id} className="hover:bg-neutral-50/50">
-                <td className="px-4 py-2 font-medium text-neutral-900">
+              <tr key={profile.id} className="hover:bg-surface-hover/50">
+                <td className="px-4 py-2 font-medium text-txt-primary">
                   <Link
                     href={`/admin/camper-profile/${profile.id}`}
                     className="text-accent-600 hover:text-accent-700 hover:underline"
@@ -146,8 +146,8 @@ const ProfilesList: React.FC<{ userId: string }> = ({ userId }) => {
                     {profile.name}
                   </Link>
                 </td>
-                <td className="px-4 py-2 text-neutral-600">{age}</td>
-                <td className="px-4 py-2 text-neutral-500 capitalize">{profile.gender || "-"}</td>
+                <td className="px-4 py-2 text-txt-secondary">{age}</td>
+                <td className="px-4 py-2 text-txt-secondary capitalize">{profile.gender || "-"}</td>
                 <td className="px-4 py-2">
                   <Badge tone={profile.location ? "info" : "neutral"}>
                     {locationName}

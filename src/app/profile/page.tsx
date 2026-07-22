@@ -268,10 +268,10 @@ export default function ProfilePage() {
 
   if (status === "loading" || isProfileLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-neutral-50">
+      <div className="flex h-screen items-center justify-center bg-page-bg">
         <div className="text-center">
           <span className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-accent-600 border-t-transparent" />
-          <p className="mt-2 text-sm text-neutral-500 font-medium">Loading profile...</p>
+          <p className="mt-2 text-sm text-txt-secondary font-medium">Loading profile...</p>
         </div>
       </div>
     );
@@ -457,23 +457,23 @@ export default function ProfilePage() {
 
         {/* Notifications */}
         {successMsg && (
-          <div className="rounded-md bg-green-50 p-4 border border-green-200">
+          <div className="rounded-md status-success border border-current/15 p-4">
             <div className="flex">
               <div className="shrink-0">
-                <span className="text-green-500 font-semibold">✓</span>
+                <span className="icon-success font-semibold">✓</span>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-green-800">{successMsg}</p>
+                <p className="text-sm font-medium">{successMsg}</p>
               </div>
             </div>
           </div>
         )}
 
         {errorMsg && (
-          <div className="rounded-md bg-red-50 p-4 border border-red-200">
+          <div className="rounded-md status-danger border border-current/15 p-4">
             <div className="flex">
               <div className="shrink-0">
-                <span className="text-red-500 font-semibold">✕</span>
+                <span className="icon-danger font-semibold">✕</span>
               </div>
               <div className="ml-3">
                 {formatErrorMessage(errorMsg)}
@@ -490,8 +490,8 @@ export default function ProfilePage() {
               onClick={() => setActiveTab("info")}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === "info"
-                  ? "bg-accent-50 text-accent-700"
-                  : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                  ? "brand-tint"
+                  : "text-txt-secondary hover:bg-surface-raised hover:text-txt-primary"
               }`}
             >
               <UserIcon className="h-5 w-5 shrink-0" />
@@ -502,8 +502,8 @@ export default function ProfilePage() {
               onClick={() => setActiveTab("photo")}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === "photo"
-                  ? "bg-accent-50 text-accent-700"
-                  : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                  ? "brand-tint"
+                  : "text-txt-secondary hover:bg-surface-raised hover:text-txt-primary"
               }`}
             >
               <PhotoIcon className="h-5 w-5 shrink-0" />
@@ -514,8 +514,8 @@ export default function ProfilePage() {
               onClick={() => setActiveTab("security")}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === "security"
-                  ? "bg-accent-50 text-accent-700"
-                  : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                  ? "brand-tint"
+                  : "text-txt-secondary hover:bg-surface-raised hover:text-txt-primary"
               }`}
             >
               <KeyIcon className="h-5 w-5 shrink-0" />
@@ -526,8 +526,8 @@ export default function ProfilePage() {
               onClick={() => setActiveTab("appearance")}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === "appearance"
-                  ? "bg-accent-50 dark:bg-accent-950/70 text-accent-700 dark:text-accent-300"
-                  : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white"
+                  ? "brand-tint dark:bg-accent-950/70 dark:text-accent-300"
+                  : "text-txt-secondary dark:text-neutral-400 hover:bg-surface-raised dark:hover:bg-neutral-800 hover:text-txt-primary dark:hover:text-white"
               }`}
             >
               <SunIcon className="h-5 w-5 shrink-0" />
@@ -539,8 +539,8 @@ export default function ProfilePage() {
                 onClick={() => setActiveTab("staff")}
                 className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   activeTab === "staff"
-                    ? "bg-accent-50 dark:bg-accent-950/70 text-accent-700 dark:text-accent-300"
-                    : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white"
+                    ? "brand-tint dark:bg-accent-950/70 dark:text-accent-300"
+                    : "text-txt-secondary dark:text-neutral-400 hover:bg-surface-raised dark:hover:bg-neutral-800 hover:text-txt-primary dark:hover:text-white"
                 }`}
               >
                 <ShieldCheckIcon className="h-5 w-5 shrink-0" />
@@ -587,7 +587,7 @@ export default function ProfilePage() {
                       />
                     </div>
 
-                    <div className="flex justify-end pt-2 border-t border-neutral-100 mt-4">
+                    <div className="flex justify-end pt-2 border-t border-border-subtle mt-4">
                       <Button type="submit" loading={updateProfileMutation.isPending}>
                         Save Details
                       </Button>
@@ -611,14 +611,14 @@ export default function ProfilePage() {
                         className="h-28 w-28 rounded-full object-cover border border-neutral-200 shadow-sm"
                       />
                     ) : (
-                      <span className="flex h-28 w-28 items-center justify-center rounded-full bg-accent-100 text-3xl font-medium text-accent-700 border border-accent-200">
+                      <span className="flex h-28 w-28 items-center justify-center rounded-full brand-tint-strong text-3xl font-medium">
                         {(profile?.email ?? "U").charAt(0).toUpperCase()}
                       </span>
                     )}
 
                     <div className="space-y-2 text-center sm:text-left">
-                      <h4 className="text-sm font-semibold text-neutral-800">Update Profile Avatar</h4>
-                      <p className="text-xs text-neutral-500">
+                      <h4 className="text-sm font-semibold text-txt-primary">Update Profile Avatar</h4>
+                      <p className="text-xs text-txt-secondary">
                         Supports camera capture or uploading files. The image will be cropped to square and compressed automatically to keep layouts fast.
                       </p>
                       
@@ -704,7 +704,7 @@ export default function ProfilePage() {
                   <CardBody>
                     <form onSubmit={handleSaveSecurity} className="space-y-4">
                       {!profile?.passwordSet && (
-                        <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 p-3 text-amber-800 text-xs">
+                        <div className="mb-4 rounded-md status-warning border border-current/15 p-3 text-xs">
                           🔐 You are using OTP verification. Set a password here to unlock standard username/password sign in.
                         </div>
                       )}
@@ -736,7 +736,7 @@ export default function ProfilePage() {
                         required
                       />
 
-                      <div className="flex justify-end pt-2 border-t border-neutral-100 mt-4">
+                      <div className="flex justify-end pt-2 border-t border-border-subtle mt-4">
                         <Button
                           type="submit"
                           loading={updateProfileMutation.isPending || setPasswordMutation.isPending}
@@ -749,17 +749,17 @@ export default function ProfilePage() {
                 </Card>
 
                 {/* Danger Zone */}
-                <Card className="mt-6 border-red-200 bg-red-50/5">
-                  <CardHeader className="border-b border-red-100 bg-red-50/20">
-                    <CardTitle className="text-red-800 font-semibold flex items-center gap-2">
+                <Card className="mt-6 border-red-200 dark:border-red-800/50 bg-red-50/5 dark:bg-red-50/5">
+                  <CardHeader className="border-b border-red-100 dark:border-red-800/50 bg-red-50/20 dark:bg-red-50/20">
+                    <CardTitle className="text-red-700 dark:text-red-400 font-semibold flex items-center gap-2">
                       <span>⚠️</span> Danger Zone
                     </CardTitle>
                   </CardHeader>
                   <CardBody className="space-y-4">
-                    <p className="text-sm text-neutral-600 font-medium">
+                    <p className="text-sm text-txt-secondary font-medium">
                       Deleting your account is a permanent action. All your profile details, registrations, and camper profiles will be soft-deleted and placed in the trash.
                     </p>
-                    <div className="bg-red-50 border border-red-200 rounded-md p-3 text-xs text-red-800 font-medium">
+                    <div className="status-danger border border-current/15 rounded-md p-3 text-xs font-medium">
                       Note: You will have 60 days to contact support to restore your account before the data is permanently purged.
                     </div>
                     
@@ -779,7 +779,7 @@ export default function ProfilePage() {
                               type="checkbox"
                               checked={isDeleteCheckboxChecked}
                               onChange={(e) => setIsDeleteCheckboxChecked(e.target.checked)}
-                              className="mt-1 h-4 w-4 rounded border-neutral-300 text-red-600 focus:ring-red-500"
+                              className="mt-1 h-4 w-4 rounded border-input-border text-red-600 focus:ring-red-500"
                             />
                             <span className="text-xs text-neutral-700 font-medium select-none">
                               I confirm that I want to delete my account and all associated camper registrations.
@@ -817,7 +817,7 @@ export default function ProfilePage() {
                 </CardHeader>
                 <CardBody>
                   <form onSubmit={handleSaveStaff} className="space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 pb-1 mb-2">Personal Settings</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-txt-muted border-b border-border-subtle pb-1 mb-2">Personal Settings</h4>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                       <Input
                         label="Preferred Name"
@@ -841,7 +841,7 @@ export default function ProfilePage() {
                       />
                     </div>
 
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 pb-1 pt-4 mb-2">Church Information</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-txt-muted border-b border-border-subtle pb-1 pt-4 mb-2">Church Information</h4>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <Input
                         label="Home Church"
@@ -867,7 +867,7 @@ export default function ProfilePage() {
                       />
                     </div>
 
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 pb-1 pt-4 mb-2">Emergency Contact</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-txt-muted border-b border-border-subtle pb-1 pt-4 mb-2">Emergency Contact</h4>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                       <Input
                         label="Emergency Contact Name"
@@ -886,7 +886,7 @@ export default function ProfilePage() {
                       />
                     </div>
 
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 pb-1 pt-4 mb-2">Medical Notes</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-txt-muted border-b border-border-subtle pb-1 pt-4 mb-2">Medical Notes</h4>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <Input
                         label="Allergies"
@@ -900,7 +900,7 @@ export default function ProfilePage() {
                       />
                     </div>
 
-                    <div className="flex justify-end pt-2 border-t border-neutral-100 mt-4">
+                    <div className="flex justify-end pt-2 border-t border-border-subtle mt-4">
                       <Button type="submit" loading={updateStaffMutation.isPending}>
                         Save Staff Details
                       </Button>
@@ -920,10 +920,10 @@ export default function ProfilePage() {
         title="Confirm Account Deletion"
       >
         <div className="space-y-4">
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-txt-secondary">
             Are you absolutely sure you want to delete your account? This action is highly destructive and will log you out immediately.
           </p>
-          <p className="text-xs text-red-600 font-semibold bg-red-50 p-2.5 rounded border border-red-200">
+          <p className="status-danger border border-current/15 p-2.5 rounded text-xs font-semibold">
             ⚠️ WARNING: All your registered campers, applications, and documents will be soft-deleted.
           </p>
           <div className="mt-5 flex justify-end gap-3">

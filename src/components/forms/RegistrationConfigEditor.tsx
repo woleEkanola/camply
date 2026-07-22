@@ -132,7 +132,7 @@ export function RegistrationConfigEditor({ organizationId }: { organizationId: s
     {
       header: "Required",
       accessor: (d) => (
-        <span className={`text-xs font-semibold ${d.required ? "text-accent-700" : "text-neutral-400"}`}>
+        <span className={`text-xs font-semibold ${d.required ? "text-accent-700" : "text-txt-muted"}`}>
           {d.required ? "Required" : "Optional"}
         </span>
       ),
@@ -147,7 +147,7 @@ export function RegistrationConfigEditor({ organizationId }: { organizationId: s
               type="button"
               onClick={() => moveDecl(index, -1)}
               disabled={index === 0}
-              className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-30"
+              className="rounded p-1 text-txt-muted hover:bg-surface-raised hover:text-txt-primary disabled:opacity-30"
               aria-label="Move up"
             >
               <ChevronUpIcon className="h-4 w-4" />
@@ -156,7 +156,7 @@ export function RegistrationConfigEditor({ organizationId }: { organizationId: s
               type="button"
               onClick={() => moveDecl(index, 1)}
               disabled={index === declarations.length - 1}
-              className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-30"
+              className="rounded p-1 text-txt-muted hover:bg-surface-raised hover:text-txt-primary disabled:opacity-30"
               aria-label="Move down"
             >
               <ChevronDownIcon className="h-4 w-4" />
@@ -176,8 +176,8 @@ export function RegistrationConfigEditor({ organizationId }: { organizationId: s
       {/* Consent Form Configuration */}
       <Card>
         <CardBody>
-          <h3 className="font-semibold text-neutral-900 mb-1">Consent Form</h3>
-          <p className="text-sm text-neutral-500 mb-4">
+          <h3 className="font-semibold text-txt-primary mb-1">Consent Form</h3>
+          <p className="text-sm text-txt-secondary mb-4">
             Configure the parent consent form section of the registration wizard.
           </p>
           <div className="space-y-4">
@@ -194,7 +194,7 @@ export function RegistrationConfigEditor({ organizationId }: { organizationId: s
               placeholder="Please download the consent form, sign it, and upload the signed copy."
             />
             <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">
+              <label className="mb-1 block text-sm font-medium text-txt-secondary">
                 Sample Consent Form (PDF)
               </label>
               {consentSampleUrl ? (
@@ -235,8 +235,8 @@ export function RegistrationConfigEditor({ organizationId }: { organizationId: s
         <CardBody>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Confirmation Declarations</h3>
-              <p className="text-sm text-neutral-500">
+              <h3 className="font-semibold text-txt-primary mb-1">Confirmation Declarations</h3>
+              <p className="text-sm text-txt-secondary">
                 Checkboxes the parent must agree to before submitting the registration.
               </p>
             </div>
@@ -276,12 +276,12 @@ export function RegistrationConfigEditor({ organizationId }: { organizationId: s
             placeholder="e.g. I confirm that I will be on my best behaviour"
             required
           />
-          <label className="flex items-center gap-2 text-sm text-neutral-700">
+          <label className="flex items-center gap-2 text-sm text-txt-secondary">
             <input
               type="checkbox"
               checked={declRequired}
               onChange={(e) => setDeclRequired(e.target.checked)}
-              className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+              className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
             />
             Required (must be checked to submit)
           </label>

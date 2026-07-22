@@ -345,8 +345,8 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
               </span>
             )}
             <div>
-              <div className="font-medium text-neutral-900">{item.name}</div>
-              <div className="text-xs text-neutral-500">
+              <div className="font-medium text-txt-primary">{item.name}</div>
+              <div className="text-xs text-txt-secondary">
                 {[age(item.dateOfBirth) ? `${age(item.dateOfBirth)}y` : null, item.gender].filter(Boolean).join(" · ") || "—"}
               </div>
             </div>
@@ -371,7 +371,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           return (
             <div className="space-y-0.5">
               <StatusBadge status={reg.status} labelOverrides={{ COMPLETED: "Checked Out" }} />
-              {reg.registrationNumber && <div className="text-xs text-neutral-500">{reg.registrationNumber}</div>}
+              {reg.registrationNumber && <div className="text-xs text-txt-secondary">{reg.registrationNumber}</div>}
             </div>
           );
         },
@@ -387,7 +387,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         accessor: (item) => {
           const reg = item.registrations[0];
           return (
-            <div className="text-sm text-neutral-600">
+            <div className="text-sm text-txt-secondary">
               {reg?.tribe ? <div>Tribe: {reg.tribe.name}</div> : null}
               {reg?.room ? <div>Room: {reg.room.name}</div> : null}
               {reg?.bed ? <div>Bed: {reg.bed.label}</div> : null}
@@ -472,12 +472,12 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         </Select>
         
         {/* View Mode Toggle */}
-        <div className="flex items-center rounded-lg bg-neutral-100 p-0.5 border border-neutral-200 shrink-0">
+        <div className="flex items-center rounded-lg bg-surface-raised p-0.5 border border-border-default shrink-0">
           <button
             onClick={() => setViewMode("list")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "list" ? "bg-white text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "list" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
             )}
           >
             List
@@ -486,7 +486,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             onClick={() => setViewMode("thumbnail")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "thumbnail" ? "bg-white text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "thumbnail" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
             )}
           >
             Thumbnail
@@ -495,7 +495,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             onClick={() => setViewMode("card")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "card" ? "bg-white text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "card" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
             )}
           >
             Card
@@ -568,7 +568,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           emptyDescription="Try adjusting your search or filters."
           footer={
             responseData?.nextCursor ? (
-              <div className="flex justify-center p-3 border-t border-neutral-200">
+              <div className="flex justify-center p-3 border-t border-border-default">
                 <Button
                   variant="secondary"
                   size="sm"
@@ -595,7 +595,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                 <div
                   key={item.id}
                   onClick={() => setProfileCamperId(item.id)}
-                  className="group relative cursor-pointer overflow-hidden rounded-xl border border-neutral-200 bg-white transition-all hover:scale-[1.02] hover:shadow-md"
+                  className="group relative cursor-pointer overflow-hidden rounded-xl border border-border-default bg-surface transition-all hover:scale-[1.02] hover:shadow-md"
                 >
                   {/* Select Checkbox */}
                   <div className="absolute top-2 left-2 z-10" onClick={(e) => e.stopPropagation()}>
@@ -607,15 +607,15 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                           prev.includes(item.id) ? prev.filter((x) => x !== item.id) : [...prev, item.id]
                         );
                       }}
-                      className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+                      className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500 cursor-pointer"
                     />
                   </div>
 
-                  <div className="aspect-square w-full bg-neutral-100 relative">
+                  <div className="aspect-square w-full bg-surface-raised relative">
                     {item.photoUrl ? (
                       <img src={item.photoUrl} alt={item.name} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-accent-50 text-accent-700 text-3xl font-semibold uppercase">
+                      <div className="flex h-full w-full items-center justify-center brand-tint text-3xl font-semibold uppercase">
                         {item.name?.[0]}
                       </div>
                     )}
@@ -626,8 +626,8 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                     )}
                   </div>
                   <div className="p-2.5 text-center">
-                    <div className="font-semibold text-sm text-neutral-800 truncate">{item.name}</div>
-                    <div className="text-[11px] text-neutral-500 truncate">
+                    <div className="font-semibold text-sm text-txt-primary truncate">{item.name}</div>
+                    <div className="text-[11px] text-txt-secondary truncate">
                       {[age(item.dateOfBirth) ? `${age(item.dateOfBirth)}y` : null, item.gender].filter(Boolean).join(" · ")}
                     </div>
                     {/* Admin Actions Footer inside thumbnail card */}
@@ -661,7 +661,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                   <div
                     key={item.id}
                     onClick={() => setProfileCamperId(item.id)}
-                    className="group relative cursor-pointer overflow-hidden rounded-xl border border-neutral-200 bg-white p-4 transition-all hover:shadow-md hover:border-accent-200"
+                    className="group relative cursor-pointer overflow-hidden rounded-xl border border-border-default bg-surface p-4 transition-all hover:shadow-md hover:border-accent-200"
                   >
                     {/* Select Checkbox */}
                     <div className="absolute top-4 right-4 z-10" onClick={(e) => e.stopPropagation()}>
@@ -673,23 +673,23 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                             prev.includes(item.id) ? prev.filter((x) => x !== item.id) : [...prev, item.id]
                           );
                         }}
-                        className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+                        className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500 cursor-pointer"
                       />
                     </div>
 
                     <div className="flex gap-4">
-                      <div className="h-16 w-16 shrink-0 bg-neutral-100 relative rounded-xl overflow-hidden">
+                      <div className="h-16 w-16 shrink-0 bg-surface-raised relative rounded-xl overflow-hidden">
                         {item.photoUrl ? (
                           <img src={item.photoUrl} alt={item.name} className="h-full w-full object-cover" />
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-accent-50 text-accent-700 text-xl font-bold uppercase">
+                          <div className="flex h-full w-full items-center justify-center brand-tint text-xl font-bold uppercase">
                             {item.name?.[0]}
                           </div>
                         )}
                       </div>
                       <div className="min-w-0 flex-1 pr-6">
-                        <h4 className="font-semibold text-neutral-800 text-base truncate">{item.name}</h4>
-                        <div className="text-xs text-neutral-500 mt-0.5">
+                        <h4 className="font-semibold text-txt-primary text-base truncate">{item.name}</h4>
+                        <div className="text-xs text-txt-secondary mt-0.5">
                           {[age(item.dateOfBirth) ? `${age(item.dateOfBirth)}y` : null, item.gender].filter(Boolean).join(" · ")}
                         </div>
                         {reg && (
@@ -705,30 +705,30 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-neutral-100 grid grid-cols-2 gap-2 text-xs text-neutral-600">
+                    <div className="mt-4 pt-3 border-t border-border-subtle grid grid-cols-2 gap-2 text-xs text-txt-secondary">
                       <div>
-                        <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Campus</span>
-                        <span className="font-medium text-neutral-700">{item.homeCampus?.name ?? "—"}</span>
+                        <span className="text-txt-muted block text-[10px] uppercase font-semibold">Campus</span>
+                        <span className="font-medium text-txt-primary">{item.homeCampus?.name ?? "—"}</span>
                       </div>
                       <div>
-                        <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Tribe</span>
-                        <span className="font-medium text-neutral-700">{reg?.tribe?.name ?? "—"}</span>
+                        <span className="text-txt-muted block text-[10px] uppercase font-semibold">Tribe</span>
+                        <span className="font-medium text-txt-primary">{reg?.tribe?.name ?? "—"}</span>
                       </div>
                       <div>
-                        <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Room / Bed</span>
-                        <span className="font-medium text-neutral-700 truncate block">
+                        <span className="text-txt-muted block text-[10px] uppercase font-semibold">Room / Bed</span>
+                        <span className="font-medium text-txt-primary truncate block">
                           {reg?.room ? `${reg.room.name}${reg.bed ? ` / ${reg.bed.label}` : ''}` : "—"}
                         </span>
                       </div>
                       <div>
-                        <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Reg Number</span>
-                        <span className="font-medium text-neutral-700 truncate block">{reg?.registrationNumber ?? "—"}</span>
+                        <span className="text-txt-muted block text-[10px] uppercase font-semibold">Reg Number</span>
+                        <span className="font-medium text-txt-primary truncate block">{reg?.registrationNumber ?? "—"}</span>
                       </div>
                     </div>
 
                     {/* Admin Actions Footer inside card */}
                     {canManageCampers && (
-                      <div className="mt-4 pt-3 border-t border-neutral-100 flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="mt-4 pt-3 border-t border-border-subtle flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         <Button
                           size="sm"
                           variant="secondary"
@@ -761,7 +761,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
 
       {/* Delete Confirmation Modal */}
       <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion" size="sm">
-        <p className="text-sm text-neutral-500">Are you sure you want to delete this camper? This action cannot be undone.</p>
+        <p className="text-sm text-txt-secondary">Are you sure you want to delete this camper? This action cannot be undone.</p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
           <Button variant="danger" onClick={handleDeleteProfile}>Delete Profile</Button>
@@ -775,7 +775,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         title={`Reject registrations for ${selectedIds.length} camper${selectedIds.length === 1 ? "" : "s"}`}
         size="sm"
       >
-        <p className="text-sm text-neutral-500">This reason will be shared with the parent for every selected camper&apos;s active registration.</p>
+        <p className="text-sm text-txt-secondary">This reason will be shared with the parent for every selected camper&apos;s active registration.</p>
         <Textarea
           className="mt-3"
           value={bulkReason}
@@ -807,7 +807,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         title={`Delete ${selectedIds.length} camper${selectedIds.length === 1 ? "" : "s"}`}
         size="sm"
       >
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-txt-secondary">
           These camper profiles and their live registrations will be moved to Trash. They can be restored within 60 days.
         </p>
         <div className="mt-5 flex justify-end gap-2">

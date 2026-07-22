@@ -135,7 +135,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
               <img
                 src={camper.photoUrl}
                 alt=""
-                className="h-16 w-16 rounded-full object-cover cursor-pointer border border-neutral-200 hover:scale-105 transition-transform"
+                className="h-16 w-16 rounded-full object-cover cursor-pointer border border-border-default hover:scale-105 transition-transform"
                 onClick={() => setIsPhotoOpen(true)}
                 title="Click to view/crop photo"
               />
@@ -168,7 +168,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Campus & Registration Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Campus & Registration Details
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -203,7 +203,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Personal Info Grid */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Personal Information
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -254,7 +254,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Contact Details Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Contact & Address Details
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -289,7 +289,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Medical / Emergency Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Medical & Emergency
           </h4>
           <div className="space-y-3 text-sm">
@@ -334,7 +334,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Education & Church Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Education & Church
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -361,7 +361,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Parent / Guardian Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Parent / Guardian Account
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -383,7 +383,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {formFields && formFields.length > 0 && (
         <Card>
           <CardBody>
-            <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5 flex items-center justify-between">
+            <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5 flex items-center justify-between">
               <span>Dynamic Wizard Form Responses</span>
               <span className="text-xs text-neutral-400 font-normal">{formFields.length} configured fields</span>
             </h4>
@@ -410,7 +410,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {camper.fieldValues && camper.fieldValues.length > 0 && (
         <Card>
           <CardBody>
-            <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+            <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
               Additional Custom Fields
             </h4>
             <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">

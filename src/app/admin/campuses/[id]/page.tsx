@@ -166,14 +166,14 @@ const CampusDetailsPage = () => {
           <button
             type="button"
             onClick={() => router.push("/admin/campuses")}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-neutral-600 border border-neutral-200/80 hover:bg-neutral-50 transition-colors"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-surface text-txt-secondary border border-border-default/80 hover:bg-surface-hover transition-colors"
           >
             <ChevronLeftIcon className="h-5 w-5 stroke-[2.5]" />
           </button>
 
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-neutral-600 border border-neutral-200/80 hover:bg-neutral-50 transition-colors"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-surface text-txt-secondary border border-border-default/80 hover:bg-surface-hover transition-colors"
           >
             <EllipsisVerticalIcon className="h-5 w-5" />
           </button>
@@ -187,21 +187,21 @@ const CampusDetailsPage = () => {
 
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">{campus.name}</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-txt-primary">{campus.name}</h1>
               <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
                 • Active
               </span>
             </div>
-            <p className="mt-0.5 text-xs font-semibold text-neutral-500">
+            <p className="mt-0.5 text-xs font-semibold text-txt-secondary">
               {campus.campusCode ? `${campus.campusCode}` : "No Code"}
-              <span className="mx-1.5 text-neutral-300">•</span>
+              <span className="mx-1.5 text-txt-muted">•</span>
               Order #{campus.displayOrder ?? 0}
             </p>
           </div>
         </div>
 
         {/* UNDERLINE TABS */}
-        <div className="border-b border-neutral-200/80">
+        <div className="border-b border-border-default/80">
           <nav className="flex space-x-6">
             {tabOptions.map((tab) => (
               <button
@@ -210,7 +210,7 @@ const CampusDetailsPage = () => {
                 className={`pb-3 text-xs font-semibold border-b-2 transition-all ${
                   activeTab === tab.id
                     ? "border-accent-600 text-accent-700 font-bold"
-                    : "border-transparent text-neutral-500 hover:text-neutral-900"
+                    : "border-transparent text-txt-secondary hover:text-txt-primary"
                 }`}
               >
                 {tab.label}
@@ -223,13 +223,13 @@ const CampusDetailsPage = () => {
         {activeTab === "overview" && (
           <div className="space-y-4">
             {/* CARD 1: CAMPUS INFORMATION */}
-            <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
+            <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-tint text-accent-600">
                     <MapPinIcon className="h-4 w-4" />
                   </div>
-                  <h3 className="text-xs font-bold text-neutral-900">Campus Information</h3>
+                  <h3 className="text-xs font-bold text-txt-primary">Campus Information</h3>
                 </div>
 
                 <a
@@ -243,22 +243,22 @@ const CampusDetailsPage = () => {
                 </a>
               </div>
 
-              <div className="flex items-center justify-between text-xs text-neutral-700 pt-1">
-                <p className="font-medium text-neutral-800 leading-relaxed pr-4">
+              <div className="flex items-center justify-between text-xs text-txt-secondary pt-1">
+                <p className="font-medium text-txt-primary leading-relaxed pr-4">
                   {formattedAddress || "No address specified."}
                 </p>
-                <ChevronRightIcon className="h-4 w-4 text-neutral-400 shrink-0" />
+                <ChevronRightIcon className="h-4 w-4 text-txt-muted shrink-0" />
               </div>
             </div>
 
             {/* CARD 2: SIGNUP LINK */}
-            <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
+            <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-tint text-accent-600">
                     <LinkIcon className="h-4 w-4" />
                   </div>
-                  <h3 className="text-xs font-bold text-neutral-900">Signup Link</h3>
+                  <h3 className="text-xs font-bold text-txt-primary">Signup Link</h3>
                 </div>
 
                 <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
@@ -266,7 +266,7 @@ const CampusDetailsPage = () => {
                 </span>
               </div>
 
-              <p className="text-xs text-neutral-500 font-mono truncate bg-neutral-50 p-2 rounded-xl">
+              <p className="text-xs text-txt-secondary font-mono truncate bg-surface-raised p-2 rounded-xl">
                 {signupUrl}
               </p>
 
@@ -274,7 +274,7 @@ const CampusDetailsPage = () => {
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50 text-accent-700 font-semibold text-xs hover:bg-accent-100 transition-colors"
+                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl brand-tint font-semibold text-xs hover:bg-accent-100 transition-colors"
                 >
                   <ClipboardDocumentIcon className="h-4 w-4" />
                   {copiedLink ? "Copied!" : "Copy Link"}
@@ -283,7 +283,7 @@ const CampusDetailsPage = () => {
                 <button
                   type="button"
                   onClick={() => setActiveTab("registrations")}
-                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50 text-accent-700 font-semibold text-xs hover:bg-accent-100 transition-colors"
+                  className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl brand-tint font-semibold text-xs hover:bg-accent-100 transition-colors"
                 >
                   <ChartBarIcon className="h-4 w-4" />
                   View Link Analytics
@@ -292,13 +292,13 @@ const CampusDetailsPage = () => {
             </div>
 
             {/* CARD 3: REGISTRATION CAPACITY */}
-            <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
+            <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-tint text-accent-600">
                     <ChartBarIcon className="h-4 w-4" />
                   </div>
-                  <h3 className="text-xs font-bold text-neutral-900">Registration Capacity</h3>
+                  <h3 className="text-xs font-bold text-txt-primary">Registration Capacity</h3>
                 </div>
 
                 <button
@@ -311,8 +311,8 @@ const CampusDetailsPage = () => {
               </div>
 
               <div className="flex items-center justify-between pt-1">
-                <span className="text-xl font-extrabold text-neutral-900">
-                  {stats?.approvedCount ?? 0} <span className="text-neutral-400 font-normal text-base">/ {stats?.quota && stats.quota > 0 ? stats.quota : "∞"}</span>
+                <span className="text-xl font-extrabold text-txt-primary">
+                  {stats?.approvedCount ?? 0} <span className="text-txt-muted font-normal text-base">/ {stats?.quota && stats.quota > 0 ? stats.quota : "∞"}</span>
                 </span>
 
                 {stats?.quota && stats.quota > 0 ? (
@@ -325,7 +325,7 @@ const CampusDetailsPage = () => {
                 ) : null}
               </div>
 
-              <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
+              <div className="h-2.5 w-full rounded-full bg-surface-raised overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all duration-500",
@@ -335,7 +335,7 @@ const CampusDetailsPage = () => {
                 />
               </div>
 
-              <p className="text-xs font-medium text-neutral-500">
+              <p className="text-xs font-medium text-txt-secondary">
                 {stats?.quota && stats.quota > 0
                   ? `${Math.max(0, stats.quota - (stats?.approvedCount ?? 0))} slots remaining`
                   : "Unlimited registration quota"}
@@ -343,24 +343,24 @@ const CampusDetailsPage = () => {
             </div>
 
             {/* CARD 4: CAMPUS REPRESENTATIVES */}
-            <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3.5">
+            <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-tint text-accent-600">
                     <UserGroupIcon className="h-4 w-4" />
                   </div>
-                  <h3 className="text-xs font-bold text-neutral-900">Campus Representatives</h3>
+                  <h3 className="text-xs font-bold text-txt-primary">Campus Representatives</h3>
                 </div>
 
-                <span className="text-xs font-semibold text-neutral-500 flex items-center gap-1">
-                  {repsList.length} <ChevronRightIcon className="h-3.5 w-3.5 text-neutral-400" />
+                <span className="text-xs font-semibold text-txt-secondary flex items-center gap-1">
+                  {repsList.length} <ChevronRightIcon className="h-3.5 w-3.5 text-txt-muted" />
                 </span>
               </div>
 
               {repsList.length === 0 ? (
-                <p className="text-xs text-neutral-400 py-2">No representatives assigned.</p>
+                <p className="text-xs text-txt-muted py-2">No representatives assigned.</p>
               ) : (
-                <div className="space-y-2 divide-y divide-neutral-100">
+                <div className="space-y-2 divide-y divide-border-subtle">
                   {repsList.map((rep: any) => (
                     <div key={rep.id} className="flex items-center justify-between pt-2 first:pt-0">
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -368,24 +368,24 @@ const CampusDetailsPage = () => {
                           {rep.firstName ? rep.firstName[0] : rep.email[0]}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-neutral-900 truncate">
+                          <p className="text-xs font-bold text-txt-primary truncate">
                             {[rep.firstName, rep.lastName].filter(Boolean).join(" ") || rep.email}
                           </p>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="rounded-full bg-accent-50 px-2.5 py-0.5 text-[10px] font-semibold text-accent-700">
+                        <span className="rounded-full brand-tint px-2.5 py-0.5 text-[10px] font-semibold ">
                           Campus Rep
                         </span>
-                        <ChevronRightIcon className="h-4 w-4 text-neutral-400" />
+                        <ChevronRightIcon className="h-4 w-4 text-txt-muted" />
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              <div className="pt-2 border-t border-neutral-100 text-center">
+              <div className="pt-2 border-t border-border-subtle text-center">
                 <button
                   type="button"
                   onClick={() => router.push("/admin/campuses")}
@@ -402,7 +402,7 @@ const CampusDetailsPage = () => {
               <button
                 type="button"
                 onClick={() => router.push("/admin/campuses")}
-                className="flex-1 inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-accent-50 text-accent-700 hover:bg-accent-100 font-bold text-xs transition-all active:scale-98"
+                className="flex-1 inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl brand-tint hover:bg-accent-100 font-bold text-xs transition-all active:scale-98"
               >
                 <PencilIcon className="h-4 w-4" />
                 Edit Campus
@@ -411,7 +411,7 @@ const CampusDetailsPage = () => {
               <button
                 type="button"
                 onClick={() => setIsDeleteModalOpen(true)}
-                className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-2xl bg-danger-50 text-danger-600 hover:bg-danger-100 transition-all"
+                className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-2xl status-danger text-danger-600 hover:bg-danger-100 transition-all"
                 title="Delete Campus"
               >
                 <TrashIcon className="h-5 w-5" />
@@ -422,23 +422,23 @@ const CampusDetailsPage = () => {
 
         {/* TAB 2: REPRESENTATIVES */}
         {activeTab === "representatives" && (
-          <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-4">
-            <h3 className="text-xs font-bold text-neutral-900 border-b border-neutral-100 pb-2">
+          <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-4">
+            <h3 className="text-xs font-bold text-txt-primary border-b border-border-subtle pb-2">
               All Assigned Representatives ({repsList.length})
             </h3>
             {repsList.length === 0 ? (
-              <p className="text-xs text-neutral-400">No representatives assigned.</p>
+              <p className="text-xs text-txt-muted">No representatives assigned.</p>
             ) : (
               <div className="space-y-3">
                 {repsList.map((rep: any) => (
-                  <div key={rep.id} className="flex items-center justify-between p-3 rounded-2xl border border-neutral-100 bg-neutral-50/50">
+                  <div key={rep.id} className="flex items-center justify-between p-3 rounded-2xl border border-border-subtle bg-surface-raised/50">
                     <div>
-                      <p className="text-xs font-bold text-neutral-900">
+                      <p className="text-xs font-bold text-txt-primary">
                         {[rep.firstName, rep.lastName].filter(Boolean).join(" ") || rep.email}
                       </p>
-                      <p className="text-[11px] text-neutral-500">{rep.email}</p>
+                      <p className="text-[11px] text-txt-secondary">{rep.email}</p>
                     </div>
-                    <span className="rounded-full bg-accent-50 px-2.5 py-0.5 text-[10px] font-semibold text-accent-700">
+                    <span className="rounded-full brand-tint px-2.5 py-0.5 text-[10px] font-semibold ">
                       Campus Rep
                     </span>
                   </div>
@@ -452,8 +452,8 @@ const CampusDetailsPage = () => {
         {activeTab === "registrations" && (
           <div className="space-y-4">
             {stats?.trend && (
-              <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
-                <h3 className="text-xs font-bold text-neutral-900">Registrations Trend</h3>
+              <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
+                <h3 className="text-xs font-bold text-txt-primary">Registrations Trend</h3>
                 <LineChart data={stats.trend.map((item: any) => item.count)} color={accentColor} />
               </div>
             )}
@@ -462,11 +462,11 @@ const CampusDetailsPage = () => {
 
         {/* TAB 4: SETTINGS */}
         {activeTab === "settings" && (
-          <div className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-2xs space-y-3">
-            <h3 className="text-xs font-bold text-neutral-900 border-b border-neutral-100 pb-2">
+          <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
+            <h3 className="text-xs font-bold text-txt-primary border-b border-border-subtle pb-2">
               Campus Operations & Settings
             </h3>
-            <p className="text-xs text-neutral-600">
+            <p className="text-xs text-txt-secondary">
               To update campus metadata, code, display order, or delete this campus, return to the main campuses overview dashboard.
             </p>
             <Button onClick={() => router.push("/admin/campuses")}>
@@ -478,7 +478,7 @@ const CampusDetailsPage = () => {
 
       {/* QUOTA / CAPACITY MODAL */}
       <Dialog open={isQuotaModalOpen} onClose={() => setIsQuotaModalOpen(false)} title="Edit Registration Capacity" size="sm">
-        {quotaError && <div className="mb-4 rounded-xl bg-danger-50 p-3 text-xs text-danger-700">{quotaError}</div>}
+        {quotaError && <div className="mb-4 rounded-xl status-danger p-3 text-xs ">{quotaError}</div>}
         <div className="space-y-4">
           <Input
             label="Registration Capacity / Quota (0 = Unlimited)"
@@ -488,11 +488,11 @@ const CampusDetailsPage = () => {
             onChange={(e) => setQuotaFormData({ ...quotaFormData, quota: parseInt(e.target.value, 10) || 0 })}
           />
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-txt-secondary mb-1">
               When Capacity Reached
             </label>
             <select
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-800 bg-white focus:ring-2 focus:ring-accent-500"
+              className="w-full border border-border-default rounded-xl px-3 py-2 text-xs font-medium text-txt-primary bg-surface focus:ring-2 focus:ring-accent-500"
               value={quotaFormData.quotaFullBehavior}
               onChange={(e) => setQuotaFormData({ ...quotaFormData, quotaFullBehavior: e.target.value as "CLOSE" | "WAITLIST" })}
             >
@@ -501,7 +501,7 @@ const CampusDetailsPage = () => {
             </select>
           </div>
         </div>
-        <div className="mt-5 flex justify-end gap-2 border-t border-neutral-100 pt-3">
+        <div className="mt-5 flex justify-end gap-2 border-t border-border-subtle pt-3">
           <Button variant="secondary" onClick={() => setIsQuotaModalOpen(false)}>
             Cancel
           </Button>
@@ -513,7 +513,7 @@ const CampusDetailsPage = () => {
 
       {/* DELETE DIALOG */}
       <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Delete Campus" size="sm">
-        <p className="text-xs text-neutral-600">
+        <p className="text-xs text-txt-secondary">
           Are you sure you want to delete <span className="font-bold">{campus.name}</span>? This action cannot be undone.
         </p>
         <div className="mt-5 flex justify-end gap-2">

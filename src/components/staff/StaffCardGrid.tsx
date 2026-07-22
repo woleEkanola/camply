@@ -29,7 +29,7 @@ export function StaffCardGrid({
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-48 animate-pulse rounded-2xl bg-neutral-100" />
+          <div key={i} className="h-48 animate-pulse rounded-2xl bg-surface-raised" />
         ))}
       </div>
     );
@@ -37,7 +37,7 @@ export function StaffCardGrid({
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-neutral-300 bg-white p-10 text-center">
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border-default bg-surface p-10 text-center">
         <h3 className="text-sm font-semibold text-neutral-900">{emptyTitle}</h3>
         <p className="mt-1 text-xs text-neutral-500">{emptyDescription}</p>
       </div>

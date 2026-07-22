@@ -92,7 +92,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
             onChange={(e) => onSearchChange(e.target.value)}
             onClear={() => onSearchChange("")}
             placeholder="Search campuses..."
-            className="border-0 bg-neutral-100/80 focus:bg-white rounded-2xl py-2.5"
+            className="border-0 bg-surface-raised/80 focus:bg-white rounded-2xl py-2.5"
           />
         </div>
 
@@ -101,8 +101,8 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
           <button
             type="button"
             onClick={() => setIsFilterMenuOpen((prev) => !prev)}
-            className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl border border-neutral-200/80 bg-white text-neutral-600 hover:bg-neutral-50 transition-colors ${
-              statusFilter !== "ALL" ? "border-accent-500 text-accent-600 bg-accent-50/50" : ""
+            className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl border border-border-default/80 bg-surface text-txt-secondary hover:bg-surface-hover transition-colors ${
+              statusFilter !== "ALL" ? "border-accent-500 text-accent-600 brand-tint/50" : ""
             }`}
             title="Filter campuses"
           >
@@ -110,8 +110,8 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
           </button>
 
           {isFilterMenuOpen && (
-            <div className="absolute right-0 z-30 mt-1.5 w-44 rounded-2xl border border-neutral-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100">
-              <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+            <div className="absolute right-0 z-30 mt-1.5 w-44 rounded-2xl border border-border-default bg-surface p-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100">
+              <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-txt-muted">
                 Filter Status
               </div>
               {(["ALL", "ACTIVE", "INACTIVE", "FULL", "CLOSED"] as StatusFilterOption[]).map((opt) => (
@@ -124,8 +124,8 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
                   }}
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold ${
                     statusFilter === opt
-                      ? "bg-accent-50 text-accent-700"
-                      : "text-neutral-700 hover:bg-neutral-50"
+                      ? "brand-tint "
+                      : "text-txt-secondary hover:bg-surface-hover"
                   }`}
                 >
                   <span>{opt === "ALL" ? "All Statuses" : opt}</span>
@@ -141,9 +141,9 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
             <button
               type="button"
               onClick={() => setIsColumnsMenuOpen((prev) => !prev)}
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-2xl border border-neutral-200/80 bg-white px-3.5 text-xs font-bold text-neutral-700 hover:bg-neutral-50 transition-colors"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-2xl border border-border-default/80 bg-surface px-3.5 text-xs font-bold text-txt-secondary hover:bg-surface-hover transition-colors"
             >
-              <TableCellsIcon className="h-4 w-4 text-neutral-500" />
+              <TableCellsIcon className="h-4 w-4 text-txt-secondary" />
               <span>Columns</span>
               <span className="ml-1 rounded-full bg-accent-100 px-1.5 py-0.5 text-[10px] font-bold text-accent-700">
                 {visibleColumns.length}
@@ -151,9 +151,9 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
             </button>
 
             {isColumnsMenuOpen && (
-              <div className="absolute right-0 z-30 mt-1.5 w-64 rounded-2xl border border-neutral-200 bg-white p-3 shadow-xl ring-1 ring-black/5 space-y-2">
-                <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
-                  <span className="text-xs font-bold text-neutral-900">Configure Columns</span>
+              <div className="absolute right-0 z-30 mt-1.5 w-64 rounded-2xl border border-border-default bg-surface p-3 shadow-xl ring-1 ring-black/5 space-y-2">
+                <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+                  <span className="text-xs font-bold text-txt-primary">Configure Columns</span>
                   {onResetColumns && (
                     <button
                       type="button"
@@ -182,13 +182,13 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
                   ].map((col) => (
                     <label
                       key={col.key}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-neutral-50 cursor-pointer text-neutral-700 font-medium"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-hover cursor-pointer text-txt-secondary font-medium"
                     >
                       <input
                         type="checkbox"
                         checked={visibleColumns.includes(col.key)}
                         onChange={() => onToggleColumn(col.key)}
-                        className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                        className="h-3.5 w-3.5 rounded border-input-border text-accent-600 focus:ring-accent-500"
                       />
                       <span>{col.label}</span>
                     </label>
@@ -201,15 +201,15 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
 
         {/* View Mode Toggle */}
         {onViewModeChange && (
-          <div className="flex shrink-0 rounded-2xl border border-neutral-200/80 bg-neutral-50 p-0.5">
+          <div className="flex shrink-0 rounded-2xl border border-border-default/80 bg-surface-raised p-0.5">
             <button
               type="button"
               onClick={() => onViewModeChange("grid")}
               className={cn(
                 "inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl transition-colors",
                 viewMode === "grid"
-                  ? "bg-white text-accent-600 shadow-sm"
-                  : "text-neutral-400 hover:text-neutral-600"
+                  ? "bg-surface text-accent-600 shadow-sm"
+                  : "text-txt-muted hover:text-txt-secondary"
               )}
               title="Card view"
             >
@@ -221,8 +221,8 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
               className={cn(
                 "inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl transition-colors",
                 viewMode === "table"
-                  ? "bg-white text-accent-600 shadow-sm"
-                  : "text-neutral-400 hover:text-neutral-600"
+                  ? "bg-surface text-accent-600 shadow-sm"
+                  : "text-txt-muted hover:text-txt-secondary"
               )}
               title="Table view"
             >
@@ -245,7 +245,7 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
       </div>
 
       {/* SUB-HEADER ROW (Count on Left, Sort on Right) */}
-      <div className="flex items-center justify-between px-1 text-xs font-medium text-neutral-500">
+      <div className="flex items-center justify-between px-1 text-xs font-medium text-txt-secondary">
         <div>
           {filteredCount === totalCount ? (
             <span>{totalCount} campuses</span>
@@ -259,15 +259,15 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
           <button
             type="button"
             onClick={() => setIsSortMenuOpen((prev) => !prev)}
-            className="inline-flex items-center gap-1 font-semibold text-neutral-700 hover:text-accent-700 transition-colors"
+            className="inline-flex items-center gap-1 font-semibold text-txt-secondary hover:text-accent-700 transition-colors"
           >
             <span>Sort: {getSortLabel(sortBy)}</span>
-            <ChevronDownIcon className="h-3.5 w-3.5 text-neutral-400" />
+            <ChevronDownIcon className="h-3.5 w-3.5 text-txt-muted" />
           </button>
 
           {isSortMenuOpen && (
-            <div className="absolute right-0 z-30 mt-1.5 w-48 rounded-2xl border border-neutral-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100">
-              <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+            <div className="absolute right-0 z-30 mt-1.5 w-48 rounded-2xl border border-border-default bg-surface p-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100">
+              <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-txt-muted">
                 Sort Options
               </div>
               {[
@@ -286,8 +286,8 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
                   }}
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold ${
                     sortBy === opt.id
-                      ? "bg-accent-50 text-accent-700"
-                      : "text-neutral-700 hover:bg-neutral-50"
+                      ? "brand-tint "
+                      : "text-txt-secondary hover:bg-surface-hover"
                   }`}
                 >
                   <span>{opt.label}</span>
