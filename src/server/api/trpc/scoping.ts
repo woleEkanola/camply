@@ -3,10 +3,11 @@ import { TRPCError } from "@trpc/server";
 const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
 /** Throws unless the caller is an org admin (SUPER_ADMIN/OWNER/ADMIN) for `organizationId`. */
-export async function assertOrgAdmin(ctx: { session: any }, organizationId: string) {
+export async function assertOrgAdmin(ctx: { session: any }, organizationId?: string) {
   const user = ctx.session?.user;
   if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (ORG_ADMIN_ROLES.includes(user.role) && user.organizationId === organizationId) return user;
+  if (user.role === "SUPER_ADMIN") return user;
+  if (organizationId && ORG_ADMIN_ROLES.includes(user.role) && user.organizationId === organizationId) return user;
   throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized for this organization" });
 }
 

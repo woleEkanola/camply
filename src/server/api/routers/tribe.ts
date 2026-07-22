@@ -137,6 +137,45 @@ export const tribeRouter = createTRPCRouter({
       return tribeEngine.suggestTribe(ctx.prisma, input.registrationId);
     }),
 
+  recommend: protectedProcedure
+    .input(z.object({ registrationId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      return tribeEngine.recommendTribe(input.registrationId, currentUser.id);
+    }),
+
+  acceptRecommendation: protectedProcedure
+    .input(z.object({ registrationId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      return tribeEngine.acceptRecommendation(input.registrationId, currentUser.id);
+    }),
+
+  overrideRecommendation: protectedProcedure
+    .input(z.object({ registrationId: z.string(), tribeId: z.string(), reason: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      return tribeEngine.overrideRecommendation(input.registrationId, input.tribeId, currentUser.id, input.reason);
+    }),
+
   assign: protectedProcedure
     .input(z.object({ registrationId: z.string(), tribeId: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -165,6 +204,22 @@ export const tribeRouter = createTRPCRouter({
       });
       await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
       return tribeEngine.clearTribeAssignment({ registrationId: input.registrationId, actorId: currentUser.id });
+    }),
+
+  bulkSuggest: protectedProcedure
+    .input(z.object({ campId: z.string(), registrationIds: z.array(z.string()).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      await assertCanManageCamp(ctx, input.campId);
+      return tribeEngine.bulkSuggestTribes({ campId: input.campId, registrationIds: input.registrationIds, actorId: currentUser!.id });
+    }),
+
+  bulkApply: protectedProcedure
+    .input(z.object({ campId: z.string(), registrationIds: z.array(z.string()).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      await assertCanManageCamp(ctx, input.campId);
+      return tribeEngine.bulkApplySuggestedTribes({ campId: input.campId, registrationIds: input.registrationIds, actorId: currentUser!.id });
     }),
 
   bulkAutoAssign: protectedProcedure

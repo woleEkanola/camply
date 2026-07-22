@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Table, type Column } from "@/components/ui/Table";
 import { Dialog } from "@/components/ui/Dialog";
+import { Badge } from "@/components/ui/Badge";
 import { 
   BuildingOfficeIcon, 
   UsersIcon, 
@@ -52,6 +53,16 @@ export default function SuperAdminDashboard() {
   
   const [selectedUserForDelete, setSelectedUserForDelete] = useState<any>(null);
   const [isUserDeleteOpen, setIsUserDeleteOpen] = useState(false);
+
+  // Trash states
+  const [trashOrgFilter, setTrashOrgFilter] = useState("");
+  const [trashTypeFilter, setTrashTypeFilter] = useState("");
+  const [trashSearchQuery, setTrashSearchQuery] = useState("");
+  const [trashSelectedIds, setTrashSelectedIds] = useState<string[]>([]);
+  const [restoreTarget, setRestoreTarget] = useState<any>(null);
+  const [purgeTarget, setPurgeTarget] = useState<any>(null);
+  const [purgeConfirmText, setPurgeConfirmText] = useState("");
+  const [isEmptyTrashOpen, setIsEmptyTrashOpen] = useState(false);
 
   const [testEmail, setTestEmail] = useState("");
   const [error, setError] = useState("");
@@ -97,6 +108,14 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     if (usersError) setError(usersError.message);
   }, [usersError]);
+
+  const { data: trashItems, refetch: refetchTrash, isLoading: isTrashLoading, error: trashError } = api.trash.list.useQuery(
+    { organizationId: trashOrgFilter || undefined },
+    { enabled: status === "authenticated" && session?.user?.role === "SUPER_ADMIN" }
+  );
+  useEffect(() => {
+    if (trashError) setError(trashError.message);
+  }, [trashError]);
 
   // Mutations
   const createOrgMutation = api.organization.create.useMutation({
@@ -161,13 +180,100 @@ export default function SuperAdminDashboard() {
 
   const deleteUserMutation = api.user.delete.useMutation({
     onSuccess: () => {
-      setSuccess("User deleted successfully");
+      setSuccess("User soft-deleted successfully and moved to Trash.");
       setIsUserDeleteOpen(false);
       setSelectedUserForDelete(null);
       refetchAllUsers();
+      refetchTrash();
       refetchMetrics();
     },
     onError: (error) => setError(error.message)
+  });
+
+  const restoreTrashMutation = api.trash.restore.useMutation({
+    onSuccess: () => {
+      setSuccess("Item restored successfully");
+      setRestoreTarget(null);
+      setTrashSelectedIds([]);
+      refetchTrash();
+      refetchAllUsers();
+      refetchMetrics();
+      setTimeout(() => setSuccess(""), 5000);
+    },
+    onError: (err) => {
+      setError(`Error restoring item: ${err.message}`);
+      setRestoreTarget(null);
+    },
+  });
+
+  const purgeTrashMutation = api.trash.purgeNow.useMutation({
+    onSuccess: () => {
+      setSuccess("Item permanently deleted");
+      setPurgeTarget(null);
+      setPurgeConfirmText("");
+      setTrashSelectedIds([]);
+      refetchTrash();
+      refetchAllUsers();
+      refetchMetrics();
+      setTimeout(() => setSuccess(""), 5000);
+    },
+    onError: (err) => {
+      setError(`Error permanently deleting item: ${err.message}`);
+      setPurgeTarget(null);
+      setPurgeConfirmText("");
+    },
+  });
+
+  const bulkRestoreTrashMutation = api.trash.bulkRestore.useMutation({
+    onSuccess: (result) => {
+      if (result.failed.length > 0) {
+        setError(`${result.restored} restored, ${result.failed.length} failed: ${result.failed[0].message}`);
+      } else {
+        setSuccess("Selected items restored successfully");
+        setTimeout(() => setSuccess(""), 5000);
+      }
+      setTrashSelectedIds([]);
+      refetchTrash();
+      refetchAllUsers();
+      refetchMetrics();
+    },
+    onError: (err) => setError(`Error restoring items: ${err.message}`),
+  });
+
+  const bulkPurgeTrashMutation = api.trash.bulkPurgeNow.useMutation({
+    onSuccess: (result) => {
+      if (result.failed.length > 0) {
+        setError(`${result.purged} purged, ${result.failed.length} failed: ${result.failed[0].message}`);
+      } else {
+        setSuccess("Selected items permanently deleted");
+        setTimeout(() => setSuccess(""), 5000);
+      }
+      setTrashSelectedIds([]);
+      refetchTrash();
+      refetchAllUsers();
+      refetchMetrics();
+    },
+    onError: (err) => setError(`Error deleting items: ${err.message}`),
+  });
+
+  const emptyTrashMutation = api.trash.emptyTrash.useMutation({
+    onSuccess: (result) => {
+      if (result.failed.length > 0) {
+        setError(`${result.purged} item(s) purged, but ${result.failed.length} could not be: ${result.failed[0].message}`);
+      } else {
+        setSuccess("Trash emptied successfully");
+        setTimeout(() => setSuccess(""), 5000);
+      }
+      setIsEmptyTrashOpen(false);
+      setTrashSelectedIds([]);
+      refetchTrash();
+      refetchAllUsers();
+      refetchMetrics();
+    },
+    onError: (err) => {
+      setError(`Error emptying trash: ${err.message}`);
+      setIsEmptyTrashOpen(false);
+    },
   });
 
   const sendTestMutation = api.notification.sendTestEmail.useMutation({
@@ -381,6 +487,31 @@ export default function SuperAdminDashboard() {
     },
   ];
 
+  const filteredTrash = (trashItems as any[])?.filter((item: any) => {
+    const labelMatch = (item.label ?? "").toLowerCase().includes(trashSearchQuery.toLowerCase());
+    const typeDisplayNameMatch = (item.displayName ?? "").toLowerCase().includes(trashSearchQuery.toLowerCase());
+    const searchMatch = labelMatch || typeDisplayNameMatch;
+    const typeMatch = trashTypeFilter ? item.type === trashTypeFilter : true;
+    return searchMatch && typeMatch;
+  }) ?? [];
+
+  const trashColumns: Column<any>[] = [
+    { header: "Type", accessor: (row) => <Badge tone="neutral">{row.displayName}</Badge> },
+    { header: "Item Label", accessor: "label", className: "font-semibold text-neutral-900" },
+    { header: "Deleted At", accessor: (row) => new Date(row.deletedAt).toLocaleString(), className: "text-sm text-txt-secondary" },
+    {
+      header: "Retention",
+      accessor: (row) =>
+        row.daysRemaining === 0 ? (
+          <Badge tone="danger">Due for purge</Badge>
+        ) : (
+          <span className="text-xs font-semibold text-neutral-600">
+            {row.daysRemaining} day{row.daysRemaining === 1 ? "" : "s"} left
+          </span>
+        ),
+    },
+  ];
+
   return (
     <AppShell area="super-admin">
       <PageHeader 
@@ -425,6 +556,17 @@ export default function SuperAdminDashboard() {
         >
           <UsersIcon className="h-5 w-5" />
           User Directory
+        </button>
+        <button
+          onClick={() => setActiveTab("trash")}
+          className={`flex items-center gap-2 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
+            activeTab === "trash"
+              ? "border-accent-600 text-accent-700"
+              : "border-transparent text-txt-muted hover:text-txt-primary"
+          }`}
+        >
+          <TrashIcon className="h-5 w-5" />
+          Trash Can {trashItems && trashItems.length > 0 ? `(${trashItems.length})` : ""}
         </button>
         <button
           onClick={() => setActiveTab("tools")}
@@ -763,6 +905,142 @@ export default function SuperAdminDashboard() {
         </div>
       )}
 
+      {activeTab === "trash" && (
+        <div className="space-y-6">
+          <Card>
+            <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Input
+                label="Search Trash"
+                value={trashSearchQuery}
+                onChange={(e) => setTrashSearchQuery(e.target.value)}
+                placeholder="Search by label or type..."
+              />
+              <Select
+                label="Filter by Organization"
+                value={trashOrgFilter}
+                onChange={(e) => setTrashOrgFilter(e.target.value)}
+              >
+                <option value="">All Organizations (System-wide)</option>
+                {organizations?.map((org: any) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </Select>
+              <Select
+                label="Filter by Entity Type"
+                value={trashTypeFilter}
+                onChange={(e) => setTrashTypeFilter(e.target.value)}
+              >
+                <option value="">All Entity Types</option>
+                <option value="user">User Account</option>
+                <option value="camper">Camper</option>
+                <option value="registration">Registration</option>
+                <option value="campus">Campus</option>
+                <option value="camp">Camp</option>
+                <option value="venue">Venue</option>
+                <option value="staffProfile">Staff Profile</option>
+                <option value="department">Department</option>
+                <option value="tribe">Tribe</option>
+                <option value="hostel">Hostel</option>
+                <option value="room">Room</option>
+                <option value="bed">Bed</option>
+              </Select>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-neutral-900">System-wide Trash Can</h2>
+                  <p className="text-xs text-neutral-500">Soft-deleted items across all tenants. Items are automatically purged after 60 days.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-neutral-500 font-semibold bg-surface-raised px-2 py-1 rounded">
+                    Showing {filteredTrash.length} of {trashItems?.length ?? 0} items
+                  </span>
+                  {trashItems && trashItems.length > 0 && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => setIsEmptyTrashOpen(true)}
+                    >
+                      Empty Trash
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {trashSelectedIds.length > 0 && (
+                <div className="mb-3 flex items-center gap-2 rounded-md border border-accent-200 bg-accent-50 px-3 py-2">
+                  <Badge tone="info">{trashSelectedIds.length} selected</Badge>
+                  <Button
+                    size="sm"
+                    loading={bulkRestoreTrashMutation.status === "pending"}
+                    onClick={() => {
+                      const items = trashSelectedIds.map(id => {
+                        const [type, item_id] = id.split(":");
+                        return { type: type as any, id: item_id };
+                      });
+                      bulkRestoreTrashMutation.mutate({ organizationId: trashOrgFilter || undefined, items });
+                    }}
+                  >
+                    Restore Selected
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    loading={bulkPurgeTrashMutation.status === "pending"}
+                    onClick={() => {
+                      if (window.confirm("Permanently delete selected items? This action cannot be undone.")) {
+                        const items = trashSelectedIds.map(id => {
+                          const [type, item_id] = id.split(":");
+                          return { type: type as any, id: item_id };
+                        });
+                        bulkPurgeTrashMutation.mutate({ organizationId: trashOrgFilter || undefined, items });
+                      }
+                    }}
+                  >
+                    Delete Selected Forever
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setTrashSelectedIds([])}>Clear Selection</Button>
+                </div>
+              )}
+
+              <Table
+                mode="local"
+                columns={trashColumns}
+                data={filteredTrash}
+                rowKey={(row: any) => `${row.type}:${row.id}`}
+                isLoading={isTrashLoading}
+                emptyTitle="Trash is empty"
+                emptyDescription="No soft-deleted records or user accounts match criteria."
+                selectable
+                selectedIds={trashSelectedIds}
+                onSelectionChange={setTrashSelectedIds}
+                actions={(row: any) => (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setRestoreTarget(row)}
+                    >
+                      Restore
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => setPurgeTarget(row)}
+                    >
+                      Delete Forever
+                    </Button>
+                  </div>
+                )}
+              />
+            </CardBody>
+          </Card>
+        </div>
+      )}
+
       {/* MODALS */}
 
       {/* Edit Organization Dialog */}
@@ -983,6 +1261,85 @@ export default function SuperAdminDashboard() {
               Delete User
             </Button>
           </div>
+        </div>
+      </Dialog>
+
+      {/* Restore Trash Item Dialog */}
+      <Dialog open={!!restoreTarget} onClose={() => setRestoreTarget(null)} title="Restore item" size="sm">
+        <p className="text-sm text-neutral-500">
+          Restore &quot;{restoreTarget?.label}&quot;? It will reappear in its normal list and be fully operational.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setRestoreTarget(null)}>Cancel</Button>
+          <Button
+            loading={restoreTrashMutation.status === "pending"}
+            onClick={() =>
+              restoreTarget &&
+              restoreTrashMutation.mutate({ organizationId: trashOrgFilter || undefined, type: restoreTarget.type as any, id: restoreTarget.id })
+            }
+          >
+            Restore Item
+          </Button>
+        </div>
+      </Dialog>
+
+      {/* Purge Trash Item Dialog */}
+      <Dialog
+        open={!!purgeTarget}
+        onClose={() => { setPurgeTarget(null); setPurgeConfirmText(""); }}
+        title="Permanently delete item"
+        size="sm"
+      >
+        <p className="text-sm text-neutral-500">
+          This permanently deletes &quot;{purgeTarget?.label}&quot; right now. This action cannot be undone — type{" "}
+          <span className="font-mono font-semibold">delete</span> to confirm.
+        </p>
+        <input
+          type="text"
+          className="mt-3 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
+          value={purgeConfirmText}
+          onChange={(e) => setPurgeConfirmText(e.target.value)}
+          placeholder="delete"
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => { setPurgeTarget(null); setPurgeConfirmText(""); }}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={purgeConfirmText.toLowerCase() !== "delete"}
+            loading={purgeTrashMutation.status === "pending"}
+            onClick={() =>
+              purgeTarget &&
+              purgeTrashMutation.mutate({ organizationId: trashOrgFilter || undefined, type: purgeTarget.type as any, id: purgeTarget.id })
+            }
+          >
+            Delete Forever
+          </Button>
+        </div>
+      </Dialog>
+
+      {/* Empty Trash Dialog */}
+      <Dialog
+        open={isEmptyTrashOpen}
+        onClose={() => setIsEmptyTrashOpen(false)}
+        title="Empty Trash Can"
+        size="sm"
+      >
+        <p className="text-sm text-neutral-500">
+          Are you sure you want to permanently delete all items in the trash? This action cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setIsEmptyTrashOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            loading={emptyTrashMutation.status === "pending"}
+            onClick={() => emptyTrashMutation.mutate({ organizationId: trashOrgFilter || undefined })}
+          >
+            Empty Trash Can
+          </Button>
         </div>
       </Dialog>
     </AppShell>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -60,6 +61,7 @@ interface RegistrationQueueProps {
 }
 
 export function RegistrationQueue({ organizationId, managedCampuses }: RegistrationQueueProps) {
+  const { data: session } = useSession();
   const campusId = managedCampuses[0];
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
@@ -286,14 +288,36 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             else setSelectedIds((prev) => prev.filter((i) => i !== id));
           }}
           onCardClick={(reg) => setSelectedRegistrationId(reg.id)}
+          primaryLabel={isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes((session?.user as any)?.role) ? "Recommend" : "Approve"}
+          secondaryLabel={isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes((session?.user as any)?.role) ? "Request Correction" : "Reject"}
+          onPrimaryAction={(reg) => {
+            if (isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes((session?.user as any)?.role)) endorseMutation.mutate({ registrationId: reg.id });
+            else approveMutation.mutate({ registrationId: reg.id });
+          }}
+          onSecondaryAction={(reg) => {
+            if (isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes((session?.user as any)?.role)) {
+              setSelectedRegistrationId(reg.id);
+            } else {
+              setSelectedIds([reg.id]);
+              setBulkAction("REJECT");
+              setBulkReason("");
+            }
+          }}
           onApprove={(reg) => {
             if (isTwoStep) endorseMutation.mutate({ registrationId: reg.id });
             else approveMutation.mutate({ registrationId: reg.id });
           }}
-          onReject={(reg) => {
-            setSelectedIds([reg.id]);
-            setBulkAction("REJECT");
-            setBulkReason("");
+          onReject={(reg, reason) => {
+            if (reason) bulkTransition.mutate({ ids: [reg.id], action: "REJECT", reason });
+            else {
+              setSelectedIds([reg.id]);
+              setBulkAction("REJECT");
+              setBulkReason("");
+            }
+          }}
+          onRequestCorrection={(reg, message) => {
+            if (message) bulkTransition.mutate({ ids: [reg.id], action: "REQUEST_CORRECTION", reason: message });
+            else setSelectedRegistrationId(reg.id);
           }}
           onQuickAction={(reg, action) => {
             if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
@@ -512,14 +536,20 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                         else setSelectedIds((prev) => prev.filter((i) => i !== id));
                       }}
                       onClick={(r) => setSelectedRegistrationId(r.id)}
-                      onApprove={(r) => {
-                        if (isTwoStep) endorseMutation.mutate({ registrationId: r.id });
+                      primaryLabel={isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes((session?.user as any)?.role) ? "Recommend" : "Approve"}
+                      secondaryLabel={isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes((session?.user as any)?.role) ? "Request Correction" : "Reject"}
+                      onPrimaryAction={(r) => {
+                        if (isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes((session?.user as any)?.role)) endorseMutation.mutate({ registrationId: r.id });
                         else approveMutation.mutate({ registrationId: r.id });
                       }}
-                      onReject={(r) => {
-                        setSelectedIds([r.id]);
-                        setBulkAction("REJECT");
-                        setBulkReason("");
+                      onSecondaryAction={(r) => {
+                        if (isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes((session?.user as any)?.role)) {
+                          setSelectedRegistrationId(r.id);
+                        } else {
+                          setSelectedIds([r.id]);
+                          setBulkAction("REJECT");
+                          setBulkReason("");
+                        }
                       }}
                       onQuickAction={(r, action) => {
                         if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {

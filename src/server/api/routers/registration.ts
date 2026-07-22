@@ -7,7 +7,7 @@ import { RegistrationValidationError } from "../../registration/validation";
 import { IllegalTransitionError } from "../../registration/stateMachine";
 import { runSideEffectsNow } from "../../registration/effects";
 import { assertOrgAdminOrCampusRep, assertOrgAdmin } from "../trpc/scoping";
-import { normalizeScannedQRToken } from "@/lib/qr";
+import { normalizeScannedQRToken } from "../../../lib/qr";
 
 function toTRPCError(error: unknown): TRPCError {
   if (error instanceof RegistrationValidationError) {

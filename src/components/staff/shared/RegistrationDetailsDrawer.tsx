@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Select, Textarea } from "@/components/ui/Input";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
 import { Dialog } from "@/components/ui/Dialog";
 import { StatusDialog } from "@/app/admin/registrations/components/StatusDialog";
@@ -76,7 +77,7 @@ export function RegistrationDetailsDrawer({
   );
   const { data: tribeSuggestion } = api.tribe.suggest.useQuery(
     { registrationId },
-    { enabled: registration?.status === "APPROVED" && !(registration as any)?.tribeId }
+    { enabled: !!registrationId }
   );
   const orgId = (registration?.camp as any)?.organizationId || (registration?.campus as any)?.organizationId;
   const { data: org } = api.organization.getById.useQuery({ id: orgId ?? "" }, { enabled: !!orgId });
@@ -104,6 +105,7 @@ export function RegistrationDetailsDrawer({
 
   // Mutations
   const approve = api.registration.approve.useMutation({ onSuccess: invalidate, onError: onErr });
+  const endorse = api.registration.endorse.useMutation({ onSuccess: invalidate, onError: onErr });
   const reject = api.registration.reject.useMutation({
     onSuccess: () => {
       setRejectReason("");
@@ -132,6 +134,10 @@ export function RegistrationDetailsDrawer({
   const cancelReg = api.registration.cancelMine.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignTribe = api.tribe.assign.useMutation({ onSuccess: invalidate, onError: onErr });
   const clearTribe = api.tribe.clear.useMutation({ onSuccess: invalidate, onError: onErr });
+  const acceptRecommendation = api.tribe.acceptRecommendation.useMutation({ onSuccess: invalidate, onError: onErr });
+  const overrideRecommendation = api.tribe.overrideRecommendation.useMutation({ onSuccess: invalidate, onError: onErr });
+  const recommendTribeMut = api.tribe.recommend.useMutation({ onSuccess: invalidate, onError: onErr });
+  const lockAssignmentMut = api.tribe.lockAssignment.useMutation({ onSuccess: invalidate, onError: onErr });
   const transitionWithOptions = api.registration.transitionWithOptions.useMutation({ onSuccess: invalidate, onError: onErr });
   const advanceFromRequiresAction = api.registration.advanceFromRequiresAction.useMutation({ onSuccess: invalidate, onError: onErr });
   const reassignCampus = api.registration.reassignCampus.useMutation({ onSuccess: invalidate, onError: onErr });
@@ -177,6 +183,9 @@ export function RegistrationDetailsDrawer({
   const handlePrintBadge = () => {
     window.print();
   };
+
+  const userRole = (session?.user as any)?.role;
+  const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(userRole);
 
   return (
     <>
@@ -356,7 +365,7 @@ export function RegistrationDetailsDrawer({
                   <div className="space-y-2.5 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="text-neutral-500 font-medium">Campus</span>
-                      {campuses.length > 0 ? (
+                      {isOrgAdmin && campuses.length > 0 ? (
                         <Select
                           containerClassName="w-44"
                           value={registration.campusId}
@@ -540,19 +549,102 @@ export function RegistrationDetailsDrawer({
             {/* ASSIGNMENTS TAB */}
             {activeTab === "assignments" && (
               <div className="space-y-4">
+                {/* 1. TRIBE RECOMMENDATION CARD */}
                 <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
-                  <h3 className="font-bold text-neutral-900 text-sm border-b border-border-subtle pb-2">Tribe Assignment</h3>
-                  {tribeSuggestion && !(registration as any).tribeId && (
-                    <div className="rounded-xl bg-accent-50 p-3 text-xs text-accent-700 border border-accent-200">
-                      Suggested: <strong>{tribeSuggestion.tribeName}</strong> ({tribeSuggestion.confidence}% confidence)
+                  <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+                    <h3 className="font-bold text-neutral-900 text-sm">Tribe Recommendation</h3>
+                    <Badge tone={
+                      (registration as any).tribeRecommendationStatus === "ACCEPTED" ? "success"
+                      : (registration as any).tribeRecommendationStatus === "MANUAL_OVERRIDE" ? "warning"
+                      : (registration as any).tribeRecommendationStatus === "ASSIGNED" ? "success"
+                      : (registration as any).tribeRecommendationStatus === "LOCKED" ? "neutral"
+                      : "info"
+                    }>
+                      {(registration as any).tribeRecommendationStatus || "SUGGESTED"}
+                    </Badge>
+                  </div>
+
+                  {/* Current Recommendation & Reasons */}
+                  {((registration as any).suggestedTribe || tribeSuggestion) ? (
+                    <div className="rounded-xl bg-accent-50/60 p-3 text-xs border border-accent-200/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-accent-900 font-bold text-sm">
+                          Suggested: {(registration as any).suggestedTribe?.name || tribeSuggestion?.tribeName}
+                        </span>
+                        {((registration as any).tribeRecommendationScore || tribeSuggestion?.confidence) && (
+                          <span className="text-accent-700 font-semibold text-xs">
+                            {((registration as any).tribeRecommendationScore || tribeSuggestion?.confidence)}% Confidence
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Explanation Checklist */}
+                      {((registration as any).tribeRecommendationReason || tribeSuggestion?.reasons) && (
+                        <div className="space-y-1 pt-1 border-t border-accent-200/60">
+                          <span className="font-semibold text-accent-900 text-[11px] block">Recommendation Reasons:</span>
+                          {(((registration as any).tribeRecommendationReason as string[]) || tribeSuggestion?.reasons || []).map((reason: string, idx: number) => (
+                            <div key={idx} className="flex items-center gap-1.5 text-accent-800 text-[11px]">
+                              <span className="font-bold text-emerald-600">✓</span>
+                              <span>{reason}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl bg-surface-raised p-3 text-xs text-txt-secondary border border-border-subtle">
+                      No tribe recommendation generated yet. Click "Regenerate Recommendation" below.
                     </div>
                   )}
+
+                  {/* Recommendation Actions */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {((registration as any).suggestedTribeId || tribeSuggestion?.tribeId) && (registration as any).tribeRecommendationStatus !== "ACCEPTED" && (
+                      <Button
+                        size="sm"
+                        loading={acceptRecommendation.isPending}
+                        onClick={() => acceptRecommendation.mutate({ registrationId })}
+                      >
+                        Accept Recommendation
+                      </Button>
+                    )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={recommendTribeMut.isPending}
+                      onClick={() => recommendTribeMut.mutate({ registrationId })}
+                    >
+                      Regenerate
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={lockAssignmentMut.isPending}
+                      onClick={() => lockAssignmentMut.mutate({ registrationId, locked: !(registration as any).isTribeLocked })}
+                    >
+                      {(registration as any).isTribeLocked ? "Unlock Assignment" : "Lock Assignment"}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 2. OFFICIAL ASSIGNED TRIBE CARD */}
+                <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+                    <h3 className="font-bold text-neutral-900 text-sm">Confirmed Tribe Assignment</h3>
+                    {(registration as any).tribeId && (
+                      <Badge tone="success">Official Assignment</Badge>
+                    )}
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <Select
                       containerClassName="flex-1"
-                      value={(registration as any).tribeId ?? ""}
+                      value={(registration as any).tribeId ?? (registration as any).suggestedTribeId ?? ""}
                       onChange={(e) => {
-                        if (e.target.value) assignTribe.mutate({ registrationId, tribeId: e.target.value });
+                        if (e.target.value) {
+                          overrideRecommendation.mutate({ registrationId, tribeId: e.target.value, reason: "Admin override in drawer" });
+                          assignTribe.mutate({ registrationId, tribeId: e.target.value });
+                        }
                       }}
                     >
                       <option value="">Unassigned</option>
@@ -565,11 +657,6 @@ export function RegistrationDetailsDrawer({
                     {(registration as any).tribeId && (
                       <Button variant="secondary" size="sm" onClick={() => clearTribe.mutate({ registrationId })}>
                         Clear
-                      </Button>
-                    )}
-                    {tribeSuggestion && !(registration as any).tribeId && (
-                      <Button size="sm" onClick={() => assignTribe.mutate({ registrationId, tribeId: tribeSuggestion.tribeId })}>
-                        Use Suggestion
                       </Button>
                     )}
                   </div>
@@ -627,12 +714,10 @@ export function RegistrationDetailsDrawer({
           <div className="fixed bottom-0 inset-x-0 z-30 border-t border-border-default bg-surface p-3.5 shadow-2xl">
             <div className="flex items-center gap-2 max-w-lg mx-auto">
               <Button
-                variant="secondary"
-                className="flex-1 justify-center text-xs font-bold text-neutral-700 py-2.5"
-                onClick={() => setStatusDialogOpen(true)}
+                className="flex-1 justify-center text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 py-2.5"
+                onClick={() => setCorrectionDialogOpen(true)}
               >
-                <EllipsisVerticalIcon className="mr-1 h-4 w-4 text-neutral-500" />
-                More Actions
+                Request Correction
               </Button>
 
               <Button
@@ -643,14 +728,25 @@ export function RegistrationDetailsDrawer({
                 Reject
               </Button>
 
-              <Button
-                className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"
-                loading={approve.isPending}
-                onClick={() => approve.mutate({ registrationId })}
-              >
-                <CheckIcon className="mr-1 h-4 w-4" />
-                Approve
-              </Button>
+              {isTwoStep && !isOrgAdmin ? (
+                <Button
+                  className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"
+                  loading={endorse.isPending}
+                  onClick={() => endorse.mutate({ registrationId })}
+                >
+                  <CheckIcon className="mr-1 h-4 w-4" />
+                  Recommend
+                </Button>
+              ) : (
+                <Button
+                  className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"
+                  loading={approve.isPending}
+                  onClick={() => approve.mutate({ registrationId })}
+                >
+                  <CheckIcon className="mr-1 h-4 w-4" />
+                  Approve
+                </Button>
+              )}
             </div>
           </div>
         </div>

@@ -2,6 +2,9 @@
 
 import React, { useState } from "react";
 import { cn } from "@/lib/cn";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { Textarea } from "@/components/ui/Input";
 import {
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -23,6 +26,8 @@ import {
   EnvelopeIcon,
   ChatBubbleLeftIcon,
   TrashIcon,
+  ListBulletIcon,
+  Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 
 export function formatRelativeTime(dateInput: Date | string | number | null | undefined): string {
@@ -120,8 +125,10 @@ interface MobileRegistrationCardProps {
   isSelected: boolean;
   onSelect: (id: string, checked: boolean) => void;
   onClick: (reg: any) => void;
-  onApprove?: (reg: any) => void;
-  onReject?: (reg: any) => void;
+  onPrimaryAction?: (reg: any) => void;
+  onSecondaryAction?: (reg: any) => void;
+  primaryLabel?: string;
+  secondaryLabel?: string;
   onQuickAction?: (reg: any, action: string) => void;
 }
 
@@ -130,8 +137,10 @@ export function MobileRegistrationCard({
   isSelected,
   onSelect,
   onClick,
-  onApprove,
-  onReject,
+  onPrimaryAction,
+  onSecondaryAction,
+  primaryLabel = "Approve",
+  secondaryLabel = "Reject",
   onQuickAction,
 }: MobileRegistrationCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -241,6 +250,29 @@ export function MobileRegistrationCard({
         </span>
       </div>
 
+      {/* TRIBE RECOMMENDATION / ASSIGNMENT BADGE */}
+      {(registration.tribe || registration.suggestedTribe || registration.tribeName || registration.suggestedTribeName) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+          {registration.tribe ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-600">
+              <span>Tribe:</span>
+              <span>{registration.tribe.name || registration.tribeName}</span>
+            </span>
+          ) : (registration.suggestedTribe || registration.suggestedTribeName) ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 text-[11px] font-bold text-purple-600">
+              <span>Suggested:</span>
+              <span>{registration.suggestedTribe?.name || registration.suggestedTribeName}</span>
+            </span>
+          ) : null}
+
+          {registration.tribeRecommendationStatus === "MANUAL_OVERRIDE" && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">
+              ⚡ Override
+            </span>
+          )}
+        </div>
+      )}
+
       {/* DYNAMIC DOCUMENT PROGRESS BAR */}
       <div className="mt-2.5 space-y-1">
         <div className="flex items-center justify-between text-[11px] font-medium text-neutral-500">
@@ -263,14 +295,38 @@ export function MobileRegistrationCard({
       </div>
 
       {/* SECTION 3 — ACTIONS ROW */}
-      <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        {onPrimaryAction && (
+          <button
+            type="button"
+            onClick={() => onPrimaryAction(registration)}
+            className="flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all active:scale-98 shadow-2xs px-2"
+          >
+            <span>{primaryLabel}</span>
+          </button>
+        )}
+
+        {onSecondaryAction && (
+          <button
+            type="button"
+            onClick={() => onSecondaryAction(registration)}
+            className={cn(
+              "flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl font-bold text-xs transition-all active:scale-98 border px-2",
+              secondaryLabel.toLowerCase().includes("correction")
+                ? "bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20"
+                : "bg-rose-500/10 text-rose-600 border-rose-500/30 hover:bg-rose-500/20"
+            )}
+          >
+            <span>{secondaryLabel}</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => onClick(registration)}
-          className="flex-1 inline-flex min-h-[38px] items-center justify-center gap-1 rounded-xl bg-accent-50 text-accent-700 hover:bg-purple-100 font-bold text-xs transition-all active:scale-98"
+          className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl bg-accent-50 text-accent-700 hover:bg-purple-100 font-bold text-xs transition-all active:scale-98 px-2.5 border border-accent-200/50"
         >
-          <span>View Review</span>
-          <span>→</span>
+          <span>View</span>
         </button>
 
         {/* Overflow Menu button */}
@@ -278,7 +334,7 @@ export function MobileRegistrationCard({
           <button
             type="button"
             onClick={() => setMenuOpen((prev) => !prev)}
-            className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl bg-surface-raised border border-border-default text-txt-secondary hover:bg-surface-hover transition-colors"
+            className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-xl bg-surface-raised border border-border-default text-txt-secondary hover:bg-surface-hover transition-colors"
             aria-label="More options"
           >
             <EllipsisVerticalIcon className="h-5 w-5" />
@@ -286,7 +342,6 @@ export function MobileRegistrationCard({
 
           {menuOpen && (
             <>
-              {/* Click outside backdrop to close */}
               <div
                 className="fixed inset-0 z-20 bg-transparent"
                 onClick={(e) => {
@@ -307,8 +362,36 @@ export function MobileRegistrationCard({
                   className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-purple-900"
                 >
                   <UserIcon className="h-4 w-4 text-neutral-500" />
-                  View Registration
+                  View Details
                 </button>
+
+                {!secondaryLabel.toLowerCase().includes("reject") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onQuickAction?.(registration, "REJECT");
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                  >
+                    <XCircleIcon className="h-4 w-4 text-rose-500" />
+                    Reject
+                  </button>
+                )}
+                {!secondaryLabel.toLowerCase().includes("correction") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onQuickAction?.(registration, "REQUEST_CORRECTION");
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-amber-600 hover:bg-amber-50"
+                  >
+                    <ChatBubbleLeftIcon className="h-4 w-4 text-amber-500" />
+                    Request Correction
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {
@@ -368,6 +451,7 @@ interface MobileRegistrationsViewProps {
   onSearchChange: (q: string) => void;
   onOpenFilters: () => void;
   filterStatus: string;
+  isTwoStep?: boolean;
   onSelectStatusFilter: (status: string) => void;
   stats: {
     totalCount: number;
@@ -381,8 +465,13 @@ interface MobileRegistrationsViewProps {
   onSelectRow: (id: string, checked: boolean) => void;
   onSelectAllOnPage?: (checked: boolean) => void;
   onCardClick: (reg: any) => void;
+  onPrimaryAction?: (reg: any) => void;
+  onSecondaryAction?: (reg: any) => void;
+  primaryLabel?: string;
+  secondaryLabel?: string;
   onApprove?: (reg: any) => void;
-  onReject?: (reg: any) => void;
+  onReject?: (reg: any, reason?: string) => void;
+  onRequestCorrection?: (reg: any, message?: string) => void;
   onQuickAction?: (reg: any, action: string) => void;
   onBulkApprove?: () => void;
   onBulkReject?: () => void;
@@ -399,14 +488,20 @@ export function MobileRegistrationsView({
   onSearchChange,
   onOpenFilters,
   filterStatus,
+  isTwoStep = false,
   onSelectStatusFilter,
   stats,
   registrations,
   selectedIds,
   onSelectRow,
   onCardClick,
+  onPrimaryAction,
+  onSecondaryAction,
+  primaryLabel,
+  secondaryLabel,
   onApprove,
   onReject,
+  onRequestCorrection,
   onQuickAction,
   onBulkApprove,
   onBulkReject,
@@ -417,6 +512,36 @@ export function MobileRegistrationsView({
   nextCursor,
   onLoadMore,
 }: MobileRegistrationsViewProps) {
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const [rejectTarget, setRejectTarget] = useState<any>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [correctionTarget, setCorrectionTarget] = useState<any>(null);
+  const [correctionMessage, setCorrectionMessage] = useState("");
+
+  const handleSecondaryAction = (reg: any) => {
+    if (onSecondaryAction) {
+      onSecondaryAction(reg);
+    } else if (secondaryLabel?.toLowerCase().includes("correction")) {
+      setCorrectionTarget(reg);
+      setCorrectionMessage("");
+    } else {
+      setRejectTarget(reg);
+      setRejectReason("");
+    }
+  };
+
+  const handleQuickAction = (reg: any, action: string) => {
+    if (action === "REJECT") {
+      setRejectTarget(reg);
+      setRejectReason("");
+    } else if (action === "REQUEST_CORRECTION") {
+      setCorrectionTarget(reg);
+      setCorrectionMessage("");
+    } else {
+      onQuickAction?.(reg, action);
+    }
+  };
+
   const statCards = [
     { label: "All", value: stats.totalCount ?? registrations.length, statusKey: "", valueColor: "text-neutral-900" },
     { label: "Pending", value: stats.pendingCount ?? 0, statusKey: "PENDING", valueColor: "text-amber-600" },
@@ -427,7 +552,12 @@ export function MobileRegistrationsView({
 
   const filterChips = [
     { label: "All", key: "" },
-    { label: "Pending", key: "PENDING", dotColor: "bg-amber-500" },
+    ...(isTwoStep
+      ? [
+          { label: "Awaiting Vetting", key: "REVIEW_AWAITING_VETTING", dotColor: "bg-amber-500" },
+          { label: "Awaiting Final", key: "REVIEW_AWAITING_FINAL", dotColor: "bg-purple-500" },
+        ]
+      : [{ label: "Pending", key: "PENDING", dotColor: "bg-amber-500" }]),
     { label: "Approved", key: "APPROVED", dotColor: "bg-emerald-500" },
     { label: "Checked In", key: "CHECKED_IN", dotColor: "bg-sky-500" },
     { label: "Completed", key: "COMPLETED", dotColor: "bg-accent-500" },
@@ -438,7 +568,7 @@ export function MobileRegistrationsView({
 
   return (
     <div className="space-y-4 pb-24">
-      {/* 1. SEARCH SECTION */}
+      {/* 1. SEARCH SECTION & VIEW TOGGLE */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-txt-muted">
@@ -455,6 +585,15 @@ export function MobileRegistrationsView({
 
         <button
           type="button"
+          onClick={() => setViewMode((prev) => (prev === "card" ? "list" : "card"))}
+          className="inline-flex min-h-[46px] min-w-[46px] items-center justify-center rounded-2xl border border-border-default bg-surface text-neutral-700 hover:bg-surface-hover transition-colors shadow-2xs"
+          title={viewMode === "card" ? "Switch to Compact List View" : "Switch to Card View"}
+        >
+          {viewMode === "card" ? <ListBulletIcon className="h-5 w-5" /> : <Squares2X2Icon className="h-5 w-5" />}
+        </button>
+
+        <button
+          type="button"
           onClick={onOpenFilters}
           className="inline-flex min-h-[46px] min-w-[46px] items-center justify-center rounded-2xl border border-border-default bg-surface text-neutral-700 hover:bg-surface-hover transition-colors shadow-2xs"
           aria-label="Filter"
@@ -463,7 +602,7 @@ export function MobileRegistrationsView({
         </button>
       </div>
 
-      {/* 2. STATISTICS SUMMARY CARDS (Grid Layout) */}
+      {/* 2. STATISTICS SUMMARY CARDS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 pt-0.5">
         {statCards.map((stat) => {
           const isSelected = filterStatus === stat.statusKey;
@@ -490,7 +629,7 @@ export function MobileRegistrationsView({
         })}
       </div>
 
-      {/* 3. QUICK FILTER CHIPS (Horizontally Scrolling) */}
+      {/* 3. QUICK FILTER CHIPS */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
         {filterChips.map((chip) => {
           const isSelected = filterStatus === chip.key;
@@ -515,11 +654,61 @@ export function MobileRegistrationsView({
         })}
       </div>
 
-      {/* 4. REGISTRATION CARDS LIST */}
+      {/* 4. REGISTRATION CARDS OR LIST VIEW */}
       {registrations.length === 0 ? (
         <div className="rounded-2xl border border-border-default bg-surface p-8 text-center">
           <p className="text-sm font-bold text-neutral-900">No registrations found</p>
           <p className="mt-1 text-xs text-neutral-500">Try adjusting your search or filters.</p>
+        </div>
+      ) : viewMode === "list" ? (
+        <div className="divide-y divide-border-subtle rounded-2xl border border-border-default bg-surface overflow-hidden shadow-2xs">
+          {registrations.map((reg) => {
+            const camperName = reg.camper?.name || reg.user?.name || reg.name || "Camper";
+            const photoUrl = reg.camper?.photoUrl || reg.photoUrl;
+            const campusName = reg.campus?.name || reg.campusName || "Campus Unassigned";
+            const regNumber = shortenRegistrationNumber(reg.registrationNumber);
+            const statusInfo = getStatusStyle(reg.status);
+            const isSelected = selectedIds.includes(reg.id);
+
+            return (
+              <div
+                key={reg.id}
+                onClick={() => onCardClick(reg)}
+                className={cn(
+                  "flex items-center justify-between p-3.5 hover:bg-surface-hover transition-colors cursor-pointer gap-3",
+                  isSelected && "bg-accent-500/10"
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    onSelectRow(reg.id, e.target.checked);
+                  }}
+                  className="h-5 w-5 rounded border-input-border text-accent-600 cursor-pointer shrink-0"
+                  aria-label={`Select ${camperName}`}
+                />
+                {photoUrl ? (
+                  <img src={photoUrl} alt="" className="h-10 w-10 rounded-full object-cover shrink-0 border border-border-default" />
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-500/20 text-accent-400 font-bold text-sm">
+                    {(camperName[0] || "C").toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-sm text-txt-primary truncate">{camperName}</div>
+                  <div className="text-xs text-txt-muted truncate">{campusName} • #{regNumber}</div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] uppercase font-bold", statusInfo.badgeClass)}>
+                    {statusInfo.label}
+                  </span>
+                  <ChevronRightIcon className="h-4 w-4 text-neutral-400" />
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="space-y-3">
@@ -530,9 +719,11 @@ export function MobileRegistrationsView({
               isSelected={selectedIds.includes(reg.id)}
               onSelect={onSelectRow}
               onClick={onCardClick}
-              onApprove={onApprove}
-              onReject={onReject}
-              onQuickAction={onQuickAction}
+              onPrimaryAction={onPrimaryAction || onApprove}
+              onSecondaryAction={handleSecondaryAction}
+              primaryLabel={primaryLabel}
+              secondaryLabel={secondaryLabel}
+              onQuickAction={handleQuickAction}
             />
           ))}
         </div>
@@ -552,7 +743,7 @@ export function MobileRegistrationsView({
         </div>
       )}
 
-      {/* 5. STICKY BULK ACTION BAR (Slides up when 1+ selected) */}
+      {/* STICKY BULK ACTION BAR */}
       {selectedIds.length > 0 && (
         <div className="fixed inset-x-4 bottom-6 z-40 flex items-center justify-between gap-2 rounded-2xl border border-purple-200 bg-neutral-900 p-3.5 text-white shadow-2xl animate-in slide-in-from-bottom-5 duration-200">
           <div className="flex items-center gap-2 pl-1">
@@ -611,6 +802,66 @@ export function MobileRegistrationsView({
           </div>
         </div>
       )}
+
+      {/* INLINE REJECT DIALOG */}
+      <Dialog open={!!rejectTarget} onClose={() => setRejectTarget(null)} title="Reject Registration" size="sm">
+        <p className="text-xs text-neutral-500">
+          Provide a reason for rejecting <strong>{rejectTarget?.camper?.name || rejectTarget?.name}</strong>.
+        </p>
+        <Textarea
+          className="mt-3 text-xs"
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          placeholder="Reason for rejection..."
+          rows={3}
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setRejectTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={!rejectReason.trim()}
+            onClick={() => {
+              if (rejectTarget && onReject) {
+                onReject(rejectTarget, rejectReason.trim());
+              }
+              setRejectTarget(null);
+            }}
+          >
+            Confirm Reject
+          </Button>
+        </div>
+      </Dialog>
+
+      {/* INLINE REQUEST CORRECTION DIALOG */}
+      <Dialog open={!!correctionTarget} onClose={() => setCorrectionTarget(null)} title="Request Correction" size="sm">
+        <p className="text-xs text-neutral-500">
+          Describe the required correction for <strong>{correctionTarget?.camper?.name || correctionTarget?.name}</strong>.
+        </p>
+        <Textarea
+          className="mt-3 text-xs"
+          value={correctionMessage}
+          onChange={(e) => setCorrectionMessage(e.target.value)}
+          placeholder="Describe required correction..."
+          rows={3}
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setCorrectionTarget(null)}>Cancel</Button>
+          <Button
+            size="sm"
+            className="bg-amber-600 text-white hover:bg-amber-700"
+            disabled={!correctionMessage.trim()}
+            onClick={() => {
+              if (correctionTarget && onRequestCorrection) {
+                onRequestCorrection(correctionTarget, correctionMessage.trim());
+              }
+              setCorrectionTarget(null);
+            }}
+          >
+            Send Request
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

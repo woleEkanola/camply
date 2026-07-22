@@ -214,6 +214,24 @@ function RegistrationsPage() {
     },
   });
 
+  const bulkSuggestMut = api.tribe.bulkSuggest.useMutation({
+    onSuccess: (res) => {
+      setBulkResult({ message: `Generated tribe recommendations for ${res.length} registration(s).`, type: "success" });
+      setSelectedIds([]);
+      invalidateRegistrations();
+    },
+    onError: (err) => setBulkResult({ message: err.message, type: "error" }),
+  });
+
+  const bulkApplyMut = api.tribe.bulkApply.useMutation({
+    onSuccess: (res) => {
+      setBulkResult({ message: `Applied tribe assignments for ${res.length} registration(s).`, type: "success" });
+      setSelectedIds([]);
+      invalidateRegistrations();
+    },
+    onError: (err) => setBulkResult({ message: err.message, type: "error" }),
+  });
+
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
 
   const [cursor, setCursor] = useState<string | undefined>(undefined);
@@ -451,7 +469,20 @@ function RegistrationsPage() {
     if (visibleColumns.includes("tribe")) {
       cols.push({
         header: renderSortableHeader("Tribe", "tribe"),
-        accessor: (row) => row.tribe?.name || "—",
+        accessor: (row) => (
+          <div className="flex flex-col gap-0.5">
+            {row.tribe?.name ? (
+              <span className="font-semibold text-emerald-700">{row.tribe.name}</span>
+            ) : row.suggestedTribe?.name ? (
+              <span className="text-purple-600 text-xs font-medium">Sugg: {row.suggestedTribe.name}</span>
+            ) : (
+              <span className="text-txt-muted">—</span>
+            )}
+            {row.tribeRecommendationStatus === "MANUAL_OVERRIDE" && (
+              <span className="text-[10px] text-amber-600 font-bold">⚡ Override</span>
+            )}
+          </div>
+        ),
       });
     }
 
@@ -538,6 +569,7 @@ function RegistrationsPage() {
           onSearchChange={setSearchQuery}
           onOpenFilters={() => setFiltersOpen(true)}
           filterStatus={filterStatus}
+          isTwoStep={isTwoStep}
           onSelectStatusFilter={(s) => {
             setReviewStateFilter("");
             setFilterStatus(s);
@@ -556,11 +588,26 @@ function RegistrationsPage() {
             else setSelectedIds((prev) => prev.filter((i) => i !== id));
           }}
           onCardClick={(reg) => setSelectedRegistration(reg.id)}
-          onApprove={(reg) => bulkTransition.mutate({ ids: [reg.id], action: "APPROVE" })}
-          onReject={(reg) => {
+          primaryLabel="Approve"
+          secondaryLabel="Reject"
+          onPrimaryAction={(reg) => bulkTransition.mutate({ ids: [reg.id], action: "APPROVE" })}
+          onSecondaryAction={(reg) => {
             setSelectedIds([reg.id]);
             setBulkAction("REJECT");
             setBulkReason("");
+          }}
+          onApprove={(reg) => bulkTransition.mutate({ ids: [reg.id], action: "APPROVE" })}
+          onReject={(reg, reason) => {
+            if (reason) bulkTransition.mutate({ ids: [reg.id], action: "REJECT", reason });
+            else {
+              setSelectedIds([reg.id]);
+              setBulkAction("REJECT");
+              setBulkReason("");
+            }
+          }}
+          onRequestCorrection={(reg, message) => {
+            if (message) bulkTransition.mutate({ ids: [reg.id], action: "REQUEST_CORRECTION", reason: message });
+            else setSelectedRegistration(reg.id);
           }}
           onQuickAction={(reg, action) => {
             if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
@@ -629,10 +676,13 @@ function RegistrationsPage() {
                 />
               </>
             )}
-            {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"].map((s) => (
+            {(isTwoStep
+              ? ["APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"]
+              : ["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"]
+            ).map((s) => (
               <StatCard
                 key={s}
-                label={s === "PENDING" && isTwoStep ? "Waiting Decision" : s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
+                label={s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
                 value={kpi[s] ?? 0}
                 selected={filterStatus === s && !duplicatesOnly}
                 onClick={() => {
@@ -670,6 +720,12 @@ function RegistrationsPage() {
               }
             }}>
               Archive
+            </Button>
+            <Button size="sm" variant="secondary" loading={bulkSuggestMut.isPending} onClick={() => bulkSuggestMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds })}>
+              Suggest Tribes
+            </Button>
+            <Button size="sm" variant="secondary" loading={bulkApplyMut.isPending} onClick={() => bulkApplyMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds })}>
+              Apply Tribes
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setBulkReassignOpen(true)}>
               Reassign Campus
@@ -710,14 +766,16 @@ function RegistrationsPage() {
               >
                 <option value="">All Statuses</option>
                 <option value="FILTER_DUPLICATES">Duplicates Only ({statsData?.duplicateCount ?? 0})</option>
-                {isTwoStep && (
+                {isTwoStep ? (
                   <>
-                    <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval (Recommended)</option>
-                    <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting (Pending)</option>
+                    <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting</option>
+                    <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval</option>
                   </>
+                ) : (
+                  <option value="PENDING">Pending</option>
                 )}
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}</option>
+                {["REQUIRES_ACTION", "APPROVED", "REJECTED", "WAITLISTED", "CHECKED_IN", "COMPLETED", "CANCELLED", "ARCHIVED"].map((s) => (
+                  <option key={s} value={s}>{s === "REQUIRES_ACTION" ? "Corrections Needed" : s.replace(/_/g, " ")}</option>
                 ))}
               </Select>
             </div>
@@ -879,8 +937,10 @@ function RegistrationsPage() {
                         else setSelectedIds((prev) => prev.filter((i) => i !== id));
                       }}
                       onClick={(r) => setSelectedRegistration(r.id)}
-                      onApprove={(r) => bulkTransition.mutate({ ids: [r.id], action: "APPROVE" })}
-                      onReject={(r) => {
+                      primaryLabel="Approve"
+                      secondaryLabel="Reject"
+                      onPrimaryAction={(r) => bulkTransition.mutate({ ids: [r.id], action: "APPROVE" })}
+                      onSecondaryAction={(r) => {
                         setSelectedIds([r.id]);
                         setBulkAction("REJECT");
                         setBulkReason("");
