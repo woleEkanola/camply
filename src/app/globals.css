@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Design tokens for the Camply UI (Semantic Token System).
+ * Design tokens for the Camply UI (Semantic Token System matching high-end SaaS dashboard standards).
  * Level 0: Page Canvas (--page-bg)
  * Level 1: Navigation & Sidebar (--sidebar-bg, --sidebar-border)
  * Level 2: Surface & Cards (--surface-bg, --surface-raised, --surface-hover)
@@ -11,36 +11,36 @@
   --font-geist-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* Brand primary color — default Camply orange (#e67e22) */
+  /* Brand primary color — default Camply orange (#e67e22 / #f97316) */
   --brand-primary: #e67e22;
 
   /* LIGHT THEME SEMANTIC TOKENS */
-  --page-bg: #fafafa;
-  --page-fg: #18181b;
+  --page-bg: #f8fafc;
+  --page-fg: #0f172a;
 
   --sidebar-bg: #ffffff;
-  --sidebar-border: #e4e4e7;
-  --sidebar-fg: #52525b;
+  --sidebar-border: #e2e8f0;
+  --sidebar-fg: #64748b;
   --sidebar-active-bg: color-mix(in srgb, var(--brand-primary) 10%, white);
-  --sidebar-active-fg: color-mix(in srgb, var(--brand-primary) 85%, black);
+  --sidebar-active-fg: color-mix(in srgb, var(--brand-primary) 90%, black);
 
   --surface-bg: #ffffff;
-  --surface-raised: #f4f4f5;
-  --surface-hover: #f4f4f5;
-  --surface-border: #e4e4e7;
+  --surface-raised: #f1f5f9;
+  --surface-hover: #f1f5f9;
+  --surface-border: #e2e8f0;
 
   --elevated-bg: #ffffff;
-  --elevated-border: #e4e4e7;
+  --elevated-border: #cbd5e1;
 
   --input-bg: #ffffff;
-  --input-border: #d4d4d8;
+  --input-border: #cbd5e1;
 
-  --text-primary: #18181b;
-  --text-secondary: #52525b;
-  --text-muted: #71717a;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
 
-  --border-subtle: #f4f4f5;
-  --border-default: #e4e4e7;
+  --border-subtle: #f1f5f9;
+  --border-default: #e2e8f0;
 
   --status-success-bg: #f0fdf4;
   --status-success-fg: #15803d;
@@ -57,33 +57,33 @@
 .dark {
   color-scheme: dark;
 
-  /* DARK THEME SEMANTIC TOKENS (Linear/Vercel/GitHub inspired) */
-  --page-bg: #09090b;
-  --page-fg: #f4f4f5;
+  /* DARK THEME SEMANTIC TOKENS (Matching Jesus Tribe/Linear Premium Dark Theme) */
+  --page-bg: #090a0f;
+  --page-fg: #f1f3f9;
 
-  --sidebar-bg: #0e0e11;
-  --sidebar-border: #1a1a1f;
-  --sidebar-fg: #a1a1aa;
-  --sidebar-active-bg: color-mix(in srgb, var(--brand-primary) 18%, #141418);
+  --sidebar-bg: #0d0f17;
+  --sidebar-border: #181b28;
+  --sidebar-fg: #8a90a2;
+  --sidebar-active-bg: #161926;
   --sidebar-active-fg: #f97316;
 
-  --surface-bg: #121215;
-  --surface-raised: #18181c;
-  --surface-hover: #1e1e24;
-  --surface-border: #222227;
+  --surface-bg: #131622;
+  --surface-raised: #181b29;
+  --surface-hover: #1e2235;
+  --surface-border: #202434;
 
-  --elevated-bg: #1a1a1f;
-  --elevated-border: #282830;
+  --elevated-bg: #181b29;
+  --elevated-border: #2a2f45;
 
-  --input-bg: #141418;
-  --input-border: #26262c;
+  --input-bg: #10121b;
+  --input-border: #24283b;
 
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
+  --text-primary: #f1f3f9;
+  --text-secondary: #949ba8;
+  --text-muted: #5e6375;
 
-  --border-subtle: #19191d;
-  --border-default: #222227;
+  --border-subtle: #191c2b;
+  --border-default: #202434;
 
   --status-success-bg: rgba(34, 197, 94, 0.12);
   --status-success-fg: #4ade80;
