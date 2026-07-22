@@ -88,6 +88,55 @@ export default function CampusesPage() {
   const [sortBy, setSortBy] = useState<SortOption>("name_asc");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 
+  // Table Column Selection & Interactive Sorting State
+  const DEFAULT_CAMPUS_COLUMNS = ["select", "campus", "code", "reps", "quota", "link", "actions"];
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_CAMPUS_COLUMNS);
+  const [tableSortKey, setTableSortKey] = useState<string | null>("campus");
+  const [tableSortDirection, setTableSortDirection] = useState<"asc" | "desc">("asc");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("camply_campus_columns_v1");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setVisibleColumns(parsed);
+        }
+      } catch (e) {}
+    }
+  }, []);
+
+  const toggleColumn = (key: string) => {
+    setVisibleColumns((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      if (typeof window !== "undefined") {
+        localStorage.setItem("camply_campus_columns_v1", JSON.stringify(next));
+      }
+      return next;
+    });
+  };
+
+  const resetColumns = () => {
+    setVisibleColumns(DEFAULT_CAMPUS_COLUMNS);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("camply_campus_columns_v1", JSON.stringify(DEFAULT_CAMPUS_COLUMNS));
+    }
+  };
+
+  const handleColumnHeaderClick = (key: string) => {
+    if (tableSortKey === key) {
+      if (tableSortDirection === "asc") {
+        setTableSortDirection("desc");
+      } else {
+        setTableSortKey(null);
+        setTableSortDirection("asc");
+      }
+    } else {
+      setTableSortKey(key);
+      setTableSortDirection("asc");
+    }
+  };
+
   // Modal / Drawer states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -681,33 +730,327 @@ export default function CampusesPage() {
     return result;
   }, [campuses, searchQuery, statusFilter, sortBy, signupLinks]);
 
-  // Desktop Table Columns fallback
-  const columns: Column<CampusWithReps>[] = [
-    {
-      header: "",
-      accessor: (campus) => (
-        <input
-          type="checkbox"
-          checked={selectedCampusIds.includes(campus.id)}
-          onChange={() => handleSelectCampus(campus.id)}
-          onClick={(e) => e.stopPropagation()}
-          aria-label={`Select campus ${campus.name}`}
-        />
-      ),
-      className: "w-8",
-    },
-    { header: "Name", accessor: "name", primary: true },
-    { header: "Code", accessor: (c) => c.campusCode || "-" },
-    { header: "Order", accessor: (c) => c.displayOrder?.toString() ?? "0" },
-    { header: "Address", accessor: (c) => [c.address, c.city, c.state].filter(Boolean).join(", ") },
-    {
-      header: "Signup Link",
-      accessor: (c) => {
-        const link = getSignupLinkForCampus(c.id);
-        return link ? (link.active ? "Active" : "Inactive") : "Not Set";
-      },
-    },
-  ];
+  const renderSortableHeader = (label: string, key: string) => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        handleColumnHeaderClick(key);
+      }}
+      className="group inline-flex items-center gap-1.5 font-bold hover:text-accent-700 focus:outline-none transition-colors text-left"
+    >
+      <span>{label}</span>
+      {tableSortKey === key ? (
+        <span className="text-accent-600 font-bold text-xs">
+          {tableSortDirection === "asc" ? "↑" : "↓"}
+        </span>
+      ) : (
+        <span className="text-neutral-400 opacity-40 group-hover:opacity-100 text-xs transition-opacity">
+          ↕
+        </span>
+      )}
+    </button>
+  );
+
+  const sortedCampuses = useMemo(() => {
+    let list = [...filteredCampuses];
+    if (!tableSortKey) return list;
+
+    return list.sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+
+      if (tableSortKey === "campus") { valA = a.name; valB = b.name; }
+      else if (tableSortKey === "code") { valA = a.campusCode || ""; valB = b.campusCode || ""; }
+      else if (tableSortKey === "order") { valA = a.displayOrder || 0; valB = b.displayOrder || 0; }
+      else if (tableSortKey === "reps") { valA = a.reps?.length || 0; valB = b.reps?.length || 0; }
+      else if (tableSortKey === "quota") {
+        const linkA = getSignupLinkForCampus(a.id);
+        const linkB = getSignupLinkForCampus(b.id);
+        valA = linkA?.usedCount || 0;
+        valB = linkB?.usedCount || 0;
+      } else if (tableSortKey === "link") {
+        const linkA = getSignupLinkForCampus(a.id);
+        const linkB = getSignupLinkForCampus(b.id);
+        valA = linkA ? (linkA.active ? 1 : 0) : -1;
+        valB = linkB ? (linkB.active ? 1 : 0) : -1;
+      }
+
+      if (valA === valB) return 0;
+      let cmp = 0;
+      if (typeof valA === "number" && typeof valB === "number") {
+        cmp = valA - valB;
+      } else {
+        cmp = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: "base" });
+      }
+      return tableSortDirection === "asc" ? cmp : -cmp;
+    });
+  }, [filteredCampuses, tableSortKey, tableSortDirection, signupLinks]);
+
+  const buildTableColumns = (): Column<CampusWithReps>[] => {
+    const cols: Column<CampusWithReps>[] = [];
+
+    if (visibleColumns.includes("select")) {
+      cols.push({
+        header: "",
+        accessor: (campus) => (
+          <input
+            type="checkbox"
+            checked={selectedCampusIds.includes(campus.id)}
+            onChange={() => handleSelectCampus(campus.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+            aria-label={`Select campus ${campus.name}`}
+          />
+        ),
+        className: "w-8 text-center",
+      });
+    }
+
+    if (visibleColumns.includes("campus")) {
+      cols.push({
+        header: renderSortableHeader("Campus Name", "campus"),
+        primary: true,
+        accessor: (c) => (
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-100/80 text-accent-700 font-bold">
+              <BuildingOffice2Icon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-neutral-900 truncate text-sm">{c.name}</div>
+              <div className="text-xs text-neutral-500 truncate">
+                {[c.city, c.state, c.country].filter(Boolean).join(", ") || c.address}
+              </div>
+            </div>
+          </div>
+        ),
+      });
+    }
+
+    if (visibleColumns.includes("code")) {
+      cols.push({
+        header: renderSortableHeader("Code", "code"),
+        accessor: (c) =>
+          c.campusCode ? (
+            <span className="inline-flex items-center rounded-lg bg-neutral-100 px-2 py-1 text-xs font-mono font-bold text-neutral-700">
+              {c.campusCode}
+            </span>
+          ) : (
+            <span className="text-neutral-400 text-xs">—</span>
+          ),
+      });
+    }
+
+    if (visibleColumns.includes("reps")) {
+      cols.push({
+        header: renderSortableHeader("Representatives", "reps"),
+        accessor: (c) => {
+          const reps = c.reps || [];
+          return (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                openAdminModal(c.id);
+              }}
+              className="flex items-center gap-2 cursor-pointer group/rep hover:opacity-80"
+            >
+              {reps.length > 0 ? (
+                <div className="flex -space-x-1.5 overflow-hidden">
+                  {reps.slice(0, 3).map((r: any, idx: number) => {
+                    const repName = [r.firstName, r.lastName].filter(Boolean).join(" ") || r.email || "";
+                    return (
+                      <div
+                        key={r.id || idx}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-accent-200 font-bold text-accent-900 text-[10px] ring-2 ring-white"
+                        title={repName}
+                      >
+                        {getInitials(repName)}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <span className="text-xs font-semibold text-accent-700 group-hover/rep:underline">
+                {reps.length > 0 ? `${reps.length} Reps` : "+ Assign Reps"}
+              </span>
+            </div>
+          );
+        },
+      });
+    }
+
+    if (visibleColumns.includes("quota")) {
+      cols.push({
+        header: renderSortableHeader("Capacity / Quota", "quota"),
+        accessor: (c) => {
+          const link = getSignupLinkForCampus(c.id);
+          const limit = link?.quota ?? 0;
+          const used = link?.usedCount ?? 0;
+          const isUnlimited = limit <= 0;
+          const pct = isUnlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
+
+          const tone = pct >= 100 ? { bar: "bg-rose-500", text: "text-rose-600" } : pct >= 80 ? { bar: "bg-amber-500", text: "text-amber-600" } : { bar: "bg-emerald-500", text: "text-emerald-600" };
+
+          return (
+            <div className="space-y-1.5 w-44">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-extrabold text-neutral-900">
+                  {used} <span className="font-normal text-neutral-400">/ {isUnlimited ? "∞" : limit}</span>
+                </span>
+                {!isUnlimited && (
+                  <span className={cn("font-bold text-xs", tone.text)}>
+                    {pct}%
+                  </span>
+                )}
+              </div>
+              {isUnlimited ? (
+                <div className="h-2 w-full rounded-full bg-neutral-100 overflow-hidden">
+                  <div className="h-full bg-accent-400/40 w-full animate-pulse" />
+                </div>
+              ) : (
+                <div className="h-2 w-full rounded-full bg-neutral-100 overflow-hidden">
+                  <div
+                    className={cn("h-full rounded-full transition-all duration-500", tone.bar)}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              )}
+              {link && canManageQuota && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenQuotaModal(link);
+                  }}
+                  className="text-[11px] font-bold text-accent-600 hover:underline"
+                >
+                  Set Capacity
+                </button>
+              )}
+            </div>
+          );
+        },
+      });
+    }
+
+    if (visibleColumns.includes("link")) {
+      cols.push({
+        header: renderSortableHeader("Signup Link", "link"),
+        accessor: (c) => {
+          const link = getSignupLinkForCampus(c.id);
+          const isCopied = copiedLinkId === c.id;
+          const isGenerating = generatingLinkFor === c.id;
+
+          if (!link) {
+            return canGenerateSignupLink ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={isGenerating}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleGenerateSignupLink(c.id);
+                }}
+                className="text-xs"
+              >
+                {isGenerating ? "Creating..." : "Create Link"}
+              </Button>
+            ) : (
+              <span className="text-xs font-semibold text-neutral-400">• Not Created</span>
+            );
+          }
+
+          return (
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <span className="text-xs font-semibold text-emerald-600 shrink-0">
+                {link.active ? "• Active" : "• Inactive"}
+              </span>
+              <Button
+                size="sm"
+                variant={isCopied ? "primary" : "secondary"}
+                onClick={() => handleCopySignupLink(c.id)}
+                className="text-xs shrink-0"
+              >
+                {isCopied ? "Copied ✓" : "Copy Link"}
+              </Button>
+            </div>
+          );
+        },
+      });
+    }
+
+    if (visibleColumns.includes("order")) {
+      cols.push({
+        header: renderSortableHeader("Order #", "order"),
+        accessor: (c) => (
+          <span className="text-xs font-semibold text-neutral-600">
+            #{c.displayOrder ?? 0}
+          </span>
+        ),
+      });
+    }
+
+    if (visibleColumns.includes("address")) {
+      cols.push({
+        header: "Address",
+        accessor: (c) => [c.address, c.city, c.state, c.country].filter(Boolean).join(", ") || "—",
+      });
+    }
+
+    if (visibleColumns.includes("actions")) {
+      cols.push({
+        header: "Actions",
+        accessor: (c) => {
+          return (
+            <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+              {canUpdateCampus && (
+                <button
+                  type="button"
+                  onClick={() => openEditModal(c.id)}
+                  className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+                  title="Edit Campus"
+                >
+                  <PencilIcon className="h-4 w-4" />
+                </button>
+              )}
+              {canManageAdmins && (
+                <button
+                  type="button"
+                  onClick={() => openAdminModal(c.id)}
+                  className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+                  title="Manage Reps"
+                >
+                  <UserGroupIcon className="h-4 w-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setAnalyticsCampusId(c.id)}
+                className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+                title="View Analytics"
+              >
+                <ChartBarIcon className="h-4 w-4" />
+              </button>
+              {canDeleteCampus && (
+                <button
+                  type="button"
+                  onClick={() => openDeleteModal(c.id)}
+                  className="p-1.5 rounded-lg text-danger-500 hover:text-danger-700 hover:bg-danger-50 transition-colors"
+                  title="Delete Campus"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          );
+        },
+      });
+    }
+
+    return cols;
+  };
+
+  const columns = buildTableColumns();
 
   if (status === "loading") {
     return <div className="flex h-screen items-center justify-center">Loading campuses dashboard...</div>;
@@ -758,6 +1101,9 @@ export default function CampusesPage() {
           filteredCount={filteredCampuses.length}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          visibleColumns={visibleColumns}
+          onToggleColumn={toggleColumn}
+          onResetColumns={resetColumns}
         />
 
         {/* BULK ACTIONS TOOLBAR */}
@@ -851,7 +1197,7 @@ export default function CampusesPage() {
         /* TABLE VIEW OPTION */
         <Table
           columns={columns}
-          data={filteredCampuses}
+          data={sortedCampuses}
           rowKey={(c) => c.id}
           onRowClick={(c) => router.push(`/admin/campuses/${c.id}`)}
           isLoading={isLoadingCampuses}

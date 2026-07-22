@@ -20,6 +20,9 @@ export interface CampusFilterBarProps {
   viewMode?: "grid" | "table";
   onViewModeChange?: (mode: "grid" | "table") => void;
   onOpenCreateModal?: () => void;
+  visibleColumns?: string[];
+  onToggleColumn?: (key: string) => void;
+  onResetColumns?: () => void;
 }
 
 export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
@@ -34,11 +37,16 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
   viewMode = "grid",
   onViewModeChange,
   onOpenCreateModal,
+  visibleColumns,
+  onToggleColumn,
+  onResetColumns,
 }) => {
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
+  const columnsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -47,6 +55,9 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
       }
       if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
         setIsSortMenuOpen(false);
+      }
+      if (columnsRef.current && !columnsRef.current.contains(e.target as Node)) {
+        setIsColumnsMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -123,6 +134,70 @@ export const CampusFilterBar: React.FC<CampusFilterBarProps> = ({
             </div>
           )}
         </div>
+
+        {/* Columns Selector Button */}
+        {visibleColumns && onToggleColumn && (
+          <div className="relative shrink-0" ref={columnsRef}>
+            <button
+              type="button"
+              onClick={() => setIsColumnsMenuOpen((prev) => !prev)}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-2xl border border-neutral-200/80 bg-white px-3.5 text-xs font-bold text-neutral-700 hover:bg-neutral-50 transition-colors"
+            >
+              <TableCellsIcon className="h-4 w-4 text-neutral-500" />
+              <span>Columns</span>
+              <span className="ml-1 rounded-full bg-accent-100 px-1.5 py-0.5 text-[10px] font-bold text-accent-700">
+                {visibleColumns.length}
+              </span>
+            </button>
+
+            {isColumnsMenuOpen && (
+              <div className="absolute right-0 z-30 mt-1.5 w-64 rounded-2xl border border-neutral-200 bg-white p-3 shadow-xl ring-1 ring-black/5 space-y-2">
+                <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                  <span className="text-xs font-bold text-neutral-900">Configure Columns</span>
+                  {onResetColumns && (
+                    <button
+                      type="button"
+                      className="text-[11px] font-bold text-accent-600 hover:underline"
+                      onClick={() => {
+                        onResetColumns();
+                        setIsColumnsMenuOpen(false);
+                      }}
+                    >
+                      Reset Defaults
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-1 max-h-60 overflow-y-auto text-xs">
+                  {[
+                    { key: "select", label: "Checkbox Selection" },
+                    { key: "campus", label: "Campus Name & Location" },
+                    { key: "code", label: "Campus Code" },
+                    { key: "reps", label: "Representatives" },
+                    { key: "quota", label: "Capacity & Quota Progress" },
+                    { key: "link", label: "Signup Link & Actions" },
+                    { key: "order", label: "Display Order #" },
+                    { key: "address", label: "Full Address" },
+                    { key: "actions", label: "Action Menu" },
+                  ].map((col) => (
+                    <label
+                      key={col.key}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-neutral-50 cursor-pointer text-neutral-700 font-medium"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.includes(col.key)}
+                        onChange={() => onToggleColumn(col.key)}
+                        className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                      />
+                      <span>{col.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* View Mode Toggle */}
         {onViewModeChange && (
