@@ -1,16 +1,72 @@
 import { test, expect } from "@playwright/test";
-import { loginWithPassword } from "./helpers";
+import { loginWithPassword, getFixtureOrgContext, prisma, visibleText } from "./helpers";
 
 /**
- * /admin/teachers on mobile (StaffListPage.tsx + CampusQuotasCard.tsx):
+ * /admin/teachers on mobile (StaffListPage.tsx + StaffCard.tsx + CampusQuotasCard.tsx):
  * - Header action buttons ("Auto Assign Tribes" etc.) must not overflow the
  *   viewport or spill wrapped text outside the button's box.
  * - StatCard labels must not be clipped mid-word.
  * - Campus Quotas renders collapsed by default, positioned above the teacher
  *   list on mobile (a second, desktop-only copy lives in the sidebar).
+ * - A teacher row with a long name/email/phone/campus (realistic worst case)
+ *   must truncate instead of forcing the page wider — an empty list can't
+ *   catch this, since there's nothing there to overflow.
  */
 test.describe("Teachers page — mobile layout", () => {
   test.use({ viewport: { width: 375, height: 812 } });
+
+  const longTeacherEmail = `e2e-teacher-mobile-layout-${Date.now()}@camply.test`;
+  let parentUserId: string;
+  let staffProfileId: string;
+  let longCampusId: string;
+
+  test.beforeAll(async () => {
+    const { organizationId, campId } = await getFixtureOrgContext();
+
+    const longCampus = await prisma.campus.create({
+      data: {
+        name: `Extremely Long Campus Name For Overflow Testing Purposes ${Date.now()}`,
+        slug: `e2e-long-campus-${Date.now()}`,
+        address: "1 Test St",
+        city: "Testville",
+        country: "Testland",
+        organizationId,
+      },
+    });
+    longCampusId = longCampus.id;
+
+    const user = await prisma.user.create({
+      data: { email: longTeacherEmail, password: "x", role: "PARENT", organizationId },
+    });
+    parentUserId = user.id;
+
+    const profile = await prisma.staffProfile.create({
+      data: {
+        userId: parentUserId,
+        organizationId,
+        campId,
+        type: "TEACHER",
+        status: "APPROVED",
+        firstName: "Bartholomew-Nathaniel",
+        lastName: "Chukwuemeka-Adebayo-Okonkwo",
+        phone: "+234-801-234-5678-EXT-99999",
+        email: longTeacherEmail,
+        preferredCampusId: longCampusId,
+        skills: ["Extremely Long Skill Name For Testing", "Another Long Skill Name"],
+      },
+    });
+    staffProfileId = profile.id;
+  });
+
+  test.afterAll(async () => {
+    try {
+      await prisma.staffProfile.deleteMany({ where: { id: staffProfileId } });
+      await prisma.user.deleteMany({ where: { id: parentUserId } });
+      await prisma.campus.deleteMany({ where: { id: longCampusId } });
+    } catch {
+      // best-effort cleanup
+    }
+  });
 
   test.beforeEach(async ({ page }) => {
     await loginWithPassword(page, "admin@camply.com", "password123");
@@ -18,12 +74,29 @@ test.describe("Teachers page — mobile layout", () => {
     await page.getByRole("heading", { name: "Teachers", exact: true, level: 1 }).waitFor({ state: "visible", timeout: 15000 });
   });
 
-  test("page has no horizontal overflow", async ({ page }) => {
+  async function assertNoHorizontalOverflow(page: import("@playwright/test").Page) {
     const { scrollWidth, clientWidth } = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       clientWidth: document.documentElement.clientWidth,
     }));
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
+  }
+
+  test("page has no horizontal overflow (empty/default state)", async ({ page }) => {
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("a row with long name/email/phone/campus doesn't force horizontal overflow — list view", async ({ page }) => {
+    await page.getByPlaceholder(/Search by name, email or phone/i).fill(longTeacherEmail);
+    await expect(visibleText(page, longTeacherEmail).first()).toBeVisible({ timeout: 10000 });
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("a row with long name/email/phone/campus doesn't force horizontal overflow — card view", async ({ page }) => {
+    await page.getByPlaceholder(/Search by name, email or phone/i).fill(longTeacherEmail);
+    await page.getByRole("button", { name: "Cards" }).click();
+    await expect(visibleText(page, longTeacherEmail).first()).toBeVisible({ timeout: 10000 });
+    await assertNoHorizontalOverflow(page);
   });
 
   test("header action buttons render single-line, not clipped", async ({ page }) => {

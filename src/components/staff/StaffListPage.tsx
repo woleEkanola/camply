@@ -195,19 +195,19 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       header: type === "TEACHER" ? "Teacher" : "Volunteer",
       primary: true,
       accessor: (row) => (
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {row.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={row.photoUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
+            <img src={row.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
           ) : (
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-100 text-xs font-bold text-accent-700">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-100 text-xs font-bold text-accent-700">
               {row.firstName?.[0]}{row.lastName?.[0]}
             </span>
           )}
-          <div>
-            <div className="text-sm font-semibold text-neutral-900">{row.firstName} {row.lastName}</div>
-            <div className="text-xs text-neutral-500">{row.email}</div>
-            <div className="text-xs text-txt-muted">{row.phone}</div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-neutral-900">{row.firstName} {row.lastName}</div>
+            <div className="truncate text-xs text-neutral-500">{row.email}</div>
+            <div className="truncate text-xs text-txt-muted">{row.phone}</div>
           </div>
         </div>
       ),
