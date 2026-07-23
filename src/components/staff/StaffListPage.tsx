@@ -38,6 +38,7 @@ import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
 import { StaffCardGrid } from "@/components/staff/StaffCardGrid";
 import { ViewModeToggle, type StaffViewMode } from "@/components/staff/ViewModeToggle";
 import { TeacherRecruitmentPanel } from "@/components/staff/TeacherRecruitmentPanel";
+import { CampusQuotasCard } from "@/components/staff/CampusQuotasCard";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
@@ -290,12 +291,13 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             <h1 className="text-2xl font-bold text-neutral-900">{type === "TEACHER" ? "Teachers" : "Volunteers"}</h1>
             <p className="text-sm text-neutral-500">Manage and assign {type === "TEACHER" ? "teachers" : "volunteers"} for {activeYear?.name ?? "the active camp"}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             {type === "TEACHER" && (
               <>
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="w-full justify-center whitespace-nowrap sm:w-auto"
                   loading={autoAssignToTribes.isPending}
                   onClick={() => { if (window.confirm("Auto assign all teachers to tribes based on gender & quota?")) autoAssignToTribes.mutate({ organizationId, campId }); }}
                 >
@@ -304,6 +306,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="w-full justify-center whitespace-nowrap sm:w-auto"
                   loading={autoAssignToDepartments.isPending}
                   onClick={() => { if (window.confirm("Auto assign all teachers to departments with gender-mixed leaders?")) autoAssignToDepartments.mutate({ organizationId, campId }); }}
                 >
@@ -311,7 +314,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 </Button>
               </>
             )}
-            <Button size="sm" onClick={() => setIsAddOpen(true)}>
+            <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto" onClick={() => setIsAddOpen(true)}>
               <PlusIcon className="mr-1 h-4 w-4" /> Add {type === "TEACHER" ? "Teacher" : "Volunteer"}
             </Button>
           </div>
@@ -325,6 +328,13 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <StatCard label="Assigned" value={stats?.assigned ?? 0} icon={<UserCircleIcon className="h-5 w-5" />} tone="info" insight="With roles" />
           <StatCard label="Unassigned" value={stats?.unassigned ?? 0} icon={<UserMinusIcon className="h-5 w-5" />} tone="neutral" insight="No role yet" />
         </div>
+
+        {/* Campus Quotas — mobile only, above the list (sidebar copy below is desktop-only) */}
+        {type === "TEACHER" && (
+          <div className="mb-4 lg:hidden">
+            <CampusQuotasCard organizationId={organizationId} campId={campId} />
+          </div>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-4">
           {/* Main content */}
@@ -465,7 +475,12 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           {/* Right panel */}
           <div className="space-y-4">
             {type === "TEACHER" ? (
-              <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
+              <>
+                <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
+                <div className="hidden lg:block">
+                  <CampusQuotasCard organizationId={organizationId} campId={campId} />
+                </div>
+              </>
             ) : (
               <StaffLinkCard organizationId={organizationId} campId={campId} type={type} />
             )}

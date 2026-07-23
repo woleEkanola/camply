@@ -46,7 +46,7 @@ export function StatCard({ label, value, insight, tone = "neutral", icon, onClic
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-txt-secondary truncate">{label}</span>
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-txt-secondary line-clamp-2">{label}</span>
           <span className="block text-2xl md:text-3xl font-extrabold text-txt-primary tracking-tight mt-1">{value}</span>
         </div>
         {icon && (
