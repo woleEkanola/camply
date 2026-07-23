@@ -22,6 +22,7 @@ import { RegistrationDocumentPanel } from "@/components/staff/shared/Registratio
 import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
 import { CamperPhotoCropperModal } from "@/components/staff/shared/CamperPhotoCropperModal";
 import { CommunicationTimeline } from "@/components/communication/CommunicationTimeline";
+import { isEndorsed } from "@/server/registration/endorsement";
 
 import {
   ChevronLeftIcon,
@@ -97,6 +98,7 @@ export function RegistrationDetailsDrawer({
 
   const invalidate = () => {
     refetch();
+    refetchReview();
     utils.registration.timeline.invalidate({ registrationId });
     utils.registration.adminList.invalidate();
   };
@@ -186,6 +188,9 @@ export function RegistrationDetailsDrawer({
 
   const userRole = (session?.user as any)?.role;
   const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(userRole);
+  // endorse() leaves status at PENDING (only the two-step admin's own Approve moves it
+  // forward), so this is the only way to tell a reviewer "you already recommended this".
+  const endorsed = isTwoStep && registration.status === "PENDING" && isEndorsed(review);
 
   return (
     <>
@@ -315,8 +320,9 @@ export function RegistrationDetailsDrawer({
                 </div>
               </div>
 
-              <div className="shrink-0">
+              <div className="shrink-0 flex flex-col items-end gap-1">
                 <StatusBadge status={registration.status} />
+                {endorsed && <Badge tone="info">Recommended</Badge>}
               </div>
             </div>
           </div>
@@ -731,14 +737,24 @@ export function RegistrationDetailsDrawer({
               </button>
 
               {isTwoStep && !isOrgAdmin ? (
-                <Button
-                  className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"
-                  loading={endorse.isPending}
-                  onClick={() => endorse.mutate({ registrationId })}
-                >
-                  <CheckIcon className="mr-1 h-4 w-4" />
-                  Recommend
-                </Button>
+                endorsed ? (
+                  <Button
+                    disabled
+                    variant="secondary"
+                    className="flex-1 justify-center text-xs font-bold py-2.5"
+                  >
+                    Awaiting Approval
+                  </Button>
+                ) : (
+                  <Button
+                    className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"
+                    loading={endorse.isPending}
+                    onClick={() => endorse.mutate({ registrationId })}
+                  >
+                    <CheckIcon className="mr-1 h-4 w-4" />
+                    Recommend
+                  </Button>
+                )
               ) : (
                 <Button
                   className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"

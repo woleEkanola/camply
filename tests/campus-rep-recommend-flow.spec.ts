@@ -26,6 +26,7 @@ test.describe("Campus-rep recommend flow + filters + duplicates", () => {
   const camperIds: string[] = [];
 
   const targetName = `E2E Reprec Target ${stamp}`;
+  const drawerTargetName = `E2E Reprec Drawer ${stamp}`;
   const dupName = `E2E Reprec Dup ${stamp}`;
   const dupDob = new Date(2012, 3, 4);
 
@@ -62,6 +63,8 @@ test.describe("Campus-rep recommend flow + filters + duplicates", () => {
 
     // Recommend target (unique — not a duplicate).
     await makePending(targetName);
+    // Separate target opened via the drawer (RegistrationDetailsDrawer), not the list row.
+    await makePending(drawerTargetName);
     // Duplicate pair: two distinct campers sharing name+dob → both flagged duplicate.
     await makePending(dupName, dupDob);
     await makePending(dupName, dupDob);
@@ -110,6 +113,34 @@ test.describe("Campus-rep recommend flow + filters + duplicates", () => {
     await expect(awaitingBtn).toBeVisible();
     await expect(awaitingBtn).toBeDisabled();
     await expect(awaitingRow.getByRole("button", { name: "Recommend" })).toHaveCount(0);
+  });
+
+  test("Recommend inside the Registration Details drawer gives immediate feedback", async ({ page }) => {
+    await loginWithPassword(page, repEmail, "password123");
+    await page.goto("/campus-rep-dashboard/registrations");
+    await page.getByRole("heading", { name: "Registrations" }).first().waitFor({ state: "visible", timeout: 15000 });
+    await page.getByRole("button", { name: "List View" }).click();
+
+    // Clear back to "All Statuses" so both filter states are reachable without navigating away.
+    await page.locator("select").first().selectOption("");
+    const row = page.locator("tr", { hasText: drawerTargetName });
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 10000 });
+
+    const recommendBtn = dialog.getByRole("button", { name: "Recommend" });
+    await expect(recommendBtn).toBeVisible();
+    await recommendBtn.click();
+
+    // Without closing/reopening the drawer: badge appears, button becomes disabled
+    // "Awaiting Approval" — this is the fix for "clicking Recommend does nothing".
+    await expect(dialog.getByText("Recommended")).toBeVisible({ timeout: 10000 });
+    const awaitingBtn = dialog.getByRole("button", { name: "Awaiting Approval" });
+    await expect(awaitingBtn).toBeVisible();
+    await expect(awaitingBtn).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Recommend" })).toHaveCount(0);
   });
 
   test("surfaces duplicate registrations with a Duplicates filter and badge", async ({ page }) => {
