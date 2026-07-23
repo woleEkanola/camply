@@ -336,9 +336,9 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
           {/* Main content */}
-          <div className="lg:col-span-3 space-y-4">
+          <div className="min-w-0 lg:col-span-3 space-y-4">
             {/* Status tabs */}
             <div className="border-b border-border-default">
               <nav className="flex space-x-6">
@@ -473,7 +473,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           </div>
 
           {/* Right panel */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {type === "TEACHER" ? (
               <>
                 <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
@@ -488,30 +488,32 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         </div>
       </div>
 
-      {/* Fixed bottom bulk action bar */}
+      {/* Fixed bottom bulk action bar. overflow-hidden + a horizontally-scrollable
+          action group keep the 5 controls from pushing the whole page wider than
+          the viewport on mobile (they scroll within the bar instead). */}
       <div className={cn(
-        "fixed bottom-0 left-0 right-0 z-30 border-t border-border-default bg-surface p-3 shadow-lg transition-transform md:left-64",
+        "fixed bottom-0 left-0 right-0 z-30 overflow-hidden border-t border-border-default bg-surface p-3 shadow-lg transition-transform md:left-64",
         selectedIds.length > 0 ? "translate-y-0" : "translate-y-full"
       )}>
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full brand-tint-strong">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4">
+          <div className="flex min-w-0 shrink items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full brand-tint-strong">
               <UserGroupIcon className="h-5 w-5" />
             </div>
-            <div>
-              <div className="text-sm font-semibold text-neutral-900">{selectedIds.length} {type === "TEACHER" ? "teacher" : "volunteer"}{selectedIds.length === 1 ? "" : "s"} selected</div>
-              <div className="text-xs text-neutral-500">Select teachers to perform actions</div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-neutral-900">{selectedIds.length} {type === "TEACHER" ? "teacher" : "volunteer"}{selectedIds.length === 1 ? "" : "s"} selected</div>
+              <div className="truncate text-xs text-neutral-500">Select teachers to perform actions</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" loading={bulkApprove.isPending} onClick={() => bulkApprove.mutate({ ids: selectedIds })}><CheckIcon className="mr-1 h-4 w-4" /> Approve</Button>
-            <Button size="sm" variant="secondary" loading={bulkReject.isPending} onClick={() => bulkReject.mutate({ ids: selectedIds })}><XMarkIcon className="mr-1 h-4 w-4" /> Reject</Button>
-            <Select value={bulkVenueId} onChange={(e) => setBulkVenueId(e.target.value)} className="w-auto text-sm">
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
+            <Button size="sm" className="shrink-0" loading={bulkApprove.isPending} onClick={() => bulkApprove.mutate({ ids: selectedIds })}><CheckIcon className="mr-1 h-4 w-4" /> Approve</Button>
+            <Button size="sm" variant="secondary" className="shrink-0" loading={bulkReject.isPending} onClick={() => bulkReject.mutate({ ids: selectedIds })}><XMarkIcon className="mr-1 h-4 w-4" /> Reject</Button>
+            <Select value={bulkVenueId} onChange={(e) => setBulkVenueId(e.target.value)} containerClassName="shrink-0" className="w-auto text-sm">
               <option value="">Assign Venue</option>
               {filterVenues.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </Select>
-            <Button size="sm" variant="secondary" disabled={!bulkVenueId} loading={bulkAssignVenue.isPending} onClick={() => bulkAssignVenue.mutate({ ids: selectedIds, venueId: bulkVenueId })}><MapPinIcon className="mr-1 h-4 w-4" /> Assign</Button>
-            <Button size="sm" variant="danger" loading={bulkDelete.isPending} onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }}><TrashIcon className="mr-1 h-4 w-4" /> Delete</Button>
+            <Button size="sm" variant="secondary" className="shrink-0" disabled={!bulkVenueId} loading={bulkAssignVenue.isPending} onClick={() => bulkAssignVenue.mutate({ ids: selectedIds, venueId: bulkVenueId })}><MapPinIcon className="mr-1 h-4 w-4" /> Assign</Button>
+            <Button size="sm" variant="danger" className="shrink-0" loading={bulkDelete.isPending} onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }}><TrashIcon className="mr-1 h-4 w-4" /> Delete</Button>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { loginWithPassword, getFixtureOrgContext, prisma, visibleText } from "./helpers";
+import { loginWithPassword, getFixtureOrgContext, prisma, visibleText, onlyVisible } from "./helpers";
 
 /**
  * /admin/teachers on mobile (StaffListPage.tsx + StaffCard.tsx + CampusQuotasCard.tsx):
@@ -74,11 +74,18 @@ test.describe("Teachers page — mobile layout", () => {
     await page.getByRole("heading", { name: "Teachers", exact: true, level: 1 }).waitFor({ state: "visible", timeout: 15000 });
   });
 
+  // The real scroll container is AppShell's `<main className="… overflow-auto …">`,
+  // so horizontal overflow shows up as main.scrollWidth > main.clientWidth — NOT on
+  // document.documentElement (main clips/scrolls it). Measuring the document is what
+  // let a real overflow slip past this spec before.
   async function assertNoHorizontalOverflow(page: import("@playwright/test").Page) {
-    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
+    const { scrollWidth, clientWidth } = await page.evaluate(() => {
+      const main = document.querySelector("main");
+      return {
+        scrollWidth: main?.scrollWidth ?? document.documentElement.scrollWidth,
+        clientWidth: main?.clientWidth ?? document.documentElement.clientWidth,
+      };
+    });
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
   }
 
@@ -96,6 +103,15 @@ test.describe("Teachers page — mobile layout", () => {
     await page.getByPlaceholder(/Search by name, email or phone/i).fill(longTeacherEmail);
     await page.getByRole("button", { name: "Cards" }).click();
     await expect(visibleText(page, longTeacherEmail).first()).toBeVisible({ timeout: 10000 });
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("selecting a row shows the bulk action bar without widening the page", async ({ page }) => {
+    await page.getByPlaceholder(/Search by name, email or phone/i).fill(longTeacherEmail);
+    await expect(visibleText(page, longTeacherEmail).first()).toBeVisible({ timeout: 10000 });
+    // Select the first row's checkbox to reveal the fixed bottom bulk action bar.
+    await onlyVisible(page.getByRole("checkbox", { name: /Select/i })).first().check();
+    await expect(page.getByText(/teacher(s)? selected/i).first()).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 

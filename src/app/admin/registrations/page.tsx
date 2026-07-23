@@ -568,11 +568,28 @@ function RegistrationsPage() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onOpenFilters={() => setFiltersOpen(true)}
-          filterStatus={filterStatus}
+          activeFilterKey={
+            duplicatesOnly
+              ? "FILTER_DUPLICATES"
+              : reviewStateFilter
+                ? `REVIEW_${reviewStateFilter}`
+                : filterStatus
+          }
           isTwoStep={isTwoStep}
-          onSelectStatusFilter={(s) => {
-            setReviewStateFilter("");
-            setFilterStatus(s);
+          onSelectStatusFilter={(key) => {
+            if (key === "FILTER_DUPLICATES") {
+              setFilterStatus("");
+              setReviewStateFilter("");
+              setDuplicatesOnly(true);
+            } else if (key.startsWith("REVIEW_")) {
+              setFilterStatus("");
+              setDuplicatesOnly(false);
+              setReviewStateFilter(key.replace("REVIEW_", "") as any);
+            } else {
+              setReviewStateFilter("");
+              setDuplicatesOnly(false);
+              setFilterStatus(key);
+            }
           }}
           stats={{
             totalCount: statsTotalCount,
@@ -580,6 +597,9 @@ function RegistrationsPage() {
             approvedCount: kpi["APPROVED"] ?? 0,
             checkedInCount: kpi["CHECKED_IN"] ?? 0,
             rejectedCount: kpi["REJECTED"] ?? 0,
+            awaitingVettingCount,
+            awaitingFinalCount,
+            duplicateCount: statsData?.duplicateCount ?? 0,
           }}
           registrations={registrations}
           selectedIds={selectedIds}

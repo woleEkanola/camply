@@ -40,12 +40,12 @@ export function StaffCard({ row, onClick, actions, type, selected, onSelect }: S
     <div
       onClick={onClick}
       className={cn(
-        "group relative flex flex-col gap-4 rounded-2xl border bg-surface p-4 shadow-xs transition",
+        "group relative flex min-w-0 flex-col gap-4 rounded-2xl border bg-surface p-4 shadow-xs transition",
         onClick && "cursor-pointer hover:border-accent-300 hover:shadow-sm",
         selected ? "border-accent-500 ring-1 ring-accent-500" : "border-border-default"
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-start gap-3">
         {onSelect && (
           <input
             type="checkbox"

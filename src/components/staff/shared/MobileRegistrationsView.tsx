@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
+import { isEndorsed } from "@/server/registration/endorsement";
 import {
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -130,6 +131,8 @@ interface MobileRegistrationCardProps {
   primaryLabel?: string;
   secondaryLabel?: string;
   onQuickAction?: (reg: any, action: string) => void;
+  isTwoStep?: boolean;
+  isReviewer?: boolean;
 }
 
 export function MobileRegistrationCard({
@@ -142,8 +145,14 @@ export function MobileRegistrationCard({
   primaryLabel = "Approve",
   secondaryLabel = "Reject",
   onQuickAction,
+  isTwoStep = false,
+  isReviewer = false,
 }: MobileRegistrationCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const endorsed = isTwoStep && registration.status === "PENDING" && isEndorsed(registration.review);
+  // A reviewer who has already recommended this camper has nothing left to do on
+  // it — the primary action becomes a non-clickable "Awaiting Approval" marker.
+  const awaitingApproval = isReviewer && endorsed;
 
   const camperName = registration.camper?.name || registration.user?.name || registration.name || "Camper";
   const parentName = registration.parent?.name || registration.camper?.user?.name || registration.user?.email || "";
@@ -207,13 +216,25 @@ export function MobileRegistrationCard({
 
           {/* Name & Relationship */}
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-[17px] font-bold text-txt-primary leading-tight">
-              {camperName}
-            </h3>
-            <div className="mt-1 flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h3 className="truncate text-[17px] font-bold text-txt-primary leading-tight">
+                {camperName}
+              </h3>
+              {registration.isDuplicate && (
+                <span className="shrink-0 inline-flex items-center rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">
+                  Duplicate
+                </span>
+              )}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <span className="inline-flex items-center rounded-md bg-accent-500/15 border border-accent-500/30 px-2 py-0.5 text-[11px] font-semibold text-accent-400">
                 {relationship}
               </span>
+              {endorsed && (
+                <span className="inline-flex items-center rounded-md bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 text-[11px] font-semibold text-sky-500">
+                  Recommended
+                </span>
+              )}
               {age !== null && (
                 <span className="inline-flex items-center rounded-md bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 text-[11px] font-semibold text-sky-400">
                   {age}y
@@ -296,7 +317,15 @@ export function MobileRegistrationCard({
 
       {/* SECTION 3 — ACTIONS ROW */}
       <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        {onPrimaryAction && (
+        {awaitingApproval ? (
+          <button
+            type="button"
+            disabled
+            className="flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl bg-surface-raised text-txt-secondary font-bold text-xs border border-border-default cursor-not-allowed px-2"
+          >
+            <span>Awaiting Approval</span>
+          </button>
+        ) : onPrimaryAction ? (
           <button
             type="button"
             onClick={() => onPrimaryAction(registration)}
@@ -304,7 +333,7 @@ export function MobileRegistrationCard({
           >
             <span>{primaryLabel}</span>
           </button>
-        )}
+        ) : null}
 
         {onSecondaryAction && (
           <button
@@ -450,15 +479,21 @@ interface MobileRegistrationsViewProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onOpenFilters: () => void;
-  filterStatus: string;
+  /** The currently active filter, encoded the same way desktop encodes it:
+   * a plain status ("PENDING"), a "REVIEW_*" review-state key, "FILTER_DUPLICATES", or "". */
+  activeFilterKey: string;
   isTwoStep?: boolean;
-  onSelectStatusFilter: (status: string) => void;
+  isReviewer?: boolean;
+  onSelectStatusFilter: (key: string) => void;
   stats: {
     totalCount: number;
     pendingCount: number;
     approvedCount: number;
     checkedInCount: number;
     rejectedCount: number;
+    awaitingVettingCount?: number;
+    awaitingFinalCount?: number;
+    duplicateCount?: number;
   };
   registrations: any[];
   selectedIds: string[];
@@ -487,8 +522,9 @@ export function MobileRegistrationsView({
   searchQuery,
   onSearchChange,
   onOpenFilters,
-  filterStatus,
+  activeFilterKey,
   isTwoStep = false,
+  isReviewer = false,
   onSelectStatusFilter,
   stats,
   registrations,
@@ -544,9 +580,14 @@ export function MobileRegistrationsView({
 
   const statCards = [
     { label: "All", value: stats.totalCount ?? registrations.length, statusKey: "", valueColor: "text-neutral-900" },
-    { label: "Pending", value: stats.pendingCount ?? 0, statusKey: "PENDING", valueColor: "text-amber-600" },
+    ...(isTwoStep
+      ? [
+          { label: "Pending", value: stats.awaitingVettingCount ?? 0, statusKey: "REVIEW_AWAITING_VETTING", valueColor: "text-amber-600" },
+          { label: "Awaiting", value: stats.awaitingFinalCount ?? 0, statusKey: "REVIEW_AWAITING_FINAL", valueColor: "text-sky-600" },
+        ]
+      : [{ label: "Pending", value: stats.pendingCount ?? 0, statusKey: "PENDING", valueColor: "text-amber-600" }]),
+    { label: "Duplicates", value: stats.duplicateCount ?? 0, statusKey: "FILTER_DUPLICATES", valueColor: "text-amber-600" },
     { label: "Approved", value: stats.approvedCount ?? 0, statusKey: "APPROVED", valueColor: "text-emerald-600" },
-    { label: "Checked In", value: stats.checkedInCount ?? 0, statusKey: "CHECKED_IN", valueColor: "text-sky-600" },
     { label: "Rejected", value: stats.rejectedCount ?? 0, statusKey: "REJECTED", valueColor: "text-rose-600" },
   ];
 
@@ -554,10 +595,11 @@ export function MobileRegistrationsView({
     { label: "All", key: "" },
     ...(isTwoStep
       ? [
-          { label: "Awaiting Vetting", key: "REVIEW_AWAITING_VETTING", dotColor: "bg-amber-500" },
-          { label: "Awaiting Final", key: "REVIEW_AWAITING_FINAL", dotColor: "bg-purple-500" },
+          { label: "Pending", key: "REVIEW_AWAITING_VETTING", dotColor: "bg-amber-500" },
+          { label: "Awaiting", key: "REVIEW_AWAITING_FINAL", dotColor: "bg-sky-500" },
         ]
       : [{ label: "Pending", key: "PENDING", dotColor: "bg-amber-500" }]),
+    { label: "Duplicates", key: "FILTER_DUPLICATES", dotColor: "bg-amber-600" },
     { label: "Approved", key: "APPROVED", dotColor: "bg-emerald-500" },
     { label: "Checked In", key: "CHECKED_IN", dotColor: "bg-sky-500" },
     { label: "Completed", key: "COMPLETED", dotColor: "bg-accent-500" },
@@ -605,7 +647,7 @@ export function MobileRegistrationsView({
       {/* 2. STATISTICS SUMMARY CARDS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 pt-0.5">
         {statCards.map((stat) => {
-          const isSelected = filterStatus === stat.statusKey;
+          const isSelected = activeFilterKey === stat.statusKey;
           return (
             <button
               key={stat.label}
@@ -632,7 +674,7 @@ export function MobileRegistrationsView({
       {/* 3. QUICK FILTER CHIPS */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
         {filterChips.map((chip) => {
-          const isSelected = filterStatus === chip.key;
+          const isSelected = activeFilterKey === chip.key;
           return (
             <button
               key={chip.key}
@@ -697,7 +739,14 @@ export function MobileRegistrationsView({
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="font-bold text-sm text-txt-primary truncate">{camperName}</div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-bold text-sm text-txt-primary truncate">{camperName}</span>
+                    {reg.isDuplicate && (
+                      <span className="shrink-0 inline-flex items-center rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">
+                        Dup
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-txt-muted truncate">{campusName} • #{regNumber}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -716,6 +765,8 @@ export function MobileRegistrationsView({
             <MobileRegistrationCard
               key={reg.id}
               registration={reg}
+              isTwoStep={isTwoStep}
+              isReviewer={isReviewer}
               isSelected={selectedIds.includes(reg.id)}
               onSelect={onSelectRow}
               onClick={onCardClick}
