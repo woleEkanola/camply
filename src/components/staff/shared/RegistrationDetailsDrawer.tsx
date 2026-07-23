@@ -713,20 +713,22 @@ export function RegistrationDetailsDrawer({
           {/* 5. FIXED BOTTOM ACTION BAR */}
           <div className="fixed bottom-0 inset-x-0 z-30 border-t border-border-default bg-surface p-3.5 shadow-2xl">
             <div className="flex items-center gap-2 max-w-lg mx-auto">
-              <Button
-                className="flex-1 justify-center text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 py-2.5"
+              <button
+                type="button"
+                className="flex-1 inline-flex items-center justify-center rounded-md font-bold transition-colors touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 text-xs bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 py-2.5"
                 onClick={() => setCorrectionDialogOpen(true)}
               >
                 Request Correction
-              </Button>
+              </button>
 
-              <Button
-                className="flex-1 justify-center text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 py-2.5"
+              <button
+                type="button"
+                className="flex-1 inline-flex items-center justify-center rounded-md font-bold transition-colors touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 text-xs bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 py-2.5"
                 onClick={() => setRejectDialogOpen(true)}
               >
                 <XMarkIcon className="mr-1 h-4 w-4 text-rose-600" />
                 Reject
-              </Button>
+              </button>
 
               {isTwoStep && !isOrgAdmin ? (
                 <Button

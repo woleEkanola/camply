@@ -303,10 +303,19 @@ export async function recommendTribe(registrationId: string, actorId?: string | 
 
 export async function acceptRecommendation(registrationId: string, actorId: string) {
   return prisma.$transaction(async (tx) => {
-    const reg = await tx.registration.findUniqueOrThrow({
+    let reg = await tx.registration.findUniqueOrThrow({
       where: { id: registrationId },
       include: { camper: true },
     });
+    if (!reg.suggestedTribeId) {
+      // No suggestion persisted yet (e.g. only the live preview was ever shown) —
+      // compute and persist one before accepting, so Accept works in one click.
+      await recommendTribeInTx(tx, registrationId, actorId);
+      reg = await tx.registration.findUniqueOrThrow({
+        where: { id: registrationId },
+        include: { camper: true },
+      });
+    }
     if (!reg.suggestedTribeId) {
       throw new TribeAllocationError("NO_RECOMMENDATION", "No tribe recommendation exists to accept.");
     }

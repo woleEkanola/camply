@@ -226,6 +226,19 @@ describe("v3 Recommendation Engine (Decoupled Recommendation vs Assignment)", ()
     expect(confirmed.tribeRecommendationStatus).toBe("ASSIGNED");
   });
 
+  it("acceptRecommendation succeeds on the first click with no prior recommend/regenerate call", async () => {
+    const tribe = await prisma.tribe.create({ data: { campId, name: "First Click Tribe" } });
+    const camper = await makeCamper();
+    const draft = await regEngine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+
+    // Deliberately skip recommendTribe/regenerate — mirrors a user clicking
+    // "Accept Recommendation" while only the live (unpersisted) preview has been shown.
+    const accepted = await tribeEngine.acceptRecommendation(draft.id, parentId);
+
+    expect(accepted.suggestedTribeId).toBe(tribe.id);
+    expect(accepted.tribeRecommendationStatus).toBe("ACCEPTED");
+  });
+
   it("bulkSuggestTribes generates suggestions and bulkApplySuggestedTribes confirms assignments", async () => {
     await prisma.camp.update({ where: { id: campId }, data: { approvalMode: "MANUAL" } });
     const tribe = await prisma.tribe.create({ data: { campId, name: "Bulk Tribe" } });
