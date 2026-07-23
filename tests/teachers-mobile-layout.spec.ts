@@ -150,4 +150,19 @@ test.describe("Teachers page — mobile layout", () => {
     await quotasHeading.click();
     await expect(page.getByText("Set quota").or(page.getByText("Edit quota")).first()).toBeVisible({ timeout: 5000 });
   });
+
+  test("Teacher Recruitment card sits above the teacher list, before Campus Quotas", async ({ page }) => {
+    const recruitmentHeading = page.getByRole("heading", { name: "Teacher Recruitment" }).first();
+    await expect(recruitmentHeading).toBeVisible();
+
+    const quotasHeading = page.getByRole("heading", { name: "Campus Quotas" }).first();
+    const tabsBox = await page.getByRole("button", { name: "All" }).first().boundingBox();
+    const recruitmentBox = await recruitmentHeading.boundingBox();
+    const quotasBox = await quotasHeading.boundingBox();
+
+    // Above the list.
+    expect(recruitmentBox && tabsBox && recruitmentBox.y).toBeLessThan(tabsBox!.y);
+    // Before (above) Campus Quotas in the mobile stack.
+    expect(recruitmentBox && quotasBox && recruitmentBox.y).toBeLessThan(quotasBox!.y);
+  });
 });

@@ -329,9 +329,11 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <StatCard label="Unassigned" value={stats?.unassigned ?? 0} icon={<UserMinusIcon className="h-5 w-5" />} tone="neutral" insight="No role yet" />
         </div>
 
-        {/* Campus Quotas — mobile only, above the list (sidebar copy below is desktop-only) */}
+        {/* Teacher Recruitment + Campus Quotas — mobile only, above the list
+            (desktop sidebar copies below stay hidden on mobile to avoid duplication). */}
         {type === "TEACHER" && (
-          <div className="mb-4 lg:hidden">
+          <div className="mb-4 space-y-4 lg:hidden">
+            <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
             <CampusQuotasCard organizationId={organizationId} campId={campId} />
           </div>
         )}
@@ -475,12 +477,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           {/* Right panel */}
           <div className="min-w-0 space-y-4">
             {type === "TEACHER" ? (
-              <>
+              <div className="hidden space-y-4 lg:block">
                 <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
-                <div className="hidden lg:block">
-                  <CampusQuotasCard organizationId={organizationId} campId={campId} />
-                </div>
-              </>
+                <CampusQuotasCard organizationId={organizationId} campId={campId} />
+              </div>
             ) : (
               <StaffLinkCard organizationId={organizationId} campId={campId} type={type} />
             )}

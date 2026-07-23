@@ -87,8 +87,15 @@ test.describe("Dual role: a Teacher can also be a Campus Rep", () => {
     await expect(page.getByRole("heading", { name: "Teacher Dashboard" })).toBeVisible({ timeout: 10000 });
 
     // Nav gained the Campus Rep's Registrations/Campers items on top of the Teacher nav.
-    await expect(page.getByText("My Campus (Rep)")).toBeVisible();
+    const repSectionHeading = page.getByText("My Campus (Rep)");
+    await expect(repSectionHeading).toBeVisible();
     await expect(page.getByRole("link", { name: "Registrations" })).toBeVisible();
+
+    // It's the reviewer's primary task, so it's positioned above "Dashboard" in the nav.
+    const dashboardLink = page.getByRole("link", { name: "Dashboard" }).first();
+    const repBox = await repSectionHeading.boundingBox();
+    const dashboardBox = await dashboardLink.boundingBox();
+    expect(repBox && dashboardBox && repBox.y).toBeLessThan(dashboardBox!.y);
 
     // Can assign a tribe on a registration in their own (rep) campus.
     const ok = await page.request.post("/api/trpc/tribe.assign?batch=1", {

@@ -237,7 +237,6 @@ const PARENT_GROUPS: NavGroup[] = [
 ];
 
 const CAMPUS_REP_GROUPS: NavGroup[] = [
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }] },
   {
     name: "Registration",
     items: [
@@ -245,6 +244,7 @@ const CAMPUS_REP_GROUPS: NavGroup[] = [
       { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
     ],
   },
+  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }] },
 ];
 
 const SUPER_ADMIN_GROUPS: NavGroup[] = [
@@ -336,9 +336,9 @@ export function getNavGroups(
   }
   if (hasCampusRepAccess && (area === "teacher" || area === "volunteer")) {
     // Inside the unified staff shell, dual-role teachers/volunteers see a single
-    // Registrations link scoped to their managed campuses.
+    // Registrations link scoped to their managed campuses. Placed first — it's
+    // the primary task reps come here to do, ahead of Dashboard/Operations.
     groups = [
-      ...groups,
       {
         name: "My Campus (Rep)",
         items: [
@@ -349,6 +349,7 @@ export function getNavGroups(
           },
         ],
       },
+      ...groups,
     ];
   }
   return groups;
