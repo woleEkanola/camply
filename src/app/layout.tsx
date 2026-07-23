@@ -3,6 +3,7 @@ import "./globals.css";
 import { TRPCProvider } from "./providers";
 import { AuthProvider } from "./auth-provider";
 import { ToastProvider } from "@/components/ui/Toast";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { BrandColorProvider } from "@/components/theme/BrandColorProvider";
 import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
 import { extractRouterConfig } from "uploadthing/server";
@@ -43,19 +44,28 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("camply-theme");if(t==="dark"||(!t&&window.matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.classList.add("dark");}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
         <AuthProvider>
           <TRPCProvider>
-            <BrandColorProvider>
-              <Suspense>
-                <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
-              </Suspense>
-              <ToastProvider>{children}</ToastProvider>
-              <Analytics />
-            </BrandColorProvider>
+            <ThemeProvider>
+              <BrandColorProvider>
+                <Suspense>
+                  <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
+                </Suspense>
+                <ToastProvider>{children}</ToastProvider>
+                <Analytics />
+              </BrandColorProvider>
+            </ThemeProvider>
           </TRPCProvider>
         </AuthProvider>
       </body>

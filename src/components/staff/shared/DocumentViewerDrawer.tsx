@@ -128,7 +128,7 @@ export function DocumentViewerDrawer({
               ) : (
                 <iframe
                   src={document.url}
-                  className="w-full h-[380px] rounded-lg bg-white shadow-2xl"
+                  className="w-full h-[380px] rounded-lg bg-surface shadow-2xl"
                   title={document.fileName}
                 />
               )}
@@ -186,12 +186,12 @@ export function DocumentViewerDrawer({
             </div>
 
             {/* Verification Metadata */}
-            <div className="rounded-xl bg-neutral-50 border border-neutral-200/80 p-3 text-xs space-y-1.5">
-              <div className="flex justify-between text-neutral-600">
+            <div className="rounded-xl bg-surface-raised border border-border-default p-3 text-xs space-y-1.5">
+              <div className="flex justify-between text-txt-secondary">
                 <span>Verified by</span>
                 <span className="font-semibold text-neutral-900">{document.verifiedBy || "Staff Reviewer"}</span>
               </div>
-              <div className="flex justify-between text-neutral-600">
+              <div className="flex justify-between text-txt-secondary">
                 <span>Verified date</span>
                 <span className="font-medium text-neutral-800">
                   {document.verifiedAt

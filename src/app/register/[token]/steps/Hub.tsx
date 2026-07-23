@@ -69,10 +69,10 @@ export function StepHub({ state, dispatch }: StepHubProps) {
         <button onClick={() => dispatch({ type: "GO_BACK" })} className="text-sm font-medium text-accent-600 hover:text-accent-700">
           ← Back
         </button>
-        <h1 className="mt-1 text-2xl font-bold text-neutral-900">
+        <h1 className="mt-1 text-2xl font-bold text-txt-primary">
           Welcome{state.firstName ? `, ${state.firstName}` : ""}!
         </h1>
-        <p className="text-sm text-neutral-500">What would you like to do?</p>
+        <p className="text-sm text-txt-secondary">What would you like to do?</p>
       </div>
 
       <div className="space-y-4">
@@ -80,7 +80,7 @@ export function StepHub({ state, dispatch }: StepHubProps) {
         <button
           type="button"
           onClick={() => dispatch({ type: "GO_TO", step: "TEENS" })}
-          className="flex w-full items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-accent-300 hover:shadow-md"
+          className="flex w-full items-center gap-4 rounded-2xl border border-border-default bg-surface p-5 text-left shadow-sm transition-colors hover:border-accent-300 hover:shadow-md"
         >
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent-100 text-accent-600">
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -88,8 +88,8 @@ export function StepHub({ state, dispatch }: StepHubProps) {
             </svg>
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-neutral-900">Register a Teen</h3>
-            <p className="text-xs text-neutral-500">Add a new teen to this camp.</p>
+            <h3 className="font-semibold text-txt-primary">Register a Teen</h3>
+            <p className="text-xs text-txt-secondary">Add a new teen to this camp.</p>
           </div>
           <svg className="h-5 w-5 shrink-0 text-neutral-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
@@ -98,18 +98,18 @@ export function StepHub({ state, dispatch }: StepHubProps) {
 
         {/* Card 2: Resume Registration */}
         {isLoading ? (
-          <div className="animate-pulse rounded-2xl border border-neutral-200 bg-white p-5">
+          <div className="animate-pulse rounded-2xl border border-border-default bg-surface p-5">
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-xl bg-neutral-200" />
               <div className="flex-1 space-y-2">
                 <div className="h-4 w-32 rounded bg-neutral-200" />
-                <div className="h-3 w-48 rounded bg-neutral-100" />
+                <div className="h-3 w-48 rounded bg-surface-raised" />
               </div>
             </div>
           </div>
         ) : incomplete.length > 0 ? (
           <div className="space-y-2">
-            <p className="px-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+            <p className="px-1 text-xs font-semibold uppercase tracking-wide text-txt-muted">
               Incomplete Registrations
             </p>
             {incomplete.map((reg: any) => (
@@ -125,10 +125,10 @@ export function StepHub({ state, dispatch }: StepHubProps) {
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-neutral-900 truncate">
+                  <h3 className="font-semibold text-txt-primary truncate">
                     Resume: {reg.camper?.firstName ?? reg.camper?.name ?? "Camper"}
                   </h3>
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-txt-secondary">
                     {reg.status === "REQUIRES_ACTION" ? "Action needed" : "Incomplete"} · {reg.camp?.name}
                   </p>
                 </div>
@@ -143,16 +143,16 @@ export function StepHub({ state, dispatch }: StepHubProps) {
         {/* Card 3: View Status */}
         <a
           href="/dashboard"
-          className="flex w-full items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-neutral-300 hover:shadow-md"
+          className="flex w-full items-center gap-4 rounded-2xl border border-border-default bg-surface p-5 text-left shadow-sm transition-colors hover:border-input-border hover:shadow-md"
         >
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-surface-raised text-txt-secondary">
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 8.25h-2.25A2.25 2.25 0 0 1 13.5 6V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
             </svg>
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-neutral-900">View Status</h3>
-            <p className="text-xs text-neutral-500">Check your registrations and acceptance letters.</p>
+            <h3 className="font-semibold text-txt-primary">View Status</h3>
+            <p className="text-xs text-txt-secondary">Check your registrations and acceptance letters.</p>
           </div>
           <svg className="h-5 w-5 shrink-0 text-neutral-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />

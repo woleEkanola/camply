@@ -188,7 +188,7 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-neutral-500">Fields shown to the wizard, in order. Drag to reorder. System fields can be hidden or required but not removed.</p>
+        <p className="text-sm text-txt-secondary">Fields shown to the wizard, in order. Drag to reorder. System fields can be hidden or required but not removed.</p>
         <Button size="sm" className="whitespace-nowrap px-3" onClick={openCreate}>Add Custom Field</Button>
       </div>
 
@@ -211,13 +211,13 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
       {isLoading ? (
         <div className="animate-pulse space-y-2">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-14 rounded-lg bg-neutral-100" />
+            <div key={i} className="h-14 rounded-lg bg-surface-raised" />
           ))}
         </div>
       ) : fields.length === 0 ? (
-        <div className="rounded-lg border border-neutral-200 bg-white py-12 text-center">
-          <p className="text-sm font-medium text-neutral-700">No fields yet</p>
-          <p className="mt-1 text-xs text-neutral-500">Click "Add Custom Field" to create your first field.</p>
+        <div className="rounded-lg border border-border-default bg-surface py-12 text-center">
+          <p className="text-sm font-medium text-txt-secondary">No fields yet</p>
+          <p className="mt-1 text-xs text-txt-secondary">Click "Add Custom Field" to create your first field.</p>
         </div>
       ) : (
         <DraggableFieldList
@@ -254,7 +254,7 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
               {ALL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </Select>
           ) : (
-            <div className="text-sm text-neutral-500">Type: <span className="font-medium text-neutral-700">{edit?.field?.type}</span></div>
+            <div className="text-sm text-txt-secondary">Type: <span className="font-medium text-txt-secondary">{edit?.field?.type}</span></div>
           )}
 
           {(edit?.mode === "create" ? showOptionsEditor : isSystemEdit ? HAS_OPTIONS.includes(edit?.field?.type as FormFieldType) : showOptionsEditor) && (
@@ -278,13 +278,13 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
           )}
 
           <div className="flex gap-4">
-            <label className="flex items-center gap-2 text-sm text-neutral-700">
-              <input type="checkbox" checked={form.required} onChange={(e) => setForm((f) => ({ ...f, required: e.target.checked }))} className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500" />
+            <label className="flex items-center gap-2 text-sm text-txt-secondary">
+              <input type="checkbox" checked={form.required} onChange={(e) => setForm((f) => ({ ...f, required: e.target.checked }))} className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500" />
               Required
             </label>
             {edit?.mode === "edit" && (
-              <label className="flex items-center gap-2 text-sm text-neutral-700">
-                <input type="checkbox" checked={form.visible} onChange={(e) => setForm((f) => ({ ...f, visible: e.target.checked }))} className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500" />
+              <label className="flex items-center gap-2 text-sm text-txt-secondary">
+                <input type="checkbox" checked={form.visible} onChange={(e) => setForm((f) => ({ ...f, visible: e.target.checked }))} className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500" />
                 Visible
               </label>
             )}

@@ -194,46 +194,46 @@ export default function AccessControl({ organizationId }: { organizationId: stri
 
   return (
     <div>
-      <h2 className="mb-4 text-xl font-semibold text-gray-800">Access Control</h2>
+      <h2 className="mb-4 text-xl font-semibold text-txt-primary">Access Control</h2>
       
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-4 rounded-md status-danger p-4 text-sm">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="mb-4 rounded-md bg-green-50 p-4 text-sm text-green-700">
+        <div className="mb-4 rounded-md status-success p-4 text-sm">
           {success}
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         {/* User List */}
-        <div className="rounded-lg bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-lg font-medium text-gray-800">Users</h3>
+        <div className="rounded-lg bg-surface p-4 shadow-sm">
+          <h3 className="mb-3 text-lg font-medium text-txt-primary">Users</h3>
           <div className="max-h-[500px] overflow-y-auto">
-            <ul className="divide-y divide-gray-200">
+            <ul className="divide-y divide-border-default">
               {users.map((user) => (
                 <li 
                   key={user.id} 
-                  className={`cursor-pointer py-3 hover:bg-gray-50 ${
+                  className={`cursor-pointer py-3 hover:bg-surface-hover ${
                     selectedUser === user.id ? 'bg-accent-50' : ''
                   }`}
                   onClick={() => canManageUserPermissions(user.role) && handleUserSelect(user.id)}
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-gray-900">
+                      <p className="font-medium text-txt-primary">
                         {user.firstName} {user.lastName}
                       </p>
-                      <p className="text-sm text-gray-500">{user.email}</p>
-                      <span className="mt-1 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800">
+                      <p className="text-sm text-txt-secondary">{user.email}</p>
+                      <span className="mt-1 inline-block rounded-full bg-surface-raised px-2 py-0.5 text-xs font-medium text-txt-primary">
                         {getRoleDisplayName(user.role)}
                       </span>
                     </div>
                     {!canManageUserPermissions(user.role) && (
-                      <span className="text-xs text-gray-400">No access</span>
+                      <span className="text-xs text-txt-muted">No access</span>
                     )}
                   </div>
                 </li>
@@ -243,13 +243,13 @@ export default function AccessControl({ organizationId }: { organizationId: stri
         </div>
 
         {/* Permissions Form */}
-        <div className="col-span-2 rounded-lg bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-lg font-medium text-gray-800">Permissions</h3>
+        <div className="col-span-2 rounded-lg bg-surface p-4 shadow-sm">
+          <h3 className="mb-3 text-lg font-medium text-txt-primary">Permissions</h3>
           
           {selectedUser ? (
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-txt-secondary">
                   Manage permissions for the selected user. Changes will take effect immediately.
                 </p>
               </div>
@@ -260,7 +260,7 @@ export default function AccessControl({ organizationId }: { organizationId: stri
 
                 if (availablePermissions.length === 0) {
                   return (
-                    <div className="mb-4 rounded-md bg-gray-50 p-4 text-sm text-gray-500">
+                    <div className="mb-4 rounded-md bg-surface-raised p-4 text-sm text-txt-secondary">
                       {getRoleDisplayName(selectedRole ?? "")} accounts don&apos;t have configurable permissions here —
                       this panel manages the granular {" "}
                       <span className="font-medium">{Object.values(PermissionType).map(getPermissionDisplayName).join(", ")}</span>{" "}
@@ -279,11 +279,11 @@ export default function AccessControl({ organizationId }: { organizationId: stri
                             id={`permission-${permission}`}
                             checked={permissionForm.permissions.includes(permission)}
                             onChange={(e) => handlePermissionChange(permission, e.target.checked)}
-                            className="h-4 w-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500"
+                            className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
                           />
                           <label
                             htmlFor={`permission-${permission}`}
-                            className="ml-2 text-sm text-gray-700"
+                            className="ml-2 text-sm text-txt-primary"
                           >
                             {getPermissionDisplayName(permission)}
                           </label>
@@ -306,7 +306,7 @@ export default function AccessControl({ organizationId }: { organizationId: stri
             </form>
           ) : (
             <div className="flex h-64 items-center justify-center">
-              <p className="text-gray-500">Select a user to manage permissions</p>
+              <p className="text-txt-secondary">Select a user to manage permissions</p>
             </div>
           )}
         </div>

@@ -52,7 +52,7 @@ export default function DeliveryQueuePage() {
           <div className="rounded-lg bg-amber-50 p-3 text-center"><div className="text-xl font-bold text-amber-600">{stats?.waiting ?? 0}</div><div className="text-xs text-amber-500">Waiting</div></div>
           <div className="rounded-lg bg-green-50 p-3 text-center"><div className="text-xl font-bold text-green-600">{stats?.completed ?? 0}</div><div className="text-xs text-green-500">Completed</div></div>
           <div className="rounded-lg bg-red-50 p-3 text-center"><div className="text-xl font-bold text-red-600">{stats?.failed ?? 0}</div><div className="text-xs text-red-500">Failed</div></div>
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold text-neutral-600">{(stats?.waiting ?? 0) + (stats?.completed ?? 0) + (stats?.failed ?? 0)}</div><div className="text-xs text-neutral-500">Total</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-txt-secondary">{(stats?.waiting ?? 0) + (stats?.completed ?? 0) + (stats?.failed ?? 0)}</div><div className="text-xs text-txt-secondary">Total</div></div>
         </div>
 
         <div className="flex gap-2">
@@ -60,7 +60,7 @@ export default function DeliveryQueuePage() {
         </div>
 
         {!queue?.items?.length ? (
-          <Card><CardBody><p className="text-center text-neutral-500">Queue is empty</p></CardBody></Card>
+          <Card><CardBody><p className="text-center text-txt-secondary">Queue is empty</p></CardBody></Card>
         ) : (
           <div className="space-y-1">
             {queue.items.map((item: any) => (
@@ -68,13 +68,13 @@ export default function DeliveryQueuePage() {
                 <CardBody className="flex items-center justify-between py-2 text-sm">
                   <div className="flex-1 min-w-0">
                     <span className="font-medium truncate">{item.recipientEmail || "Unknown"}</span>
-                    <span className="text-neutral-400 mx-2">·</span>
-                    <span className="text-neutral-500">{item.deliverySource || item.type}</span>
+                    <span className="text-txt-muted mx-2">·</span>
+                    <span className="text-txt-secondary">{item.deliverySource || item.type}</span>
                   </div>
                   <div className="flex items-center gap-3 ml-4">
-                    <span className="text-xs text-neutral-400">#{item.attempts}</span>
+                    <span className="text-xs text-txt-muted">#{item.attempts}</span>
                     <Badge tone={statusTone(item.status)}>{item.status}</Badge>
-                    <span className="text-xs text-neutral-400">{new Date(item.createdAt).toLocaleTimeString()}</span>
+                    <span className="text-xs text-txt-muted">{new Date(item.createdAt).toLocaleTimeString()}</span>
                   </div>
                 </CardBody>
               </Card>

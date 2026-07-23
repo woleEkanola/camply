@@ -94,10 +94,10 @@ function TeenReviewCard({
   }, [camper, fields]);
 
   return (
-    <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+    <div className="min-w-0 rounded-2xl border border-border-default bg-surface p-5 shadow-sm">
       <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-100">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-raised">
             {photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={photoUrl} alt="" className="h-full w-full object-cover" />
@@ -108,10 +108,10 @@ function TeenReviewCard({
             )}
           </div>
           <div className="min-w-0">
-            <h3 className="break-words font-semibold text-neutral-900 [overflow-wrap:anywhere]">
+            <h3 className="break-words font-semibold text-txt-primary [overflow-wrap:anywhere]">
               {teen.firstName} {teen.lastName}
             </h3>
-            <p className="break-words text-xs text-neutral-500 [overflow-wrap:anywhere]">
+            <p className="break-words text-xs text-txt-secondary [overflow-wrap:anywhere]">
               {formattedDob || "No DOB"}
               {teen.gender ? ` · ${teen.gender}` : ""}
             </p>
@@ -130,7 +130,7 @@ function TeenReviewCard({
           <button
             type="button"
             onClick={() => dispatch({ type: "GO_TO_EDIT", camperId: teen.camperId })}
-            className="rounded border border-neutral-300 bg-white px-2 py-0.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+            className="rounded border border-input-border bg-surface px-2 py-0.5 text-xs font-medium text-txt-secondary transition-colors hover:bg-neutral-50"
           >
             Edit
           </button>
@@ -139,14 +139,14 @@ function TeenReviewCard({
 
       {/* Profile fields grid */}
       <div className="mb-4 min-w-0 rounded-lg bg-neutral-50 p-4">
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-txt-muted">
           Profile Information
         </h4>
         <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
           {fieldEntries.map(({ label, value }) => (
             <div key={label} className="min-w-0">
-              <div className="break-words text-neutral-500 [overflow-wrap:anywhere]">{label}:</div>
-              <div className="break-words font-medium text-neutral-900 [overflow-wrap:anywhere]">
+              <div className="break-words text-txt-secondary [overflow-wrap:anywhere]">{label}:</div>
+              <div className="break-words font-medium text-txt-primary [overflow-wrap:anywhere]">
                 {value || "—"}
               </div>
             </div>
@@ -157,7 +157,7 @@ function TeenReviewCard({
       {/* Documents summary */}
       {requirements && requirements.length > 0 && (
         <div className="min-w-0 rounded-lg bg-neutral-50 p-4">
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-txt-muted">
             Documents
           </h4>
           <div className="space-y-1.5 text-sm">
@@ -167,7 +167,7 @@ function TeenReviewCard({
               );
               return (
                 <div key={req.id} className="flex min-w-0 items-center justify-between gap-3">
-                  <span className="min-w-0 break-words text-neutral-500 [overflow-wrap:anywhere]">{req.name}:</span>
+                  <span className="min-w-0 break-words text-txt-secondary [overflow-wrap:anywhere]">{req.name}:</span>
                   {doc ? (
                     <a
                       href={doc.url}
@@ -178,7 +178,7 @@ function TeenReviewCard({
                       View
                     </a>
                   ) : (
-                    <span className="shrink-0 text-xs italic text-neutral-400">Not uploaded</span>
+                    <span className="shrink-0 text-xs italic text-txt-muted">Not uploaded</span>
                   )}
                 </div>
               );
@@ -260,14 +260,14 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-neutral-900">Review Your Registration</h1>
+        <h1 className="text-2xl font-bold text-txt-primary">Review Your Registration</h1>
       </div>
 
       {/* Camp Overview */}
-      <div className="mb-6 min-w-0 rounded-xl bg-white p-4 shadow-sm">
-        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">Camp</h3>
-        <p className="break-words text-sm font-medium text-neutral-900 [overflow-wrap:anywhere]">{state.campData?.campName}</p>
-        <p className="break-words text-xs text-neutral-500 [overflow-wrap:anywhere]">
+      <div className="mb-6 min-w-0 rounded-xl bg-surface p-4 shadow-sm">
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-txt-muted">Camp</h3>
+        <p className="break-words text-sm font-medium text-txt-primary [overflow-wrap:anywhere]">{state.campData?.campName}</p>
+        <p className="break-words text-xs text-txt-secondary [overflow-wrap:anywhere]">
           {state.campData?.organizationName} · {state.campData?.campusName}
           {state.campData?.year ? ` · ${state.campData?.year}` : ""}
         </p>
@@ -288,8 +288,8 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
 
       {/* Consent Declarations */}
       {declarations && declarations.length > 0 && (
-        <div className="mb-6 min-w-0 rounded-2xl bg-white p-6 shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold text-neutral-900">Consent</h3>
+        <div className="mb-6 min-w-0 rounded-2xl bg-surface p-6 shadow-sm">
+          <h3 className="mb-3 text-sm font-semibold text-txt-primary">Consent</h3>
           <div className="space-y-3">
             {declarations.map((d) => (
               <label key={d.id} className="flex min-w-0 cursor-pointer items-start gap-3">
@@ -300,9 +300,9 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
                     dispatch({ type: "SET_DECLARATION", id: d.id, checked: e.target.checked });
                     setErrors([]);
                   }}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-neutral-300 text-accent-600"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-input-border text-accent-600"
                 />
-                <span className="min-w-0 break-words text-sm text-neutral-700 [overflow-wrap:anywhere]">{d.label}</span>
+                <span className="min-w-0 break-words text-sm text-txt-secondary [overflow-wrap:anywhere]">{d.label}</span>
               </label>
             ))}
           </div>
@@ -322,7 +322,7 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
           type="button"
           onClick={() => dispatch({ type: "GO_BACK" })}
           disabled={submitting || submitRef.current}
-          className="flex h-12 flex-1 items-center justify-center rounded-xl border border-neutral-300 bg-white text-base font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-12 flex-1 items-center justify-center rounded-xl border border-input-border bg-surface text-base font-medium text-txt-secondary transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           ← Back
         </button>
@@ -340,7 +340,7 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
         </button>
       </div>
       <div className="mt-6 text-center">
-        <a href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-600 underline">
+        <a href="/dashboard" className="text-sm text-txt-muted hover:text-txt-primary underline">
           Go to Dashboard
         </a>
       </div>

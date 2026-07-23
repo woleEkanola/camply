@@ -76,6 +76,7 @@ function RegistrationsPage() {
   const [selectedRegistration, setSelectedRegistration] = useState<string | null>(null);
   const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -213,6 +214,24 @@ function RegistrationsPage() {
     },
   });
 
+  const bulkSuggestMut = api.tribe.bulkSuggest.useMutation({
+    onSuccess: (res) => {
+      setBulkResult({ message: `Generated tribe recommendations for ${res.length} registration(s).`, type: "success" });
+      setSelectedIds([]);
+      invalidateRegistrations();
+    },
+    onError: (err) => setBulkResult({ message: err.message, type: "error" }),
+  });
+
+  const bulkApplyMut = api.tribe.bulkApply.useMutation({
+    onSuccess: (res) => {
+      setBulkResult({ message: `Applied tribe assignments for ${res.length} registration(s).`, type: "success" });
+      setSelectedIds([]);
+      invalidateRegistrations();
+    },
+    onError: (err) => setBulkResult({ message: err.message, type: "error" }),
+  });
+
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
 
   const [cursor, setCursor] = useState<string | undefined>(undefined);
@@ -222,7 +241,7 @@ function RegistrationsPage() {
   useEffect(() => {
     setCursor(undefined);
     setAccumulatedItems([]);
-  }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery]);
+  }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery, duplicatesOnly]);
 
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
@@ -231,6 +250,7 @@ function RegistrationsPage() {
       campusId: filterCampus || undefined,
       status: filterStatus || undefined,
       reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
+      duplicatesOnly: duplicatesOnly || undefined,
       q: debouncedSearchQuery || undefined,
       cursor,
       limit: 50,
@@ -404,7 +424,14 @@ function RegistrationsPage() {
         primary: true,
         accessor: (row) => (
           <div>
-            <div className="font-medium text-neutral-900">{row.camper?.name}</div>
+            <div className="flex items-center gap-2 font-medium text-neutral-900">
+              <span>{row.camper?.name}</span>
+              {row.isDuplicate && (
+                <Badge tone="warning">
+                  Duplicate
+                </Badge>
+              )}
+            </div>
             <div className="text-xs text-neutral-500">{row.camper?.user?.email}</div>
           </div>
         ),
@@ -442,7 +469,20 @@ function RegistrationsPage() {
     if (visibleColumns.includes("tribe")) {
       cols.push({
         header: renderSortableHeader("Tribe", "tribe"),
-        accessor: (row) => row.tribe?.name || "—",
+        accessor: (row) => (
+          <div className="flex flex-col gap-0.5">
+            {row.tribe?.name ? (
+              <span className="font-semibold text-emerald-700">{row.tribe.name}</span>
+            ) : row.suggestedTribe?.name ? (
+              <span className="text-purple-600 text-xs font-medium">Sugg: {row.suggestedTribe.name}</span>
+            ) : (
+              <span className="text-txt-muted">—</span>
+            )}
+            {row.tribeRecommendationStatus === "MANUAL_OVERRIDE" && (
+              <span className="text-[10px] text-amber-600 font-bold">⚡ Override</span>
+            )}
+          </div>
+        ),
       });
     }
 
@@ -528,10 +568,28 @@ function RegistrationsPage() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onOpenFilters={() => setFiltersOpen(true)}
-          filterStatus={filterStatus}
-          onSelectStatusFilter={(s) => {
-            setReviewStateFilter("");
-            setFilterStatus(s);
+          activeFilterKey={
+            duplicatesOnly
+              ? "FILTER_DUPLICATES"
+              : reviewStateFilter
+                ? `REVIEW_${reviewStateFilter}`
+                : filterStatus
+          }
+          isTwoStep={isTwoStep}
+          onSelectStatusFilter={(key) => {
+            if (key === "FILTER_DUPLICATES") {
+              setFilterStatus("");
+              setReviewStateFilter("");
+              setDuplicatesOnly(true);
+            } else if (key.startsWith("REVIEW_")) {
+              setFilterStatus("");
+              setDuplicatesOnly(false);
+              setReviewStateFilter(key.replace("REVIEW_", "") as any);
+            } else {
+              setReviewStateFilter("");
+              setDuplicatesOnly(false);
+              setFilterStatus(key);
+            }
           }}
           stats={{
             totalCount: statsTotalCount,
@@ -539,6 +597,9 @@ function RegistrationsPage() {
             approvedCount: kpi["APPROVED"] ?? 0,
             checkedInCount: kpi["CHECKED_IN"] ?? 0,
             rejectedCount: kpi["REJECTED"] ?? 0,
+            awaitingVettingCount,
+            awaitingFinalCount,
+            duplicateCount: statsData?.duplicateCount ?? 0,
           }}
           registrations={registrations}
           selectedIds={selectedIds}
@@ -547,11 +608,26 @@ function RegistrationsPage() {
             else setSelectedIds((prev) => prev.filter((i) => i !== id));
           }}
           onCardClick={(reg) => setSelectedRegistration(reg.id)}
-          onApprove={(reg) => bulkTransition.mutate({ ids: [reg.id], action: "APPROVE" })}
-          onReject={(reg) => {
+          primaryLabel="Approve"
+          secondaryLabel="Reject"
+          onPrimaryAction={(reg) => bulkTransition.mutate({ ids: [reg.id], action: "APPROVE" })}
+          onSecondaryAction={(reg) => {
             setSelectedIds([reg.id]);
             setBulkAction("REJECT");
             setBulkReason("");
+          }}
+          onApprove={(reg) => bulkTransition.mutate({ ids: [reg.id], action: "APPROVE" })}
+          onReject={(reg, reason) => {
+            if (reason) bulkTransition.mutate({ ids: [reg.id], action: "REJECT", reason });
+            else {
+              setSelectedIds([reg.id]);
+              setBulkAction("REJECT");
+              setBulkReason("");
+            }
+          }}
+          onRequestCorrection={(reg, message) => {
+            if (message) bulkTransition.mutate({ ids: [reg.id], action: "REQUEST_CORRECTION", reason: message });
+            else setSelectedRegistration(reg.id);
           }}
           onQuickAction={(reg, action) => {
             if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
@@ -575,14 +651,25 @@ function RegistrationsPage() {
         />
       ) : (
         <div>
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-6">
             <StatCard
               label="Total Registrations"
               value={statsTotalCount}
-              selected={filterStatus === "" && reviewStateFilter === ""}
+              selected={filterStatus === "" && reviewStateFilter === "" && !duplicatesOnly}
               onClick={() => {
                 setReviewStateFilter("");
                 setFilterStatus("");
+                setDuplicatesOnly(false);
+              }}
+            />
+            <StatCard
+              label="Duplicates"
+              value={statsData?.duplicateCount ?? 0}
+              selected={duplicatesOnly}
+              onClick={() => {
+                setReviewStateFilter("");
+                setFilterStatus("");
+                setDuplicatesOnly(!duplicatesOnly);
               }}
             />
             {isTwoStep && (
@@ -593,6 +680,7 @@ function RegistrationsPage() {
                   selected={reviewStateFilter === "AWAITING_VETTING"}
                   onClick={() => {
                     setFilterStatus("");
+                    setDuplicatesOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_VETTING" ? "" : "AWAITING_VETTING");
                   }}
                 />
@@ -602,19 +690,24 @@ function RegistrationsPage() {
                   selected={reviewStateFilter === "AWAITING_FINAL"}
                   onClick={() => {
                     setFilterStatus("");
+                    setDuplicatesOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_FINAL" ? "" : "AWAITING_FINAL");
                   }}
                 />
               </>
             )}
-            {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"].map((s) => (
+            {(isTwoStep
+              ? ["APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"]
+              : ["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"]
+            ).map((s) => (
               <StatCard
                 key={s}
-                label={s === "PENDING" && isTwoStep ? "Waiting Decision" : s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
+                label={s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
                 value={kpi[s] ?? 0}
-                selected={filterStatus === s}
+                selected={filterStatus === s && !duplicatesOnly}
                 onClick={() => {
                   setReviewStateFilter("");
+                  setDuplicatesOnly(false);
                   setFilterStatus(filterStatus === s ? "" : s);
                 }}
               />
@@ -648,6 +741,12 @@ function RegistrationsPage() {
             }}>
               Archive
             </Button>
+            <Button size="sm" variant="secondary" loading={bulkSuggestMut.isPending} onClick={() => bulkSuggestMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds })}>
+              Suggest Tribes
+            </Button>
+            <Button size="sm" variant="secondary" loading={bulkApplyMut.isPending} onClick={() => bulkApplyMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds })}>
+              Apply Tribes
+            </Button>
             <Button size="sm" variant="secondary" onClick={() => setBulkReassignOpen(true)}>
               Reassign Campus
             </Button>
@@ -667,27 +766,36 @@ function RegistrationsPage() {
               </Select>
               <Select
                 data-testid="registration-status-filter"
-                value={reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
+                value={duplicatesOnly ? "FILTER_DUPLICATES" : reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (val.startsWith("REVIEW_")) {
+                  if (val === "FILTER_DUPLICATES") {
+                    setFilterStatus("");
+                    setReviewStateFilter("");
+                    setDuplicatesOnly(true);
+                  } else if (val.startsWith("REVIEW_")) {
+                    setDuplicatesOnly(false);
                     setFilterStatus("");
                     setReviewStateFilter(val.replace("REVIEW_", "") as any);
                   } else {
+                    setDuplicatesOnly(false);
                     setFilterStatus(val);
                     setReviewStateFilter("");
                   }
                 }}
               >
                 <option value="">All Statuses</option>
-                {isTwoStep && (
+                <option value="FILTER_DUPLICATES">Duplicates Only ({statsData?.duplicateCount ?? 0})</option>
+                {isTwoStep ? (
                   <>
-                    <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval (Recommended)</option>
-                    <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting (Pending)</option>
+                    <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting</option>
+                    <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval</option>
                   </>
+                ) : (
+                  <option value="PENDING">Pending</option>
                 )}
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}</option>
+                {["REQUIRES_ACTION", "APPROVED", "REJECTED", "WAITLISTED", "CHECKED_IN", "COMPLETED", "CANCELLED", "ARCHIVED"].map((s) => (
+                  <option key={s} value={s}>{s === "REQUIRES_ACTION" ? "Corrections Needed" : s.replace(/_/g, " ")}</option>
                 ))}
               </Select>
             </div>
@@ -849,8 +957,10 @@ function RegistrationsPage() {
                         else setSelectedIds((prev) => prev.filter((i) => i !== id));
                       }}
                       onClick={(r) => setSelectedRegistration(r.id)}
-                      onApprove={(r) => bulkTransition.mutate({ ids: [r.id], action: "APPROVE" })}
-                      onReject={(r) => {
+                      primaryLabel="Approve"
+                      secondaryLabel="Reject"
+                      onPrimaryAction={(r) => bulkTransition.mutate({ ids: [r.id], action: "APPROVE" })}
+                      onSecondaryAction={(r) => {
                         setSelectedIds([r.id]);
                         setBulkAction("REJECT");
                         setBulkReason("");

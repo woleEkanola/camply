@@ -40,12 +40,12 @@ export function StaffCard({ row, onClick, actions, type, selected, onSelect }: S
     <div
       onClick={onClick}
       className={cn(
-        "group relative flex flex-col gap-4 rounded-2xl border bg-white p-4 shadow-xs transition",
+        "group relative flex min-w-0 flex-col gap-4 rounded-2xl border bg-surface p-4 shadow-xs transition",
         onClick && "cursor-pointer hover:border-accent-300 hover:shadow-sm",
-        selected ? "border-accent-500 ring-1 ring-accent-500" : "border-neutral-200/80"
+        selected ? "border-accent-500 ring-1 ring-accent-500" : "border-border-default"
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-start gap-3">
         {onSelect && (
           <input
             type="checkbox"
@@ -65,10 +65,10 @@ export function StaffCard({ row, onClick, actions, type, selected, onSelect }: S
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-bold text-neutral-900">{name}</h3>
-              <p className="text-xs text-neutral-500 truncate">{row.email}</p>
-              <p className="text-xs text-neutral-400">{row.phone}</p>
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-sm font-bold text-neutral-900">{name}</h3>
+              <p className="truncate text-xs text-txt-secondary">{row.email}</p>
+              <p className="truncate text-xs text-txt-muted">{row.phone}</p>
             </div>
             <StatusBadge status={row.status} />
           </div>
@@ -76,21 +76,21 @@ export function StaffCard({ row, onClick, actions, type, selected, onSelect }: S
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-xs">
-        <div className="rounded-xl bg-neutral-50 p-2.5">
-          <span className="block text-neutral-400">Campus</span>
-          <span className="font-medium text-neutral-900 truncate">{row.preferredCampus?.name || "—"}</span>
+        <div className="min-w-0 rounded-xl bg-surface-raised p-2.5">
+          <span className="block text-txt-muted">Campus</span>
+          <span className="block truncate font-medium text-neutral-900">{row.preferredCampus?.name || "—"}</span>
         </div>
-        <div className="rounded-xl bg-neutral-50 p-2.5">
-          <span className="block text-neutral-400">{type === "TEACHER" ? "Venue" : "Category"}</span>
-          <span className="font-medium text-neutral-900 truncate">{type === "TEACHER" ? row.assignedVenue?.name || "—" : row.volunteerCategory || "—"}</span>
+        <div className="min-w-0 rounded-xl bg-surface-raised p-2.5">
+          <span className="block text-txt-muted">{type === "TEACHER" ? "Venue" : "Category"}</span>
+          <span className="block truncate font-medium text-neutral-900">{type === "TEACHER" ? row.assignedVenue?.name || "—" : row.volunteerCategory || "—"}</span>
         </div>
-        <div className="rounded-xl bg-neutral-50 p-2.5">
-          <span className="block text-neutral-400">{type === "TEACHER" ? "Dept" : "Venue"}</span>
-          <span className="font-medium text-neutral-900 truncate">{type === "TEACHER" ? row.department?.name || "—" : row.assignedVenue?.name || "—"}</span>
+        <div className="min-w-0 rounded-xl bg-surface-raised p-2.5">
+          <span className="block text-txt-muted">{type === "TEACHER" ? "Dept" : "Venue"}</span>
+          <span className="block truncate font-medium text-neutral-900">{type === "TEACHER" ? row.department?.name || "—" : row.assignedVenue?.name || "—"}</span>
         </div>
-        <div className="rounded-xl bg-neutral-50 p-2.5">
-          <span className="block text-neutral-400">Skills</span>
-          <span className="font-medium text-neutral-900 truncate">{(row.skills || []).slice(0, 2).join(", ") || "—"}</span>
+        <div className="min-w-0 rounded-xl bg-surface-raised p-2.5">
+          <span className="block text-txt-muted">Skills</span>
+          <span className="block truncate font-medium text-neutral-900">{(row.skills || []).slice(0, 2).join(", ") || "—"}</span>
         </div>
       </div>
 

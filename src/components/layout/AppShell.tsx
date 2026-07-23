@@ -8,6 +8,7 @@ import { ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, UserIcon } from "@hero
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import NotificationBell from "@/components/NotificationBell";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { getNavGroups, getBottomNavItems, type Role } from "./navConfig";
 import { CommandPalette } from "./CommandPalette";
 import { BottomNav } from "./BottomNav";
@@ -62,7 +63,7 @@ export default function AppShell({ area, children }: AppShellProps) {
   const role = session?.user?.role as Role | undefined;
   const managedCampuses = (session?.user as { managedCampuses?: string[] } | undefined)?.managedCampuses ?? [];
   const groups = getNavGroups(role, area, managedCampuses.length > 0);
-  const bottomNavItems = getBottomNavItems(role, area);
+  const bottomNavItems = getBottomNavItems(role, area, managedCampuses.length > 0);
 
   const handleLogout = async () => {
     await signOut({ redirect: false });
@@ -72,19 +73,19 @@ export default function AppShell({ area, children }: AppShellProps) {
   const sidebarContent = (
     <>
       <div className="flex h-14 items-center justify-between px-4">
-        <span className={cn("truncate font-semibold text-neutral-900", !sidebarOpen && "hidden")}>
+        <span className={cn("truncate font-semibold text-txt-primary", !sidebarOpen && "hidden")}>
           {organization?.name || "Camply"}
         </span>
         <button
           onClick={() => setSidebarOpen((v) => !v)}
-          className="hidden rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 md:block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          className="hidden rounded-md p-1.5 text-txt-muted hover:bg-surface-raised hover:text-txt-primary md:block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
           aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
         >
           {sidebarOpen ? <XMarkIcon className="h-5 w-5" /> : <Bars3Icon className="h-5 w-5" />}
         </button>
         <button
           onClick={() => setMobileOpen(false)}
-          className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 md:hidden"
+          className="rounded-md p-1.5 text-txt-muted hover:bg-surface-raised md:hidden"
           aria-label="Close menu"
         >
           <XMarkIcon className="h-5 w-5" />
@@ -98,7 +99,7 @@ export default function AppShell({ area, children }: AppShellProps) {
       >
         {groups.map((group) => (
           <div key={group.name} className="mb-4">
-            <div className={cn("mb-1 px-3 text-xs font-semibold uppercase tracking-wide text-neutral-400", !sidebarOpen && "hidden")}>
+            <div className={cn("mb-1 px-3 text-xs font-semibold uppercase tracking-wide text-txt-muted", !sidebarOpen && "hidden")}>
               {group.name}
             </div>
             <div className="space-y-0.5">
@@ -122,10 +123,12 @@ export default function AppShell({ area, children }: AppShellProps) {
                     onClick={() => setMobileOpen(false)}
                     className={cn(
                       "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                      active ? "bg-accent-50 text-accent-700" : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                      active
+                        ? "bg-sidebar-active-bg text-sidebar-active-fg font-semibold"
+                        : "text-sidebar-fg hover:bg-surface-raised hover:text-txt-primary"
                     )}
                   >
-                    <item.icon className={cn("h-5 w-5 shrink-0", active ? "text-accent-600" : "text-neutral-400")} aria-hidden="true" />
+                    <item.icon className={cn("h-5 w-5 shrink-0", active ? "text-sidebar-active-fg" : "text-txt-muted")} aria-hidden="true" />
                     <span className={cn(!sidebarOpen && "hidden")}>{item.name}</span>
                   </Link>
                 );
@@ -135,12 +138,12 @@ export default function AppShell({ area, children }: AppShellProps) {
         ))}
       </nav>
 
-      <div className="border-t border-neutral-200 p-2">
+      <div className="border-t border-sidebar-border p-2">
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-fg hover:bg-surface-raised hover:text-txt-primary"
         >
-          <ArrowRightOnRectangleIcon className="h-5 w-5 shrink-0 text-neutral-400" aria-hidden="true" />
+          <ArrowRightOnRectangleIcon className="h-5 w-5 shrink-0 text-txt-muted" aria-hidden="true" />
           <span className={cn(!sidebarOpen && "hidden")}>Log out</span>
         </button>
       </div>
@@ -148,11 +151,11 @@ export default function AppShell({ area, children }: AppShellProps) {
   );
 
   return (
-    <div className="flex h-screen bg-neutral-50">
+    <div className="flex h-screen bg-page-bg text-page-fg">
       {/* Desktop sidebar */}
       <div
         className={cn(
-          "hidden md:flex md:flex-col md:border-r md:border-neutral-200 md:bg-white md:transition-all md:duration-200",
+          "hidden md:flex md:flex-col border-r border-sidebar-border bg-sidebar-bg transition-all duration-200",
           sidebarOpen ? "md:w-64" : "md:w-16"
         )}
       >
@@ -162,31 +165,32 @@ export default function AppShell({ area, children }: AppShellProps) {
       {/* Mobile off-canvas sidebar */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div className="fixed inset-0 bg-neutral-900/40" onClick={() => setMobileOpen(false)} aria-hidden="true" />
-          <div className="fixed inset-y-0 left-0 flex w-72 flex-col bg-white shadow-xl">{sidebarContent}</div>
+          <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-xs" onClick={() => setMobileOpen(false)} aria-hidden="true" />
+          <div className="fixed inset-y-0 left-0 flex w-72 flex-col bg-sidebar-bg border-r border-sidebar-border shadow-xl">{sidebarContent}</div>
         </div>
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 pt-[env(safe-area-inset-top)]">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border-default bg-surface px-4 pt-[env(safe-area-inset-top)]">
           <button
             onClick={() => setMobileOpen(true)}
-            className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 md:hidden"
+            className="rounded-md p-1.5 text-txt-secondary hover:bg-surface-raised md:hidden"
             aria-label="Open menu"
           >
             <Bars3Icon className="h-5 w-5" />
           </button>
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}
-            className="hidden items-center gap-2 rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-400 hover:border-neutral-300 hover:text-neutral-500 md:flex"
+            className="hidden items-center gap-2 rounded-md border border-border-default bg-surface px-3 py-1.5 text-sm text-txt-muted hover:border-neutral-400 hover:text-txt-secondary md:flex"
           >
             Search...
-            <kbd className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xs">⌘K</kbd>
+            <kbd className="rounded border border-border-default bg-surface-raised px-1.5 py-0.5 text-xs text-txt-muted">⌘K</kbd>
           </button>
           <div className="flex items-center gap-2">
             <NotificationBell />
+            <ThemeToggle />
             {session?.user?.email && (
-              <Menu as="div" className="relative ml-3">
+              <Menu as="div" className="relative ml-1 sm:ml-2">
                 <div>
                   <Menu.Button className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2">
                     {userProfile?.photoUrl ? (
@@ -196,11 +200,11 @@ export default function AppShell({ area, children }: AppShellProps) {
                         className="h-8 w-8 rounded-full object-cover border border-neutral-200"
                       />
                     ) : (
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-100 text-sm font-medium text-accent-700 border border-accent-200">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full brand-tint-strong text-sm font-medium">
                         {session.user.email.charAt(0).toUpperCase()}
                       </span>
                     )}
-                    <span className="hidden text-sm font-medium text-neutral-700 sm:inline">
+                    <span className="hidden text-sm font-medium text-txt-primary sm:inline">
                       {userProfile ? `${userProfile.firstName ?? ""} ${userProfile.lastName ?? ""}`.trim() || session.user.email : session.user.email}
                     </span>
                   </Menu.Button>
@@ -214,21 +218,21 @@ export default function AppShell({ area, children }: AppShellProps) {
                   leaveFrom="transform opacity-100 scale-100"
                   leaveTo="transform opacity-0 scale-95"
                 >
-                  <Menu.Items className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none border border-neutral-100">
-                    <div className="px-4 py-2 border-b border-neutral-100">
-                      <p className="text-xs text-neutral-400">Signed in as</p>
-                      <p className="truncate text-xs font-semibold text-neutral-700">{session.user.email}</p>
+                  <Menu.Items className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-elevated py-1 shadow-lg ring-1 ring-black/5 focus:outline-none border border-elevated-border">
+                    <div className="px-4 py-2 border-b border-elevated-border">
+                      <p className="text-xs text-txt-muted">Signed in as</p>
+                      <p className="truncate text-xs font-semibold text-txt-primary">{session.user.email}</p>
                     </div>
                     <Menu.Item>
                       {({ active }) => (
                         <Link
                           href="/profile"
                           className={cn(
-                            active ? "bg-neutral-50 text-neutral-900" : "text-neutral-700",
+                            active ? "bg-surface-raised text-txt-primary" : "text-txt-secondary",
                             "flex items-center gap-2 px-4 py-2 text-sm"
                           )}
                         >
-                          <UserIcon className="h-4 w-4 text-neutral-400" />
+                          <UserIcon className="h-4 w-4 text-txt-muted" />
                           My Profile
                         </Link>
                       )}
@@ -238,11 +242,11 @@ export default function AppShell({ area, children }: AppShellProps) {
                         <button
                           onClick={handleLogout}
                           className={cn(
-                            active ? "bg-neutral-50 text-neutral-900" : "text-neutral-700",
+                            active ? "bg-surface-raised text-txt-primary" : "text-txt-secondary",
                             "flex w-full items-center gap-2 px-4 py-2 text-left text-sm"
                           )}
                         >
-                          <ArrowRightOnRectangleIcon className="h-4 w-4 text-neutral-400" />
+                          <ArrowRightOnRectangleIcon className="h-4 w-4 text-txt-muted" />
                           Log out
                         </button>
                       )}

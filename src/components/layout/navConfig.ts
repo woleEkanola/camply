@@ -237,7 +237,6 @@ const PARENT_GROUPS: NavGroup[] = [
 ];
 
 const CAMPUS_REP_GROUPS: NavGroup[] = [
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }] },
   {
     name: "Registration",
     items: [
@@ -245,6 +244,7 @@ const CAMPUS_REP_GROUPS: NavGroup[] = [
       { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
     ],
   },
+  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }] },
 ];
 
 const SUPER_ADMIN_GROUPS: NavGroup[] = [
@@ -336,9 +336,9 @@ export function getNavGroups(
   }
   if (hasCampusRepAccess && (area === "teacher" || area === "volunteer")) {
     // Inside the unified staff shell, dual-role teachers/volunteers see a single
-    // Registrations link scoped to their managed campuses.
+    // Registrations link scoped to their managed campuses. Placed first — it's
+    // the primary task reps come here to do, ahead of Dashboard/Operations.
     groups = [
-      ...groups,
       {
         name: "My Campus (Rep)",
         items: [
@@ -349,6 +349,7 @@ export function getNavGroups(
           },
         ],
       },
+      ...groups,
     ];
   }
   return groups;
@@ -364,7 +365,8 @@ export function getNavGroups(
  */
 export function getBottomNavItems(
   role: Role | undefined,
-  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer"
+  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer",
+  hasCampusRepAccess = false
 ): NavItem[] {
   if (!role) return [];
   switch (area) {
@@ -378,11 +380,19 @@ export function getBottomNavItems(
     case "teacher":
       return [
         { name: "Home", href: "/teacher", icon: HomeIcon },
-        { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
+        { name: "Registrations", href: "/teacher/registrations", icon: ClipboardDocumentListIcon },
         { name: "Check-in", href: "/teacher/check-in", icon: QrCodeIcon },
-        { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
+        { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
       ];
     case "volunteer":
+      if (hasCampusRepAccess) {
+        return [
+          { name: "Home", href: "/volunteer", icon: HomeIcon },
+          { name: "Registrations", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon },
+          { name: "Check-in", href: "/volunteer/check-in", icon: QrCodeIcon },
+          { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
+        ];
+      }
       return [
         { name: "Home", href: "/volunteer", icon: HomeIcon },
         { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
@@ -391,8 +401,9 @@ export function getBottomNavItems(
       ];
     case "campus-rep":
       return [
-        { name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon },
+        { name: "Home", href: "/campus-rep-dashboard", icon: HomeIcon },
         { name: "Registrations", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon },
+        { name: "Check-in", href: "/teacher/check-in", icon: QrCodeIcon },
         { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
       ];
     case "dashboard":

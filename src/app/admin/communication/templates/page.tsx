@@ -83,8 +83,8 @@ function ToolbarButton({
       disabled={disabled}
       title={label}
       className={cn(
-        "rounded p-1.5 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 transition-colors",
-        active && "bg-accent-50 text-accent-700 font-bold",
+        "rounded p-1.5 text-txt-secondary hover:bg-surface-raised hover:text-neutral-900 transition-colors",
+        active && "brand-tint font-bold",
         disabled && "opacity-40 cursor-not-allowed"
       )}
     >
@@ -121,7 +121,7 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-neutral-200 bg-neutral-50 px-3 py-2 sticky top-0 z-10">
+    <div className="flex flex-wrap items-center gap-1 border-b border-border-default bg-surface-raised px-3 py-2 sticky top-0 z-10">
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBold().run()}
         active={editor.isActive("bold")}
@@ -226,14 +226,14 @@ function VariablesPanel({ editor }: { editor: ReturnType<typeof useEditor> }) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1">
+      <h3 className="text-xs font-bold uppercase tracking-wider text-txt-secondary flex items-center gap-1">
         <BookOpenIcon className="h-4 w-4" /> Variable Registry
       </h3>
-      <p className="text-xs text-neutral-500">Click a variable to insert it at your cursor location.</p>
+      <p className="text-xs text-txt-secondary">Click a variable to insert it at your cursor location.</p>
       <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
         {categories.map((cat) => (
           <div key={cat} className="space-y-1.5">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 pb-0.5">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-txt-muted border-b border-border-subtle pb-0.5">
               {cat}
             </div>
             <div className="flex flex-wrap gap-1">
@@ -243,7 +243,7 @@ function VariablesPanel({ editor }: { editor: ReturnType<typeof useEditor> }) {
                   type="button"
                   onClick={() => insertVariable(v.key)}
                   title={`${v.label} — example: ${v.sampleValue}`}
-                  className="rounded border border-neutral-200 bg-white px-2 py-0.5 text-[11px] text-neutral-600 hover:border-accent-300 hover:bg-accent-50 hover:text-accent-700 transition-all shadow-2xs active:scale-95"
+                  className="rounded border border-border-default bg-surface px-2 py-0.5 text-[11px] text-txt-secondary hover:border-accent-300 hover:bg-accent-50 hover:text-accent-700 transition-all shadow-2xs active:scale-95"
                 >
                   {v.label}
                 </button>
@@ -279,9 +279,9 @@ function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs" onClick={onCancel} />
-      <div className="relative z-10 w-full max-w-sm rounded-xl border border-neutral-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      <div className="relative z-10 w-full max-w-sm rounded-xl border border-border-default bg-surface p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
         <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
-        {message && <p className="mt-1 text-sm text-neutral-600">{message}</p>}
+        {message && <p className="mt-1 text-sm text-txt-secondary">{message}</p>}
         {children}
         <div className="mt-4 flex justify-end gap-2">
           <Button size="sm" variant="secondary" onClick={onCancel}>
@@ -511,22 +511,22 @@ export default function TemplatesPage() {
       <h1 className="sr-only">Email Templates</h1>
       <div className="flex flex-col h-[calc(100vh-100px)] -m-6 overflow-hidden">
         {/* Responsive Mobile Tabs Header */}
-        <div className="md:hidden flex border-b border-neutral-200 bg-white">
+        <div className="md:hidden flex border-b border-border-default bg-surface">
           <button
             onClick={() => setMobileTab("list")}
-            className={cn("flex-1 py-3 text-center text-xs font-semibold border-b-2", mobileTab === "list" ? "border-accent-600 text-accent-700 bg-accent-50/20" : "border-transparent text-neutral-600")}
+            className={cn("flex-1 py-3 text-center text-xs font-semibold border-b-2", mobileTab === "list" ? "border-accent-600 text-accent-700 bg-accent-50/20" : "border-transparent text-txt-secondary")}
           >
             Templates ({filteredTemplates.length})
           </button>
           <button
             onClick={() => setMobileTab("editor")}
-            className={cn("flex-1 py-3 text-center text-xs font-semibold border-b-2", mobileTab === "editor" ? "border-accent-600 text-accent-700 bg-accent-50/20" : "border-transparent text-neutral-600")}
+            className={cn("flex-1 py-3 text-center text-xs font-semibold border-b-2", mobileTab === "editor" ? "border-accent-600 text-accent-700 bg-accent-50/20" : "border-transparent text-txt-secondary")}
           >
             Compose
           </button>
           <button
             onClick={() => setMobileTab("preview")}
-            className={cn("flex-1 py-3 text-center text-xs font-semibold border-b-2", mobileTab === "preview" ? "border-accent-600 text-accent-700 bg-accent-50/20" : "border-transparent text-neutral-600")}
+            className={cn("flex-1 py-3 text-center text-xs font-semibold border-b-2", mobileTab === "preview" ? "border-accent-600 text-accent-700 bg-accent-50/20" : "border-transparent text-txt-secondary")}
           >
             Preview
           </button>
@@ -537,23 +537,23 @@ export default function TemplatesPage() {
           {/* ═══ COLUMN 1: TEMPLATE LIST SIDEBAR ═══ */}
           <div
             className={cn(
-              "w-80 shrink-0 border-r border-neutral-200 bg-white flex flex-col h-full overflow-hidden",
+              "w-80 shrink-0 border-r border-border-default bg-surface flex flex-col h-full overflow-hidden",
               mobileTab !== "list" && "hidden md:flex"
             )}
           >
             {/* Search and New Template Header */}
-            <div className="p-3 border-b border-neutral-100 space-y-2">
+            <div className="p-3 border-b border-border-subtle space-y-2">
               <Button size="sm" className="w-full flex items-center justify-center gap-1.5" onClick={handleNew} loading={createMutation.isPending}>
                 + New Template
               </Button>
               <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
+                <MagnifyingGlassIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-txt-muted" />
                 <input
                   type="text"
                   placeholder="Search templates..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-md border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-accent-500 focus:border-accent-500"
+                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-md border border-border-default focus:outline-none focus:ring-1 focus:ring-accent-500 focus:border-accent-500"
                 />
               </div>
             </div>
@@ -569,7 +569,7 @@ export default function TemplatesPage() {
                     setMobileTab("editor");
                   }}
                   className={cn(
-                    "w-full text-left px-4 py-3 hover:bg-neutral-50/50 transition-all border-l-3",
+                    "w-full text-left px-4 py-3 hover:bg-surface-hover/50 transition-all border-l-3",
                     selectedId === t.id
                       ? "bg-accent-50/30 border-l-accent-600"
                       : "border-l-transparent"
@@ -582,14 +582,14 @@ export default function TemplatesPage() {
                       {!t.active && <Badge tone="neutral" className="text-[9px] px-1 py-0">Inact</Badge>}
                     </div>
                   </div>
-                  <div className="text-[11px] text-neutral-500 truncate mt-0.5">{t.subject}</div>
-                  <div className="text-[10px] text-neutral-400 mt-1">
+                  <div className="text-[11px] text-txt-secondary truncate mt-0.5">{t.subject}</div>
+                  <div className="text-[10px] text-txt-muted mt-1">
                     Updated: {new Date(t.updatedAt).toLocaleDateString()}
                   </div>
                 </button>
               ))}
               {filteredTemplates.length === 0 && (
-                <p className="px-4 py-6 text-center text-xs text-neutral-400">No templates found.</p>
+                <p className="px-4 py-6 text-center text-xs text-txt-muted">No templates found.</p>
               )}
             </div>
           </div>
@@ -597,15 +597,15 @@ export default function TemplatesPage() {
           {/* ═══ COLUMN 2: WORKSPACE EDITOR PANEL ═══ */}
           <div
             className={cn(
-              "flex-1 flex flex-col h-full bg-white overflow-hidden border-r border-neutral-200",
+              "flex-1 flex flex-col h-full bg-surface overflow-hidden border-r border-border-default",
               mobileTab !== "editor" && "hidden md:flex"
             )}
           >
             {!selectedId ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-neutral-50/30">
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-surface-raised/30">
                 <BookOpenIcon className="h-12 w-12 text-neutral-300 mb-2" />
-                <p className="text-sm font-medium text-neutral-500">Select a template to begin editing</p>
-                <p className="text-xs text-neutral-400 mt-1">Choose from the left sidebar or create a new template.</p>
+                <p className="text-sm font-medium text-txt-secondary">Select a template to begin editing</p>
+                <p className="text-xs text-txt-muted mt-1">Choose from the left sidebar or create a new template.</p>
               </div>
             ) : selectedId && !selectedTemplate ? (
               <div className="flex-1 p-6 space-y-4">
@@ -616,7 +616,7 @@ export default function TemplatesPage() {
             ) : (
               <div className="flex flex-col flex-1 overflow-hidden h-full">
                 {/* Sticky Editor Header */}
-                <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 bg-white shrink-0">
+                <div className="flex items-center justify-between border-b border-border-default px-4 py-3 bg-surface shrink-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <input
                       type="text"
@@ -626,7 +626,7 @@ export default function TemplatesPage() {
                         setDirty(true);
                       }}
                       placeholder="Template name"
-                      className="text-sm font-semibold text-neutral-900 border-0 border-b border-transparent hover:border-neutral-200 focus:border-accent-500 focus:outline-none bg-transparent px-1 py-0.5 rounded w-48 md:w-64 transition-all"
+                      className="text-sm font-semibold text-neutral-900 border-0 border-b border-transparent hover:border-border-default focus:border-accent-500 focus:outline-none bg-transparent px-1 py-0.5 rounded w-48 md:w-64 transition-all"
                     />
                     {selectedTemplate?.isDefault && <Badge tone="info" className="text-[10px]">Default</Badge>}
                   </div>
@@ -661,7 +661,7 @@ export default function TemplatesPage() {
                 </div>
 
                 {/* Form fields (Subject / Preview) */}
-                <div className="p-4 border-b border-neutral-100 space-y-3 shrink-0 bg-white">
+                <div className="p-4 border-b border-border-subtle space-y-3 shrink-0 bg-surface">
                   <Input
                     label="Email Subject"
                     value={subject}
@@ -683,7 +683,7 @@ export default function TemplatesPage() {
                 </div>
 
                 {/* Editor canvas */}
-                <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                <div className="flex-1 flex flex-col overflow-hidden bg-surface">
                   <EditorToolbar editor={editor} />
                   <div className="flex-1 overflow-y-auto px-6 py-4 prose prose-sm max-w-none focus:outline-none min-h-[200px]">
                     <EditorContent editor={editor} className="min-h-full" />
@@ -696,7 +696,7 @@ export default function TemplatesPage() {
           {/* ═══ COLUMN 3: PREVIEW / INSPECT PANEL ═══ */}
           <div
             className={cn(
-              "w-[400px] shrink-0 bg-neutral-50 flex flex-col h-full overflow-y-auto p-4 border-l border-neutral-200 space-y-5",
+              "w-[400px] shrink-0 bg-surface-raised flex flex-col h-full overflow-y-auto p-4 border-l border-border-default space-y-5",
               mobileTab !== "preview" && "hidden md:flex"
             )}
           >
@@ -705,7 +705,7 @@ export default function TemplatesPage() {
               <div className="space-y-4">
                 {/* Header */}
                 <div className="flex justify-between items-center">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-txt-secondary">
                     Live Rendering Preview
                   </h3>
                   <Button size="sm" variant="secondary" onClick={handleTestSend} icon={<PaperAirplaneIcon className="h-3 w-3" />}>
@@ -736,15 +736,15 @@ export default function TemplatesPage() {
                 </div>
 
                 {/* Sender Preview Block */}
-                <div className="rounded-lg border border-neutral-200 bg-white p-3 space-y-1.5 shadow-2xs">
-                  <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Sender Headers</div>
+                <div className="rounded-lg border border-border-default bg-surface p-3 space-y-1.5 shadow-2xs">
+                  <div className="text-[10px] font-bold text-txt-muted uppercase tracking-wider">Sender Headers</div>
                   <div className="text-xs break-all">
-                    <span className="font-semibold text-neutral-600">From: </span>
+                    <span className="font-semibold text-txt-secondary">From: </span>
                     <code className="text-neutral-900 font-mono text-[11px]">{resolvedSender || "donotreply@camply.ng"}</code>
                   </div>
                   {resolvedReplyTo && (
-                    <div className="text-xs break-all border-t border-neutral-100 pt-1.5">
-                      <span className="font-semibold text-neutral-600">Reply-To: </span>
+                    <div className="text-xs break-all border-t border-border-subtle pt-1.5">
+                      <span className="font-semibold text-txt-secondary">Reply-To: </span>
                       <code className="text-neutral-900 font-mono text-[11px]">{resolvedReplyTo}</code>
                     </div>
                   )}
@@ -768,14 +768,14 @@ export default function TemplatesPage() {
                 )}
 
                 {/* Desktop/Mobile Size Selector */}
-                <div className="flex items-center justify-between border-t border-neutral-200 pt-4">
-                  <span className="text-xs font-medium text-neutral-500">Layout Size</span>
-                  <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5">
+                <div className="flex items-center justify-between border-t border-border-default pt-4">
+                  <span className="text-xs font-medium text-txt-secondary">Layout Size</span>
+                  <div className="inline-flex rounded-lg border border-border-default bg-surface p-0.5">
                     <button
                       onClick={() => setPreviewWidth("desktop")}
                       className={cn(
                         "p-1 rounded-md transition-colors",
-                        previewWidth === "desktop" ? "bg-accent-100 text-accent-700" : "text-neutral-400 hover:text-neutral-600"
+                        previewWidth === "desktop" ? "bg-accent-100 text-accent-700" : "text-txt-muted hover:text-txt-secondary"
                       )}
                       title="Desktop Layout (480px)"
                     >
@@ -785,7 +785,7 @@ export default function TemplatesPage() {
                       onClick={() => setPreviewWidth("mobile")}
                       className={cn(
                         "p-1 rounded-md transition-colors",
-                        previewWidth === "mobile" ? "bg-accent-100 text-accent-700" : "text-neutral-400 hover:text-neutral-600"
+                        previewWidth === "mobile" ? "bg-accent-100 text-accent-700" : "text-txt-muted hover:text-txt-secondary"
                       )}
                       title="Mobile Layout (320px)"
                     >
@@ -795,10 +795,10 @@ export default function TemplatesPage() {
                 </div>
 
                 {/* IFrame Preview Canvas */}
-                <div className="flex justify-center border-t border-neutral-200 pt-3">
+                <div className="flex justify-center border-t border-border-default pt-3">
                   <div
                     className={cn(
-                      "rounded-xl border border-neutral-200 bg-white shadow-lg overflow-hidden transition-all duration-300",
+                      "rounded-xl border border-border-default bg-surface shadow-lg overflow-hidden transition-all duration-300",
                       previewWidth === "desktop" ? "w-[480px]" : "w-[320px]"
                     )}
                   >
@@ -810,7 +810,7 @@ export default function TemplatesPage() {
                         sandbox="allow-same-origin"
                       />
                     ) : (
-                      <div className="flex flex-col items-center justify-center h-48 text-neutral-400 bg-white">
+                      <div className="flex flex-col items-center justify-center h-48 text-txt-muted bg-surface">
                         <ArrowPathIcon className="h-8 w-8 animate-spin mb-1 text-neutral-300" />
                         <span className="text-xs">Rendering preview...</span>
                       </div>
@@ -819,13 +819,13 @@ export default function TemplatesPage() {
                 </div>
 
                 {/* Variables Reference Panel */}
-                <div className="border-t border-neutral-200 pt-4">
+                <div className="border-t border-border-default pt-4">
                   <VariablesPanel editor={editor} />
                 </div>
               </div>
             )}
             {!selectedId && (
-              <p className="text-center text-xs text-neutral-400 py-12">No template context available.</p>
+              <p className="text-center text-xs text-txt-muted py-12">No template context available.</p>
             )}
           </div>
 

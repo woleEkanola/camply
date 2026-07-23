@@ -85,11 +85,11 @@ function VariablesPanel({ editor }: { editor: ReturnType<typeof useEditor> }) {
   };
 
   return (
-    <div className="border-t border-neutral-200 bg-neutral-50">
+    <div className="border-t border-border-default bg-surface-raised">
       <button
         type="button"
         onClick={() => setCollapsed(!collapsed)}
-        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:bg-neutral-100"
+        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-txt-secondary hover:bg-surface-raised"
       >
         Insert Variable
         <svg
@@ -104,7 +104,7 @@ function VariablesPanel({ editor }: { editor: ReturnType<typeof useEditor> }) {
         <div className="space-y-2 px-3 pb-3">
           {categories.map((cat) => (
             <div key={cat}>
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-txt-muted">
                 {cat}
               </div>
               <div className="flex flex-wrap gap-1">
@@ -114,7 +114,7 @@ function VariablesPanel({ editor }: { editor: ReturnType<typeof useEditor> }) {
                     type="button"
                     onClick={() => insertVariable(v.key)}
                     title={`${v.label} — example: ${v.sampleValue}`}
-                    className="rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-[11px] text-neutral-600 hover:border-accent-300 hover:bg-accent-50 hover:text-accent-700 transition-colors"
+                    className="rounded border border-border-default bg-surface px-1.5 py-0.5 text-[11px] text-txt-secondary hover:border-accent-300 hover:bg-accent-50 hover:text-accent-700 transition-colors"
                   >
                     {v.label}
                   </button>
@@ -161,7 +161,7 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-t border-neutral-200 bg-white px-3 py-1.5">
+    <div className="flex flex-wrap items-center gap-1 border-t border-border-default bg-surface px-3 py-1.5">
       <TbBtn
         onClick={() => editor.chain().focus().toggleBold().run()}
         active={editor.isActive("bold")}
@@ -251,8 +251,8 @@ function TbBtn({
       disabled={disabled}
       title={label}
       className={cn(
-        "flex h-7 w-7 items-center justify-center rounded hover:bg-neutral-100",
-        active && "bg-accent-50 text-accent-700",
+        "flex h-7 w-7 items-center justify-center rounded hover:bg-surface-raised",
+        active && "brand-tint",
         disabled && "opacity-40 cursor-not-allowed"
       )}
     >
@@ -483,8 +483,8 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
                   className={cn(
                     "cursor-pointer rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
                     audience === opt
-                      ? "border-accent-600 bg-accent-50 text-accent-700"
-                      : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
+                      ? "border-accent-600 brand-tint"
+                      : "border-border-default bg-surface text-txt-secondary hover:bg-surface-hover"
                   )}
                 >
                   <input
@@ -546,8 +546,8 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
             />
 
             <div>
-              <span className="block text-xs font-semibold text-neutral-500 mb-1">Resolved Sender Preview</span>
-              <div className="rounded bg-neutral-50 px-3 py-2 text-xs font-mono border border-neutral-200 text-neutral-800 break-all">
+              <span className="block text-xs font-semibold text-txt-secondary mb-1">Resolved Sender Preview</span>
+              <div className="rounded bg-surface-raised px-3 py-2 text-xs font-mono border border-border-default text-neutral-800 break-all">
                 {getLivePreview()}
               </div>
             </div>
@@ -578,11 +578,11 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
       {/* Message editor */}
       <Card>
         <CardBody className="!p-0">
-          <div className="border-b border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-700">
+          <div className="border-b border-border-default px-4 py-2 text-sm font-medium text-neutral-700">
             Message
           </div>
           <EditorToolbar editor={editor} />
-          <div className="min-h-[250px] bg-white">
+          <div className="min-h-[250px] bg-surface">
             <EditorContent
               editor={editor}
               className="prose prose-sm max-w-none min-h-[250px] px-6 py-4 focus:outline-none"
@@ -610,9 +610,9 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-neutral-900/40" onClick={() => setShowConfirm(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-lg border border-neutral-200 bg-white p-6 shadow-xl">
+          <div className="relative z-10 w-full max-w-md rounded-lg border border-border-default bg-surface p-6 shadow-xl">
             <h3 className="text-sm font-semibold text-neutral-900">Confirm Broadcast</h3>
-            <p className="mt-2 text-sm text-neutral-600">
+            <p className="mt-2 text-sm text-txt-secondary">
               You are about to send this broadcast to{" "}
               <strong className="text-neutral-900">
                 {audience === "ALL"
@@ -627,7 +627,7 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
               {campusId && " in the selected campus"}
               .
             </p>
-            <p className="mt-1 text-xs text-neutral-500">This action cannot be undone once sent.</p>
+            <p className="mt-1 text-xs text-txt-secondary">This action cannot be undone once sent.</p>
             <div className="mt-4 flex justify-end gap-2">
               <Button size="sm" variant="secondary" onClick={() => setShowConfirm(false)}>
                 Cancel
@@ -666,13 +666,13 @@ function HistoryTab() {
         </CardHeader>
         <CardBody className="!p-0">
           {items.length === 0 ? (
-            <div className="px-5 py-8 text-center text-sm text-neutral-400">
+            <div className="px-5 py-8 text-center text-sm text-txt-muted">
               No broadcasts sent yet.
             </div>
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                <tr className="border-b border-border-default bg-surface-raised text-left text-xs font-medium text-txt-secondary uppercase tracking-wider">
                   <th className="px-5 py-3">Title</th>
                   <th className="px-5 py-3">Audience</th>
                   <th className="px-5 py-3">Status</th>
@@ -690,23 +690,23 @@ function HistoryTab() {
                       )
                     }
                     className={cn(
-                      "cursor-pointer transition-colors hover:bg-neutral-50",
+                      "cursor-pointer transition-colors hover:bg-surface-hover",
                       selectedBroadcastId === b.id && "bg-accent-50"
                     )}
                   >
                     <td className="px-5 py-3 text-sm font-medium text-neutral-900">
                       {b.title}
                     </td>
-                    <td className="px-5 py-3 text-sm text-neutral-600">
+                    <td className="px-5 py-3 text-sm text-txt-secondary">
                       {b.audience.charAt(0) + b.audience.slice(1).toLowerCase()}
                     </td>
                     <td className="px-5 py-3">
                       <Badge tone={statusTone(b.status)}>{b.status}</Badge>
                     </td>
-                    <td className="px-5 py-3 text-sm text-neutral-600">
+                    <td className="px-5 py-3 text-sm text-txt-secondary">
                       {b._count.recipients}
                     </td>
-                    <td className="px-5 py-3 text-sm text-neutral-500">
+                    <td className="px-5 py-3 text-sm text-txt-secondary">
                       {b.sentAt
                         ? new Date(b.sentAt).toLocaleDateString()
                         : new Date(b.createdAt).toLocaleDateString()}
@@ -731,30 +731,30 @@ function HistoryTab() {
                 <div className="text-2xl font-bold text-neutral-900">
                   {broadcastDetail.stats.total}
                 </div>
-                <div className="text-xs text-neutral-500 mt-1">Total</div>
+                <div className="text-xs text-txt-secondary mt-1">Total</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-warning-600">
                   {broadcastDetail.stats.queued}
                 </div>
-                <div className="text-xs text-neutral-500 mt-1">Queued</div>
+                <div className="text-xs text-txt-secondary mt-1">Queued</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-success-600">
                   {broadcastDetail.stats.sent}
                 </div>
-                <div className="text-xs text-neutral-500 mt-1">Sent</div>
+                <div className="text-xs text-txt-secondary mt-1">Sent</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-danger-600">
                   {broadcastDetail.stats.failed}
                 </div>
-                <div className="text-xs text-neutral-500 mt-1">Failed</div>
+                <div className="text-xs text-txt-secondary mt-1">Failed</div>
               </div>
             </div>
 
             {/* Progress bar */}
-            <div className="mt-4 h-2 rounded-full bg-neutral-100 overflow-hidden">
+            <div className="mt-4 h-2 rounded-full bg-surface-raised overflow-hidden">
               <div className="flex h-full">
                 {broadcastDetail.stats.sent > 0 && (
                   <div
@@ -782,7 +782,7 @@ function HistoryTab() {
                 )}
               </div>
             </div>
-            <div className="mt-2 flex items-center gap-4 text-xs text-neutral-500">
+            <div className="mt-2 flex items-center gap-4 text-xs text-txt-secondary">
               <span className="flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full bg-success-500" /> Sent
               </span>

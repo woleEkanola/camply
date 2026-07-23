@@ -50,7 +50,7 @@ export const CampusRepsSheet: React.FC<CampusRepsSheetProps> = ({
   return (
     <Dialog open={isOpen} onClose={onClose} title={`Representatives — ${campusName}`} size="md">
       {error && (
-        <div className="mb-4 rounded-xl bg-danger-50 p-3.5 text-xs font-medium text-danger-700">
+        <div className="mb-4 rounded-xl status-danger p-3.5 text-xs font-medium ">
           {error}
         </div>
       )}
@@ -58,13 +58,13 @@ export const CampusRepsSheet: React.FC<CampusRepsSheetProps> = ({
       <div className="space-y-5">
         {/* CURRENT ASSIGNED REPS ROSTER */}
         <div>
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2.5 flex items-center gap-1.5">
-            <UserGroupIcon className="h-4 w-4 text-neutral-600" />
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-txt-secondary mb-2.5 flex items-center gap-1.5">
+            <UserGroupIcon className="h-4 w-4 text-txt-secondary" />
             Assigned Roster ({selectedReps.length})
           </h4>
 
           {selectedReps.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/70 p-4 text-center text-xs text-neutral-500">
+            <div className="rounded-xl border border-dashed border-border-default bg-surface-raised/70 p-4 text-center text-xs text-txt-secondary">
               No representatives assigned yet. Select candidates below to assign them.
             </div>
           ) : (
@@ -82,15 +82,15 @@ export const CampusRepsSheet: React.FC<CampusRepsSheetProps> = ({
                 return (
                   <div
                     key={rep.id}
-                    className="flex items-center justify-between rounded-xl border border-neutral-200/90 bg-white p-3 shadow-2xs"
+                    className="flex items-center justify-between rounded-xl border border-border-default/90 bg-surface p-3 shadow-2xs"
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-100 font-semibold text-accent-800 text-xs">
                         {initials}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-neutral-900">{name || rep.email}</p>
-                        <p className="text-xs text-neutral-500">
+                        <p className="text-sm font-semibold text-txt-primary">{name || rep.email}</p>
+                        <p className="text-xs text-txt-secondary">
                           Campus Rep {rep.email && name ? `· ${rep.email}` : ""}
                         </p>
                       </div>
@@ -110,8 +110,8 @@ export const CampusRepsSheet: React.FC<CampusRepsSheetProps> = ({
         </div>
 
         {/* CANDIDATES SELECTION AREA */}
-        <div className="border-t border-neutral-100 pt-4">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2.5">
+        <div className="border-t border-border-subtle pt-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-txt-secondary mb-2.5">
             Add Representative
           </h4>
 
@@ -124,9 +124,9 @@ export const CampusRepsSheet: React.FC<CampusRepsSheetProps> = ({
             />
           </div>
 
-          <div className="max-h-56 overflow-y-auto rounded-xl border border-neutral-200 divide-y divide-neutral-100 bg-white">
+          <div className="max-h-56 overflow-y-auto rounded-xl border border-border-default divide-y divide-border-subtle bg-surface">
             {filteredAdmins.length === 0 ? (
-              <p className="p-4 text-center text-xs text-neutral-500">No matching users found.</p>
+              <p className="p-4 text-center text-xs text-txt-secondary">No matching users found.</p>
             ) : (
               filteredAdmins.map((admin) => {
                 const isChecked = selectedAdminIds.includes(admin.id);
@@ -135,25 +135,25 @@ export const CampusRepsSheet: React.FC<CampusRepsSheetProps> = ({
                 return (
                   <label
                     key={admin.id}
-                    className="flex cursor-pointer items-center justify-between p-3 hover:bg-neutral-50 transition-colors"
+                    className="flex cursor-pointer items-center justify-between p-3 hover:bg-surface-hover transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <input
                         type="checkbox"
                         checked={isChecked}
                         onChange={(e) => onSelectionChange(admin.id, e.target.checked)}
-                        className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                        className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
                       />
                       <div>
-                        <p className="text-xs font-semibold text-neutral-900">{name || admin.email}</p>
-                        <p className="text-[11px] text-neutral-500">
+                        <p className="text-xs font-semibold text-txt-primary">{name || admin.email}</p>
+                        <p className="text-[11px] text-txt-secondary">
                           {admin.email} {admin.role ? `· ${admin.role}` : ""}
                         </p>
                       </div>
                     </div>
 
                     {isChecked && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-semibold text-success-700">
+                      <span className="inline-flex items-center gap-1 rounded-full status-success px-2 py-0.5 text-[11px] font-semibold ">
                         <CheckIcon className="h-3 w-3" />
                         Selected
                       </span>
@@ -166,7 +166,7 @@ export const CampusRepsSheet: React.FC<CampusRepsSheetProps> = ({
         </div>
 
         {/* FOOTER ACTIONS */}
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle">
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>

@@ -5,7 +5,7 @@ import { logEvent } from "../audit";
 import { assertTransition } from "./stateMachine";
 import { RegistrationValidationError, validateSubmission } from "./validation";
 import { runSideEffectsNow } from "./effects";
-import { autoAssignTribeOnApproval } from "../tribe/engine";
+import { autoAssignTribeOnApproval, recommendTribe, confirmAssignmentInTx } from "../tribe/engine";
 import { isEndorsed } from "./endorsement";
 
 const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
@@ -217,6 +217,7 @@ export async function submitRegistration(params: { registrationId: string; actor
   } else if (result.status === "WAITLISTED") {
     await runSideEffectsNow(result.id, "REGISTRATION_WAITLISTED");
   } else if (result.status === "PENDING") {
+    await recommendTribe(result.id, params.actorId);
     await runSideEffectsNow(result.id, "REGISTRATION_SUBMITTED");
   }
 
@@ -360,6 +361,8 @@ async function approveRegistrationInTx(
       ...(twoStep ? { twoStepOverride: !endorsed } : {}),
     },
   });
+
+  await confirmAssignmentInTx(tx, registration.id, params.actorId);
 
   if (twoStep) {
     await tx.registrationReview.upsert({

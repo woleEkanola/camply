@@ -53,7 +53,7 @@ export function StaffLinkCard({ organizationId, campId, type }: { organizationId
           </Button>
         ) : (
           <div className="space-y-3">
-            <div className="truncate rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600">{url}</div>
+            <div className="truncate rounded-md border border-border-default bg-surface-raised px-3 py-2 text-xs text-txt-secondary">{url}</div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="secondary" onClick={handleCopy}>{copied ? "Copied!" : "Copy Link"}</Button>
               <Button size="sm" variant="secondary" onClick={handleShare}>Share</Button>

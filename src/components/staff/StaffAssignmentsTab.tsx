@@ -25,8 +25,8 @@ export function StaffAssignmentsTab({ staffId, campId }: StaffAssignmentsTabProp
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
-      <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
-        <div className="flex items-center justify-between gap-4 rounded-xl bg-neutral-50 p-4">
+      <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
+        <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-raised p-4">
           <span className="text-sm font-medium text-neutral-900">{profile.assignedVenue?.name || "Not assigned"}</span>
           <div className="flex items-center gap-2">
             <label className="text-sm font-semibold text-neutral-500">Venue</label>
@@ -45,12 +45,12 @@ export function StaffAssignmentsTab({ staffId, campId }: StaffAssignmentsTabProp
       </div>
 
       {profile.type === "TEACHER" ? (
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+        <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
           <div className="mb-4 flex items-center gap-2">
             <UsersIcon className="h-5 w-5 text-accent-600" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Tribe</h2>
           </div>
-          <div className="flex items-center justify-between gap-4 rounded-xl bg-neutral-50 p-4">
+          <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-raised p-4">
             <span className="text-sm font-medium text-neutral-900">{profile.assignedTribe?.name || "Not assigned"}</span>
             <select
               className="rounded-lg border-neutral-300 text-sm"
@@ -65,19 +65,19 @@ export function StaffAssignmentsTab({ staffId, campId }: StaffAssignmentsTabProp
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+        <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
           <div className="mb-4 flex items-center gap-2">
             <BuildingOfficeIcon className="h-5 w-5 text-accent-600" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Volunteer Category</h2>
           </div>
-          <div className="rounded-xl bg-neutral-50 p-4 text-sm font-medium text-neutral-900">
+          <div className="rounded-xl bg-surface-raised p-4 text-sm font-medium text-neutral-900">
             {profile.volunteerCategory || "Not categorized"}
           </div>
         </div>
       )}
 
-      <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs md:col-span-2">
-        <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4">
+      <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs md:col-span-2">
+        <div className="flex flex-col gap-4 rounded-xl bg-surface-raised p-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm">
               <span className="font-medium text-neutral-900">{profile.department?.name || "Not assigned"}</span>
@@ -125,9 +125,9 @@ export function StaffAssignmentsTab({ staffId, campId }: StaffAssignmentsTabProp
       </div>
 
       {profile.type === "TEACHER" && profile.camperAssignments && profile.camperAssignments.length > 0 && (
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs md:col-span-2">
+        <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs md:col-span-2">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-neutral-500">Assigned Campers</h2>
-          <ul className="divide-y divide-neutral-100">
+          <ul className="divide-y divide-border-subtle">
             {profile.camperAssignments.map((ca: any) => (
               <li key={ca.id} className="flex items-center justify-between py-3">
                 <span className="text-sm font-medium text-neutral-900">

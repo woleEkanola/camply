@@ -183,3 +183,75 @@ describe("manual assignment and capacity enforcement", () => {
     expect(logs.length).toBeGreaterThan(0);
   });
 });
+
+describe("v3 Recommendation Engine (Decoupled Recommendation vs Assignment)", () => {
+  it("populates suggestedTribeId without assigning tribeId during recommendTribe", async () => {
+    const tribe = await prisma.tribe.create({ data: { campId, name: "Suggested Tribe" } });
+    const camper = await makeCamper();
+    const draft = await regEngine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+
+    const recommended = await tribeEngine.recommendTribe(draft.id, parentId);
+
+    expect(recommended.suggestedTribeId).toBe(tribe.id);
+    expect(recommended.tribeId).toBeNull();
+    expect(recommended.tribeRecommendationStatus).toBe("SUGGESTED");
+    expect(recommended.tribeRecommendationReason).toBeTruthy();
+  });
+
+  it("stores manual override while preserving original recommendation in overrideRecommendation", async () => {
+    const tribeA = await prisma.tribe.create({ data: { campId, name: "Rec Tribe A" } });
+    const tribeB = await prisma.tribe.create({ data: { campId, name: "Override Tribe B" } });
+    const camper = await makeCamper();
+    const draft = await regEngine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+
+    const rec = await tribeEngine.recommendTribe(draft.id, parentId);
+    const targetOverride = rec.suggestedTribeId === tribeA.id ? tribeB.id : tribeA.id;
+    const overridden = await tribeEngine.overrideRecommendation(draft.id, targetOverride, parentId, "Admin preferred different tribe");
+
+    expect(overridden.suggestedTribeId).toBe(targetOverride);
+    expect(overridden.tribeOriginalSuggestedId).toBe(rec.suggestedTribeId);
+    expect(overridden.tribeRecommendationStatus).toBe("MANUAL_OVERRIDE");
+  });
+
+  it("converts suggestedTribeId to official tribeId on confirmAssignment", async () => {
+    const tribe = await prisma.tribe.create({ data: { campId, name: "Confirmed Tribe" } });
+    const camper = await makeCamper();
+    const draft = await regEngine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+
+    await tribeEngine.recommendTribe(draft.id, parentId);
+    const confirmed = await tribeEngine.confirmAssignment(draft.id, parentId);
+
+    expect(confirmed.tribeId).toBe(tribe.id);
+    expect(confirmed.tribeAssignedAt).toBeTruthy();
+    expect(confirmed.tribeRecommendationStatus).toBe("ASSIGNED");
+  });
+
+  it("acceptRecommendation succeeds on the first click with no prior recommend/regenerate call", async () => {
+    const tribe = await prisma.tribe.create({ data: { campId, name: "First Click Tribe" } });
+    const camper = await makeCamper();
+    const draft = await regEngine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+
+    // Deliberately skip recommendTribe/regenerate — mirrors a user clicking
+    // "Accept Recommendation" while only the live (unpersisted) preview has been shown.
+    const accepted = await tribeEngine.acceptRecommendation(draft.id, parentId);
+
+    expect(accepted.suggestedTribeId).toBe(tribe.id);
+    expect(accepted.tribeRecommendationStatus).toBe("ACCEPTED");
+  });
+
+  it("bulkSuggestTribes generates suggestions and bulkApplySuggestedTribes confirms assignments", async () => {
+    await prisma.camp.update({ where: { id: campId }, data: { approvalMode: "MANUAL" } });
+    const tribe = await prisma.tribe.create({ data: { campId, name: "Bulk Tribe" } });
+    const camperA = await makeCamper();
+    const draftA = await regEngine.createDraft({ camperId: camperA.id, campId, campusId, actorId: parentId });
+    await regEngine.submitRegistration({ registrationId: draftA.id, actorId: parentId });
+
+    const suggestResults = await tribeEngine.bulkSuggestTribes({ campId, actorId: parentId });
+    expect(suggestResults.length).toBeGreaterThan(0);
+    expect(suggestResults[0].suggestedTribeId).toBe(tribe.id);
+
+    const applyResults = await tribeEngine.bulkApplySuggestedTribes({ campId, actorId: parentId });
+    expect(applyResults.length).toBeGreaterThan(0);
+    expect(applyResults[0].tribeId).toBe(tribe.id);
+  });
+});

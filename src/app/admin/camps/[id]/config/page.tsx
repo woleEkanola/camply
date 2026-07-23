@@ -320,12 +320,12 @@ export default function CampConfigPage() {
               <option value="ARCHIVED">Archived</option>
             </Select>
 
-            <label className="flex items-center gap-2 text-sm text-neutral-700 md:col-span-2">
+            <label className="flex items-center gap-2 text-sm text-txt-secondary md:col-span-2">
               <input
                 type="checkbox"
                 checked={form.allowResubmission}
                 onChange={(e) => setForm({ ...form, allowResubmission: e.target.checked })}
-                className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
               />
               Allow parents to resubmit after a rejection
             </label>
@@ -342,8 +342,8 @@ export default function CampConfigPage() {
     <Card>
       <CardBody>
         <div className="py-8 text-center">
-          <p className="text-sm font-medium text-neutral-700">Required documents are now managed in Profile Fields</p>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="text-sm font-medium text-txt-secondary">Required documents are now managed in Profile Fields</p>
+          <p className="mt-1 text-xs text-txt-secondary">
             <a href="/admin/profile-fields" className="text-accent-600 underline">
               Go to Profile Fields → Required Documents tab
             </a>
@@ -359,12 +359,12 @@ export default function CampConfigPage() {
       <Card>
         <CardHeader><CardTitle>Allocation Settings</CardTitle></CardHeader>
         <CardBody className="space-y-4">
-          <label className="flex items-center gap-2 text-sm text-neutral-700">
+          <label className="flex items-center gap-2 text-sm text-txt-secondary">
             <input
               type="checkbox"
               checked={tribeEnabled}
               onChange={(e) => setTribeEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+              className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
             />
             Enable tribe allocation for this camp
           </label>
@@ -378,17 +378,17 @@ export default function CampConfigPage() {
               </Select>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-neutral-700">Allocation Criteria (priority = order below)</label>
+                <label className="mb-2 block text-sm font-medium text-txt-secondary">Allocation Criteria (priority = order below)</label>
                 <div className="space-y-1">
                   {CRITERIA.map((c) => (
-                    <label key={c.key} className="flex items-center gap-2 text-sm text-neutral-700">
+                    <label key={c.key} className="flex items-center gap-2 text-sm text-txt-secondary">
                       <input
                         type="checkbox"
                         checked={!!tribeRules.find((r) => r.criterion === c.key)?.enabled}
                         onChange={(e) =>
                           setRules((prev) => prev.map((r) => (r.criterion === c.key ? { ...r, enabled: e.target.checked } : r)))
                         }
-                        className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                        className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
                       />
                       {c.label}
                     </label>
@@ -412,11 +412,11 @@ export default function CampConfigPage() {
         <CardBody className="space-y-4">
           <div className="space-y-2">
             {(tribes ?? []).map((tribe: any) => (
-              <div key={tribe.id} className="flex items-center justify-between rounded-md border border-neutral-200 p-3">
+              <div key={tribe.id} className="flex items-center justify-between rounded-md border border-border-default p-3">
                 <div className="flex items-center gap-2">
                   <span className="h-3 w-3 rounded-full" style={{ backgroundColor: tribe.color || "#999" }} />
-                  <span className="font-medium text-neutral-900">{tribe.name}</span>
-                  <span className="text-xs text-neutral-500">
+                  <span className="font-medium text-txt-primary">{tribe.name}</span>
+                  <span className="text-xs text-txt-secondary">
                     {tribe.population} camper{tribe.population === 1 ? "" : "s"}
                     {tribe.maxCapacity ? ` / ${tribe.maxCapacity}` : ""}
                   </span>
@@ -433,14 +433,14 @@ export default function CampConfigPage() {
                 </div>
               </div>
             ))}
-            {(tribes ?? []).length === 0 && <p className="text-sm text-neutral-500">No tribes created yet.</p>}
+            {(tribes ?? []).length === 0 && <p className="text-sm text-txt-secondary">No tribes created yet.</p>}
           </div>
 
-          <div className="grid grid-cols-4 items-end gap-2 border-t border-neutral-200 pt-4">
+          <div className="grid grid-cols-4 items-end gap-2 border-t border-border-default pt-4">
             <Input containerClassName="col-span-2" label="Tribe Name" value={newTribe.name} onChange={(e) => setNewTribe({ ...newTribe, name: e.target.value })} placeholder="e.g. Green House" />
             <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">Color</label>
-              <input type="color" className="h-10 w-full rounded-md border border-neutral-300" value={newTribe.color} onChange={(e) => setNewTribe({ ...newTribe, color: e.target.value })} />
+              <label className="mb-1 block text-sm font-medium text-txt-secondary">Color</label>
+              <input type="color" className="h-10 w-full rounded-md border border-input-border" value={newTribe.color} onChange={(e) => setNewTribe({ ...newTribe, color: e.target.value })} />
             </div>
             <Input label="Max Capacity" type="number" value={newTribe.maxCapacity} onChange={(e) => setNewTribe({ ...newTribe, maxCapacity: e.target.value })} />
             <Button
@@ -465,7 +465,7 @@ export default function CampConfigPage() {
       <Card>
         <CardHeader><CardTitle>Bulk Allocation</CardTitle></CardHeader>
         <CardBody>
-          <p className="mb-3 text-sm text-neutral-500">Automatically assign a tribe to every approved camper who doesn&apos;t have one yet.</p>
+          <p className="mb-3 text-sm text-txt-secondary">Automatically assign a tribe to every approved camper who doesn&apos;t have one yet.</p>
           {bulkResult && <div className="mb-2 text-sm text-success-700">{bulkResult}</div>}
           <Button loading={bulkAssign.isPending} onClick={() => bulkAssign.mutate({ campId: id })}>Run Bulk Auto-Allocation</Button>
         </CardBody>
@@ -479,34 +479,34 @@ export default function CampConfigPage() {
       <Card>
         <CardHeader><CardTitle>Bed Allocation Settings</CardTitle></CardHeader>
         <CardBody className="space-y-4">
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-txt-secondary">
             Controls the &quot;Auto Assign Rooms &amp; Beds&quot; button on the Camp Structure → Accommodation tab.
             A hostel&apos;s gender restriction is always enforced and can&apos;t be turned off here — these criteria only
             break ties between otherwise-eligible beds.
           </p>
-          <label className="flex items-center gap-2 text-sm text-neutral-700">
+          <label className="flex items-center gap-2 text-sm text-txt-secondary">
             <input
               type="checkbox"
               checked={bedEnabled}
               onChange={(e) => setBedEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+              className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
             />
             Enable bed allocation for this camp
           </label>
 
           {bedEnabled && (
             <div>
-              <label className="mb-2 block text-sm font-medium text-neutral-700">Allocation Criteria (priority = order below)</label>
+              <label className="mb-2 block text-sm font-medium text-txt-secondary">Allocation Criteria (priority = order below)</label>
               <div className="space-y-1">
                 {BED_CRITERIA.map((c) => (
-                  <label key={c.key} className="flex items-center gap-2 text-sm text-neutral-700">
+                  <label key={c.key} className="flex items-center gap-2 text-sm text-txt-secondary">
                     <input
                       type="checkbox"
                       checked={!!bedRules.find((r) => r.criterion === c.key)?.enabled}
                       onChange={(e) =>
                         setBedRules((prev) => prev.map((r) => (r.criterion === c.key ? { ...r, enabled: e.target.checked } : r)))
                       }
-                      className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                      className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
                     />
                     {c.label}
                   </label>
@@ -541,14 +541,14 @@ export default function CampConfigPage() {
           description="Set registration rules, dates, and requirements before opening registration."
         />
 
-        {error && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
-        {success && <div className="rounded-md bg-success-50 p-3 text-sm text-success-700">{success}</div>}
+        {error && <div className="rounded-md status-danger p-3 text-sm ">{error}</div>}
+        {success && <div className="rounded-md status-success p-3 text-sm ">{success}</div>}
 
         <Tabs tabs={configTabs} />
       </div>
 
       <Dialog open={!!deleteReqTarget} onClose={() => setDeleteReqTarget(null)} title="Confirm Removal" size="sm">
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-txt-secondary">
           Are you sure you want to remove &quot;{deleteReqTarget?.name}&quot;? This action cannot be undone.
         </p>
         <div className="mt-5 flex justify-end gap-2">

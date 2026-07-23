@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { TRASH_REGISTRY, PURGE_ORDER, type TrashEntityType } from "./registry";
+import { restoreUser } from "./userCascade";
 
 const TRASH_RETENTION_DAYS = 60;
 
@@ -12,13 +13,17 @@ export interface TrashItem {
   daysRemaining: number;
 }
 
-/** Lists every soft-deleted row across all registered entity types, scoped to one org. */
-export async function listTrash(organizationId: string): Promise<TrashItem[]> {
+/** Lists soft-deleted rows across registered entity types, optionally scoped to an org. */
+export async function listTrash(organizationId?: string): Promise<TrashItem[]> {
   const results = await Promise.all(
     (Object.keys(TRASH_REGISTRY) as TrashEntityType[]).map(async (type) => {
       const entry = TRASH_REGISTRY[type];
+      const where: Record<string, unknown> = { deletedAt: { not: null } };
+      if (organizationId) {
+        Object.assign(where, entry.orgWhere(organizationId));
+      }
       const rows: any[] = await entry.delegate().findMany({
-        where: { deletedAt: { not: null }, ...entry.orgWhere(organizationId) },
+        where,
         ...(entry.include ? { include: entry.include } : {}),
         orderBy: { deletedAt: "desc" },
       });
@@ -39,27 +44,37 @@ export async function listTrash(organizationId: string): Promise<TrashItem[]> {
   return results.flat().sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
 }
 
-/** Restores a single soft-deleted row (does not restore any cascaded children — admin restores each explicitly). */
-export async function restoreEntity(type: TrashEntityType, id: string, organizationId: string) {
+/** Restores a single soft-deleted row. */
+export async function restoreEntity(type: TrashEntityType, id: string, organizationId?: string) {
   const entry = TRASH_REGISTRY[type];
   if (!entry) throw new TRPCError({ code: "BAD_REQUEST", message: `Unknown trash entity type: ${type}` });
 
-  const existing = await entry.delegate().findFirst({
-    where: { id, deletedAt: { not: null }, ...entry.orgWhere(organizationId) },
-  });
+  const where: Record<string, unknown> = { id, deletedAt: { not: null } };
+  if (organizationId) {
+    Object.assign(where, entry.orgWhere(organizationId));
+  }
+
+  const existing = await entry.delegate().findFirst({ where });
   if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Item not found in trash" });
+
+  if (type === "user") {
+    return restoreUser(id);
+  }
 
   return entry.delegate().update({ where: { id }, data: { deletedAt: null } });
 }
 
 /** Permanently (hard-)deletes a single soft-deleted row, immediately rather than waiting for the 60-day sweep. */
-export async function purgeEntity(type: TrashEntityType, id: string, organizationId: string) {
+export async function purgeEntity(type: TrashEntityType, id: string, organizationId?: string) {
   const entry = TRASH_REGISTRY[type];
   if (!entry) throw new TRPCError({ code: "BAD_REQUEST", message: `Unknown trash entity type: ${type}` });
 
-  const existing = await entry.delegate().findFirst({
-    where: { id, deletedAt: { not: null }, ...entry.orgWhere(organizationId) },
-  });
+  const where: Record<string, unknown> = { id, deletedAt: { not: null } };
+  if (organizationId) {
+    Object.assign(where, entry.orgWhere(organizationId));
+  }
+
+  const existing = await entry.delegate().findFirst({ where });
   if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Item not found in trash" });
 
   try {

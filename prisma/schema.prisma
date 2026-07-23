@@ -482,6 +482,16 @@ model Registration {
   isTribeLocked         Boolean   @default(false)
   tribeAllocationLogs   TribeAllocationLog[]
 
+  // Tribe Recommendation (v3 Recommendation Engine)
+  suggestedTribe            Tribe?    @relation("SuggestedTribe", fields: [suggestedTribeId], references: [id])
+  suggestedTribeId          String?
+  tribeSuggestedAt          DateTime?
+  tribeRecommendationStatus String    @default("NONE") // NONE | SUGGESTED | ACCEPTED | MANUAL_OVERRIDE | ASSIGNED | LOCKED
+  tribeRecommendationReason Json?     // string[] checklist of explanations
+  tribeRecommendationScore  Float?    // quality score / soft score
+  tribeRecommendationBreakdown Json?  // Record<Criterion, number>
+  tribeOriginalSuggestedId  String?   // Tracks original recommendation when overridden
+
   // Accommodation (Camp Structure module)
   room   Room?   @relation(fields: [roomId], references: [id])
   roomId String?
@@ -652,6 +662,7 @@ model Tribe {
   isAllocationLocked Boolean             @default(false)
   status             String              @default("ACTIVE") // ACTIVE | INACTIVE
   registrations      Registration[]
+  suggestedRegistrations Registration[] @relation("SuggestedTribe")
   allocationLogs     TribeAllocationLog[]
   preferredByStaff   StaffProfile[]      @relation("PreferredTribe")
   assignedStaff      StaffProfile[]      @relation("AssignedStaffTribe")

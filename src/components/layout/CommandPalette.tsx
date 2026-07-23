@@ -114,13 +114,13 @@ export function CommandPalette({ area }: { area: "admin" | "dashboard" | "campus
             leaveFrom="opacity-100 scale-100"
             leaveTo="opacity-0 scale-95"
           >
-            <Dialog.Panel className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5">
+            <Dialog.Panel className="w-full max-w-lg overflow-hidden rounded-xl bg-elevated shadow-2xl ring-1 ring-black/5">
               <Combobox onChange={handleSelect}>
-                <div className="flex items-center gap-2 border-b border-neutral-200 px-4">
-                  <MagnifyingGlassIcon className="h-5 w-5 text-neutral-400" />
+                <div className="flex items-center gap-2 border-b border-elevated-border px-4">
+                  <MagnifyingGlassIcon className="h-5 w-5 text-txt-muted" />
                   <Combobox.Input
                     autoFocus
-                    className="w-full border-0 py-3.5 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-0"
+                    className="w-full border-0 bg-transparent py-3.5 text-sm text-txt-primary placeholder-txt-muted focus:outline-none focus:ring-0"
                     placeholder="Search campers, registrations, staff, pages..."
                     onChange={(e) => setQuery(e.target.value)}
                     displayValue={() => query}
@@ -137,26 +137,26 @@ export function CommandPalette({ area }: { area: "admin" | "dashboard" | "campus
                         value={result}
                         className={({ active }) =>
                           `flex cursor-pointer items-center justify-between px-4 py-2.5 text-sm ${
-                            active ? "bg-accent-50 text-accent-900" : "text-neutral-700"
+                            active ? "bg-accent-50 dark:bg-accent-950/30 text-txt-primary" : "text-txt-secondary"
                           }`
                         }
                       >
                         <div className="flex flex-col min-w-0 pr-2">
-                          <span className="font-medium text-neutral-900 truncate">{result.label}</span>
+                          <span className="font-medium text-txt-primary truncate">{result.label}</span>
                           {result.sublabel && (
-                            <span className="text-xs text-neutral-400 truncate">{result.sublabel}</span>
+                            <span className="text-xs text-txt-muted truncate">{result.sublabel}</span>
                           )}
                         </div>
                         {result.badge && (
                           <span
                             className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
                               result.badge === "Camper"
-                                ? "bg-primary-100 text-primary-700"
+                                ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
                                 : result.badge === "Registration"
-                                ? "bg-accent-100 text-accent-700"
+                                ? "brand-tint"
                                 : result.badge === "Staff"
-                                ? "bg-success-100 text-success-700"
-                                : "bg-neutral-100 text-neutral-600"
+                                ? "status-success"
+                                : "bg-surface-raised text-txt-muted"
                             }`}
                           >
                             {result.badge}
@@ -167,7 +167,7 @@ export function CommandPalette({ area }: { area: "admin" | "dashboard" | "campus
                   </Combobox.Options>
                 )}
                 {query && results.length === 0 && !isLoading && (
-                  <div className="px-4 py-8 text-center text-sm text-neutral-500">
+                  <div className="px-4 py-8 text-center text-sm text-txt-secondary">
                     No results found for &quot;{query}&quot;
                   </div>
                 )}

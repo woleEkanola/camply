@@ -80,16 +80,16 @@ export default function SignupOrgPage() {
             <Image src="/logo.png" alt="Logo" width={80} height={80} />
           </div>
           
-          <div className="w-[90%] bg-white p-6 rounded-2xl shadow-lg mt-2 mb-6">
-            <h2 className="text-xl font-bold text-center mb-4 text-gray-800">Register Your Church</h2>
+          <div className="w-[90%] bg-surface p-6 rounded-2xl shadow-lg mt-2 mb-6">
+            <h2 className="text-xl font-bold text-center mb-4 text-txt-primary">Register Your Church</h2>
 
             {error && (
-              <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">
+              <div className="mb-4 rounded-md status-danger border border-current/15 p-3 text-sm">
                 {error}
               </div>
             )}
             {success && (
-              <div className="mb-4 rounded-md bg-success-50 p-3 text-sm text-success-700">
+              <div className="mb-4 rounded-md status-success border border-current/15 p-3 text-sm">
                 {success}
               </div>
             )}
@@ -101,7 +101,7 @@ export default function SignupOrgPage() {
                 value={churchName}
                 onChange={(e) => setChurchName(e.target.value)}
                 required
-                className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                className="w-full rounded-full border border-input-border bg-input-bg px-4 py-2.5 text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
               />
               <div className="grid grid-cols-2 gap-3">
                 <input
@@ -110,7 +110,7 @@ export default function SignupOrgPage() {
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-input-border bg-input-bg px-4 py-2.5 text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
                 <input
                   type="text"
@@ -118,7 +118,7 @@ export default function SignupOrgPage() {
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-input-border bg-input-bg px-4 py-2.5 text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
               </div>
               <input
@@ -127,7 +127,7 @@ export default function SignupOrgPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                className="w-full rounded-full border border-input-border bg-input-bg px-4 py-2.5 text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
               />
               <input
                 type="password"
@@ -135,7 +135,7 @@ export default function SignupOrgPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full rounded-full border border-gray-300 px-4 py-2.5 text-sm focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                className="w-full rounded-full border border-input-border bg-input-bg px-4 py-2.5 text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
               />
               <button
                 type="submit"
@@ -189,16 +189,16 @@ export default function SignupOrgPage() {
 
         {/* Right Panel */}
         <div className="w-[44%] h-full flex items-center justify-center bg-neutral-50 p-4">
-          <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Register Your Church</h2>
+          <div className="w-full max-w-md bg-surface p-6 md:p-8 rounded-2xl shadow-lg">
+            <h2 className="text-2xl font-bold text-center mb-6 text-txt-primary">Register Your Church</h2>
 
             {error && (
-              <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">
+              <div className="mb-4 rounded-md status-danger border border-current/15 p-3 text-sm">
                 {error}
               </div>
             )}
             {success && (
-              <div className="mb-4 rounded-md bg-success-50 p-3 text-sm text-success-700">
+              <div className="mb-4 rounded-md status-success border border-current/15 p-3 text-sm">
                 {success}
               </div>
             )}
@@ -212,7 +212,7 @@ export default function SignupOrgPage() {
                   value={churchName}
                   onChange={(e) => setChurchName(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
               </div>
               
@@ -225,7 +225,7 @@ export default function SignupOrgPage() {
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     required
-                    className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                    className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                   />
                 </div>
                 <div>
@@ -236,7 +236,7 @@ export default function SignupOrgPage() {
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     required
-                    className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                    className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                   />
                 </div>
               </div>
@@ -249,7 +249,7 @@ export default function SignupOrgPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
               </div>
 
@@ -261,7 +261,7 @@ export default function SignupOrgPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+                  className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
                 />
               </div>
 

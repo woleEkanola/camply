@@ -246,7 +246,7 @@ export default function LoginPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <button
@@ -268,7 +268,7 @@ export default function LoginPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <div className="mb-4">
@@ -278,7 +278,7 @@ export default function LoginPage() {
           value={passwordValue}
           onChange={(e) => setPasswordValue(e.target.value)}
           required
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <button
@@ -305,7 +305,7 @@ export default function LoginPage() {
     <form onSubmit={handleOtpSubmit}>
       <div className="mb-5">
         <OtpInput disabled={loading} onComplete={setAuthValue} />
-        <p className="mt-2 text-center text-xs text-gray-500">
+        <p className="mt-2 text-center text-xs text-txt-muted">
           Enter the 6-digit verification code emailed to you.
         </p>
       </div>
@@ -320,7 +320,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleBackToEmail}
-          className="text-gray-500 hover:text-gray-700 hover:underline cursor-pointer"
+          className="text-txt-secondary hover:text-txt-primary hover:underline cursor-pointer"
         >
           &larr; Back
         </button>
@@ -330,7 +330,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleResendCode}
           disabled={resending || resendCooldown > 0}
-          className="text-gray-500 hover:text-gray-700 hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer"
+          className="text-txt-secondary hover:text-txt-primary hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer"
         >
           {resending ? "Resending..." : resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code to email"}
         </button>
@@ -340,7 +340,7 @@ export default function LoginPage() {
 
   const resetPasswordForm = (
     <form onSubmit={handleResetPassword}>
-      <p className="mb-4 text-sm text-gray-600">
+          <p className="mb-4 text-sm text-txt-secondary">
         Enter the verification code we sent to <span className="font-medium">{email}</span> and choose a new password.
       </p>
       <div className="mb-4">
@@ -354,7 +354,7 @@ export default function LoginPage() {
           onChange={(e) => setNewPassword(e.target.value)}
           required
           minLength={8}
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <div className="mb-5">
@@ -365,7 +365,7 @@ export default function LoginPage() {
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
           minLength={8}
-          className="w-full rounded-full border border-gray-300 px-4 py-3 focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
+          className="w-full rounded-full border border-input-border bg-input-bg px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:ring-accent-500 focus:outline-none shadow-sm"
         />
       </div>
       <button
@@ -379,7 +379,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={() => { setStep(1); setLoginType("password"); setError(""); setInfo(""); setHint(""); }}
-          className="text-gray-500 hover:text-gray-700 hover:underline cursor-pointer"
+          className="text-txt-secondary hover:text-txt-primary hover:underline cursor-pointer"
         >
           &larr; Back
         </button>
@@ -405,7 +405,7 @@ export default function LoginPage() {
   const heading = step === 3 ? "Reset Password" : "Login";
 
   const tabsHeader = step === 1 && (
-    <div className="flex border-b border-gray-200 mb-6">
+    <div className="flex border-b border-border-default mb-6">
       <button
         type="button"
         onClick={() => {
@@ -417,7 +417,7 @@ export default function LoginPage() {
         className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
           loginType === "password"
             ? "border-accent-500 text-accent-600"
-            : "border-transparent text-gray-500 hover:text-gray-900"
+            : "border-transparent text-txt-muted hover:text-txt-primary"
         }`}
       >
         Password
@@ -433,7 +433,7 @@ export default function LoginPage() {
         className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
           loginType === "otp"
             ? "border-accent-500 text-accent-600"
-            : "border-transparent text-gray-500 hover:text-gray-900"
+            : "border-transparent text-txt-muted hover:text-txt-primary"
         }`}
       >
         Email OTP
@@ -444,17 +444,17 @@ export default function LoginPage() {
   const messages = (
     <>
       {error && (
-        <div className="mb-4 rounded-md bg-red-100 p-3 text-sm text-red-700">
+        <div className="mb-4 rounded-md status-danger border border-current/15 p-3 text-sm">
           {error}
         </div>
       )}
       {!error && info && (
-        <div className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-700">
+        <div className="mb-4 rounded-md status-success border border-current/15 p-3 text-sm">
           {info}
         </div>
       )}
       {hint && (
-        <div className="mb-4 rounded-md bg-accent-50 p-3 text-sm text-accent-700">
+        <div className="mb-4 rounded-md brand-tint border border-current/15 p-3 text-sm">
           {hint}
         </div>
       )}
@@ -488,8 +488,8 @@ export default function LoginPage() {
 
         {/* Login form overlay with higher z-index, positioned higher */}
         <div className="absolute inset-x-0 bottom-[20%] z-10 flex justify-center">
-          <div className="w-[85%] bg-white p-6 rounded-2xl shadow-lg">
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">{heading}</h2>
+          <div className="w-[85%] bg-surface p-6 rounded-2xl shadow-lg">
+            <h2 className="text-2xl font-bold text-center mb-6 text-txt-primary">{heading}</h2>
 
             {tabsHeader}
             {messages}
@@ -543,8 +543,8 @@ export default function LoginPage() {
         </div>
         {/* Right Panel */}
         <div className="w-[44%] h-full flex items-center justify-center bg-neutral-50 p-4">
-          <div className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-lg">
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">{heading}</h2>
+          <div className="w-full max-w-md bg-surface p-6 md:p-8 rounded-2xl shadow-lg">
+            <h2 className="text-2xl font-bold text-center mb-6 text-txt-primary">{heading}</h2>
 
             {tabsHeader}
             {messages}

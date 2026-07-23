@@ -248,27 +248,256 @@ export async function assignTribe(params: {
   );
 }
 
+export async function recommendTribeInTx(
+  tx: TxClient,
+  registrationId: string,
+  actorId?: string | null
+) {
+  const registration = await tx.registration.findUniqueOrThrow({
+    where: { id: registrationId },
+    include: { camper: true },
+  });
+
+  // Skip updating recommendation if locked or manually overridden by admin unless explicitly forced
+  if (registration.isTribeLocked) {
+    return registration;
+  }
+
+  const suggestion = await suggestTribe(tx, registrationId);
+  if (!suggestion) return registration;
+
+  const newStatus = registration.tribeRecommendationStatus === "MANUAL_OVERRIDE"
+    ? "MANUAL_OVERRIDE"
+    : "SUGGESTED";
+
+  const updated = await tx.registration.update({
+    where: { id: registrationId },
+    data: {
+      suggestedTribeId: suggestion.tribeId,
+      tribeSuggestedAt: new Date(),
+      tribeRecommendationStatus: newStatus,
+      tribeRecommendationReason: suggestion.reasons as any,
+      tribeRecommendationScore: suggestion.confidence,
+      tribeRecommendationBreakdown: (suggestion.scoreBreakdown ?? {}) as any,
+    },
+  });
+
+  await logEvent(tx, {
+    organizationId: registration.camper.organizationId,
+    registrationId: registration.id,
+    actorId: actorId ?? null,
+    action: "REGISTRATION_TRIBE_RECOMMENDED",
+    newValue: {
+      suggestedTribeId: suggestion.tribeId,
+      score: suggestion.confidence,
+      reasons: suggestion.reasons,
+    },
+  });
+
+  return updated;
+}
+
+export async function recommendTribe(registrationId: string, actorId?: string | null) {
+  return prisma.$transaction((tx) => recommendTribeInTx(tx, registrationId, actorId));
+}
+
+export async function acceptRecommendation(registrationId: string, actorId: string) {
+  return prisma.$transaction(async (tx) => {
+    let reg = await tx.registration.findUniqueOrThrow({
+      where: { id: registrationId },
+      include: { camper: true },
+    });
+    if (!reg.suggestedTribeId) {
+      // No suggestion persisted yet (e.g. only the live preview was ever shown) —
+      // compute and persist one before accepting, so Accept works in one click.
+      await recommendTribeInTx(tx, registrationId, actorId);
+      reg = await tx.registration.findUniqueOrThrow({
+        where: { id: registrationId },
+        include: { camper: true },
+      });
+    }
+    if (!reg.suggestedTribeId) {
+      throw new TribeAllocationError("NO_RECOMMENDATION", "No tribe recommendation exists to accept.");
+    }
+    const updated = await tx.registration.update({
+      where: { id: registrationId },
+      data: { tribeRecommendationStatus: "ACCEPTED" },
+    });
+    await logEvent(tx, {
+      organizationId: reg.camper.organizationId,
+      registrationId: reg.id,
+      actorId,
+      action: "REGISTRATION_TRIBE_RECOMMENDATION_ACCEPTED",
+      newValue: { suggestedTribeId: reg.suggestedTribeId },
+    });
+    return updated;
+  });
+}
+
+export async function overrideRecommendation(
+  registrationId: string,
+  selectedTribeId: string,
+  actorId: string,
+  reason?: string
+) {
+  return prisma.$transaction(async (tx) => {
+    const reg = await tx.registration.findUniqueOrThrow({
+      where: { id: registrationId },
+      include: { camper: true },
+    });
+
+    const originalSuggested = reg.tribeOriginalSuggestedId ?? reg.suggestedTribeId ?? reg.tribeId;
+
+    const updated = await tx.registration.update({
+      where: { id: registrationId },
+      data: {
+        suggestedTribeId: selectedTribeId,
+        tribeOriginalSuggestedId: originalSuggested,
+        tribeRecommendationStatus: "MANUAL_OVERRIDE",
+        tribeSuggestedAt: new Date(),
+      },
+    });
+
+    await logEvent(tx, {
+      organizationId: reg.camper.organizationId,
+      registrationId: reg.id,
+      actorId,
+      action: "REGISTRATION_TRIBE_RECOMMENDATION_OVERRIDDEN",
+      previousValue: { suggestedTribeId: reg.suggestedTribeId },
+      newValue: { suggestedTribeId: selectedTribeId, reason: reason ?? "Admin override" },
+    });
+
+    return updated;
+  });
+}
+
+export async function confirmAssignmentInTx(
+  tx: Prisma.TransactionClient,
+  registrationId: string,
+  actorId: string | null
+) {
+  const reg = await tx.registration.findUniqueOrThrow({
+    where: { id: registrationId },
+  });
+
+  let targetTribeId = reg.suggestedTribeId;
+
+  if (!targetTribeId) {
+    const suggestion = await suggestTribe(tx, registrationId);
+    if (suggestion) {
+      targetTribeId = suggestion.tribeId;
+    }
+  }
+
+  if (!targetTribeId) {
+    return reg;
+  }
+
+  const method = reg.tribeRecommendationStatus === "MANUAL_OVERRIDE" ? "HYBRID_OVERRIDE" : "AUTOMATIC";
+  const updatedReg = await assignTribeInTx(tx, {
+    registrationId,
+    tribeId: targetTribeId,
+    actorId,
+    method,
+  });
+
+  const finalStatus = reg.tribeRecommendationStatus === "MANUAL_OVERRIDE" ? "MANUAL_OVERRIDE" : "ASSIGNED";
+  return tx.registration.update({
+    where: { id: registrationId },
+    data: { tribeRecommendationStatus: finalStatus },
+  });
+}
+
+export async function confirmAssignment(registrationId: string, actorId: string) {
+  return prisma.$transaction((tx) => confirmAssignmentInTx(tx, registrationId, actorId));
+}
+
+export async function bulkSuggestTribes(params: {
+  campId: string;
+  registrationIds?: string[];
+  actorId: string;
+}) {
+  const whereClause: Prisma.RegistrationWhereInput = {
+    campId: params.campId,
+    deletedAt: null,
+    ...(params.registrationIds && params.registrationIds.length > 0
+      ? { id: { in: params.registrationIds } }
+      : { status: { in: ["SUBMITTED", "PENDING", "APPROVED"] } }),
+  };
+
+  const registrations = await prisma.registration.findMany({
+    where: whereClause,
+    select: { id: true },
+  });
+
+  const results: { registrationId: string; suggestedTribeId?: string; error?: string }[] = [];
+  for (const reg of registrations) {
+    try {
+      const updated = await recommendTribe(reg.id, params.actorId);
+      results.push({ registrationId: reg.id, suggestedTribeId: updated.suggestedTribeId ?? undefined });
+    } catch (err) {
+      results.push({ registrationId: reg.id, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  return results;
+}
+
+export async function bulkApplySuggestedTribes(params: {
+  campId: string;
+  registrationIds?: string[];
+  actorId: string;
+}) {
+  const whereClause: Prisma.RegistrationWhereInput = {
+    campId: params.campId,
+    deletedAt: null,
+    suggestedTribeId: { not: null },
+    ...(params.registrationIds && params.registrationIds.length > 0
+      ? { id: { in: params.registrationIds } }
+      : { tribeId: null }),
+  };
+
+  const registrations = await prisma.registration.findMany({
+    where: whereClause,
+    select: { id: true },
+  });
+
+  const results: { registrationId: string; tribeId?: string; error?: string }[] = [];
+  for (const reg of registrations) {
+    try {
+      const updated = await confirmAssignment(reg.id, params.actorId);
+      results.push({ registrationId: reg.id, tribeId: updated.tribeId ?? undefined });
+    } catch (err) {
+      results.push({ registrationId: reg.id, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  return results;
+}
+
 export async function autoAssignTribeOnApproval(registrationId: string) {
   try {
     const registration = await prisma.registration.findUnique({ where: { id: registrationId }, include: { camp: true } });
-    if (!registration || !registration.camp.tribeAllocationEnabled || registration.camp.tribeAllocationMode !== "AUTOMATIC") {
+    if (!registration || !registration.camp.tribeAllocationEnabled) {
       return;
     }
     if (registration.tribeId) return;
 
-    const suggestion = await suggestTribe(prisma, registrationId);
-    if (!suggestion) return;
-
-    await prisma.$transaction((tx) =>
-      assignTribeInTx(tx, { registrationId, tribeId: suggestion.tribeId, actorId: null, method: "AUTOMATIC" })
-    );
+    await prisma.$transaction((tx) => confirmAssignmentInTx(tx, registrationId, null));
   } catch (error) {
-    console.error("Automatic tribe assignment failed:", error);
+    console.error("Automatic tribe assignment on approval failed:", error);
   }
 }
 
 export async function reassignTribe(params: { registrationId: string; tribeId: string; actorId: string; reason?: string }) {
-  const result = await prisma.$transaction((tx) => assignTribeInTx(tx, { ...params, method: "MANUAL" }));
+  const result = await prisma.$transaction(async (tx) => {
+    const updated = await assignTribeInTx(tx, { ...params, method: "MANUAL" });
+    return tx.registration.update({
+      where: { id: updated.id },
+      data: { tribeRecommendationStatus: "MANUAL_OVERRIDE" },
+    });
+  });
+
   if (params.reason) {
     await logEvent(prisma, {
       organizationId: (await prisma.camper.findUniqueOrThrow({ where: { id: result.camperId } })).organizationId,
@@ -289,7 +518,12 @@ export async function clearTribeAssignment(params: { registrationId: string; act
     });
     const updated = await tx.registration.update({
       where: { id: registration.id },
-      data: { tribeId: null, tribeAssignedAt: null, tribeAssignmentMethod: null },
+      data: {
+        tribeId: null,
+        tribeAssignedAt: null,
+        tribeAssignmentMethod: null,
+        tribeRecommendationStatus: registration.suggestedTribeId ? "SUGGESTED" : "NONE",
+      },
     });
     await logEvent(tx, {
       organizationId: registration.camper.organizationId,
@@ -303,33 +537,14 @@ export async function clearTribeAssignment(params: { registrationId: string; act
 }
 
 export async function bulkAutoAssignTribes(params: { campId: string; actorId: string }) {
-  const registrations = await prisma.registration.findMany({
-    where: { campId: params.campId, status: { in: ["APPROVED", "CHECKED_IN"] }, tribeId: null, deletedAt: null },
-    select: { id: true },
-  });
-
-  const results: { registrationId: string; tribeId?: string; error?: string }[] = [];
-  for (const reg of registrations) {
-    try {
-      const suggestion = await suggestTribe(prisma, reg.id);
-      if (!suggestion) {
-        results.push({ registrationId: reg.id, error: "No available tribe" });
-        continue;
-      }
-      await prisma.$transaction((tx) =>
-        assignTribeInTx(tx, { registrationId: reg.id, tribeId: suggestion.tribeId, actorId: params.actorId, method: "AUTOMATIC" })
-      );
-      results.push({ registrationId: reg.id, tribeId: suggestion.tribeId });
-    } catch (error) {
-      results.push({ registrationId: reg.id, error: error instanceof Error ? error.message : String(error) });
-    }
-  }
-  return results;
+  return bulkApplySuggestedTribes(params);
 }
 
 export async function lockTribeAssignment(registrationId: string, locked: boolean, actorId: string) {
+  const newStatus = locked ? "LOCKED" : "SUGGESTED";
   return prisma.registration.update({
     where: { id: registrationId },
-    data: { isTribeLocked: locked },
+    data: { isTribeLocked: locked, tribeRecommendationStatus: newStatus },
   });
 }
+

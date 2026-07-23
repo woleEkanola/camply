@@ -228,7 +228,7 @@ export function CampersList({
         accessor: (item) => {
           const reg = item.registrations[0];
           return (
-            <div className="text-sm text-neutral-600">
+            <div className="text-sm text-txt-secondary">
               {reg?.tribe ? <div>Tribe: {reg.tribe.name}</div> : null}
               {reg?.room ? <div>Room: {reg.room.name}</div> : null}
               {reg?.bed ? <div>Bed: {reg.bed.label}</div> : null}
@@ -287,12 +287,12 @@ export function CampersList({
         </Select>
         
         {/* View Mode Toggle */}
-        <div className="flex items-center rounded-lg bg-neutral-100 p-0.5 border border-neutral-200 shrink-0">
+        <div className="flex items-center rounded-lg bg-surface-raised p-0.5 border border-border-default shrink-0">
           <button
             onClick={() => setViewMode("list")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "list" ? "bg-white text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "list" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
             )}
           >
             List
@@ -301,7 +301,7 @@ export function CampersList({
             onClick={() => setViewMode("thumbnail")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "thumbnail" ? "bg-white text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "thumbnail" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
             )}
           >
             Thumbnail
@@ -310,7 +310,7 @@ export function CampersList({
             onClick={() => setViewMode("card")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "card" ? "bg-white text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "card" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
             )}
           >
             Card
@@ -368,9 +368,9 @@ export function CampersList({
                   <div
                     key={item.id}
                     onClick={() => setProfileCamperId(item.id)}
-                    className="group relative cursor-pointer overflow-hidden rounded-xl border border-neutral-200 bg-white transition-all hover:scale-[1.02] hover:shadow-md"
+                    className="group relative cursor-pointer overflow-hidden rounded-xl border border-border-default bg-surface transition-all hover:scale-[1.02] hover:shadow-md"
                   >
-                    <div className="aspect-square w-full bg-neutral-100 relative">
+                    <div className="aspect-square w-full bg-surface-raised relative">
                       {item.photoUrl ? (
                         <img src={item.photoUrl} alt={item.name} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
                       ) : (
@@ -401,10 +401,10 @@ export function CampersList({
                     <div
                       key={item.id}
                       onClick={() => setProfileCamperId(item.id)}
-                      className="group cursor-pointer overflow-hidden rounded-xl border border-neutral-200 bg-white p-4 transition-all hover:shadow-md hover:border-accent-200"
+                      className="group cursor-pointer overflow-hidden rounded-xl border border-border-default bg-surface p-4 transition-all hover:shadow-md hover:border-accent-200"
                     >
                       <div className="flex gap-4">
-                        <div className="h-16 w-16 shrink-0 bg-neutral-100 relative rounded-xl overflow-hidden">
+                        <div className="h-16 w-16 shrink-0 bg-surface-raised relative rounded-xl overflow-hidden">
                           {item.photoUrl ? (
                             <img src={item.photoUrl} alt={item.name} className="h-full w-full object-cover" />
                           ) : (
@@ -430,23 +430,23 @@ export function CampersList({
                         </div>
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-neutral-100 grid grid-cols-2 gap-2 text-xs text-neutral-600">
+                      <div className="mt-4 pt-3 border-t border-border-subtle grid grid-cols-2 gap-2 text-xs text-txt-secondary">
                         <div>
-                          <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Campus</span>
+                          <span className="text-txt-muted block text-[10px] uppercase font-semibold">Campus</span>
                           <span className="font-medium text-neutral-700">{item.homeCampus?.name ?? "—"}</span>
                         </div>
                         <div>
-                          <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Tribe</span>
+                          <span className="text-txt-muted block text-[10px] uppercase font-semibold">Tribe</span>
                           <span className="font-medium text-neutral-700">{reg?.tribe?.name ?? "—"}</span>
                         </div>
                         <div>
-                          <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Room / Bed</span>
+                          <span className="text-txt-muted block text-[10px] uppercase font-semibold">Room / Bed</span>
                           <span className="font-medium text-neutral-700 truncate block">
                             {reg?.room ? `${reg.room.name}${reg.bed ? ` / ${reg.bed.label}` : ''}` : "—"}
                           </span>
                         </div>
                         <div>
-                          <span className="text-neutral-400 block text-[10px] uppercase font-semibold">Reg Number</span>
+                          <span className="text-txt-muted block text-[10px] uppercase font-semibold">Reg Number</span>
                           <span className="font-medium text-neutral-700 truncate block">{reg?.registrationNumber ?? "—"}</span>
                         </div>
                       </div>

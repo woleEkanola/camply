@@ -194,7 +194,7 @@ export default function BrandingPage() {
                         type="color"
                         value={primaryColor}
                         onChange={(e) => setPrimaryColor(e.target.value)}
-                        className="h-10 w-10 cursor-pointer rounded border border-neutral-300 bg-white p-1"
+                        className="h-10 w-10 cursor-pointer rounded border border-neutral-300 bg-surface p-1"
                       />
                       <Input
                         value={primaryColor}
@@ -213,7 +213,7 @@ export default function BrandingPage() {
                         type="color"
                         value={accentColor}
                         onChange={(e) => setAccentColor(e.target.value)}
-                        className="h-10 w-10 cursor-pointer rounded border border-neutral-300 bg-white p-1"
+                        className="h-10 w-10 cursor-pointer rounded border border-neutral-300 bg-surface p-1"
                       />
                       <Input
                         value={accentColor}
@@ -232,7 +232,7 @@ export default function BrandingPage() {
                         type="color"
                         value={buttonColor}
                         onChange={(e) => setButtonColor(e.target.value)}
-                        className="h-10 w-10 cursor-pointer rounded border border-neutral-300 bg-white p-1"
+                        className="h-10 w-10 cursor-pointer rounded border border-neutral-300 bg-surface p-1"
                       />
                       <Input
                         value={buttonColor}
@@ -359,7 +359,7 @@ export default function BrandingPage() {
                       <Skeleton className="h-10 w-32" />
                     </div>
                   ) : previewHtml ? (
-                    <div className="overflow-hidden rounded-lg border border-neutral-200">
+                    <div className="overflow-hidden rounded-lg border border-border-default">
                       <iframe
                         title="Email Preview"
                         srcDoc={previewHtml}
@@ -368,7 +368,7 @@ export default function BrandingPage() {
                       />
                     </div>
                   ) : (
-                    <p className="text-sm text-neutral-500">
+                    <p className="text-sm text-txt-secondary">
                       Preview not available. Save your branding settings to see a preview.
                     </p>
                   )}

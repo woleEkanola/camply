@@ -148,7 +148,7 @@ export function CheckOutShell({ organizationId, title = "Check-out" }: { organiz
       <PageHeader title={title} />
 
       {/* ═══ STEP 1: SCANNER PANEL ═══ */}
-      <Card className="overflow-hidden border-neutral-200">
+      <Card className="overflow-hidden border-border-default">
         <CardBody className="p-6 text-center space-y-4">
           <div className="max-w-md mx-auto">
             <Button
@@ -174,11 +174,11 @@ export function CheckOutShell({ organizationId, title = "Check-out" }: { organiz
       </Card>
 
       {/* ═══ STEP 2: SEARCH BOX ═══ */}
-      <Card className="border-neutral-200">
+      <Card className="border-border-default">
         <CardBody className="p-6">
           <form onSubmit={handleSearchSubmit} className="flex gap-3">
             <div className="relative flex-1">
-              <MagnifyingGlassIcon className="absolute left-3 top-3 h-5 w-5 text-neutral-400" />
+              <MagnifyingGlassIcon className="absolute left-3 top-3 h-5 w-5 text-txt-muted" />
               <Input
                 ref={searchInputRef}
                 containerClassName="w-full"
@@ -217,11 +217,11 @@ export function CheckOutShell({ organizationId, title = "Check-out" }: { organiz
         const parentName = parentUser ? `${parentUser.firstName ?? ""} ${parentUser.lastName ?? ""}`.trim() : "";
 
         return (
-          <Card key={regId} className="border-neutral-200 shadow animate-fade-in">
+          <Card key={regId} className="border-border-default shadow animate-fade-in">
             <CardBody className="p-6 space-y-6">
               <div className="flex items-start gap-4">
                 {photo ? (
-                  <img src={photo} alt={camperName} className="h-16 w-16 rounded-xl object-cover border border-neutral-200 shadow-sm" />
+                  <img src={photo} alt={camperName} className="h-16 w-16 rounded-xl object-cover border border-border-default shadow-sm" />
                 ) : (
                   <div className="h-16 w-16 rounded-xl bg-accent-50 border border-accent-100 text-accent-700 font-bold flex items-center justify-center text-xl shadow-sm">
                     {camperName?.charAt(0).toUpperCase()}
@@ -239,7 +239,7 @@ export function CheckOutShell({ organizationId, title = "Check-out" }: { organiz
               </div>
 
               {isCheckedIn && !isCheckedOut && (
-                <div className="border-t border-neutral-100 pt-4 space-y-4">
+                <div className="border-t border-border-subtle pt-4 space-y-4">
                   <h3 className="text-sm font-bold text-neutral-700 uppercase tracking-wider">Secure Collection Details</h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -51,18 +51,18 @@ export function DraggableFieldList({
             ref={provided.innerRef}
             {...provided.droppableProps}
             className={`space-y-1 rounded-lg border transition-colors ${
-              snapshot.isDraggingOver ? "border-accent-400 bg-accent-50/50" : "border-neutral-200"
+              snapshot.isDraggingOver ? "border-accent-400 bg-accent-50/50" : "border-border-default"
             }`}
           >
             {/* Table header */}
-            <div className="flex items-center gap-3 rounded-t-lg bg-neutral-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <div className="flex items-center gap-3 rounded-t-lg bg-neutral-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-txt-secondary">
               <span className="w-5" />
               <span className="w-5">
                 <input
                   type="checkbox"
                   checked={allCustomSelected}
                   onChange={onSelectAll}
-                  className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                  className="h-3.5 w-3.5 rounded border-input-border text-accent-600 focus:ring-accent-500"
                   aria-label="Select all custom fields"
                 />
               </span>
@@ -80,14 +80,14 @@ export function DraggableFieldList({
                     <div
                       ref={provided.innerRef}
                       {...provided.draggableProps}
-                      className={`flex items-center gap-3 border-b border-neutral-100 bg-white px-4 py-3 last:border-b-0 transition-colors ${
+                      className={`flex items-center gap-3 border-b border-border-subtle bg-surface px-4 py-3 last:border-b-0 transition-colors ${
                         snapshot.isDragging ? "rounded-lg shadow-lg ring-1 ring-accent-300" : ""
                       } ${selectedIds.has(field.id) ? "bg-accent-50/30" : ""}`}
                     >
                       {/* Drag handle */}
                       <span
                         {...provided.dragHandleProps}
-                        className="flex w-5 shrink-0 cursor-grab items-center justify-center text-neutral-300 hover:text-neutral-500 active:cursor-grabbing"
+                        className="flex w-5 shrink-0 cursor-grab items-center justify-center text-neutral-300 hover:text-txt-secondary active:cursor-grabbing"
                         aria-label="Drag to reorder"
                       >
                         <Bars3Icon className="h-5 w-5" />
@@ -100,7 +100,7 @@ export function DraggableFieldList({
                             type="checkbox"
                             checked={selectedIds.has(field.id)}
                             onChange={(e) => onSelect(field.id, e.target.checked)}
-                            className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                            className="h-3.5 w-3.5 rounded border-input-border text-accent-600 focus:ring-accent-500"
                             aria-label={`Select ${field.label}`}
                           />
                         ) : (
@@ -111,12 +111,12 @@ export function DraggableFieldList({
                       {/* Field info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-neutral-900 truncate">{field.label}</span>
+                          <span className="font-medium text-txt-primary truncate">{field.label}</span>
                           <Badge tone="neutral">{field.type}</Badge>
                           {field.source === "SYSTEM" && <Badge tone="info">System</Badge>}
                         </div>
                         {field.groupLabel && (
-                          <div className="text-xs text-neutral-500">{field.groupLabel}</div>
+                          <div className="text-xs text-txt-secondary">{field.groupLabel}</div>
                         )}
                       </div>
 
@@ -126,7 +126,7 @@ export function DraggableFieldList({
                           type="checkbox"
                           checked={optimisticRequired[field.id] ?? field.required}
                           onChange={(e) => onToggleRequired(field.id, e.target.checked)}
-                          className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                          className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
                         />
                       </div>
 
@@ -136,7 +136,7 @@ export function DraggableFieldList({
                           type="checkbox"
                           checked={optimisticVisible[field.id] ?? field.visible}
                           onChange={(e) => onToggleVisible(field.id, e.target.checked)}
-                          className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                          className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
                         />
                       </div>
 

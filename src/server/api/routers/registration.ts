@@ -7,6 +7,7 @@ import { RegistrationValidationError } from "../../registration/validation";
 import { IllegalTransitionError } from "../../registration/stateMachine";
 import { runSideEffectsNow } from "../../registration/effects";
 import { assertOrgAdminOrCampusRep, assertOrgAdmin } from "../trpc/scoping";
+import { normalizeScannedQRToken } from "../../../lib/qr";
 
 function toTRPCError(error: unknown): TRPCError {
   if (error instanceof RegistrationValidationError) {
@@ -1344,21 +1345,51 @@ export const registrationRouter = createTRPCRouter({
       };
 
       let registrations: any[] = [];
-      if (input.qrToken) {
-        const registration = await ctx.prisma.registration.findFirst({
-          where: { ...baseWhere, qrToken: input.qrToken },
+      const rawToken = input.qrToken || input.query || "";
+      const normalizedToken = normalizeScannedQRToken(rawToken);
+
+      if (normalizedToken) {
+        let registration = await ctx.prisma.registration.findFirst({
+          where: {
+            ...baseWhere,
+            OR: [
+              { qrToken: normalizedToken },
+              { id: normalizedToken },
+              { registrationNumber: { equals: normalizedToken, mode: "insensitive" } },
+              { camperId: normalizedToken },
+            ],
+          },
           include,
         });
+
+        if (!registration) {
+          registration = await ctx.prisma.registration.findFirst({
+            where: {
+              campus: campusFilter,
+              deletedAt: null,
+              OR: [
+                { qrToken: normalizedToken },
+                { id: normalizedToken },
+                { registrationNumber: { equals: normalizedToken, mode: "insensitive" } },
+                { camperId: normalizedToken },
+                { registrationNumber: { contains: normalizedToken, mode: "insensitive" } },
+              ],
+            },
+            include,
+          });
+        }
+
         registrations = registration ? [registration] : [];
       } else if (input.query) {
+        const queryClean = input.query.trim();
         registrations = await ctx.prisma.registration.findMany({
           where: {
             ...baseWhere,
             OR: [
-              { registrationNumber: { contains: input.query, mode: "insensitive" } },
-              { camper: { name: { contains: input.query, mode: "insensitive" } } },
-              { camper: { user: { email: { contains: input.query, mode: "insensitive" } } } },
-              { camper: { user: { phone: { contains: input.query, mode: "insensitive" } } } },
+              { registrationNumber: { contains: queryClean, mode: "insensitive" } },
+              { camper: { name: { contains: queryClean, mode: "insensitive" } } },
+              { camper: { user: { email: { contains: queryClean, mode: "insensitive" } } } },
+              { camper: { user: { phone: { contains: queryClean, mode: "insensitive" } } } },
             ],
           },
           include,
@@ -1711,10 +1742,49 @@ export const registrationRouter = createTRPCRouter({
         where: baseWhere
       });
 
+      // Calculate duplicate registrations count
+      const allRegsInScope = await ctx.prisma.registration.findMany({
+        where: baseWhere,
+        select: {
+          id: true,
+          camperId: true,
+          camper: { select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true } },
+        },
+      });
+
+      const camperIdCounts = new Map<string, number>();
+      const nameDobMap = new Map<string, string[]>();
+      for (const r of allRegsInScope) {
+        camperIdCounts.set(r.camperId, (camperIdCounts.get(r.camperId) || 0) + 1);
+        const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
+        const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
+        if (name) {
+          const key = `${name}|${dob}`;
+          const list = nameDobMap.get(key) || [];
+          list.push(r.id);
+          nameDobMap.set(key, list);
+        }
+      }
+
+      const duplicateRegIds = new Set<string>();
+      for (const r of allRegsInScope) {
+        if ((camperIdCounts.get(r.camperId) || 0) > 1) {
+          duplicateRegIds.add(r.id);
+        } else {
+          const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
+          const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
+          const key = `${name}|${dob}`;
+          if ((nameDobMap.get(key)?.length || 0) > 1) {
+            duplicateRegIds.add(r.id);
+          }
+        }
+      }
+
       return {
         countsByStatus,
         awaitingVetting,
         awaitingFinal,
+        duplicateCount: duplicateRegIds.size,
         totalCount,
       };
     }),
@@ -1729,6 +1799,7 @@ export const registrationRouter = createTRPCRouter({
       // TWO_STEP-only queue filter: PENDING registrations split into "not yet
       // endorsed by a rep" vs "endorsed, waiting on an admin's final approve".
       reviewState: z.enum(["AWAITING_VETTING", "AWAITING_FINAL", "AWAITING_DOCUMENT_REPLACEMENT"]).optional(),
+      duplicatesOnly: z.boolean().optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
       limit: z.number().min(1).max(100).default(25),
@@ -1749,14 +1820,57 @@ export const registrationRouter = createTRPCRouter({
         campusFilter = { organizationId: input.organizationId, id: { in: managed.map((c: { id: string }) => c.id) } };
       }
 
-      const endorsedFilter = { review: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } };
-      const notEndorsedFilter = { OR: [{ review: null }, { review: { NOT: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } } }] };
-
-      const where: Record<string, unknown> = {
+      const baseWhere: Record<string, unknown> = {
         campus: campusFilter,
         deletedAt: null,
         ...(input.campId && { campId: input.campId }),
         ...(input.campusId && { campusId: input.campusId }),
+      };
+
+      // Duplicate detection within base scope
+      const allRegsInScope = await ctx.prisma.registration.findMany({
+        where: baseWhere,
+        select: {
+          id: true,
+          camperId: true,
+          camper: { select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true } },
+        },
+      });
+
+      const camperIdCounts = new Map<string, number>();
+      const nameDobMap = new Map<string, string[]>();
+      for (const r of allRegsInScope) {
+        camperIdCounts.set(r.camperId, (camperIdCounts.get(r.camperId) || 0) + 1);
+        const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
+        const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
+        if (name) {
+          const key = `${name}|${dob}`;
+          const list = nameDobMap.get(key) || [];
+          list.push(r.id);
+          nameDobMap.set(key, list);
+        }
+      }
+
+      const duplicateRegIds = new Set<string>();
+      for (const r of allRegsInScope) {
+        if ((camperIdCounts.get(r.camperId) || 0) > 1) {
+          duplicateRegIds.add(r.id);
+        } else {
+          const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
+          const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
+          const key = `${name}|${dob}`;
+          if ((nameDobMap.get(key)?.length || 0) > 1) {
+            duplicateRegIds.add(r.id);
+          }
+        }
+      }
+
+      const endorsedFilter = { review: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } };
+      const notEndorsedFilter = { OR: [{ review: null }, { review: { NOT: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } } }] };
+
+      const where: Record<string, unknown> = {
+        ...baseWhere,
+        ...(input.duplicatesOnly && { id: { in: Array.from(duplicateRegIds) } }),
         ...(input.status && { status: input.status }),
         ...(input.reviewState === "AWAITING_VETTING" && { status: "PENDING", ...notEndorsedFilter }),
         ...(input.reviewState === "AWAITING_FINAL" && { status: "PENDING", ...endorsedFilter }),
@@ -1775,7 +1889,7 @@ export const registrationRouter = createTRPCRouter({
         }),
       };
 
-      const items = await ctx.prisma.registration.findMany({
+      const rawItems = await ctx.prisma.registration.findMany({
         where,
         include: {
           camper: { include: { user: true } },
@@ -1799,10 +1913,15 @@ export const registrationRouter = createTRPCRouter({
       });
 
       let nextCursor: string | undefined;
-      if (items.length > input.limit) {
-        const next = items.pop();
+      if (rawItems.length > input.limit) {
+        const next = rawItems.pop();
         nextCursor = next?.id;
       }
+
+      const items = rawItems.map((item) => ({
+        ...item,
+        isDuplicate: duplicateRegIds.has(item.id),
+      }));
 
       const totalCount = await ctx.prisma.registration.count({ where });
 

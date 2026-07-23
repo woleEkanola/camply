@@ -134,7 +134,7 @@ const CampusRepRegistrations: React.FC<{ profileId: string; campusId: string }> 
   const publishedRegs = registrations?.filter((reg: any) => reg.published && reg.campusId === campusId);
   if (!publishedRegs?.length) return <div>No published registrations</div>;
   return (
-    <table className="min-w-full border bg-gray-50 text-xs">
+    <table className="min-w-full border bg-surface-raised text-xs">
       <thead>
         <tr>
           <th className="px-2 py-1 border-b">Camp</th>

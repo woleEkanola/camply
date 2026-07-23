@@ -290,14 +290,14 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
 
       {/* Admin Form */}
       {isAddingAdmin && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-lg border border-gray-200 bg-surface p-6 shadow-sm">
           <h3 className="mb-4 text-lg font-medium text-gray-900">
             {isEditingAdmin ? "Edit Admin User" : "Add New Admin User"}
           </h3>
           <form onSubmit={handleAdminSubmit}>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-txt-primary">
                   Email*
                 </label>
                 <input
@@ -313,7 +313,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
               </div>
               {!isEditingAdmin && (
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="password" className="block text-sm font-medium text-txt-primary">
                     Password*
                   </label>
                   <input
@@ -330,7 +330,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
             </div>
 
             <div className="mt-6">
-              <label className="block text-sm font-medium text-gray-700">Permissions*</label>
+              <label className="block text-sm font-medium text-txt-primary">Permissions*</label>
               <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
                 {availablePermissions.map((permission) => (
                   <div key={permission.type} className="flex items-center">
@@ -343,7 +343,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
                     />
                     <label
                       htmlFor={`permission-${permission.type}`}
-                      className="ml-2 block text-sm text-gray-700"
+                      className="ml-2 block text-sm text-txt-primary"
                     >
                       {permission.label}
                     </label>
@@ -356,7 +356,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
               <button
                 type="button"
                 onClick={handleCancelForm}
-                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2"
+                className="inline-flex items-center rounded-md border border-gray-300 bg-surface px-4 py-2 text-sm font-medium text-txt-primary shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2"
               >
                 Cancel
               </button>
@@ -404,7 +404,7 @@ export default function AdminManagement({ organizationId }: AdminManagementProps
       />
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-txt-secondary">
           Are you sure you want to delete &quot;{deleteTarget?.label}&quot;? This action cannot be undone.
         </p>
         <div className="mt-5 flex justify-end gap-2">

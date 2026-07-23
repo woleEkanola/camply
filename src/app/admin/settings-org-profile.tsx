@@ -83,8 +83,8 @@ export default function OrgProfileSettings({
   return (
     <form onSubmit={handleSave} className="space-y-6">
       <div>
-        <h3 className="text-lg font-bold text-neutral-900">Church Profile</h3>
-        <p className="text-sm text-neutral-500">
+        <h3 className="text-lg font-bold text-txt-primary">Church Profile</h3>
+        <p className="text-sm text-txt-secondary">
           Customize your church's public branding details.
         </p>
       </div>
@@ -113,7 +113,7 @@ export default function OrgProfileSettings({
               onChange={(e) => setLogoUrl(e.target.value)}
             />
           </div>
-          <div className="flex flex-col items-center justify-center p-2 border border-dashed border-neutral-300 rounded-lg h-[84px] bg-neutral-50">
+          <div className="flex flex-col items-center justify-center p-2 border border-dashed border-border-default rounded-lg h-[84px] bg-surface-raised">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -125,13 +125,13 @@ export default function OrgProfileSettings({
                 }}
               />
             ) : (
-              <span className="text-xs text-neutral-400">No logo preview</span>
+              <span className="text-xs text-txt-muted">No logo preview</span>
             )}
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-neutral-700 mb-2">
+          <label className="block text-sm font-medium text-txt-primary mb-2">
             Brand Color Theme
           </label>
           <div className="flex flex-wrap items-center gap-3">
@@ -141,14 +141,14 @@ export default function OrgProfileSettings({
                 type="button"
                 className={`w-8 h-8 rounded-full border-2 transition-transform ${preset.bg} ${
                   colorTheme.toLowerCase() === preset.hex.toLowerCase()
-                    ? "border-neutral-900 scale-110"
+                    ? "border-txt-primary scale-110"
                     : "border-transparent hover:scale-105"
                 }`}
                 title={preset.name}
                 onClick={() => setColorTheme(preset.hex)}
               />
             ))}
-            <div className="flex items-center gap-2 border border-neutral-300 rounded-lg px-2.5 py-1 bg-white ml-2">
+            <div className="flex items-center gap-2 border border-input-border rounded-lg px-2.5 py-1 bg-input-bg ml-2">
               <input
                 type="color"
                 value={colorTheme}
@@ -160,18 +160,18 @@ export default function OrgProfileSettings({
                 placeholder="#E67E22"
                 value={colorTheme}
                 onChange={(e) => setColorTheme(e.target.value)}
-                className="w-20 border-0 p-0 text-sm focus:ring-0 focus:outline-none uppercase font-mono"
+                className="w-20 border-0 p-0 text-sm focus:ring-0 focus:outline-none uppercase font-mono bg-transparent text-txt-primary"
               />
             </div>
           </div>
-          <p className="text-xs text-neutral-500 mt-1.5">
+          <p className="text-xs text-txt-secondary mt-1.5">
             This theme color is used for buttons, accent decorations, and links across your Camply admin pages, registration flows, and public landing pages.
           </p>
         </div>
       </div>
 
-      {error && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
-      {success && <div className="rounded-md bg-success-50 p-3 text-sm text-success-700">Profile saved successfully!</div>}
+      {error && <div className="rounded-md status-danger border border-current/15 p-3 text-sm">{error}</div>}
+      {success && <div className="rounded-md status-success border border-current/15 p-3 text-sm">Profile saved successfully!</div>}
 
       <div className="flex justify-end pt-2">
         <Button type="submit" loading={saving}>

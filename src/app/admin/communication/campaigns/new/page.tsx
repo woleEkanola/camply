@@ -25,7 +25,7 @@ function TbBtn({ onClick, active, label }: { onClick: () => void; active?: boole
   return (
     <button
       onClick={onClick}
-      className={`px-2 py-1 text-xs rounded border text-neutral-700 hover:bg-neutral-100 ${active ? "bg-accent-50 border-accent-300 text-accent-700" : "border-neutral-200"}`}
+      className={`px-2 py-1 text-xs rounded border text-neutral-700 hover:bg-surface-raised ${active ? "bg-accent-50 border-accent-300 text-accent-700" : "border-border-default"}`}
     >
       {label}
     </button>
@@ -210,7 +210,7 @@ function ComposerInner() {
             ]} />
             {senderMode === "CUSTOM" && <Input label="Custom Local Part" value={customFromLocalPart} onChange={(e: any) => setCustomFromLocalPart(e.target.value)} placeholder="news" />}
             <Input label="Reply-To" value={replyTo} onChange={(e: any) => setReplyTo(e.target.value)} placeholder="support@example.com" />
-            <div className="rounded bg-neutral-50 p-2 text-xs font-mono text-neutral-600">{senderPreview}</div>
+            <div className="rounded bg-surface-raised p-2 text-xs font-mono text-txt-secondary">{senderPreview}</div>
           </CardBody>
         </Card>
 
@@ -277,8 +277,8 @@ function ComposerInner() {
               </div>
             )}
             <p>This campaign will be sent to the selected audience.</p>
-            <p className="text-neutral-500">Sender: {senderPreview}</p>
-            <p className="text-neutral-500">Subject: {subject}</p>
+            <p className="text-txt-secondary">Sender: {senderPreview}</p>
+            <p className="text-txt-secondary">Subject: {subject}</p>
           </div>
         </Dialog>
       </div>

@@ -110,13 +110,13 @@ export default function DataTable<T>({
   };
 
   return (
-    <div className="overflow-hidden rounded-lg bg-white shadow">
+    <div className="overflow-hidden rounded-lg bg-surface shadow">
       {/* Search and filters */}
-      <div className="border-b border-gray-200 bg-white p-4">
+      <div className="border-b border-border-default bg-surface p-4">
         <div className="flex items-center">
           <div className="relative flex-grow">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+              <MagnifyingGlassIcon className="h-5 w-5 text-txt-muted" />
             </div>
             <input
               type="text"
@@ -125,7 +125,7 @@ export default function DataTable<T>({
                 setSearchTerm(e.target.value);
                 setCurrentPage(1); // Reset to first page on search
               }}
-              className="block w-full rounded-md border border-gray-300 bg-white py-2 pl-10 pr-3 text-sm placeholder-gray-500 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              className="block w-full rounded-md border border-input-border bg-surface py-2 pl-10 pr-3 text-sm placeholder-txt-secondary focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
               placeholder={searchPlaceholder}
             />
           </div>
@@ -134,15 +134,15 @@ export default function DataTable<T>({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-border-default">
+          <thead className="bg-surface-raised">
             <tr>
               {columns.map((column, index) => (
                 <th
                   key={index}
                   scope="col"
-                  className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 ${
-                    column.sortable ? "cursor-pointer hover:bg-gray-100" : ""
+                  className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-txt-secondary ${
+                    column.sortable ? "cursor-pointer hover:bg-surface-raised" : ""
                   }`}
                   onClick={() => {
                     if (column.sortable && typeof column.accessor !== "function") {
@@ -160,24 +160,24 @@ export default function DataTable<T>({
                   </div>
                 </th>
               ))}
-              {actions && <th scope="col" className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>}
+              {actions && <th scope="col" className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-txt-secondary">Actions</th>}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200 bg-white">
+          <tbody className="divide-y divide-border-default bg-surface">
             {isLoading ? (
               <tr>
-                <td colSpan={columns.length + (actions ? 1 : 0)} className="px-6 py-4 text-center text-sm text-gray-500">
+                <td colSpan={columns.length + (actions ? 1 : 0)} className="px-6 py-4 text-center text-sm text-txt-secondary">
                   <div className="flex items-center justify-center">
-                    <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-gray-500"></div>
+                    <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-txt-secondary"></div>
                     <span className="ml-2">Loading...</span>
                   </div>
                 </td>
               </tr>
             ) : paginatedData.length > 0 ? (
               paginatedData.map((item, rowIndex) => (
-                <tr key={rowIndex} className="hover:bg-gray-50">
+                <tr key={rowIndex} className="hover:bg-surface-hover">
                   {columns.map((column, colIndex) => (
-                    <td key={colIndex} className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    <td key={colIndex} className="whitespace-nowrap px-6 py-4 text-sm text-txt-secondary">
                       {getCellValue(item, column)}
                     </td>
                   ))}
@@ -190,7 +190,7 @@ export default function DataTable<T>({
               ))
             ) : (
               <tr>
-                <td colSpan={columns.length + (actions ? 1 : 0)} className="px-6 py-4 text-center text-sm text-gray-500">
+                <td colSpan={columns.length + (actions ? 1 : 0)} className="px-6 py-4 text-center text-sm text-txt-secondary">
                   {emptyMessage}
                 </td>
               </tr>
@@ -201,16 +201,16 @@ export default function DataTable<T>({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
+        <div className="border-t border-border-default bg-surface px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <p className="text-sm text-gray-700">
+              <p className="text-sm text-txt-primary">
                 Showing <span className="font-medium">{Math.min(filteredData.length, (currentPage - 1) * itemsPerPage + 1)}</span> to{" "}
                 <span className="font-medium">{Math.min(filteredData.length, currentPage * itemsPerPage)}</span> of{" "}
                 <span className="font-medium">{filteredData.length}</span> results
               </p>
               <div className="ml-4 flex items-center gap-2">
-                <label htmlFor="itemsPerPage" className="text-sm text-gray-700">Per page:</label>
+                <label htmlFor="itemsPerPage" className="text-sm text-txt-primary">Per page:</label>
                 <select
                   id="itemsPerPage"
                   className="border rounded px-2 py-1"
@@ -230,24 +230,24 @@ export default function DataTable<T>({
               <button
                 onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className={`relative inline-flex items-center rounded-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium ${
+                className={`relative inline-flex items-center rounded-md border border-input-border bg-surface px-2 py-2 text-sm font-medium ${
                   currentPage === 1
-                    ? "cursor-not-allowed text-gray-300"
-                    : "text-gray-700 hover:bg-gray-50"
+                    ? "cursor-not-allowed text-txt-muted"
+                    : "text-txt-primary hover:bg-surface-hover"
                 }`}
               >
                 <ChevronLeftIcon className="h-5 w-5" />
               </button>
-              <div className="text-sm text-gray-700">
+              <div className="text-sm text-txt-primary">
                 Page {currentPage} of {totalPages}
               </div>
               <button
                 onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
-                className={`relative inline-flex items-center rounded-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium ${
+                className={`relative inline-flex items-center rounded-md border border-input-border bg-surface px-2 py-2 text-sm font-medium ${
                   currentPage === totalPages
-                    ? "cursor-not-allowed text-gray-300"
-                    : "text-gray-700 hover:bg-gray-50"
+                    ? "cursor-not-allowed text-txt-muted"
+                    : "text-txt-primary hover:bg-surface-hover"
                 }`}
               >
                 <ChevronRightIcon className="h-5 w-5" />

@@ -30,12 +30,12 @@ export function StaffHierarchyTab({ staffId }: StaffHierarchyTabProps) {
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
-      <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+      <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
         <div className="mb-4 flex items-center gap-2">
           <UserIcon className="h-5 w-5 text-accent-600" />
           <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Reports To</h2>
         </div>
-        <div className="flex flex-col gap-3 rounded-xl bg-neutral-50 p-4">
+        <div className="flex flex-col gap-3 rounded-xl bg-surface-raised p-4">
           <span className={cn("text-sm font-medium", profile.reportsTo ? "text-neutral-900" : "text-neutral-500")}>
             {profile.reportsTo ? `${profile.reportsTo.firstName} ${profile.reportsTo.lastName}` : "No manager assigned"}
           </span>
@@ -52,7 +52,7 @@ export function StaffHierarchyTab({ staffId }: StaffHierarchyTabProps) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+      <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
         <div className="mb-4 flex items-center gap-2">
           <UserGroupIcon className="h-5 w-5 text-accent-600" />
           <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Direct Reports</h2>
@@ -69,7 +69,7 @@ export function StaffHierarchyTab({ staffId }: StaffHierarchyTabProps) {
             ))}
           </ul>
         ) : (
-          <div className="rounded-xl bg-neutral-50 p-4 text-sm text-neutral-500">No direct reports.</div>
+          <div className="rounded-xl bg-surface-raised p-4 text-sm text-neutral-500">No direct reports.</div>
         )}
       </div>
     </div>

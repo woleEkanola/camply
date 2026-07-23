@@ -57,14 +57,14 @@ export default function CampaignDetail() {
         />
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold text-neutral-900">{s.total}</div><div className="text-xs text-neutral-500">Total</div></div>
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold text-amber-600">{s.queued}</div><div className="text-xs text-neutral-500">Queued</div></div>
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold text-green-600">{s.delivered}</div><div className="text-xs text-neutral-500">Delivered</div></div>
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold text-red-600">{s.failed + s.bounced}</div><div className="text-xs text-neutral-500">Failed/Bounced</div></div>
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold text-indigo-600">{s.opened}</div><div className="text-xs text-neutral-500">Opened</div></div>
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold text-rose-600">{s.clicked}</div><div className="text-xs text-neutral-500">Clicked</div></div>
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold text-neutral-600">{s.total > 0 ? Math.round((s.delivered / s.total) * 100) : 0}%</div><div className="text-xs text-neutral-500">Success Rate</div></div>
-          <div className="rounded-lg bg-neutral-50 p-3 text-center"><div className="text-xl font-bold text-cyan-600">{s.delivered > 0 ? Math.round((s.opened / s.delivered) * 100) : 0}%</div><div className="text-xs text-neutral-500">Open Rate</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-neutral-900">{s.total}</div><div className="text-xs text-txt-secondary">Total</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-amber-600">{s.queued}</div><div className="text-xs text-txt-secondary">Queued</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-green-600">{s.delivered}</div><div className="text-xs text-txt-secondary">Delivered</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-red-600">{s.failed + s.bounced}</div><div className="text-xs text-txt-secondary">Failed/Bounced</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-indigo-600">{s.opened}</div><div className="text-xs text-txt-secondary">Opened</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-rose-600">{s.clicked}</div><div className="text-xs text-txt-secondary">Clicked</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-txt-secondary">{s.total > 0 ? Math.round((s.delivered / s.total) * 100) : 0}%</div><div className="text-xs text-txt-secondary">Success Rate</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-cyan-600">{s.delivered > 0 ? Math.round((s.opened / s.delivered) * 100) : 0}%</div><div className="text-xs text-txt-secondary">Open Rate</div></div>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -85,7 +85,7 @@ export default function CampaignDetail() {
 
         <Card>
           <CardHeader><CardTitle>Recipients</CardTitle></CardHeader>
-          <CardBody><p className="text-sm text-neutral-500">{s.total} recipients</p></CardBody>
+          <CardBody><p className="text-sm text-txt-secondary">{s.total} recipients</p></CardBody>
         </Card>
 
         {(campaign.attachments as any)?.length > 0 && (
@@ -103,7 +103,7 @@ export default function CampaignDetail() {
           </Card>
         )}
 
-        <div className="w-full rounded-full bg-neutral-100 h-2">
+        <div className="w-full rounded-full bg-surface-raised h-2">
           {s.total > 0 && (
             <>
               <div className="h-2 rounded-l-full bg-green-500 inline-block" style={{ width: `${(s.delivered / s.total) * 100}%` }} />
@@ -112,7 +112,7 @@ export default function CampaignDetail() {
             </>
           )}
         </div>
-        <div className="flex gap-4 text-xs text-neutral-500">
+        <div className="flex gap-4 text-xs text-txt-secondary">
           <span>Delivered {s.delivered}</span>
           <span>Queued {s.queued}</span>
           <span>Failed {s.failed + s.bounced}</span>
@@ -130,7 +130,7 @@ export default function CampaignDetail() {
         }>
           <div className="text-sm space-y-2">
             <p>A new draft campaign will be created with the same content, targeting only the <strong>{nonOpenerCount}</strong> recipients who never opened this campaign.</p>
-            <p className="text-neutral-500">You can review and edit the follow-up before sending.</p>
+            <p className="text-txt-secondary">You can review and edit the follow-up before sending.</p>
           </div>
         </Dialog>
       </div>

@@ -356,7 +356,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
   const staffColumns: Column<User>[] = [
     {
       header: "Name",
-      accessor: (user) => <span className="font-semibold text-neutral-900">{user.firstName} {user.lastName}</span>,
+      accessor: (user) => <span className="font-semibold text-txt-primary">{user.firstName} {user.lastName}</span>,
       searchable: true,
     },
     { header: "Email Address", accessor: "email", searchable: true },
@@ -368,7 +368,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       header: "Managed Campuses",
       accessor: (user) => {
         if (user.role !== UserRole.CAMPUS_REPRESENTATIVE) {
-          return <span className="text-xs text-neutral-400 italic">All Campuses</span>;
+          return <span className="text-xs text-txt-muted italic">All Campuses</span>;
         }
         if (user.managedCampuses && user.managedCampuses.length > 0) {
           return (
@@ -381,7 +381,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
             </div>
           );
         }
-        return <span className="text-xs text-neutral-400">None assigned</span>;
+        return <span className="text-xs text-txt-muted">None assigned</span>;
       },
     },
     {
@@ -434,7 +434,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       </CardHeader>
       <CardBody>
         {loadingParents ? (
-          <div className="p-8 text-center text-sm text-neutral-500">Loading accounts...</div>
+          <div className="p-8 text-center text-sm text-txt-secondary">Loading accounts...</div>
         ) : (
           <ParentProfilesAccordion users={parents || []} />
         )}
@@ -451,15 +451,15 @@ export default function UserManagement({ organizationId }: { organizationId: str
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">User Management</h1>
-          <p className="text-sm text-neutral-500">
+          <h1 className="text-2xl font-bold text-txt-primary">User Management</h1>
+          <p className="text-sm text-txt-secondary">
             Manage your internal team of admins and view external parent & teen accounts.
           </p>
         </div>
       </div>
 
       {success && (
-        <div className="rounded-md bg-success-50 p-4 text-sm text-success-700">
+        <div className="rounded-md status-success p-4 text-sm">
           {success}
         </div>
       )}
@@ -475,7 +475,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       >
         <form onSubmit={handleUserSubmit} className="space-y-4 pt-2">
           {error && (
-            <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">
+            <div className="rounded-md status-danger p-3 text-sm">
               {error}
             </div>
           )}
@@ -575,18 +575,18 @@ export default function UserManagement({ organizationId }: { organizationId: str
 
           {/* Campus selection for Campus Representatives */}
           {userForm.role === UserRole.CAMPUS_REPRESENTATIVE && campuses.length > 0 && (
-            <div className="border-t border-neutral-100 pt-3">
-              <span className="block text-sm font-medium text-neutral-700 mb-2">
+            <div className="border-t border-border-subtle pt-3">
+              <span className="block text-sm font-medium text-txt-primary mb-2">
                 Managed Campuses
               </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1 border border-neutral-200 rounded-md">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1 border border-border-default rounded-md">
                 {campuses.map((campus) => (
-                  <label key={campus.id} className="flex items-center gap-2 text-sm text-neutral-700 p-1 hover:bg-neutral-50 rounded cursor-pointer">
+                  <label key={campus.id} className="flex items-center gap-2 text-sm text-txt-primary p-1 hover:bg-surface-hover rounded cursor-pointer">
                     <input
                       type="checkbox"
                       checked={userForm.managedCampuses?.includes(campus.id) || false}
                       onChange={(e) => handleCampusChange(campus.id, e.target.checked)}
-                      className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                      className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
                     />
                     {campus.name}
                   </label>
@@ -595,7 +595,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-neutral-100">
+          <div className="flex justify-end gap-2 pt-4 border-t border-border-subtle">
             <Button type="button" variant="secondary" onClick={handleCancelForm} disabled={isSaving}>
               Cancel
             </Button>
@@ -610,7 +610,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
       </Dialog>
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-txt-secondary">
           Are you sure you want to delete &quot;{deleteTarget?.label}&quot;? This action cannot be undone.
         </p>
         <div className="mt-5 flex justify-end gap-2">

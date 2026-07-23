@@ -75,8 +75,8 @@ export function DocumentRequirementsEditor({ organizationId }: Props) {
       <Card>
         <CardBody>
           <div className="py-8 text-center">
-            <p className="text-sm font-medium text-neutral-700">No active camp</p>
-            <p className="mt-1 text-xs text-neutral-500">
+            <p className="text-sm font-medium text-txt-secondary">No active camp</p>
+            <p className="mt-1 text-xs text-txt-secondary">
               Set an active camp in <a href="/admin/camps" className="text-accent-600 underline">Camp Settings</a> before managing required documents.
             </p>
           </div>
@@ -90,23 +90,23 @@ export function DocumentRequirementsEditor({ organizationId }: Props) {
       <CardBody className="space-y-4">
         <div className="space-y-2">
           {requirements?.map((req: any) => (
-            <div key={req.id} className="flex items-center justify-between rounded-md border border-neutral-200 px-3 py-2">
+            <div key={req.id} className="flex items-center justify-between rounded-md border border-border-default px-3 py-2">
               <div>
-                <div className="font-medium text-neutral-900">
+                <div className="font-medium text-txt-primary">
                   {req.name}{" "}
                   {req.required && <Badge tone="danger" className="ml-1">required</Badge>}
                 </div>
-                <div className="text-xs text-neutral-500">
+                <div className="text-xs text-txt-secondary">
                   {req.scope === "CAMPER" ? "Reusable across camps" : "Specific to this camp"}
                   {req.description ? ` · ${req.description}` : ""}
                 </div>
-                <div className="text-xs text-neutral-400 mt-0.5">
+                <div className="text-xs text-txt-muted mt-0.5">
                   {req.acceptedFormats} · Up to {req.maxSizeMb} MB
                 </div>
               </div>
               <div className="flex gap-3 text-sm">
                 <button
-                  className="text-neutral-700 hover:underline"
+                  className="text-txt-secondary hover:underline"
                   onClick={() =>
                     setEditReq({
                       id: req.id,
@@ -135,12 +135,12 @@ export function DocumentRequirementsEditor({ organizationId }: Props) {
             </div>
           ))}
           {requirements?.length === 0 && (
-            <p className="text-sm text-neutral-500">No document requirements yet.</p>
+            <p className="text-sm text-txt-secondary">No document requirements yet.</p>
           )}
         </div>
 
         {/* Add new requirement */}
-        <div className="grid grid-cols-1 items-end gap-2 border-t border-neutral-200 pt-4 md:grid-cols-4">
+        <div className="grid grid-cols-1 items-end gap-2 border-t border-border-default pt-4 md:grid-cols-4">
           <Input
             containerClassName="md:col-span-2"
             label="Document Name"
@@ -244,7 +244,7 @@ export function DocumentRequirementsEditor({ organizationId }: Props) {
           <Dialog open onClose={() => setDeleteReqTarget(null)}>
             <div className="p-4">
               <h3 className="text-lg font-semibold">Remove Document Requirement</h3>
-              <p className="mt-2 text-sm text-neutral-600">
+              <p className="mt-2 text-sm text-txt-secondary">
                 Are you sure you want to remove &ldquo;{deleteReqTarget.name}&rdquo;? Existing uploaded documents will be preserved.
               </p>
               <div className="mt-4 flex justify-end gap-2">

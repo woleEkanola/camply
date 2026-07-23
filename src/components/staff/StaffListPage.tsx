@@ -38,6 +38,7 @@ import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
 import { StaffCardGrid } from "@/components/staff/StaffCardGrid";
 import { ViewModeToggle, type StaffViewMode } from "@/components/staff/ViewModeToggle";
 import { TeacherRecruitmentPanel } from "@/components/staff/TeacherRecruitmentPanel";
+import { CampusQuotasCard } from "@/components/staff/CampusQuotasCard";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
@@ -194,19 +195,19 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       header: type === "TEACHER" ? "Teacher" : "Volunteer",
       primary: true,
       accessor: (row) => (
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {row.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={row.photoUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
+            <img src={row.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
           ) : (
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-100 text-xs font-bold text-accent-700">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-100 text-xs font-bold text-accent-700">
               {row.firstName?.[0]}{row.lastName?.[0]}
             </span>
           )}
-          <div>
-            <div className="text-sm font-semibold text-neutral-900">{row.firstName} {row.lastName}</div>
-            <div className="text-xs text-neutral-500">{row.email}</div>
-            <div className="text-xs text-neutral-400">{row.phone}</div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-neutral-900">{row.firstName} {row.lastName}</div>
+            <div className="truncate text-xs text-neutral-500">{row.email}</div>
+            <div className="truncate text-xs text-txt-muted">{row.phone}</div>
           </div>
         </div>
       ),
@@ -217,7 +218,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       accessor: (row) => (
         <div className="text-sm text-neutral-700">
           <div>{row.assignedVenue?.name || "—"}</div>
-          {type === "TEACHER" && <div className="text-xs text-neutral-400">{row.department?.name || row.volunteerCategory || "—"}</div>}
+          {type === "TEACHER" && <div className="text-xs text-txt-muted">{row.department?.name || row.volunteerCategory || "—"}</div>}
         </div>
       ),
     },
@@ -231,7 +232,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             </span>
           ))}
           {(row.skills || []).length > 2 && (
-            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-neutral-600">+{row.skills.length - 2}</span>
+            <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[10px] font-semibold text-txt-secondary">+{row.skills.length - 2}</span>
           )}
         </div>
       ),
@@ -252,7 +253,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           </button>
           <button
             onClick={() => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
-            className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
+            className="rounded-md p-1.5 text-neutral-500 hover:bg-surface-raised"
             title="Open"
           >
             <EllipsisVerticalIcon className="h-4 w-4" />
@@ -262,7 +263,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       {row.status !== "PENDING" && (
         <button
           onClick={() => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
-          className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
+          className="rounded-md p-1.5 text-neutral-500 hover:bg-surface-raised"
           title="Open"
         >
           <EllipsisVerticalIcon className="h-4 w-4" />
@@ -290,12 +291,13 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             <h1 className="text-2xl font-bold text-neutral-900">{type === "TEACHER" ? "Teachers" : "Volunteers"}</h1>
             <p className="text-sm text-neutral-500">Manage and assign {type === "TEACHER" ? "teachers" : "volunteers"} for {activeYear?.name ?? "the active camp"}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             {type === "TEACHER" && (
               <>
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="w-full justify-center whitespace-nowrap sm:w-auto"
                   loading={autoAssignToTribes.isPending}
                   onClick={() => { if (window.confirm("Auto assign all teachers to tribes based on gender & quota?")) autoAssignToTribes.mutate({ organizationId, campId }); }}
                 >
@@ -304,6 +306,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="w-full justify-center whitespace-nowrap sm:w-auto"
                   loading={autoAssignToDepartments.isPending}
                   onClick={() => { if (window.confirm("Auto assign all teachers to departments with gender-mixed leaders?")) autoAssignToDepartments.mutate({ organizationId, campId }); }}
                 >
@@ -311,7 +314,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 </Button>
               </>
             )}
-            <Button size="sm" onClick={() => setIsAddOpen(true)}>
+            <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto" onClick={() => setIsAddOpen(true)}>
               <PlusIcon className="mr-1 h-4 w-4" /> Add {type === "TEACHER" ? "Teacher" : "Volunteer"}
             </Button>
           </div>
@@ -326,11 +329,20 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <StatCard label="Unassigned" value={stats?.unassigned ?? 0} icon={<UserMinusIcon className="h-5 w-5" />} tone="neutral" insight="No role yet" />
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-4">
+        {/* Teacher Recruitment + Campus Quotas — mobile only, above the list
+            (desktop sidebar copies below stay hidden on mobile to avoid duplication). */}
+        {type === "TEACHER" && (
+          <div className="mb-4 space-y-4 lg:hidden">
+            <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
+            <CampusQuotasCard organizationId={organizationId} campId={campId} />
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
           {/* Main content */}
-          <div className="lg:col-span-3 space-y-4">
+          <div className="min-w-0 lg:col-span-3 space-y-4">
             {/* Status tabs */}
-            <div className="border-b border-neutral-200">
+            <div className="border-b border-border-default">
               <nav className="flex space-x-6">
                 {STATUS_TABS.map((tab) => {
                   const value = tab === "All" ? "" : tab.toUpperCase();
@@ -372,7 +384,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 <option value="REJECTED">Rejected</option>
                 <option value="DEACTIVATED">Deactivated</option>
               </Select>
-              <button className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+              <button className="inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-surface px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-surface-hover">
                 <FunnelIcon className="h-4 w-4" /> Filters
               </button>
             </div>
@@ -390,19 +402,19 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             )}
 
             {/* Toolbar */}
-            <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3">
+            <div className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-neutral-700">{selectedIds.length} selected</span>
                 {selectedIds.length > 0 && (
                   <Menu as="div" className="relative">
-                    <Menu.Button className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+                    <Menu.Button className="inline-flex items-center gap-1 rounded-lg border border-border-default bg-surface px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-surface-hover">
                       Bulk Actions <EllipsisVerticalIcon className="h-4 w-4" />
                     </Menu.Button>
                     <Transition as={Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100" leave="transition ease-in duration-75" leaveFrom="transform opacity-100 scale-100" leaveTo="transform opacity-0 scale-95">
-                      <Menu.Items className="absolute left-0 z-10 mt-2 w-48 rounded-lg border border-neutral-100 bg-white py-1 shadow-lg">
-                        <Menu.Item>{({ active }) => <button onClick={() => bulkApprove.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-neutral-50" : "")}><CheckIcon className="h-4 w-4 text-success-600" /> Approve</button>}</Menu.Item>
-                        <Menu.Item>{({ active }) => <button onClick={() => bulkReject.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-neutral-50" : "")}><XMarkIcon className="h-4 w-4 text-danger-600" /> Reject</button>}</Menu.Item>
-                        <Menu.Item>{({ active }) => <button onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-neutral-50" : "")}><TrashIcon className="h-4 w-4 text-danger-600" /> Delete</button>}</Menu.Item>
+                      <Menu.Items className="absolute left-0 z-10 mt-2 w-48 rounded-lg border border-border-subtle bg-surface py-1 shadow-lg">
+                        <Menu.Item>{({ active }) => <button onClick={() => bulkApprove.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><CheckIcon className="h-4 w-4 text-success-600" /> Approve</button>}</Menu.Item>
+                        <Menu.Item>{({ active }) => <button onClick={() => bulkReject.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><XMarkIcon className="h-4 w-4 text-danger-600" /> Reject</button>}</Menu.Item>
+                        <Menu.Item>{({ active }) => <button onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><TrashIcon className="h-4 w-4 text-danger-600" /> Delete</button>}</Menu.Item>
                       </Menu.Items>
                     </Transition>
                   </Menu>
@@ -449,13 +461,13 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             )}
 
             {/* Pagination */}
-            <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3">
+            <div className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3">
               <span className="text-xs text-neutral-500">Showing {allLoadedItems.length > 0 ? 1 : 0} to {allLoadedItems.length} of {totalItems} {type === "TEACHER" ? "teachers" : "volunteers"}</span>
               <div className="flex items-center gap-1">
-                <button disabled={cursor === undefined && allLoadedItems.length <= 10} className="rounded-lg border border-neutral-200 p-1.5 text-neutral-500 hover:bg-neutral-50 disabled:opacity-40">
+                <button disabled={cursor === undefined && allLoadedItems.length <= 10} className="rounded-lg border border-border-default p-1.5 text-neutral-500 hover:bg-surface-hover disabled:opacity-40">
                   <ChevronLeftIcon className="h-4 w-4" />
                 </button>
-                <button onClick={() => data?.nextCursor && setCursor(data.nextCursor)} disabled={!data?.nextCursor} className="rounded-lg border border-neutral-200 p-1.5 text-neutral-500 hover:bg-neutral-50 disabled:opacity-40">
+                <button onClick={() => data?.nextCursor && setCursor(data.nextCursor)} disabled={!data?.nextCursor} className="rounded-lg border border-border-default p-1.5 text-neutral-500 hover:bg-surface-hover disabled:opacity-40">
                   <ChevronRightIcon className="h-4 w-4" />
                 </button>
               </div>
@@ -463,9 +475,12 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           </div>
 
           {/* Right panel */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {type === "TEACHER" ? (
-              <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
+              <div className="hidden space-y-4 lg:block">
+                <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
+                <CampusQuotasCard organizationId={organizationId} campId={campId} />
+              </div>
             ) : (
               <StaffLinkCard organizationId={organizationId} campId={campId} type={type} />
             )}
@@ -473,30 +488,32 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         </div>
       </div>
 
-      {/* Fixed bottom bulk action bar */}
+      {/* Fixed bottom bulk action bar. overflow-hidden + a horizontally-scrollable
+          action group keep the 5 controls from pushing the whole page wider than
+          the viewport on mobile (they scroll within the bar instead). */}
       <div className={cn(
-        "fixed bottom-0 left-0 right-0 z-30 border-t border-neutral-200 bg-white p-3 shadow-lg transition-transform md:left-64",
+        "fixed bottom-0 left-0 right-0 z-30 overflow-hidden border-t border-border-default bg-surface p-3 shadow-lg transition-transform md:left-64",
         selectedIds.length > 0 ? "translate-y-0" : "translate-y-full"
       )}>
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-100 text-accent-700">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4">
+          <div className="flex min-w-0 shrink items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full brand-tint-strong">
               <UserGroupIcon className="h-5 w-5" />
             </div>
-            <div>
-              <div className="text-sm font-semibold text-neutral-900">{selectedIds.length} {type === "TEACHER" ? "teacher" : "volunteer"}{selectedIds.length === 1 ? "" : "s"} selected</div>
-              <div className="text-xs text-neutral-500">Select teachers to perform actions</div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-neutral-900">{selectedIds.length} {type === "TEACHER" ? "teacher" : "volunteer"}{selectedIds.length === 1 ? "" : "s"} selected</div>
+              <div className="truncate text-xs text-neutral-500">Select teachers to perform actions</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" loading={bulkApprove.isPending} onClick={() => bulkApprove.mutate({ ids: selectedIds })}><CheckIcon className="mr-1 h-4 w-4" /> Approve</Button>
-            <Button size="sm" variant="secondary" loading={bulkReject.isPending} onClick={() => bulkReject.mutate({ ids: selectedIds })}><XMarkIcon className="mr-1 h-4 w-4" /> Reject</Button>
-            <Select value={bulkVenueId} onChange={(e) => setBulkVenueId(e.target.value)} className="w-auto text-sm">
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
+            <Button size="sm" className="shrink-0" loading={bulkApprove.isPending} onClick={() => bulkApprove.mutate({ ids: selectedIds })}><CheckIcon className="mr-1 h-4 w-4" /> Approve</Button>
+            <Button size="sm" variant="secondary" className="shrink-0" loading={bulkReject.isPending} onClick={() => bulkReject.mutate({ ids: selectedIds })}><XMarkIcon className="mr-1 h-4 w-4" /> Reject</Button>
+            <Select value={bulkVenueId} onChange={(e) => setBulkVenueId(e.target.value)} containerClassName="shrink-0" className="w-auto text-sm">
               <option value="">Assign Venue</option>
               {filterVenues.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </Select>
-            <Button size="sm" variant="secondary" disabled={!bulkVenueId} loading={bulkAssignVenue.isPending} onClick={() => bulkAssignVenue.mutate({ ids: selectedIds, venueId: bulkVenueId })}><MapPinIcon className="mr-1 h-4 w-4" /> Assign</Button>
-            <Button size="sm" variant="danger" loading={bulkDelete.isPending} onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }}><TrashIcon className="mr-1 h-4 w-4" /> Delete</Button>
+            <Button size="sm" variant="secondary" className="shrink-0" disabled={!bulkVenueId} loading={bulkAssignVenue.isPending} onClick={() => bulkAssignVenue.mutate({ ids: selectedIds, venueId: bulkVenueId })}><MapPinIcon className="mr-1 h-4 w-4" /> Assign</Button>
+            <Button size="sm" variant="danger" className="shrink-0" loading={bulkDelete.isPending} onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }}><TrashIcon className="mr-1 h-4 w-4" /> Delete</Button>
           </div>
         </div>
       </div>
@@ -515,7 +532,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         <div className="space-y-4">
           {error && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
           <Input id="manual-email" label="Email Address" type="email" required value={addEmail} onChange={(e) => setAddEmail(e.target.value)} />
-          <div className="max-h-[50vh] overflow-y-auto border-t border-b border-neutral-100 py-4 my-2">
+          <div className="max-h-[50vh] overflow-y-auto border-t border-b border-border-subtle py-4 my-2">
             <DynamicFieldGroup fields={visibleFields} values={addFormValues} onChange={(key, val) => setAddFormValues((v) => ({ ...v, [key]: val }))} />
           </div>
           <div className="flex justify-end gap-2 pt-2">

@@ -30,7 +30,7 @@ export function BottomNav({ items, onMoreClick }: BottomNavProps) {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t border-border-default bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
       aria-label="Primary"
     >
       {items.map((item) => {
@@ -41,7 +41,7 @@ export function BottomNav({ items, onMoreClick }: BottomNavProps) {
             href={item.href}
             className={cn(
               "flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs font-medium",
-              active ? "text-accent-600" : "text-neutral-500"
+              active ? "text-accent-600" : "text-txt-secondary"
             )}
             aria-current={active ? "page" : undefined}
           >
@@ -53,7 +53,7 @@ export function BottomNav({ items, onMoreClick }: BottomNavProps) {
       <button
         type="button"
         onClick={onMoreClick}
-        className="flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs font-medium text-neutral-500"
+        className="flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs font-medium text-txt-secondary"
       >
         <EllipsisHorizontalIcon className="h-6 w-6 shrink-0" aria-hidden="true" />
         <span>More</span>

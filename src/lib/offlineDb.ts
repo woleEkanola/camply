@@ -1,6 +1,8 @@
 // Browser-native IndexedDB client database wrapper for offline storage.
 // Enforces that it only runs on the client-side (Next.js context).
 
+import { normalizeScannedQRToken } from "./qr";
+
 const DB_NAME = "camply-offline-db";
 const DB_VERSION = 1;
 
@@ -114,14 +116,23 @@ export async function getCamperByToken(qrToken: string): Promise<OfflineCamper |
   const db = await initDb();
   if (!db) return null;
 
-  return new Promise((resolve, reject) => {
+  const normalized = normalizeScannedQRToken(qrToken);
+  if (!normalized) return null;
+
+  const directCamper = await new Promise<OfflineCamper | null>((resolve, reject) => {
     const transaction = db.transaction("campers", "readonly");
     const store = transaction.objectStore("campers");
-    const request = store.get(qrToken);
+    const request = store.get(normalized);
 
     request.onsuccess = () => resolve(request.result || null);
     request.onerror = (event: any) => reject(event.target.error);
   });
+
+  if (directCamper) return directCamper;
+
+  // Fallback search by registrationNumber, camperId, or registrationId
+  const searchResults = await searchCampersOffline(normalized);
+  return searchResults.length > 0 ? searchResults[0] : null;
 }
 
 export async function searchCampersOffline(query: string): Promise<OfflineCamper[]> {

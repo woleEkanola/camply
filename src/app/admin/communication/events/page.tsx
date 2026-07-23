@@ -238,7 +238,7 @@ export default function EmailEventsPage() {
         ) : configs && configs.length === 0 ? (
           <Card>
             <CardBody>
-              <p className="text-sm text-neutral-500">No email events found.</p>
+              <p className="text-sm text-txt-secondary">No email events found.</p>
             </CardBody>
           </Card>
         ) : (
@@ -264,12 +264,12 @@ export default function EmailEventsPage() {
                               <Badge tone="info">{ev.template.name}</Badge>
                             )}
                             {ev.resolvedFrom && (
-                              <span className="text-[11px] text-neutral-400 font-mono truncate">
+                              <span className="text-[11px] text-txt-muted font-mono truncate">
                                 From: {ev.resolvedFrom}
                               </span>
                             )}
                           </div>
-                          <p className="mt-1 text-xs text-neutral-500">
+                          <p className="mt-1 text-xs text-txt-secondary">
                             {ev.description}
                           </p>
                         </div>
@@ -286,7 +286,7 @@ export default function EmailEventsPage() {
                           >
                             <span
                               className={cn(
-                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface shadow ring-0 transition duration-200 ease-in-out",
                                 ev.enabled !== false ? "translate-x-5" : "translate-x-0"
                               )}
                             />
@@ -339,8 +339,8 @@ export default function EmailEventsPage() {
             </div>
 
             {/* Sender Policy */}
-            <div className="space-y-4 rounded-lg bg-neutral-50 p-4 border border-neutral-200">
-              <h4 className="text-xs font-bold uppercase tracking-wide text-neutral-500">Sender Settings</h4>
+            <div className="space-y-4 rounded-lg bg-surface-raised p-4 border border-border-default">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-txt-secondary">Sender Settings</h4>
               
               <div>
                 <Select
@@ -381,8 +381,8 @@ export default function EmailEventsPage() {
               )}
 
               <div>
-                <span className="block text-xs font-semibold text-neutral-500 mb-1">Resolved Sender Preview</span>
-                <div className="rounded bg-white px-3 py-2 text-xs font-mono border border-neutral-200 text-neutral-800 break-all select-all">
+                <span className="block text-xs font-semibold text-txt-secondary mb-1">Resolved Sender Preview</span>
+                <div className="rounded bg-surface px-3 py-2 text-xs font-mono border border-border-default text-neutral-800 break-all select-all">
                   {getLivePreview()}
                 </div>
               </div>
@@ -397,7 +397,7 @@ export default function EmailEventsPage() {
                 {recipientOptions.map((opt) => (
                   <label
                     key={opt.value}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-surface-hover"
                   >
                     <input
                       type="checkbox"
@@ -422,7 +422,7 @@ export default function EmailEventsPage() {
                 {channelOptions.map((opt) => (
                   <label
                     key={opt.value}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-surface-hover"
                   >
                     <input
                       type="checkbox"

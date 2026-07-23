@@ -16,7 +16,7 @@ export function SkeletonText({ lines = 3, className }: { lines?: number; classNa
 
 export function SkeletonTable({ rows = 5, columns = 4 }: { rows?: number; columns?: number }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+    <div className="overflow-hidden rounded-lg border border-border-default bg-surface">
       <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-3">
         <Skeleton className="h-4 w-40" />
       </div>

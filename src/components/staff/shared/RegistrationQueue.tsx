@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -60,6 +61,7 @@ interface RegistrationQueueProps {
 }
 
 export function RegistrationQueue({ organizationId, managedCampuses }: RegistrationQueueProps) {
+  const { data: session } = useSession();
   const campusId = managedCampuses[0];
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
@@ -67,6 +69,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const [filterStatus, setFilterStatus] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("");
+  const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<"REJECT" | "REQUEST_CORRECTION" | "DELETE" | null>(null);
   const [bulkReason, setBulkReason] = useState("");
@@ -83,6 +86,19 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
     { enabled: !!organizationId }
   );
   const isTwoStep = (org as any)?.approvalWorkflow === "TWO_STEP";
+  const userRole = (session?.user as any)?.role;
+  const isReviewer = isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(userRole);
+
+  // Default a two-step reviewer straight into their outstanding work ("Pending" =
+  // submitted-but-not-yet-recommended). One-shot: once org resolves we set it a
+  // single time, so it never fights a filter the user then picks manually.
+  const defaultFilterInitialized = useRef(false);
+  useEffect(() => {
+    if (defaultFilterInitialized.current) return;
+    if (!org) return;
+    defaultFilterInitialized.current = true;
+    if (isReviewer) setReviewStateFilter("AWAITING_VETTING");
+  }, [org, isReviewer]);
 
   const { data: signupLink } = api.signupLink.getByCampusAndCamp.useQuery(
     { campusId },
@@ -95,7 +111,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   useEffect(() => {
     setCursor(undefined);
     setAccumulatedItems([]);
-  }, [filterStatus, reviewStateFilter, debouncedSearchQuery]);
+  }, [filterStatus, reviewStateFilter, duplicatesOnly, debouncedSearchQuery]);
 
   const { data, isLoading, error, refetch } = api.registration.adminList.useQuery(
     {
@@ -103,6 +119,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
       campusId: managedCampuses.length === 1 ? campusId : undefined,
       status: filterStatus || undefined,
       reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
+      duplicatesOnly: duplicatesOnly || undefined,
       q: debouncedSearchQuery || undefined,
       cursor,
       limit: 50,
@@ -135,6 +152,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const kpi = (statsData as any)?.countsByStatus ?? {};
   const awaitingVettingCount = (statsData as any)?.awaitingVetting ?? 0;
   const awaitingFinalCount = (statsData as any)?.awaitingFinal ?? 0;
+  const duplicateCount = (statsData as any)?.duplicateCount ?? 0;
   const statsTotalCount = (statsData as any)?.totalCount ?? 0;
 
   const invalidateRegistrations = () => {
@@ -204,9 +222,12 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
       header: "Camper",
       primary: true,
       accessor: (row: any) => (
-        <div>
-          <div className="font-medium text-neutral-900">{row.camper?.name}</div>
-          <div className="text-xs text-neutral-500">{row.camper?.user?.email}</div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 font-medium text-neutral-900">
+            <span className="truncate">{row.camper?.name}</span>
+            {row.isDuplicate && <Badge tone="warning">Duplicate</Badge>}
+          </div>
+          <div className="truncate text-xs text-neutral-500">{row.camper?.user?.email}</div>
         </div>
       ),
     },
@@ -242,14 +263,14 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             : undefined
         }
         actions={
-          <div className="text-sm text-neutral-600">
+          <div className="text-sm text-txt-secondary">
             Approved quota: <span className="font-medium">{quotaLabel}</span>
           </div>
         }
       />
 
       {actionError && (
-        <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+        <div className="mb-4 rounded-md status-danger">
           <span>{actionError}</span>
           <button onClick={() => setActionError("")} className="ml-3 text-xs underline">
             Dismiss
@@ -257,7 +278,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         </div>
       )}
       {error && (
-        <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+        <div className="mb-4 rounded-md status-danger">
           Error loading registrations: {error.message}
         </div>
       )}
@@ -267,10 +288,29 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onOpenFilters={() => {}}
-          filterStatus={filterStatus}
-          onSelectStatusFilter={(s) => {
-            setReviewStateFilter("");
-            setFilterStatus(s);
+          isTwoStep={isTwoStep}
+          isReviewer={isReviewer}
+          activeFilterKey={
+            duplicatesOnly
+              ? "FILTER_DUPLICATES"
+              : reviewStateFilter
+                ? `REVIEW_${reviewStateFilter}`
+                : filterStatus
+          }
+          onSelectStatusFilter={(key) => {
+            if (key === "FILTER_DUPLICATES") {
+              setFilterStatus("");
+              setReviewStateFilter("");
+              setDuplicatesOnly(true);
+            } else if (key.startsWith("REVIEW_")) {
+              setFilterStatus("");
+              setDuplicatesOnly(false);
+              setReviewStateFilter(key.replace("REVIEW_", "") as any);
+            } else {
+              setReviewStateFilter("");
+              setDuplicatesOnly(false);
+              setFilterStatus(key);
+            }
           }}
           stats={{
             totalCount: statsTotalCount,
@@ -278,6 +318,9 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             approvedCount: kpi["APPROVED"] ?? 0,
             checkedInCount: kpi["CHECKED_IN"] ?? 0,
             rejectedCount: kpi["REJECTED"] ?? 0,
+            awaitingVettingCount,
+            awaitingFinalCount,
+            duplicateCount,
           }}
           registrations={registrations}
           selectedIds={selectedIds}
@@ -286,14 +329,36 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             else setSelectedIds((prev) => prev.filter((i) => i !== id));
           }}
           onCardClick={(reg) => setSelectedRegistrationId(reg.id)}
-          onApprove={(reg) => {
-            if (isTwoStep) endorseMutation.mutate({ registrationId: reg.id });
+          primaryLabel={isReviewer ? "Recommend" : "Approve"}
+          secondaryLabel={isReviewer ? "Request Correction" : "Reject"}
+          onPrimaryAction={(reg) => {
+            if (isReviewer) endorseMutation.mutate({ registrationId: reg.id });
             else approveMutation.mutate({ registrationId: reg.id });
           }}
-          onReject={(reg) => {
-            setSelectedIds([reg.id]);
-            setBulkAction("REJECT");
-            setBulkReason("");
+          onSecondaryAction={(reg) => {
+            if (isReviewer) {
+              setSelectedRegistrationId(reg.id);
+            } else {
+              setSelectedIds([reg.id]);
+              setBulkAction("REJECT");
+              setBulkReason("");
+            }
+          }}
+          onApprove={(reg) => {
+            if (isReviewer) endorseMutation.mutate({ registrationId: reg.id });
+            else approveMutation.mutate({ registrationId: reg.id });
+          }}
+          onReject={(reg, reason) => {
+            if (reason) bulkTransition.mutate({ ids: [reg.id], action: "REJECT", reason });
+            else {
+              setSelectedIds([reg.id]);
+              setBulkAction("REJECT");
+              setBulkReason("");
+            }
+          }}
+          onRequestCorrection={(reg, message) => {
+            if (message) bulkTransition.mutate({ ids: [reg.id], action: "REQUEST_CORRECTION", reason: message });
+            else setSelectedRegistrationId(reg.id);
           }}
           onQuickAction={(reg, action) => {
             if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
@@ -320,48 +385,57 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             <StatCard
               label="Total Registrations"
               value={statsTotalCount}
-              selected={filterStatus === "" && reviewStateFilter === ""}
+              selected={filterStatus === "" && reviewStateFilter === "" && !duplicatesOnly}
               onClick={() => {
                 setReviewStateFilter("");
                 setFilterStatus("");
+                setDuplicatesOnly(false);
               }}
             />
             {isTwoStep && (
               <>
                 <StatCard
-                  label="Awaiting Vetting"
+                  label="Pending"
                   value={awaitingVettingCount}
                   selected={reviewStateFilter === "AWAITING_VETTING"}
                   onClick={() => {
                     setFilterStatus("");
+                    setDuplicatesOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_VETTING" ? "" : "AWAITING_VETTING");
                   }}
                 />
                 <StatCard
-                  label="Awaiting Final Approval"
+                  label="Awaiting"
                   value={awaitingFinalCount}
                   selected={reviewStateFilter === "AWAITING_FINAL"}
                   onClick={() => {
                     setFilterStatus("");
+                    setDuplicatesOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_FINAL" ? "" : "AWAITING_FINAL");
                   }}
                 />
               </>
             )}
-            {["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"].map((s) => (
+            <StatCard
+              label="Duplicates"
+              value={duplicateCount}
+              selected={duplicatesOnly}
+              onClick={() => {
+                setReviewStateFilter("");
+                setFilterStatus("");
+                setDuplicatesOnly((prev) => !prev);
+              }}
+            />
+            {/* For two-step reviewers, raw PENDING is fully split into Pending + Awaiting above. */}
+            {(isTwoStep ? ["APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"] : ["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"]).map((s) => (
               <StatCard
                 key={s}
-                label={
-                  s === "PENDING" && isTwoStep
-                    ? "Waiting Decision"
-                    : s === "REQUIRES_ACTION"
-                      ? "Corrections"
-                      : s.replace(/_/g, " ")
-                }
+                label={s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
                 value={kpi[s] ?? 0}
-                selected={filterStatus === s}
+                selected={filterStatus === s && !duplicatesOnly}
                 onClick={() => {
                   setReviewStateFilter("");
+                  setDuplicatesOnly(false);
                   setFilterStatus(filterStatus === s ? "" : s);
                 }}
               />
@@ -436,25 +510,32 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                 onClear={() => setSearchQuery("")}
               />
               <Select
-                value={reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
+                value={duplicatesOnly ? "FILTER_DUPLICATES" : reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (val.startsWith("REVIEW_")) {
+                  if (val === "FILTER_DUPLICATES") {
                     setFilterStatus("");
+                    setReviewStateFilter("");
+                    setDuplicatesOnly(true);
+                  } else if (val.startsWith("REVIEW_")) {
+                    setFilterStatus("");
+                    setDuplicatesOnly(false);
                     setReviewStateFilter(val.replace("REVIEW_", "") as any);
                   } else {
                     setFilterStatus(val);
                     setReviewStateFilter("");
+                    setDuplicatesOnly(false);
                   }
                 }}
               >
                 <option value="">All Statuses</option>
                 {isTwoStep && (
                   <>
-                    <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval</option>
-                    <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting</option>
+                    <option value="REVIEW_AWAITING_VETTING">Pending</option>
+                    <option value="REVIEW_AWAITING_FINAL">Awaiting</option>
                   </>
                 )}
+                <option value="FILTER_DUPLICATES">Duplicates Only ({duplicateCount})</option>
                 {STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>
                     {s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}
@@ -463,15 +544,15 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
               </Select>
             </div>
 
-            <div className="flex items-center rounded-xl border border-neutral-200/80 bg-neutral-100/80 p-1 shrink-0">
+            <div className="flex items-center rounded-xl border border-border-default bg-neutral-100/80 p-1 shrink-0">
               <button
                 type="button"
                 onClick={() => setViewMode("card")}
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
                   viewMode === "card"
-                    ? "bg-white text-accent-700 shadow-2xs"
-                    : "text-neutral-600 hover:text-neutral-900"
+                    ? "bg-surface text-accent-700 shadow-2xs"
+                    : "text-txt-secondary hover:text-neutral-900"
                 )}
               >
                 <Squares2X2Icon className="h-4 w-4" />
@@ -483,8 +564,8 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
                   viewMode === "list"
-                    ? "bg-white text-accent-700 shadow-2xs"
-                    : "text-neutral-600 hover:text-neutral-900"
+                    ? "bg-surface text-accent-700 shadow-2xs"
+                    : "text-txt-secondary hover:text-neutral-900"
                 )}
               >
                 <TableCellsIcon className="h-4 w-4" />
@@ -496,7 +577,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
           {viewMode === "card" ? (
             <div className="space-y-6">
               {registrations.length === 0 ? (
-                <div className="rounded-2xl border border-neutral-200/80 bg-white p-12 text-center">
+                <div className="rounded-2xl border border-border-default bg-surface p-12 text-center">
                   <p className="text-base font-bold text-neutral-900">No registrations match your filters</p>
                   <p className="mt-1 text-xs text-neutral-500">Try adjusting search or status filters.</p>
                 </div>
@@ -506,20 +587,28 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                     <MobileRegistrationCard
                       key={reg.id}
                       registration={reg}
+                      isTwoStep={isTwoStep}
+                      isReviewer={isReviewer}
                       isSelected={selectedIds.includes(reg.id)}
                       onSelect={(id, checked) => {
                         if (checked) setSelectedIds((prev) => Array.from(new Set([...prev, id])));
                         else setSelectedIds((prev) => prev.filter((i) => i !== id));
                       }}
                       onClick={(r) => setSelectedRegistrationId(r.id)}
-                      onApprove={(r) => {
-                        if (isTwoStep) endorseMutation.mutate({ registrationId: r.id });
+                      primaryLabel={isReviewer ? "Recommend" : "Approve"}
+                      secondaryLabel={isReviewer ? "Request Correction" : "Reject"}
+                      onPrimaryAction={(r) => {
+                        if (isReviewer) endorseMutation.mutate({ registrationId: r.id });
                         else approveMutation.mutate({ registrationId: r.id });
                       }}
-                      onReject={(r) => {
-                        setSelectedIds([r.id]);
-                        setBulkAction("REJECT");
-                        setBulkReason("");
+                      onSecondaryAction={(r) => {
+                        if (isReviewer) {
+                          setSelectedRegistrationId(r.id);
+                        } else {
+                          setSelectedIds([r.id]);
+                          setBulkAction("REJECT");
+                          setBulkReason("");
+                        }
                       }}
                       onQuickAction={(r, action) => {
                         if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
@@ -551,7 +640,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             <Table
               mode="controlled"
               toolbar={
-                <span className="text-xs text-neutral-400">
+                <span className="text-xs text-txt-muted">
                   Showing {registrations.length} of {data?.totalCount ?? 0} registration{(data?.totalCount ?? 0) === 1 ? "" : "s"}
                 </span>
               }
@@ -567,7 +656,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
               emptyDescription="Try adjusting search or status filters."
               footer={
                 data?.nextCursor ? (
-                  <div className="flex justify-center border-t border-neutral-100 p-3">
+                  <div className="flex justify-center border-t border-border-subtle p-3">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -583,13 +672,19 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                 row.status === "PENDING" ? (
                   <div className="flex flex-wrap justify-end gap-2">
                     {isTwoStep ? (
-                      <Button
-                        size="sm"
-                        loading={endorseMutation.isPending}
-                        onClick={() => endorseMutation.mutate({ registrationId: row.id })}
-                      >
-                        Recommend
-                      </Button>
+                      isReviewer && isEndorsed(row.review) ? (
+                        <Button size="sm" variant="secondary" disabled>
+                          Awaiting Approval
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          loading={endorseMutation.isPending}
+                          onClick={() => endorseMutation.mutate({ registrationId: row.id })}
+                        >
+                          Recommend
+                        </Button>
+                      )
                     ) : (
                       <Button
                         size="sm"

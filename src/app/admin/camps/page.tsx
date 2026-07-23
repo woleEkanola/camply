@@ -323,21 +323,21 @@ export default function CampsPage() {
       <PageHeader title="Camps" actions={<Button onClick={openCreateModal} disabled={!organizationId}>Add Camp</Button>} />
 
       {error && (
-        <div className="mb-4 rounded-md bg-danger-50 p-4 text-sm text-danger-700">
+        <div className="mb-4 rounded-md status-danger p-4 text-sm ">
           <span>{error}</span>
           <button onClick={() => setError("")} className="ml-3 text-xs underline">Dismiss</button>
         </div>
       )}
-      {success && <div className="mb-4 rounded-md bg-success-50 p-4 text-sm text-success-700">{success}</div>}
+      {success && <div className="mb-4 rounded-md status-success p-4 text-sm ">{success}</div>}
 
       {/* Active Camp Card */}
-      <div className="mb-6 rounded-lg border border-success-200 bg-success-50 p-4">
-        <h2 className="mb-2 text-sm font-semibold text-neutral-900">Active Camp</h2>
+      <div className="mb-6 rounded-lg border border-success-200 status-success p-4">
+        <h2 className="mb-2 text-sm font-semibold text-txt-primary">Active Camp</h2>
         {activeCamp ? (
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xl font-semibold text-success-700">{activeCamp.name}</p>
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm text-txt-secondary">
                 {new Date(activeCamp.startDate).toLocaleDateString()} - {new Date(activeCamp.endDate).toLocaleDateString()}
               </p>
             </div>
@@ -346,7 +346,7 @@ export default function CampsPage() {
             </Button>
           </div>
         ) : (
-          <p className="text-sm text-neutral-500">No active camp set. Please create a camp and set it as active.</p>
+          <p className="text-sm text-txt-secondary">No active camp set. Please create a camp and set it as active.</p>
         )}
       </div>
 
@@ -377,18 +377,18 @@ export default function CampsPage() {
           <Input label="Camp Start Date" type="date" id="startDate" name="startDate" value={formData.startDate} onChange={handleInputChange} required />
           <Input label="Camp End Date" type="date" id="endDate" name="endDate" value={formData.endDate} onChange={handleInputChange} required />
           <div>
-            <label className="flex items-center gap-2 text-sm text-neutral-700">
+            <label className="flex items-center gap-2 text-sm text-txt-secondary">
               <input
                 type="checkbox"
                 id="active"
                 name="active"
                 checked={formData.active}
                 onChange={handleInputChange}
-                className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                className="h-4 w-4 rounded border-input-border text-accent-600 focus:ring-accent-500"
               />
               Set as active camp
             </label>
-            <p className="mt-1 text-xs text-neutral-500">Setting this as active will make it the default camp for all registrations.</p>
+            <p className="mt-1 text-xs text-txt-secondary">Setting this as active will make it the default camp for all registrations.</p>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
@@ -399,7 +399,7 @@ export default function CampsPage() {
 
       {/* Delete Confirmation Modal */}
       <Dialog open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion" size="sm">
-        <p className="text-sm text-neutral-500">Are you sure you want to delete this camp? This action cannot be undone.</p>
+        <p className="text-sm text-txt-secondary">Are you sure you want to delete this camp? This action cannot be undone.</p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
           <Button variant="danger" loading={isSubmitting} onClick={handleDelete}>Delete Camp</Button>

@@ -101,14 +101,14 @@ function DocumentRow({
   const isDone = !!existingDoc;
 
   return (
-    <div className={`rounded-xl border bg-white p-4 shadow-sm transition-colors ${
-      isDone ? "border-success-300 bg-success-50" : localError ? "border-danger-300" : "border-neutral-200"
+    <div className={`rounded-xl border bg-surface p-4 shadow-sm transition-colors ${
+      isDone ? "border-success-300 bg-success-50" : localError ? "border-danger-300" : "border-border-default"
     }`}>
       <div className="mb-2 flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-neutral-900">{requirement.name}</p>
-          {requirement.description && <p className="text-xs text-neutral-500">{requirement.description}</p>}
-          <p className="mt-0.5 text-xs text-neutral-400">
+          <p className="text-sm font-medium text-txt-primary">{requirement.name}</p>
+          {requirement.description && <p className="text-xs text-txt-secondary">{requirement.description}</p>}
+          <p className="mt-0.5 text-xs text-txt-muted">
             {requirement.acceptedFormats?.split(",").map((f: string) => f.trim()).join(" or ")}. Up to {requirement.maxSizeMb} MB
           </p>
         </div>
@@ -231,8 +231,8 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-neutral-900">Documents</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-txt-primary">Documents</h1>
+        <p className="mt-1 text-sm text-txt-secondary">
           {activeTeen ? `Upload required documents for ${activeTeen.firstName}.` : "Upload required documents."}
         </p>
       </div>
@@ -244,12 +244,12 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
           ))}
         </div>
       ) : requiredReqs.length === 0 ? (
-        <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
+        <div className="rounded-2xl bg-surface p-8 text-center shadow-sm">
           <svg className="mx-auto mb-3 h-10 w-10 text-neutral-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
           </svg>
-          <p className="text-sm font-medium text-neutral-700">No documents required</p>
-          <p className="text-xs text-neutral-500">You can continue to review.</p>
+          <p className="text-sm font-medium text-txt-secondary">No documents required</p>
+          <p className="text-xs text-txt-secondary">You can continue to review.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -270,7 +270,7 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
         <button
           type="button"
           onClick={() => dispatch({ type: "GO_BACK" })}
-          className="flex h-12 flex-1 items-center justify-center rounded-xl border border-neutral-300 bg-white text-base font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          className="flex h-12 flex-1 items-center justify-center rounded-xl border border-input-border bg-surface text-base font-medium text-txt-secondary transition-colors hover:bg-neutral-50"
         >
           ← Back
         </button>
@@ -295,12 +295,12 @@ export function StepDocuments({ state, dispatch }: StepDocumentsProps) {
         </button>
       </div>
       {nextBlocked && (
-        <p className="mt-2 text-center text-xs text-neutral-500">
+        <p className="mt-2 text-center text-xs text-txt-secondary">
           {isUploading ? "Please wait for uploads to finish." : "Upload all required documents to continue."}
         </p>
       )}
       <div className="mt-6 text-center">
-        <a href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-600 underline">
+        <a href="/dashboard" className="text-sm text-txt-muted hover:text-txt-primary underline">
           Go to Dashboard
         </a>
       </div>

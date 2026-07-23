@@ -52,7 +52,7 @@ export default function TimelineItem({
           {getStatusBadge()}
         </div>
         {(time || date) && (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-txt-secondary">
             {date && <span>{date}</span>}
             {date && time && <span>, at </span>}
             {time && <span className="font-medium">{time}</span>}
@@ -69,7 +69,7 @@ export default function TimelineItem({
               </div>
             ))}
             {participants.length > 6 && (
-              <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-500 ring-2 ring-white">
+              <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-txt-secondary ring-2 ring-white">
                 +{participants.length - 6}
               </div>
             )}

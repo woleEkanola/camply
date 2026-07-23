@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
+import { CamperPhotoCropperModal } from "./CamperPhotoCropperModal";
 
 interface CamperProfileViewProps {
   registration?: {
@@ -134,13 +135,19 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
               <img
                 src={camper.photoUrl}
                 alt=""
-                className="h-16 w-16 rounded-full object-cover cursor-pointer border border-neutral-200 hover:scale-105 transition-transform"
+                className="h-16 w-16 rounded-full object-cover cursor-pointer border border-border-default hover:scale-105 transition-transform"
                 onClick={() => setIsPhotoOpen(true)}
+                title="Click to view/crop photo"
               />
             ) : (
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-100 text-xl font-semibold text-accent-700">
+              <button
+                type="button"
+                onClick={() => setIsPhotoOpen(true)}
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-100 text-xl font-semibold text-accent-700 cursor-pointer hover:scale-105 transition-transform"
+                title="Click to view/crop photo"
+              >
                 {camper.name?.[0]}
-              </span>
+              </button>
             )}
             <div>
               <h3 className="text-xl font-bold text-neutral-900">{camper.name}</h3>
@@ -161,7 +168,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Campus & Registration Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Campus & Registration Details
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -196,7 +203,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Personal Info Grid */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Personal Information
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -247,7 +254,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Contact Details Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Contact & Address Details
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -282,7 +289,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Medical / Emergency Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Medical & Emergency
           </h4>
           <div className="space-y-3 text-sm">
@@ -327,7 +334,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Education & Church Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Education & Church
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -354,7 +361,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {/* Parent / Guardian Card */}
       <Card>
         <CardBody>
-          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+          <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
             Parent / Guardian Account
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -376,7 +383,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {formFields && formFields.length > 0 && (
         <Card>
           <CardBody>
-            <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5 flex items-center justify-between">
+            <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5 flex items-center justify-between">
               <span>Dynamic Wizard Form Responses</span>
               <span className="text-xs text-neutral-400 font-normal">{formFields.length} configured fields</span>
             </h4>
@@ -403,7 +410,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
       {camper.fieldValues && camper.fieldValues.length > 0 && (
         <Card>
           <CardBody>
-            <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-1.5">
+            <h4 className="mb-3 text-sm font-semibold text-neutral-900 border-b border-border-subtle pb-1.5">
               Additional Custom Fields
             </h4>
             <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -420,16 +427,14 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
         </Card>
       )}
 
-      {/* Full Photo Modal */}
-      <Dialog open={isPhotoOpen} onClose={() => setIsPhotoOpen(false)} title="Camper Photo">
-        <div className="flex justify-center p-2 bg-neutral-900 rounded-lg overflow-hidden border border-neutral-800">
-          <img
-            src={camper.photoUrl || undefined}
-            alt={camper.name || ""}
-            className="max-h-[70vh] max-w-full object-contain rounded-md"
-          />
-        </div>
-      </Dialog>
+      {/* Full Photo & Cropper Modal */}
+      <CamperPhotoCropperModal
+        open={isPhotoOpen}
+        onClose={() => setIsPhotoOpen(false)}
+        camperId={camper.id}
+        camperName={camper.name}
+        photoUrl={camper.photoUrl}
+      />
     </div>
   );
 }

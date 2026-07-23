@@ -133,13 +133,13 @@ const EditCamperModal: React.FC<EditCamperModalProps> = ({
       }
     >
       {error && (
-        <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">
+        <div className="mb-4 rounded-md status-danger p-3 text-sm">
           {error}
         </div>
       )}
 
       {isLoading ? (
-        <div className="py-4 text-center text-sm text-neutral-500">Loading...</div>
+        <div className="py-4 text-center text-sm text-txt-secondary">Loading...</div>
       ) : (
         <form id="edit-camper-form" onSubmit={handleSave} className="space-y-4">
           <Input

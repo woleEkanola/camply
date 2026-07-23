@@ -23,14 +23,14 @@ function VolunteerDashboardContent({ profile }: { profile: any }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card><CardBody><div className="text-xs text-neutral-500">Department</div><div className="mt-1 font-medium text-neutral-900">{profile.volunteerCategory ?? "Unassigned"}</div></CardBody></Card>
-        <Card><CardBody><div className="text-xs text-neutral-500">My Centre</div><div className="mt-1 font-medium text-neutral-900">{profile.assignedLocation?.name ?? "Unassigned"}</div></CardBody></Card>
+        <Card><CardBody><div className="text-xs text-txt-secondary">Department</div><div className="mt-1 font-medium text-txt-primary">{profile.volunteerCategory ?? "Unassigned"}</div></CardBody></Card>
+        <Card><CardBody><div className="text-xs text-txt-secondary">My Centre</div><div className="mt-1 font-medium text-txt-primary">{profile.assignedLocation?.name ?? "Unassigned"}</div></CardBody></Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardBody>
-            <h3 className="mb-3 font-medium text-neutral-900">Quick Actions</h3>
+            <h3 className="mb-3 font-medium text-txt-primary">Quick Actions</h3>
             <div className="flex flex-wrap gap-2">
               {departmentActions.map((a) => (
                 <Button key={a.href} size="sm" onClick={() => router.push(a.href)}>{a.label}</Button>
@@ -42,15 +42,15 @@ function VolunteerDashboardContent({ profile }: { profile: any }) {
 
         <Card>
           <CardBody>
-            <h3 className="mb-3 font-medium text-neutral-900">Announcements</h3>
+            <h3 className="mb-3 font-medium text-txt-primary">Announcements</h3>
             <div className="space-y-2">
               {notifications.slice(0, 5).map((n: any) => (
                 <div key={n.id} className="text-sm">
-                  <div className="font-medium text-neutral-900">{n.title}</div>
-                  <div className="text-neutral-500">{n.body}</div>
+                  <div className="font-medium text-txt-primary">{n.title}</div>
+                  <div className="text-txt-secondary">{n.body}</div>
                 </div>
               ))}
-              {notifications.length === 0 && <p className="text-sm text-neutral-500">No announcements yet.</p>}
+              {notifications.length === 0 && <p className="text-sm text-txt-secondary">No announcements yet.</p>}
             </div>
           </CardBody>
         </Card>

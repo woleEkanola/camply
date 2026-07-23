@@ -24,7 +24,7 @@ async function computeQuotaReached(
     where: {
       campusId: signupLink.campusId,
       campId: signupLink.campId,
-      status: { in: ["SUBMITTED", "PENDING", "APPROVED"] },
+      status: { notIn: ["DRAFT", "CANCELLED", "REJECTED", "ARCHIVED"] },
       deletedAt: null,
     },
   });
@@ -127,7 +127,7 @@ export const signupLinkRouter = createTRPCRouter({
       // undercut) without a separate round trip per campus.
       const usedCounts = await ctx.prisma.registration.groupBy({
         by: ["campusId"],
-        where: { campId, status: { in: ["SUBMITTED", "PENDING", "APPROVED"] }, deletedAt: null },
+        where: { campId, status: { notIn: ["DRAFT", "CANCELLED", "REJECTED", "ARCHIVED"] }, deletedAt: null },
         _count: { _all: true },
       });
       const approvedCounts = await ctx.prisma.registration.groupBy({

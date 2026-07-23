@@ -76,7 +76,7 @@ export default function FileUpload({
       <div className="flex items-center gap-3">
         <button
           type="button"
-          className="border px-3 py-1.5 rounded bg-white text-gray-700 hover:bg-gray-50 text-sm disabled:opacity-50 font-medium shadow-sm transition"
+          className="border px-3 py-1.5 rounded bg-input-bg text-txt-primary hover:bg-surface-raised text-sm disabled:opacity-50 font-medium shadow-sm transition"
           onClick={() => inputRef.current?.click()}
           disabled={disabled || isUploading}
         >
@@ -108,7 +108,7 @@ export default function FileUpload({
   if (variant === "avatar") {
     return (
       <div>
-        {label && <label className="block font-medium mb-1 text-sm text-neutral-700">{label}</label>}
+        {label && <label className="block font-medium mb-1 text-sm text-txt-secondary">{label}</label>}
         <input
           ref={inputRef}
           type="file"
@@ -118,7 +118,7 @@ export default function FileUpload({
           disabled={disabled || isUploading}
         />
         <div className="flex items-center gap-4">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-100">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-raised">
             {preview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={preview} alt="Uploaded preview" className="h-full w-full object-cover" />
@@ -136,7 +136,7 @@ export default function FileUpload({
 
   return (
     <div>
-      {label && <label className="block font-medium mb-1 text-sm text-neutral-700">{label}</label>}
+      {label && <label className="block font-medium mb-1 text-sm text-txt-secondary">{label}</label>}
       <input
         ref={inputRef}
         type="file"
@@ -149,7 +149,7 @@ export default function FileUpload({
       {preview && (
         <div className="mt-2">
           {isPdf ? (
-            <div className="flex items-center gap-2 p-2 bg-neutral-50 rounded border border-neutral-200 inline-flex">
+            <div className="flex items-center gap-2 p-2 bg-neutral-50 rounded border border-border-default inline-flex">
               <span className="text-red-600 font-bold text-xs px-1.5 py-0.5 bg-red-50 rounded border border-red-200">PDF</span>
               <a
                 href={preview}

@@ -159,12 +159,12 @@ export const CampusCard: React.FC<CampusCardProps> = ({
       data-testid="campus-card"
       onClick={() => onOpenDetails?.(campus.id)}
       className={cn(
-        "group relative flex flex-col justify-between rounded-2xl border bg-white p-5 shadow-sm transition-all duration-200 hover:border-neutral-300 hover:shadow-md cursor-pointer",
-        isSelected ? "border-accent-500 ring-2 ring-accent-500/20 bg-accent-50/10" : "border-neutral-200/80"
+        "group relative flex flex-col justify-between rounded-2xl border bg-surface p-5 shadow-sm transition-all duration-200 hover:border-input-border hover:shadow-md cursor-pointer",
+        isSelected ? "border-accent-500 ring-2 ring-accent-500/20 brand-tint/10" : "border-border-default/80"
       )}
     >
       {/* SECTION 1 — CAMPUS IDENTITY */}
-      <div className="border-b border-neutral-100 pb-4">
+      <div className="border-b border-border-subtle pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
             {canSelect && (
@@ -179,7 +179,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => onSelect?.(campus.id)}
-                  className="h-5 w-5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+                  className="h-5 w-5 rounded border-input-border text-accent-600 focus:ring-accent-500 cursor-pointer"
                   aria-label={`Select ${campus.name}`}
                 />
               </div>
@@ -191,14 +191,14 @@ export const CampusCard: React.FC<CampusCardProps> = ({
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="truncate text-[18px] font-bold tracking-tight text-neutral-900 leading-snug">
+                <h3 className="truncate text-[18px] font-bold tracking-tight text-txt-primary leading-snug">
                   {campus.name}
                 </h3>
               </div>
 
-              <p className="mt-0.5 truncate text-[13px] font-medium text-neutral-500">
+              <p className="mt-0.5 truncate text-[13px] font-medium text-txt-secondary">
                 {campus.campusCode ? `${campus.campusCode}` : "No Code"}
-                <span className="mx-1.5 text-neutral-300">•</span>
+                <span className="mx-1.5 text-txt-muted">•</span>
                 Order #{campus.displayOrder ?? 0}
               </p>
             </div>
@@ -215,7 +215,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                 e.stopPropagation();
                 setIsMenuOpen((prev) => !prev);
               }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-txt-muted hover:bg-surface-raised hover:text-txt-primary transition-colors"
               aria-label="Campus options menu"
             >
               <EllipsisVerticalIcon className="h-5 w-5" />
@@ -223,7 +223,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
 
             {isMenuOpen && (
               <div
-                className="absolute right-0 top-12 z-30 w-56 rounded-2xl border border-neutral-200 bg-white py-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100"
+                className="absolute right-0 top-12 z-30 w-56 rounded-2xl border border-border-default bg-surface py-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100"
                 onClick={(e) => e.stopPropagation()}
               >
                 {canUpdate && (
@@ -233,9 +233,9 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onOpenEdit?.(campus.id);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-txt-secondary hover:bg-accent-50 hover:text-accent-900"
                   >
-                    <PencilIcon className="h-4 w-4 text-neutral-500" />
+                    <PencilIcon className="h-4 w-4 text-txt-secondary" />
                     Edit Campus
                   </button>
                 )}
@@ -247,9 +247,9 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onOpenManageReps?.(campus.id);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-txt-secondary hover:bg-accent-50 hover:text-accent-900"
                   >
-                    <UserGroupIcon className="h-4 w-4 text-neutral-500" />
+                    <UserGroupIcon className="h-4 w-4 text-txt-secondary" />
                     Manage Representatives
                   </button>
                 )}
@@ -261,9 +261,9 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onCopySignupLink?.(campus.id);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-txt-secondary hover:bg-accent-50 hover:text-accent-900"
                   >
-                    <ClipboardDocumentIcon className="h-4 w-4 text-neutral-500" />
+                    <ClipboardDocumentIcon className="h-4 w-4 text-txt-secondary" />
                     Copy Registration Link
                   </button>
                 )}
@@ -275,9 +275,9 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onOpenClickLog?.(signupLink.id, campus.name);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-txt-secondary hover:bg-accent-50 hover:text-accent-900"
                   >
-                    <ClockIcon className="h-4 w-4 text-neutral-500" />
+                    <ClockIcon className="h-4 w-4 text-txt-secondary" />
                     View Signup History
                   </button>
                 )}
@@ -289,9 +289,9 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                       setIsMenuOpen(false);
                       onOpenQuotaModal?.(signupLink);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-txt-secondary hover:bg-accent-50 hover:text-accent-900"
                   >
-                    <AdjustmentsHorizontalIcon className="h-4 w-4 text-neutral-500" />
+                    <AdjustmentsHorizontalIcon className="h-4 w-4 text-txt-secondary" />
                     Set Registration Capacity
                   </button>
                 )}
@@ -302,15 +302,15 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                     setIsMenuOpen(false);
                     onDuplicateCampus?.(campus);
                   }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-accent-50 hover:text-accent-900"
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-txt-secondary hover:bg-accent-50 hover:text-accent-900"
                 >
-                  <DocumentDuplicateIcon className="h-4 w-4 text-neutral-500" />
+                  <DocumentDuplicateIcon className="h-4 w-4 text-txt-secondary" />
                   Duplicate Campus
                 </button>
 
                 {canDelete && (
                   <>
-                    <div className="my-1 border-t border-neutral-100" />
+                    <div className="my-1 border-t border-border-subtle" />
                     <button
                       type="button"
                       onClick={() => {
@@ -331,20 +331,20 @@ export const CampusCard: React.FC<CampusCardProps> = ({
       </div>
 
       {/* SECTION 2 — QUICK INFORMATION ROWS */}
-      <div className="py-3.5 border-b border-neutral-100 space-y-3">
+      <div className="py-3.5 border-b border-border-subtle space-y-3">
         {/* Representatives Row */}
         <div
           onClick={(e) => {
             e.stopPropagation();
             onOpenManageReps?.(campus.id);
           }}
-          className="flex items-center justify-between gap-2 rounded-xl p-1 -mx-1 hover:bg-neutral-50 transition-colors cursor-pointer"
+          className="flex items-center justify-between gap-2 rounded-xl p-1 -mx-1 hover:bg-surface-hover transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 shrink-0">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-tint text-accent-600 shrink-0">
               <UserGroupIcon className="h-4 w-4" />
             </div>
-            <span className="text-[13px] font-semibold text-neutral-800 truncate">
+            <span className="text-[13px] font-semibold text-txt-primary truncate">
               {campus.reps && campus.reps.length > 0 ? `${campus.reps.length} Representatives` : "No Reps Assigned"}
             </span>
           </div>
@@ -366,7 +366,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                 })}
               </div>
             )}
-            <ChevronRightIcon className="h-4 w-4 text-neutral-400" />
+            <ChevronRightIcon className="h-4 w-4 text-txt-muted" />
           </div>
         </div>
 
@@ -374,10 +374,10 @@ export const CampusCard: React.FC<CampusCardProps> = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 shrink-0">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-tint text-accent-600 shrink-0">
                 <MapPinIcon className="h-4 w-4" />
               </div>
-              <span className="text-[13px] font-semibold text-neutral-800 truncate">Address</span>
+              <span className="text-[13px] font-semibold text-txt-primary truncate">Address</span>
             </div>
 
             <button
@@ -386,19 +386,19 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                 e.stopPropagation();
                 setIsAddressExpanded((prev) => !prev);
               }}
-              className="inline-flex items-center gap-0.5 text-xs font-semibold text-neutral-500 hover:text-accent-700 transition-colors"
+              className="inline-flex items-center gap-0.5 text-xs font-semibold text-txt-secondary hover:text-accent-700 transition-colors"
             >
               <span>{isAddressExpanded ? "Hide address" : "View address"}</span>
               <ChevronDownIcon className={cn(
-                "h-3.5 w-3.5 text-neutral-400 transition-transform",
+                "h-3.5 w-3.5 text-txt-muted transition-transform",
                 isAddressExpanded && "rotate-180"
               )} />
             </button>
           </div>
 
           {isAddressExpanded && (
-            <div className="rounded-xl bg-neutral-50 border border-neutral-100 px-3.5 py-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
-              <p className="text-xs text-neutral-700 leading-relaxed">
+            <div className="rounded-xl bg-surface-raised border border-border-subtle px-3.5 py-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
+              <p className="text-xs text-txt-secondary leading-relaxed">
                 {formattedAddress}
                 {campus.state && `, ${campus.state}`}
                 {campus.zipCode && ` ${campus.zipCode}`}
@@ -411,10 +411,10 @@ export const CampusCard: React.FC<CampusCardProps> = ({
         {/* Signup Link Row */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-50 text-accent-600 shrink-0">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-tint text-accent-600 shrink-0">
               <LinkIcon className="h-4 w-4" />
             </div>
-            <span className="text-[13px] font-semibold text-neutral-800 truncate">Signup Link</span>
+            <span className="text-[13px] font-semibold text-txt-primary truncate">Signup Link</span>
           </div>
 
           <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -430,7 +430,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
                   "inline-flex min-h-[34px] items-center gap-1 rounded-xl px-3 py-1 text-xs font-semibold transition-all",
                   isCopied
                     ? "bg-emerald-600 text-white"
-                    : "bg-accent-50 text-accent-700 hover:bg-accent-100 active:scale-95"
+                    : "brand-tint hover:bg-accent-100 active:scale-95"
                 )}
               >
                 {isCopied ? (
@@ -458,12 +458,15 @@ export const CampusCard: React.FC<CampusCardProps> = ({
       </div>
 
       {/* SECTION 3 — REGISTRATION CAPACITY */}
-      <div className="py-3.5 border-b border-neutral-100 space-y-2.5">
-        <p className="text-[14px] font-bold text-neutral-900">Registrations</p>
+      <div className="py-3.5 border-b border-border-subtle space-y-2.5">
+        <div className="flex items-center justify-between">
+          <p className="text-[14px] font-bold text-txt-primary">Registrations</p>
+          <span className="text-[11px] font-medium text-txt-secondary">Submitted (Drafts excluded)</span>
+        </div>
 
         <div className="flex items-center justify-between">
-          <span className="text-xl font-extrabold text-neutral-900 tracking-tight">
-            {usedCount} <span className="text-neutral-400 font-normal text-base">/ {isUnlimited ? "∞" : quotaLimit}</span>
+          <span className="text-xl font-extrabold text-txt-primary tracking-tight">
+            {usedCount} <span className="text-txt-muted font-normal text-base">/ {isUnlimited ? "∞" : quotaLimit}</span>
           </span>
 
           <div className="flex items-center gap-2">
@@ -493,11 +496,11 @@ export const CampusCard: React.FC<CampusCardProps> = ({
         {/* Dynamic Capacity Bar (Green -> Amber -> Red) */}
         <div className="space-y-2">
           {isUnlimited ? (
-            <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
+            <div className="h-2.5 w-full rounded-full bg-surface-raised overflow-hidden">
               <div className="h-full bg-accent-400/40 w-full animate-pulse" />
             </div>
           ) : (
-            <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
+            <div className="h-2.5 w-full rounded-full bg-surface-raised overflow-hidden">
               <div
                 className={cn(
                   "h-full rounded-full transition-all duration-500",
@@ -515,13 +518,13 @@ export const CampusCard: React.FC<CampusCardProps> = ({
               e.stopPropagation();
               onOpenAnalytics?.(campus.id);
             }}
-            className="w-full flex items-center justify-between rounded-xl bg-neutral-50/80 border border-neutral-100 px-3.5 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 transition-colors"
+            className="w-full flex items-center justify-between rounded-xl bg-surface-raised/80 border border-border-subtle px-3.5 py-2 text-xs font-semibold text-txt-secondary hover:bg-surface-raised transition-colors"
           >
             <div className="flex items-center gap-1.5">
-              <ChartBarIcon className="h-4 w-4 text-neutral-500" />
+              <ChartBarIcon className="h-4 w-4 text-txt-secondary" />
               <span>View registration analytics</span>
             </div>
-            <ChevronRightIcon className="h-4 w-4 text-neutral-400" />
+            <ChevronRightIcon className="h-4 w-4 text-txt-muted" />
           </button>
         </div>
       </div>
@@ -532,7 +535,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
           <button
             type="button"
             onClick={() => onOpenEdit?.(campus.id)}
-            className="flex-1 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50/90 text-accent-700 hover:bg-accent-100 font-semibold text-xs transition-all active:scale-98"
+            className="flex-1 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl brand-tint/90 hover:bg-accent-100 font-semibold text-xs transition-all active:scale-98"
           >
             <PencilIcon className="h-3.5 w-3.5 text-accent-600" />
             Edit
@@ -543,7 +546,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
           <button
             type="button"
             onClick={() => onOpenManageReps?.(campus.id)}
-            className="flex-1 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-accent-50/90 text-accent-700 hover:bg-accent-100 font-semibold text-xs transition-all active:scale-98"
+            className="flex-1 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl brand-tint/90 hover:bg-accent-100 font-semibold text-xs transition-all active:scale-98"
           >
             <UserGroupIcon className="h-3.5 w-3.5 text-accent-600" />
             Manage Reps
@@ -553,7 +556,7 @@ export const CampusCard: React.FC<CampusCardProps> = ({
         <button
           type="button"
           onClick={() => onOpenEdit?.(campus.id)}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl bg-neutral-50 border border-neutral-100 text-neutral-500 hover:bg-neutral-100 transition-all"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl bg-surface-raised border border-border-subtle text-txt-secondary hover:bg-surface-raised transition-all"
           aria-label="Campus details option"
         >
           <EllipsisVerticalIcon className="h-5 w-5" />

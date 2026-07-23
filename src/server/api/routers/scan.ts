@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { normalizeScannedQRToken } from "../../../lib/qr";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
@@ -96,22 +97,56 @@ export const scanRouter = createTRPCRouter({
       } as const;
 
       let registration: any = null;
+      const rawToken = input.qrToken || input.query || "";
+      const normalizedToken = normalizeScannedQRToken(rawToken);
 
-      if (input.qrToken) {
-        registration = await ctx.prisma.registration.findFirst({
-          where: { qrToken: input.qrToken, campId, deletedAt: null },
-          include,
-        });
-      } else if (input.query) {
+      if (normalizedToken) {
+        // A. Primary lookup: search qrToken, registrationNumber, registration ID, or camper ID under active camp
         registration = await ctx.prisma.registration.findFirst({
           where: {
             campId,
             deletedAt: null,
             OR: [
-              { registrationNumber: { contains: input.query, mode: "insensitive" } },
-              { camper: { name: { contains: input.query, mode: "insensitive" } } },
-              { camper: { user: { email: { contains: input.query, mode: "insensitive" } } } },
-              { camper: { user: { phone: { contains: input.query, mode: "insensitive" } } } },
+              { qrToken: normalizedToken },
+              { id: normalizedToken },
+              { registrationNumber: { equals: normalizedToken, mode: "insensitive" } },
+              { camperId: normalizedToken },
+            ],
+          },
+          include,
+        });
+
+        // B. Secondary lookup: search across any camp in the organization if active camp didn't yield a match
+        if (!registration) {
+          registration = await ctx.prisma.registration.findFirst({
+            where: {
+              campus: { organizationId: input.organizationId },
+              deletedAt: null,
+              OR: [
+                { qrToken: normalizedToken },
+                { id: normalizedToken },
+                { registrationNumber: { equals: normalizedToken, mode: "insensitive" } },
+                { camperId: normalizedToken },
+                { registrationNumber: { contains: normalizedToken, mode: "insensitive" } },
+              ],
+            },
+            include,
+          });
+        }
+      }
+
+      // C. Search query fallback if input was text query
+      if (!registration && input.query) {
+        const queryClean = input.query.trim();
+        registration = await ctx.prisma.registration.findFirst({
+          where: {
+            campus: { organizationId: input.organizationId },
+            deletedAt: null,
+            OR: [
+              { registrationNumber: { contains: queryClean, mode: "insensitive" } },
+              { camper: { name: { contains: queryClean, mode: "insensitive" } } },
+              { camper: { user: { email: { contains: queryClean, mode: "insensitive" } } } },
+              { camper: { user: { phone: { contains: queryClean, mode: "insensitive" } } } },
             ],
           },
           include,
