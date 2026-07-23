@@ -85,7 +85,11 @@ export function RegistrationDocumentPanel({ registrationId }: Props) {
                   disabled={replaceDocument.isPending}
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (!file || !doc.requirement) return;
+                    if (!file) return;
+                    if (!doc.requirement) {
+                      setActionError("This document has no linked requirement, so it can't be replaced here.");
+                      return;
+                    }
                     const requirement = doc.requirement;
                     const maxBytes = requirement.maxSizeMb * 1024 * 1024;
                     if (file.size > maxBytes) {

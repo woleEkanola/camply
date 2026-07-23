@@ -28,11 +28,11 @@ export const documentRouter = createTRPCRouter({
       const [camperDocs, regDocs] = await Promise.all([
         ctx.prisma.document.findMany({
           where: { camperId: registration.camperId, deletedAt: null },
-          include: { documentActions: { orderBy: { createdAt: "desc" }, take: 1 } },
+          include: { documentActions: { orderBy: { createdAt: "desc" }, take: 1 }, requirement: true },
         }),
         ctx.prisma.document.findMany({
           where: { registrationId: registration.id, deletedAt: null },
-          include: { documentActions: { orderBy: { createdAt: "desc" }, take: 1 } },
+          include: { documentActions: { orderBy: { createdAt: "desc" }, take: 1 }, requirement: true },
         }),
       ]);
       return [...camperDocs, ...regDocs];

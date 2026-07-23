@@ -86,12 +86,17 @@ test.describe("Two-step registration approval", () => {
     await page.goto("/campus-rep-dashboard/registrations");
     await page.getByText("List View").click();
 
+    // Reviewers default into the "Pending" filter (submitted, not yet recommended).
     const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailA}` });
     await expect(row).toBeVisible({ timeout: 10000 });
     await expect(row.getByRole("button", { name: "Approve" })).toHaveCount(0);
     await row.getByRole("button", { name: "Recommend" }).click();
 
-    await expect(row.getByText("Recommended", { exact: true })).toBeVisible({ timeout: 10000 });
+    // Endorsed rows leave the "Pending" filter (it's excluded from AWAITING_VETTING), so
+    // switch to "All Statuses" to find it again and check its Recommended badge.
+    await page.locator("select").first().selectOption("");
+    const rowAfterEndorse = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailA}` });
+    await expect(rowAfterEndorse.getByText("Recommended", { exact: true })).toBeVisible({ timeout: 10000 });
 
     const review = await prisma.registrationReview.findUnique({ where: { registrationId: registrationEndorseId } });
     expect(review?.verificationStatus).toBe("COMPLETED");

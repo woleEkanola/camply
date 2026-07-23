@@ -120,6 +120,41 @@ test.describe("Rep document replacement permissions", () => {
     expect(action.resolutionType).toBe("REP_UPLOAD");
   });
 
+  test("Upload Replacement file input actually reaches the client-side requirement check", async ({ page }) => {
+    // Regression test for a bug where listForRegistration never included `requirement`
+    // on each Document, so RegistrationDocumentPanel's onChange handler's
+    // `if (!file || !doc.requirement) return;` silently no-op'd on every file pick —
+    // no error, no upload, nothing. Driving the real file <input> (not the tRPC
+    // mutation directly, which is what the other tests in this file do and which
+    // never exercised this code path) with an oversized file proves `doc.requirement`
+    // reached the client: the size-limit error can only fire if it did.
+    await loginWithPassword(page, repAEmail, "password123");
+    await page.goto(`/campus-rep-dashboard/registrations`);
+    await page.getByRole("heading", { name: "Registrations" }).first().waitFor({ state: "visible", timeout: 15000 });
+    await page.getByRole("button", { name: "List View" }).click();
+    // Clear any default review-state filter (e.g. a TWO_STEP org defaults reviewers
+    // to "Pending") so this REQUIRES_ACTION fixture registration is guaranteed visible.
+    await page.locator("select").first().selectOption("");
+
+    const row = page.locator("tr", { hasText: "E2E Rep Doc Camper A" });
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 10000 });
+    await dialog.getByRole("button", { name: /Documents/ }).click();
+
+    const fileInput = dialog.locator('input[type="file"]').first();
+    await fileInput.setInputFiles({
+      name: "too-big.pdf",
+      mimeType: "application/pdf",
+      // requirement.maxSizeMb is 2 — 3MB deliberately exceeds it.
+      buffer: Buffer.alloc(3 * 1024 * 1024, 1),
+    });
+
+    await expect(dialog.getByText(/File exceeds the maximum size of 2 MB/i)).toBeVisible({ timeout: 10000 });
+  });
+
   test("rep A is FORBIDDEN from replacing a document on another campus", async ({ page }) => {
     await loginWithPassword(page, repAEmail, "password123");
 
