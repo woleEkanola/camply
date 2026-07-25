@@ -5,6 +5,35 @@ import { normalizeScannedQRToken } from "../../../lib/qr";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
+/**
+ * Typed station-id classification, additive to the legacy substring
+ * matching below. The client (src/lib/stations.ts) sends a free-text
+ * display `station` label AND, when known, a typed `stationId` — when
+ * present the id is authoritative, so a user-editable custom checkpoint
+ * name (e.g. "Lunch Gate") can no longer accidentally substring-match into
+ * meal/checkout behavior. Absent `stationId` (older offline-queued scans,
+ * or callers that predate this field) falls back to the original label
+ * matching unchanged.
+ */
+const STATION_ID_CLASSIFICATION: Record<string, "CHECKIN" | "CHECKOUT" | "MEAL" | "LOOKUP" | "OTHER"> = {
+  CAMP_ARRIVAL: "CHECKIN",
+  PICKUP_POINT: "CHECKIN",
+  HOSTEL_ARRIVAL: "CHECKIN",
+  BREAKFAST: "MEAL",
+  LUNCH: "MEAL",
+  DINNER: "MEAL",
+  CHECKOUT: "CHECKOUT",
+  IDENTITY_LOOKUP: "LOOKUP",
+  EMERGENCY_LOOKUP: "LOOKUP",
+  CUSTOM: "OTHER",
+};
+
+const STATION_ID_MEAL: Record<string, "BREAKFAST" | "LUNCH" | "DINNER"> = {
+  BREAKFAST: "BREAKFAST",
+  LUNCH: "LUNCH",
+  DINNER: "DINNER",
+};
+
 // Helper to determine if the user has access to check-in/scan
 async function assertCanScan(
   ctx: { prisma: any; session: any; userId: string },
@@ -31,6 +60,7 @@ export const scanRouter = createTRPCRouter({
         qrToken: z.string().optional(),
         query: z.string().optional(), // search fallback
         station: z.string(),
+        stationId: z.string().optional(),
         device: z.string().optional(),
         location: z.string().optional(),
         timestamp: z.date().optional(),
@@ -209,7 +239,8 @@ export const scanRouter = createTRPCRouter({
         return null;
       };
 
-      const classification = classifyStation(input.station);
+      const classification =
+        (input.stationId && STATION_ID_CLASSIFICATION[input.stationId]) || classifyStation(input.station);
 
       // Pre-check for medical warnings/alerts on the server side
       const hasMedical = !!(registration.camper.allergies || registration.camper.medicalConditions || registration.camper.dietaryRestrictions);
@@ -259,7 +290,7 @@ export const scanRouter = createTRPCRouter({
       // 2. Classify station & determine duplicates
 
       // A. MEAL STATION ("breakfast", "lunch", "dinner")
-      const mealType = getMealType(input.station);
+      const mealType = (input.stationId && STATION_ID_MEAL[input.stationId]) || getMealType(input.station);
       const isMeal = classification === "MEAL" && mealType !== null;
       if (isMeal && mealType) {
         // Check if meal already collected today
@@ -334,7 +365,7 @@ export const scanRouter = createTRPCRouter({
       }
 
       // B. CHECKOUT STATION
-      const isCheckout = stationLower === "checkout";
+      const isCheckout = input.stationId ? input.stationId === "CHECKOUT" : stationLower === "checkout";
       if (isCheckout) {
         // If already checked out
         if (registration.checkedOutAt) {
@@ -431,7 +462,9 @@ export const scanRouter = createTRPCRouter({
       }
 
       // C. LOOKUP STATIONS
-      const isLookup = ["identity lookup", "emergency lookup"].includes(stationLower);
+      const isLookup = input.stationId
+        ? STATION_ID_CLASSIFICATION[input.stationId] === "LOOKUP"
+        : ["identity lookup", "emergency lookup"].includes(stationLower);
       if (isLookup) {
         // Just record audit event, no modifications
         await ctx.prisma.scanEvent.create({
@@ -550,6 +583,7 @@ export const scanRouter = createTRPCRouter({
             qrToken: z.string().optional(),
             query: z.string().optional(),
             station: z.string(),
+            stationId: z.string().optional(),
             timestamp: z.string(), // ISO string from offline device
             device: z.string().optional(),
             location: z.string().optional(),
@@ -618,10 +652,12 @@ export const scanRouter = createTRPCRouter({
 
           // We simulate standard scanning rules
           const stationLower = scan.station.toLowerCase();
+          const idMeal = scan.stationId ? STATION_ID_MEAL[scan.stationId] : undefined;
+          const idIsCheckout = scan.stationId ? scan.stationId === "CHECKOUT" : undefined;
 
           // A. MEALS
-          if (["breakfast", "lunch", "dinner"].includes(stationLower)) {
-            const mealType = scan.station.toUpperCase() as "BREAKFAST" | "LUNCH" | "DINNER";
+          if (idMeal || (idIsCheckout === undefined && ["breakfast", "lunch", "dinner"].includes(stationLower))) {
+            const mealType = idMeal || (scan.station.toUpperCase() as "BREAKFAST" | "LUNCH" | "DINNER");
             const existingMeal = await ctx.prisma.mealDistribution.findFirst({
               where: { registrationId: reg.id, meal: mealType, date: parsedTimestamp },
             });
@@ -672,7 +708,7 @@ export const scanRouter = createTRPCRouter({
             syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "SUCCESS" });
           }
           // B. CHECKOUT
-          else if (stationLower === "checkout") {
+          else if (idIsCheckout ?? stationLower === "checkout") {
             if (reg.checkedOutAt) {
               await ctx.prisma.scanEvent.create({
                 data: {

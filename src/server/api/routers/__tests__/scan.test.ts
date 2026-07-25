@@ -269,6 +269,68 @@ describe("scanRouter - processScan", () => {
     expect(distributionsPostDup).toHaveLength(1); // Should still be 1
   });
 
+  it("stationId overrides label substring-matching: a custom checkpoint named 'Lunch Gate' does not record a meal", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const result = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Lunch Gate", // label alone would substring-match "lunch" -> MEAL under legacy classification
+      stationId: "CAMP_ARRIVAL", // but the typed id says this is really an arrival checkpoint
+    });
+
+    expect(result.result).toBe("SUCCESS");
+    expect(result.actionPerformed).toBe("Checked In at Lunch Gate");
+
+    const distributions = await prisma.mealDistribution.findMany({ where: { registrationId } });
+    expect(distributions).toHaveLength(0); // no meal record should have been created
+
+    const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(reg?.status).toBe("CHECKED_IN");
+  });
+
+  it("stationId correctly classifies checkout even when the label doesn't say 'checkout'", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: { status: "CHECKED_IN", checkedInAt: new Date(), checkedInById: adminId },
+    });
+
+    const promptResult = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Front Desk",
+      stationId: "CHECKOUT",
+    });
+
+    expect(promptResult.result).toBe("REQUIRES_CHECKOUT_DETAILS");
+
+    const checkoutResult = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Front Desk",
+      stationId: "CHECKOUT",
+      checkoutDetails: { collectorName: "Bob Smith", collectorRelationship: "Father" },
+    });
+
+    expect(checkoutResult.result).toBe("SUCCESS");
+    const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(reg?.checkedOutAt).toBeTruthy();
+  });
+
   it("bulkSyncOfflineScans processes a batch of chronologically sorted offline scans", async () => {
     const caller = appRouter.createCaller({
       prisma,
@@ -312,5 +374,31 @@ describe("scanRouter - processScan", () => {
 
     const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
     expect(reg?.status).toBe("CHECKED_IN");
+  });
+
+  it("bulkSyncOfflineScans uses stationId when present, overriding label-based classification", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const response = await caller.scan.bulkSyncOfflineScans({
+      organizationId: orgId,
+      scans: [
+        {
+          qrToken,
+          station: "Lunch Gate",
+          stationId: "CAMP_ARRIVAL",
+          timestamp: new Date(2026, 6, 19, 8, 0, 0).toISOString(),
+        },
+      ],
+    });
+
+    expect(response.syncResults[0]?.status).toBe("SUCCESS");
+    const distributions = await prisma.mealDistribution.findMany({ where: { registrationId } });
+    expect(distributions).toHaveLength(0);
   });
 });
