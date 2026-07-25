@@ -12,10 +12,10 @@ test.describe("Scan Center - mobile shell (tab bar, search sheet, history sheet)
 
   test("bottom tab bar replaces the permanent search field; Search and History open their sheets", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/check-in");
+    await page.goto("/admin/qr-scan");
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByRole("heading", { name: "Camp Arrival" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Identity Lookup" })).toBeVisible();
 
     // The persistent desktop search field is hidden at this viewport.
     await expect(page.locator('input[placeholder*="Enter Registration #"]')).toBeHidden();

@@ -42,7 +42,7 @@ test.describe("Admin Dashboard Redesign", () => {
     );
     await expect(page.getByTestId("quick-action-checkin")).toHaveAttribute(
       "href",
-      /\/admin\/check-in/
+      /\/admin\/qr-scan/
     );
     await expect(page.getByTestId("quick-action-add-camper")).toHaveAttribute(
       "href",

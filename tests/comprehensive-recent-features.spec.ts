@@ -121,7 +121,7 @@ test.describe("Comprehensive Recent Features E2E Verification", () => {
 
     await expect(bottomNav.getByText("Dashboard")).toBeVisible();
     await expect(bottomNav.getByText("Registrations")).toBeVisible();
-    await expect(bottomNav.getByText("Check-in")).toBeVisible();
+    await expect(bottomNav.getByText("QR Scan")).toBeVisible();
     await expect(bottomNav.getByText("Campers")).toBeVisible();
     await expect(bottomNav.getByText("More")).toBeVisible();
 

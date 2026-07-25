@@ -265,7 +265,7 @@ export default function AnalyticsDashboard() {
           </Link>
 
           <Link
-            href="/admin/check-in"
+            href="/admin/qr-scan"
             data-testid="quick-action-checkin"
             className="group flex min-h-[120px] flex-col rounded-xl border border-border-default bg-surface p-4 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
           >
@@ -273,9 +273,9 @@ export default function AnalyticsDashboard() {
               <CheckCircleIcon className="h-4 w-4" />
             </div>
             <p className="text-sm font-semibold leading-tight text-txt-primary">
-              Check-in
+              QR Scan
               <br />
-              Campers
+              Check-in / Out
             </p>
             <div className="mt-auto flex items-center gap-1 pt-3">
               <ArrowRightIcon className="h-4 w-4 text-txt-muted transition group-hover:translate-x-0.5 group-hover:text-accent-500" />

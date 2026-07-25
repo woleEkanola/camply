@@ -89,7 +89,12 @@ test.describe("Teacher check-in", () => {
     await loginWithOtp(page, teacherEmail);
     await page.waitForURL(/\/teacher/, { timeout: 90000 });
 
-    await page.goto("/teacher/check-in");
+    await page.goto("/teacher/qr-scan");
+
+    // A fresh session lands on Identity Lookup — switch to Camp Arrival.
+    await expect(page.getByRole("heading", { name: "Identity Lookup" })).toBeVisible();
+    await page.getByRole("button", { name: "Change station" }).click();
+    await page.getByRole("button", { name: "Camp Arrival" }).click();
     await expect(page.getByRole("heading", { name: "Camp Arrival" })).toBeVisible();
 
     // Manual search by registration number.

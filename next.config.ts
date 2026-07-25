@@ -3,6 +3,17 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@prisma/client", "@next-auth/prisma-adapter"],
+  async redirects() {
+    // Check-in and check-out are now one unified "QR Scan" page per area —
+    // the station (including Checkout) is switched from within that page's
+    // station sheet instead of being a separate route. Temporary (307) so
+    // browsers don't cache this past a future change.
+    const areas = ["admin", "teacher", "volunteer"];
+    return areas.flatMap((area) => [
+      { source: `/${area}/check-in`, destination: `/${area}/qr-scan`, permanent: false },
+      { source: `/${area}/check-out`, destination: `/${area}/qr-scan`, permanent: false },
+    ]);
+  },
 };
 
 export default withSentryConfig(nextConfig, {

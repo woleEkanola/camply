@@ -39,6 +39,13 @@ interface UseScanDetectorResult {
 
 const DECODE_THROTTLE_MS = 90; // ~11fps cap on BarcodeDetector's rVFC loop
 
+// lastDecodeAtRef MUST be stamped with performance.now() (monotonic, ms
+// since navigation start), never Date.now() (epoch ms) — tick() below
+// diffs it against performance.now(). Mixing the two clocks makes the
+// diff permanently negative after the first decode, which silently and
+// permanently disables further detection with no visible symptom (the rAF
+// loop keeps running, status stays "running") until the page is reloaded.
+
 /**
  * Layered QR detection: native BarcodeDetector when available (fastest, no
  * library, runs on requestVideoFrameCallback against a stream we own) ->
@@ -79,8 +86,7 @@ export function useScanDetector({ onDecode, paused, enabled }: UseScanDetectorOp
 
   const reportDecode = useCallback((token: string) => {
     if (pausedRef.current || !token) return;
-    const now = Date.now();
-    lastDecodeAtRef.current = now;
+    lastDecodeAtRef.current = performance.now();
     onDecodeRef.current(token);
   }, []);
 

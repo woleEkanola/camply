@@ -182,6 +182,11 @@ export function ScanCenterShell({
         setLookupData(null);
         setEmergencyLookupData(null);
         setCheckoutTargetReg(null);
+        // Dismissing any overlay by any means must resume scanning — this
+        // was previously missed for Escape specifically, leaving the
+        // camera visible but silently paused with nothing on screen to
+        // explain why.
+        setScannerActive(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);

@@ -68,10 +68,14 @@ test.describe("Scan Center - Unified Operations Platform", () => {
     test.setTimeout(120000);
     // 1. Log in and go to admin check-in
     await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/check-in");
+    await page.goto("/admin/qr-scan");
     await page.waitForLoadState("networkidle");
 
-    // The default station should be "Camp Arrival"
+    // A fresh session lands on Identity Lookup (the safe, read-only
+    // default) — explicitly switch to Camp Arrival for this check-in test.
+    await expect(page.getByRole("heading", { name: "Identity Lookup" })).toBeVisible();
+    await page.getByRole("button", { name: "Change station" }).click();
+    await page.getByRole("button", { name: "Camp Arrival" }).click();
     await expect(page.getByRole("heading", { name: "Camp Arrival" })).toBeVisible();
 
     // 2. Search for the camper manually using fallback query input
@@ -112,7 +116,7 @@ test.describe("Scan Center - Unified Operations Platform", () => {
     });
 
     await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/check-in");
+    await page.goto("/admin/qr-scan");
     await page.waitForLoadState("networkidle");
 
     // 1. Open the station sheet and select "Breakfast Station"

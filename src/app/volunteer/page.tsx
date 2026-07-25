@@ -12,7 +12,7 @@ import { StaffGate } from "@/components/staff/StaffGate";
 const DEPARTMENT_ACTIONS: Record<string, { label: string; href: string }[]> = {
   Medical: [{ label: "Medical Tools", href: "/volunteer/medical" }],
   Kitchen: [{ label: "Meal Distribution", href: "/volunteer/meals" }],
-  Registration: [{ label: "Check-in / QR Scanner", href: "/volunteer/check-in" }],
+  Registration: [{ label: "QR Scan", href: "/volunteer/qr-scan" }],
 };
 
 function VolunteerDashboardContent({ profile }: { profile: any }) {

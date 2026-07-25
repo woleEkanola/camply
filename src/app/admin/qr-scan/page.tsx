@@ -5,14 +5,18 @@ import { useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import { ScanCenterShell } from "@/components/staff/shared/ScanCenterShell";
 
-export default function AdminCheckOutPage() {
+export default function AdminQrScanPage() {
   const router = useRouter();
   const { data: session } = useSession({ required: true, onUnauthenticated: () => router.push("/login") });
   const organizationId = (session?.user as any)?.organizationId ?? "";
 
   return (
     <AppShell area="admin">
-      <ScanCenterShell organizationId={organizationId} defaultStationId="CHECKOUT" />
+      {/* No defaultStationId: unified check-in/check-out page — a fresh
+          session lands on the safe, read-only Identity Lookup station; the
+          volunteer switches to Camp Arrival, Checkout, or any other
+          station from the station sheet. */}
+      <ScanCenterShell organizationId={organizationId} />
     </AppShell>
   );
 }

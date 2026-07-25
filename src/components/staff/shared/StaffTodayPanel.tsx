@@ -48,7 +48,7 @@ export function StaffTodayPanel({
             <div className="flex flex-wrap gap-2">
               <Button size="sm" onClick={() => router.push("/teacher/attendance")}>Take Attendance</Button>
               <Button size="sm" variant="secondary" onClick={() => router.push("/teacher/campers")}>View Campers</Button>
-              <Button size="sm" variant="secondary" onClick={() => router.push("/teacher/check-in")}>Check In</Button>
+              <Button size="sm" variant="secondary" onClick={() => router.push("/teacher/qr-scan")}>QR Scan</Button>
               <Button size="sm" variant="secondary" onClick={() => router.push("/teacher/incidents")}>Report Incident</Button>
             </div>
           </CardBody>

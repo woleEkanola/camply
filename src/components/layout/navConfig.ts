@@ -73,14 +73,8 @@ const ADMIN_GROUPS: NavGroup[] = [
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
       {
-        name: "Check-in",
-        href: "/admin/check-in",
-        icon: QrCodeIcon,
-        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
-      },
-      {
-        name: "Check-out",
-        href: "/admin/check-out",
+        name: "QR Scan",
+        href: "/admin/qr-scan",
         icon: QrCodeIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
@@ -264,8 +258,7 @@ const TEACHER_GROUPS: NavGroup[] = [
     items: [
       { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
       { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
-      { name: "Check-in", href: "/teacher/check-in", icon: QrCodeIcon },
-      { name: "Check-out", href: "/teacher/check-out", icon: QrCodeIcon },
+      { name: "QR Scan", href: "/teacher/qr-scan", icon: QrCodeIcon },
       { name: "Inbox", href: "/teacher/inbox", icon: MegaphoneIcon },
       { name: "Incidents", href: "/teacher/incidents", icon: ExclamationTriangleIcon },
     ],
@@ -284,8 +277,7 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     name: "Operations",
     items: [
       { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
-      { name: "Check-in", href: "/volunteer/check-in", icon: QrCodeIcon },
-      { name: "Check-out", href: "/volunteer/check-out", icon: QrCodeIcon },
+      { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
       { name: "Medical", href: "/volunteer/medical", icon: HeartIcon },
       { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
       { name: "Incidents", href: "/volunteer/incidents", icon: ExclamationTriangleIcon },
@@ -374,14 +366,16 @@ export function getBottomNavItems(
       return [
         { name: "Dashboard", href: "/admin", icon: HomeIcon },
         { name: "Registrations", href: "/admin/registrations", icon: ClipboardDocumentListIcon },
-        { name: "Check-in", href: "/admin/check-in", icon: QrCodeIcon },
+        // Centered item — check-in/check-out are unified into one QR Scan
+        // page; the station (including Checkout) is switched in-page.
+        { name: "QR Scan", href: "/admin/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/admin/campers", icon: UserGroupIcon },
       ];
     case "teacher":
       return [
         { name: "Home", href: "/teacher", icon: HomeIcon },
         { name: "Registrations", href: "/teacher/registrations", icon: ClipboardDocumentListIcon },
-        { name: "Check-in", href: "/teacher/check-in", icon: QrCodeIcon },
+        { name: "QR Scan", href: "/teacher/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
       ];
     case "volunteer":
@@ -389,21 +383,21 @@ export function getBottomNavItems(
         return [
           { name: "Home", href: "/volunteer", icon: HomeIcon },
           { name: "Registrations", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon },
-          { name: "Check-in", href: "/volunteer/check-in", icon: QrCodeIcon },
+          { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
           { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
         ];
       }
       return [
         { name: "Home", href: "/volunteer", icon: HomeIcon },
         { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
-        { name: "Check-in", href: "/volunteer/check-in", icon: QrCodeIcon },
+        { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
         { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
       ];
     case "campus-rep":
       return [
         { name: "Home", href: "/campus-rep-dashboard", icon: HomeIcon },
         { name: "Registrations", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon },
-        { name: "Check-in", href: "/teacher/check-in", icon: QrCodeIcon },
+        { name: "QR Scan", href: "/teacher/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
       ];
     case "dashboard":

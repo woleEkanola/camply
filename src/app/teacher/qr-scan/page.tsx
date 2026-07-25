@@ -6,7 +6,7 @@ import AppShell from "@/components/layout/AppShell";
 import { StaffGate } from "@/components/staff/StaffGate";
 import { ScanCenterShell } from "@/components/staff/shared/ScanCenterShell";
 
-export default function TeacherCheckInPage() {
+export default function TeacherQrScanPage() {
   const router = useRouter();
   const { data: session } = useSession({ required: true, onUnauthenticated: () => router.push("/login") });
   const organizationId = (session?.user as any)?.organizationId ?? "";
@@ -14,7 +14,11 @@ export default function TeacherCheckInPage() {
   return (
     <AppShell area="teacher">
       <StaffGate>
-        {() => <ScanCenterShell organizationId={organizationId} defaultStationId="CAMP_ARRIVAL" />}
+        {/* No defaultStationId: unified check-in/check-out page — a fresh
+            session lands on the safe, read-only Identity Lookup station;
+            the teacher switches station (Camp Arrival, Checkout, etc.)
+            from the station sheet. */}
+        {() => <ScanCenterShell organizationId={organizationId} />}
       </StaffGate>
     </AppShell>
   );

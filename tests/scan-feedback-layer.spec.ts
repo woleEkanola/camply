@@ -63,8 +63,13 @@ test.describe("Scan Center - feedback layer (auto-dismiss, medical triage)", () 
   test("routine allergy renders inline without blocking, and success overlay auto-dismisses within ~2s, resuming scanning", async ({ page }) => {
     test.setTimeout(60000);
     await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/check-in");
+    await page.goto("/admin/qr-scan");
     await page.waitForLoadState("networkidle");
+
+    // A fresh session lands on Identity Lookup — switch to Camp Arrival.
+    await page.getByRole("button", { name: "Change station" }).click();
+    await page.getByRole("button", { name: "Camp Arrival" }).click();
+    await expect(page.getByRole("heading", { name: "Camp Arrival" })).toBeVisible();
 
     const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
     await searchInput.fill(registrationNumber);
@@ -86,8 +91,13 @@ test.describe("Scan Center - feedback layer (auto-dismiss, medical triage)", () 
   test("duplicate scan is framed as informational (blue), not an error, and auto-dismisses", async ({ page }) => {
     test.setTimeout(60000);
     await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/check-in");
+    await page.goto("/admin/qr-scan");
     await page.waitForLoadState("networkidle");
+
+    // A fresh session lands on Identity Lookup — switch to Camp Arrival.
+    await page.getByRole("button", { name: "Change station" }).click();
+    await page.getByRole("button", { name: "Camp Arrival" }).click();
+    await expect(page.getByRole("heading", { name: "Camp Arrival" })).toBeVisible();
 
     const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
     // Already checked in from the previous test — this search hits DUPLICATE.
@@ -116,8 +126,13 @@ test.describe("Scan Center - feedback layer (auto-dismiss, medical triage)", () 
     await prisma.scanEvent.deleteMany({ where: { registrationId } });
 
     await loginWithPassword(page, "owner@camply.com", "password123");
-    await page.goto("/admin/check-in");
+    await page.goto("/admin/qr-scan");
     await page.waitForLoadState("networkidle");
+
+    // A fresh session lands on Identity Lookup — switch to Camp Arrival.
+    await page.getByRole("button", { name: "Change station" }).click();
+    await page.getByRole("button", { name: "Camp Arrival" }).click();
+    await expect(page.getByRole("heading", { name: "Camp Arrival" })).toBeVisible();
 
     const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
     await searchInput.fill(registrationNumber);
