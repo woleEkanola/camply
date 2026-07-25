@@ -78,6 +78,12 @@ const ADMIN_GROUPS: NavGroup[] = [
         icon: QrCodeIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
+      {
+        name: "Reports",
+        href: "/admin/reports",
+        icon: ChartBarIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
+      },
     ],
   },
   {

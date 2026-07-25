@@ -5,13 +5,16 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { STATIONS, STATION_ORDER, type StationId } from "@/lib/stations";
+import { StationSubNameSheet } from "./StationSubNameSheet";
 import { CheckIcon } from "@heroicons/react/24/outline";
 
 interface StationSheetProps {
   open: boolean;
   onClose: () => void;
   currentStationId: StationId | null;
-  onSelect: (stationId: StationId) => void;
+  onSelect: (stationId: StationId, subName?: string) => void;
+  organizationId: string;
+  homeCampusId?: string;
   stationLocation: string;
   onLocationChange: (val: string) => void;
   deviceIdentifier: string;
@@ -23,15 +26,49 @@ export function StationSheet({
   onClose,
   currentStationId,
   onSelect,
+  organizationId,
+  homeCampusId,
   stationLocation,
   onLocationChange,
   deviceIdentifier,
   onDeviceChange,
 }: StationSheetProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pendingStation, setPendingStation] = useState<StationId | null>(null);
+
+  const handleClose = () => {
+    setPendingStation(null);
+    onClose();
+  };
+
+  const handleTileTap = (id: StationId) => {
+    if (STATIONS[id].customSubName) {
+      setPendingStation(id);
+      return;
+    }
+    onSelect(id);
+    handleClose();
+  };
+
+  if (pendingStation) {
+    return (
+      <BottomSheet open={open} onClose={handleClose} title={STATIONS[pendingStation].name} snap="full">
+        <StationSubNameSheet
+          stationId={pendingStation}
+          organizationId={organizationId}
+          homeCampusId={homeCampusId}
+          onBack={() => setPendingStation(null)}
+          onSubmit={(subName) => {
+            onSelect(pendingStation, subName);
+            handleClose();
+          }}
+        />
+      </BottomSheet>
+    );
+  }
 
   return (
-    <BottomSheet open={open} onClose={onClose} title="Switch Station" snap="full">
+    <BottomSheet open={open} onClose={handleClose} title="Switch Station" snap="full">
       <div className="space-y-1">
         {STATION_ORDER.map((id) => {
           const station = STATIONS[id];
@@ -41,10 +78,7 @@ export function StationSheet({
             <button
               key={id}
               type="button"
-              onClick={() => {
-                onSelect(id);
-                onClose();
-              }}
+              onClick={() => handleTileTap(id)}
               className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition-colors min-h-[56px] ${
                 isActive ? "ring-2" : "hover:bg-surface-raised"
               }`}
@@ -94,7 +128,7 @@ export function StationSheet({
         )}
       </div>
 
-      <Button variant="secondary" className="mt-4 w-full" onClick={onClose}>
+      <Button variant="secondary" className="mt-4 w-full" onClick={handleClose}>
         Close
       </Button>
     </BottomSheet>

@@ -26,7 +26,9 @@ export default function VolunteerQrScanPage() {
           // No defaultStationId: unified check-in/check-out page — a fresh
           // session lands on the safe, read-only Identity Lookup station;
           // the volunteer switches station from the station sheet.
-          return <ScanCenterShell organizationId={organizationId} />;
+          // homeCampusId pre-highlights the volunteer's own campus in the
+          // Pickup Point picker.
+          return <ScanCenterShell organizationId={organizationId} homeCampusId={profile.preferredCampusId ?? undefined} />;
         }}
       </StaffGate>
     </AppShell>

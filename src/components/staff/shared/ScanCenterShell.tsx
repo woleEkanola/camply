@@ -17,6 +17,7 @@ import { SearchSheet } from "@/components/scan/SearchSheet";
 import { OfflineSheet } from "@/components/scan/OfflineSheet";
 import { HistorySheet } from "@/components/scan/HistorySheet";
 import { ScanTabBar } from "@/components/scan/ScanTabBar";
+import { CampusTeachersSheet } from "@/components/scan/CampusTeachersSheet";
 import { CheckoutSignaturePad } from "./CheckoutSignaturePad";
 import { useOfflineScanner } from "@/hooks/useOfflineScanner";
 import { STATIONS, resolveInitialStation, getStationLabel, type StationId } from "@/lib/stations";
@@ -28,7 +29,9 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { PhoneIcon } from "@heroicons/react/24/solid";
 
 interface RecentScan {
   registrationId: string;
@@ -41,9 +44,14 @@ interface RecentScan {
 export function ScanCenterShell({
   organizationId,
   defaultStationId,
+  homeCampusId,
 }: {
   organizationId: string;
   defaultStationId?: string;
+  /** Signed-in staff member's own campus (TEACHER/VOLUNTEER only, via
+   * StaffProfile.preferredCampusId) — pre-highlighted in the Pickup Point
+   * campus picker. Admins have no personal campus and omit this. */
+  homeCampusId?: string;
 }) {
   const router = useRouter();
   useSession({ required: true, onUnauthenticated: () => router.push("/login") });
@@ -62,6 +70,7 @@ export function ScanCenterShell({
   const [searchSheetOpen, setSearchSheetOpen] = useState(false);
   const [offlineSheetOpen, setOfflineSheetOpen] = useState(false);
   const [historySheetOpen, setHistorySheetOpen] = useState(false);
+  const [campusTeachersSheetOpen, setCampusTeachersSheetOpen] = useState(false);
   const [stationLocation, setStationLocation] = useState("");
   const [deviceIdentifier, setDeviceIdentifier] = useState("");
   const [customStationName, setCustomStationName] = useState("");
@@ -133,7 +142,7 @@ export function ScanCenterShell({
     const savedCustom = sessionStorage.getItem("camply-scan-custom-name");
     const resolved = resolveInitialStation({ routeDefault: (defaultStationId as StationId) ?? null, sessionPick });
     setActiveStation(resolved);
-    if ((resolved === "PICKUP_POINT" || resolved === "CUSTOM") && savedCustom) setCustomStationName(savedCustom);
+    if (STATIONS[resolved].customSubName && savedCustom) setCustomStationName(savedCustom);
 
     if (savedLocation) setStationLocation(savedLocation);
     if (savedDevice) setDeviceIdentifier(savedDevice);
@@ -198,12 +207,12 @@ export function ScanCenterShell({
   const activeStationDef = STATIONS[activeStation];
   const activeStationLabel = getStationLabel(activeStation, customStationName);
 
-  const handleStationSelect = (stationId: StationId) => {
+  const handleStationSelect = (stationId: StationId, subName?: string) => {
     setActiveStation(stationId);
     sessionStorage.setItem("camply-scan-station", stationId);
-    if (stationId === "PICKUP_POINT" && !customStationName) {
-      setCustomStationName("Lekki Pickup Point");
-      sessionStorage.setItem("camply-scan-custom-name", "Lekki Pickup Point");
+    if (subName !== undefined) {
+      setCustomStationName(subName);
+      sessionStorage.setItem("camply-scan-custom-name", subName);
     }
     // Camera is always live once a station is active — no launch button.
     setScannerActive(true);
@@ -467,6 +476,8 @@ export function ScanCenterShell({
         onClose={() => setStationSheetOpen(false)}
         currentStationId={activeStation}
         onSelect={handleStationSelect}
+        organizationId={organizationId}
+        homeCampusId={homeCampusId}
         stationLocation={stationLocation}
         onLocationChange={handleLocationChange}
         deviceIdentifier={deviceIdentifier}
@@ -609,7 +620,7 @@ export function ScanCenterShell({
               <img
                 src={successData.photoUrl}
                 alt={successData.camperName}
-                className="h-32 w-32 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
               />
             )}
 
@@ -671,7 +682,7 @@ export function ScanCenterShell({
               <img
                 src={duplicateData.photoUrl}
                 alt={duplicateData.camperName}
-                className="h-32 w-32 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
               />
             )}
 
@@ -732,7 +743,7 @@ export function ScanCenterShell({
                 <img
                   src={emergencyLookupData.photoUrl}
                   alt={emergencyLookupData.name}
-                  className="h-32 w-32 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                  className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
                 />
               </div>
             )}
@@ -781,23 +792,29 @@ export function ScanCenterShell({
 
       {/* ═══ OVERLAY 4: CAMPER DETAILS LOOKUP OVERLAY ═══ */}
       {lookupData && (
-        <div
-          onClick={() => {
-            setLookupData(null);
-            setScannerActive(true);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-purple-900 p-6 text-white cursor-pointer overflow-y-auto"
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-purple-900 p-6 text-white overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => {
+              setLookupData(null);
+              setScannerActive(true);
+            }}
+            aria-label="Close"
+            className="fixed right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
+          >
+            <XMarkIcon className="h-6 w-6" />
+          </button>
+
           <div className="flex flex-col max-w-xl w-full space-y-6 py-6 text-left">
             <div className="flex items-center gap-4 border-b border-white/10 pb-4">
               {lookupData.registration.camper.photoUrl ? (
                 <img
                   src={lookupData.registration.camper.photoUrl}
                   alt={lookupData.registration.camper.name}
-                  className="h-20 w-20 rounded-2xl object-cover border-2 border-white/20 shadow-md"
+                  className="h-32 w-32 rounded-2xl object-cover border-2 border-white/20 shadow-md shrink-0"
                 />
               ) : (
-                <div className="h-20 w-20 rounded-2xl bg-surface/15 flex items-center justify-center text-3xl font-black">
+                <div className="h-32 w-32 rounded-2xl bg-surface/15 flex items-center justify-center text-4xl font-black shrink-0">
                   {lookupData.registration.camper.name.charAt(0)}
                 </div>
               )}
@@ -880,9 +897,60 @@ export function ScanCenterShell({
               </div>
             </div>
 
-            <p className="text-xs text-center opacity-40">Tapping anywhere will return to scanning</p>
+            {/* Campus rep contact + full teacher list — reach anyone from
+                this camper's campus quickly in an emergency. */}
+            {lookupData.registration.campus?.id && (
+              <div className="border-t border-white/10 pt-4 space-y-3">
+                <span className="block text-xs uppercase opacity-65 font-bold">Campus Contacts</span>
+                {(lookupData.registration.campus.reps ?? []).length === 0 && (
+                  <p className="text-xs opacity-50">No campus rep on file.</p>
+                )}
+                {(lookupData.registration.campus.reps ?? []).map((rep: any) => {
+                  const repName = [rep.firstName, rep.lastName].filter(Boolean).join(" ") || "Campus Rep";
+                  return (
+                    <div key={rep.id} className="flex items-center justify-between gap-3 bg-surface/5 border border-white/5 rounded-lg p-3">
+                      <div className="min-w-0">
+                        <span className="block text-xs uppercase opacity-60 font-semibold">Campus Rep</span>
+                        <span className="block font-bold truncate">{repName}</span>
+                      </div>
+                      {rep.phone ? (
+                        <a
+                          href={`tel:${rep.phone}`}
+                          className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white min-h-[44px] shrink-0"
+                        >
+                          <PhoneIcon className="h-4 w-4" />
+                          Call
+                        </a>
+                      ) : (
+                        <span className="text-xs opacity-50 shrink-0">No phone on file</span>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <Button
+                  variant="secondary"
+                  className="w-full bg-transparent hover:bg-surface/10 text-white border border-white/20"
+                  onClick={() => setCampusTeachersSheetOpen(true)}
+                >
+                  More — View campus teachers
+                </Button>
+              </div>
+            )}
+
+            <p className="text-xs text-center opacity-40">Tap the X to return to scanning</p>
           </div>
         </div>
+      )}
+
+      {lookupData?.registration.campus?.id && (
+        <CampusTeachersSheet
+          open={campusTeachersSheetOpen}
+          onClose={() => setCampusTeachersSheetOpen(false)}
+          organizationId={organizationId}
+          campusId={lookupData.registration.campus.id}
+          campusName={lookupData.registration.campus.name}
+        />
       )}
 
       {/* ═══ OVERLAY 5: CRITICAL MEDICAL INTERRUPT — only genuinely

@@ -6,6 +6,7 @@ import {
   IdentificationIcon,
   HeartIcon,
   BookOpenIcon,
+  GiftIcon,
 } from "@heroicons/react/24/outline";
 
 export type StationId =
@@ -16,6 +17,7 @@ export type StationId =
   | "BREAKFAST"
   | "LUNCH"
   | "DINNER"
+  | "COLLECTIBLES"
   | "CHECKOUT"
   | "EMERGENCY_LOOKUP"
   | "CUSTOM";
@@ -146,6 +148,22 @@ export const STATIONS: Record<StationId, StationDef> = {
     allowsUndo: false,
     isLookup: false,
   },
+  COLLECTIBLES: {
+    id: "COLLECTIBLES",
+    name: "Collectibles",
+    verb: "Recording Item Collection",
+    successVerb: "Item Collected",
+    duplicateVerb: "Already Collected",
+    // teal-700 bg (5.25:1 against near-white fg) — a new color not used by
+    // any other station, distinct from the meal amber/orange family since
+    // collectibles are explicitly NOT a meal.
+    theme: { bg: "#0f766e", bgStrong: "#115e59", fg: "#f0fdfa", ring: "#5eead4", tint: "rgba(15,118,110,0.12)" },
+    icon: GiftIcon,
+    stats: ["SCANS_TODAY"],
+    customSubName: true,
+    allowsUndo: true,
+    isLookup: false,
+  },
   CHECKOUT: {
     id: "CHECKOUT",
     name: "Checkout Desk",
@@ -196,6 +214,7 @@ export const STATION_ORDER: StationId[] = [
   "BREAKFAST",
   "LUNCH",
   "DINNER",
+  "COLLECTIBLES",
   "CHECKOUT",
   "EMERGENCY_LOOKUP",
   "CUSTOM",
@@ -209,6 +228,7 @@ export const DEFAULT_STATION: StationId = "IDENTITY_LOOKUP";
 export function getStationLabel(id: StationId, subName?: string): string {
   if (id === "PICKUP_POINT") return subName || "Pickup Point";
   if (id === "CUSTOM") return subName || "Custom Station";
+  if (id === "COLLECTIBLES") return subName || "Collectibles";
   return STATIONS[id].name;
 }
 

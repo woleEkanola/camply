@@ -16,18 +16,27 @@ const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
  * or callers that predate this field) falls back to the original label
  * matching unchanged.
  */
-const STATION_ID_CLASSIFICATION: Record<string, "CHECKIN" | "CHECKOUT" | "MEAL" | "LOOKUP" | "OTHER"> = {
+const STATION_ID_CLASSIFICATION: Record<string, "CHECKIN" | "CHECKOUT" | "MEAL" | "LOOKUP" | "COLLECTIBLE" | "OTHER"> = {
   CAMP_ARRIVAL: "CHECKIN",
   PICKUP_POINT: "CHECKIN",
   HOSTEL_ARRIVAL: "CHECKIN",
   BREAKFAST: "MEAL",
   LUNCH: "MEAL",
   DINNER: "MEAL",
+  COLLECTIBLES: "COLLECTIBLE",
   CHECKOUT: "CHECKOUT",
   IDENTITY_LOOKUP: "LOOKUP",
   EMERGENCY_LOOKUP: "LOOKUP",
   CUSTOM: "OTHER",
 };
+
+/** Station ids whose ScanEvent rows get tagged with { stationId } in
+ * metadata, purely additive, so admin reports can group reliably by
+ * station *type* via a JSON filter instead of string-matching the
+ * free-text `station` label (which, for Pickup Point, IS the campus/
+ * custom location name — still the report's row label, just not the
+ * type discriminator). */
+const REPORTABLE_STATION_IDS = new Set(["CAMP_ARRIVAL", "HOSTEL_ARRIVAL", "PICKUP_POINT"]);
 
 const STATION_ID_MEAL: Record<string, "BREAKFAST" | "LUNCH" | "DINNER"> = {
   BREAKFAST: "BREAKFAST",
@@ -51,6 +60,46 @@ async function assertCanScan(
     if (profile) return;
   }
   throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to scan camper badges." });
+}
+
+/** Reports are org-wide (not campus-scoped), matching the confirmed
+ * "SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE" access decision — org
+ * admins pass outright; a CAMPUS_REPRESENTATIVE only passes if they
+ * actually manage at least one campus in the org (DB-verified, never
+ * trusted from the JWT role claim alone, matching this file's existing
+ * assertOrgAdminOrCampusRep convention in src/server/api/trpc/scoping.ts). */
+async function assertReportsAccess(ctx: { prisma: any; session: any }, organizationId: string) {
+  const user = ctx.session?.user;
+  if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+  if (user.organizationId !== organizationId) throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to view reports." });
+  if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(user.role)) return;
+  if (user.role === "CAMPUS_REPRESENTATIVE") {
+    const managesAny = await ctx.prisma.campus.findFirst({
+      where: { organizationId, reps: { some: { id: user.id } } },
+    });
+    if (managesAny) return;
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to view reports." });
+}
+
+/** Reports default to the organization's active camp when no campId is
+ * given, matching processScan's own "no active camp" handling. */
+async function resolveReportCampId(ctx: { prisma: any }, organizationId: string, campId?: string): Promise<string | null> {
+  if (campId) return campId;
+  const org = await ctx.prisma.organization.findUnique({ where: { id: organizationId }, select: { activeCampId: true } });
+  return org?.activeCampId ?? null;
+}
+
+/** Reports default to "today" server time — confirmed with the user that
+ * meal/collectible/arrival recording never lets a volunteer backdate a
+ * scan, so a report's day picker is the only place history is browsed. */
+function dayRange(date?: Date): { start: Date; end: Date } {
+  const base = date ?? new Date();
+  const start = new Date(base);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(base);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
 }
 
 export const scanRouter = createTRPCRouter({
@@ -119,7 +168,11 @@ export const scanRouter = createTRPCRouter({
             user: true,
           },
         },
-        campus: true,
+        campus: {
+          include: {
+            reps: { select: { id: true, firstName: true, lastName: true, phone: true } },
+          },
+        },
         camp: true,
         venue: true,
         tribe: true,
@@ -510,7 +563,75 @@ export const scanRouter = createTRPCRouter({
         };
       }
 
-      // D. ARRIVAL CHECK-IN STATIONS (e.g. "Pickup Point", "Camp Arrival", "Hostel Arrival" or custom)
+      // D. COLLECTIBLE STATIONS (gifts, stationery, water, snacks, etc.) —
+      // same per-day dedupe-then-write shape as arrival check-ins below,
+      // but deliberately does NOT mutate registration.status or write a
+      // CHECK_IN_COMPLETED audit entry. A camper collecting a gift bag must
+      // not be silently marked as checked in.
+      const isCollectible = input.stationId
+        ? STATION_ID_CLASSIFICATION[input.stationId] === "COLLECTIBLE"
+        : false;
+      if (isCollectible) {
+        const existingCollection = await ctx.prisma.scanEvent.findFirst({
+          where: {
+            registrationId,
+            station: input.station,
+            result: "SUCCESS",
+            timestamp: { gte: startOfToday, lte: endOfToday },
+          },
+        });
+
+        if (existingCollection) {
+          const checkerName = await getVolunteerName(existingCollection.volunteerId);
+
+          await ctx.prisma.scanEvent.create({
+            data: {
+              registrationId,
+              campId,
+              station: input.station,
+              timestamp: activeTime,
+              volunteerId: ctx.userId,
+              device: input.device,
+              location: input.location,
+              result: "DUPLICATE",
+              metadata: { originalTime: existingCollection.timestamp, processedBy: checkerName, stationId: "COLLECTIBLE" },
+            },
+          });
+
+          return {
+            result: "DUPLICATE" as const,
+            message: `${input.station} already collected.`,
+            originalTime: existingCollection.timestamp,
+            originalVolunteerName: checkerName,
+            originalStation: input.station,
+            registration,
+          };
+        }
+
+        await ctx.prisma.scanEvent.create({
+          data: {
+            registrationId,
+            campId,
+            station: input.station,
+            timestamp: activeTime,
+            volunteerId: ctx.userId,
+            device: input.device,
+            location: input.location,
+            result: "SUCCESS",
+            metadata: { stationId: "COLLECTIBLE" },
+          },
+        });
+
+        return {
+          result: "SUCCESS" as const,
+          actionPerformed: `Collected ${input.station}`,
+          registration,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
+        };
+      }
+
+      // E. ARRIVAL CHECK-IN STATIONS (e.g. "Pickup Point", "Camp Arrival", "Hostel Arrival" or custom)
       // Check if already checked in at this specific station today
       const existingCheckIn = await ctx.prisma.scanEvent.findFirst({
         where: {
@@ -524,9 +645,12 @@ export const scanRouter = createTRPCRouter({
         },
       });
 
+      const arrivalStationIdTag =
+        input.stationId && REPORTABLE_STATION_IDS.has(input.stationId) ? { stationId: input.stationId } : undefined;
+
       if (existingCheckIn) {
         const checkerName = await getVolunteerName(existingCheckIn.volunteerId);
-        
+
         await ctx.prisma.scanEvent.create({
           data: {
             registrationId,
@@ -537,7 +661,7 @@ export const scanRouter = createTRPCRouter({
             device: input.device,
             location: input.location,
             result: "DUPLICATE",
-            metadata: { originalTime: existingCheckIn.timestamp, processedBy: checkerName },
+            metadata: { originalTime: existingCheckIn.timestamp, processedBy: checkerName, ...arrivalStationIdTag },
           },
         });
 
@@ -562,6 +686,7 @@ export const scanRouter = createTRPCRouter({
           device: input.device,
           location: input.location,
           result: "SUCCESS",
+          metadata: arrivalStationIdTag,
         },
       });
 
@@ -972,5 +1097,154 @@ export const scanRouter = createTRPCRouter({
         dinnerCount,
         checkedOutCount,
       };
+    }),
+
+  // ─── Pickup Point picker + campus contact lookup ───
+
+  listCampuses: protectedProcedure
+    .input(z.object({ organizationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+      return ctx.prisma.campus.findMany({
+        where: { organizationId: input.organizationId, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { displayOrder: "asc" },
+      });
+    }),
+
+  getCampusContacts: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campusId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+
+      const [campus, teacherCount] = await Promise.all([
+        ctx.prisma.campus.findFirst({
+          where: { id: input.campusId, organizationId: input.organizationId },
+          select: { reps: { select: { id: true, firstName: true, lastName: true, phone: true } } },
+        }),
+        ctx.prisma.staffProfile.count({
+          where: { organizationId: input.organizationId, preferredCampusId: input.campusId, type: "TEACHER", status: "APPROVED", deletedAt: null },
+        }),
+      ]);
+
+      const reps = (campus?.reps ?? []).map((r: any) => ({
+        id: r.id,
+        name: [r.firstName, r.lastName].filter(Boolean).join(" ") || "Campus Rep",
+        phone: r.phone ?? null,
+      }));
+
+      return { reps, teacherCount };
+    }),
+
+  getCampusTeachers: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campusId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+
+      const teachers = await ctx.prisma.staffProfile.findMany({
+        where: {
+          organizationId: input.organizationId,
+          preferredCampusId: input.campusId,
+          type: "TEACHER",
+          status: "APPROVED",
+          deletedAt: null,
+        },
+        select: { id: true, firstName: true, lastName: true, phone: true },
+        orderBy: { firstName: "asc" },
+      });
+
+      return teachers.map((t: any) => ({
+        id: t.id,
+        name: [t.firstName, t.lastName].filter(Boolean).join(" ") || "Teacher",
+        phone: t.phone ?? null,
+      }));
+    }),
+
+  // ─── Reports ───
+
+  getMealReport: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional(), date: z.date().optional() }))
+    .query(async ({ ctx, input }) => {
+      await assertReportsAccess(ctx, input.organizationId);
+      const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
+      const { start, end } = dayRange(input.date);
+      if (!campId) return { breakfast: 0, lunch: 0, dinner: 0 };
+
+      const [breakfast, lunch, dinner] = await Promise.all([
+        ctx.prisma.mealDistribution.count({ where: { campId, meal: "BREAKFAST", date: { gte: start, lte: end } } }),
+        ctx.prisma.mealDistribution.count({ where: { campId, meal: "LUNCH", date: { gte: start, lte: end } } }),
+        ctx.prisma.mealDistribution.count({ where: { campId, meal: "DINNER", date: { gte: start, lte: end } } }),
+      ]);
+
+      return { breakfast, lunch, dinner };
+    }),
+
+  getArrivalsReport: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        campId: z.string().optional(),
+        date: z.date().optional(),
+        stationId: z.enum(["CAMP_ARRIVAL", "HOSTEL_ARRIVAL", "PICKUP_POINT"]).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertReportsAccess(ctx, input.organizationId);
+      const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
+      const { start, end } = dayRange(input.date);
+      const stationIds = input.stationId
+        ? [input.stationId]
+        : (["CAMP_ARRIVAL", "HOSTEL_ARRIVAL", "PICKUP_POINT"] as const);
+
+      if (!campId) return { total: 0, byType: {}, rows: [] };
+
+      const groups = await Promise.all(
+        stationIds.map((id) =>
+          ctx.prisma.scanEvent
+            .groupBy({
+              by: ["station"],
+              where: {
+                campId,
+                result: "SUCCESS",
+                timestamp: { gte: start, lte: end },
+                metadata: { path: ["stationId"], equals: id },
+              },
+              _count: { _all: true },
+            })
+            .then((rows: any[]) => rows.map((r) => ({ station: r.station, stationId: id, count: r._count._all })))
+        )
+      );
+
+      const rows = groups.flat();
+      const byType: Record<string, number> = {};
+      for (const id of stationIds) byType[id] = rows.filter((r) => r.stationId === id).reduce((sum, r) => sum + r.count, 0);
+      const total = rows.reduce((sum, r) => sum + r.count, 0);
+
+      return { total, byType, rows };
+    }),
+
+  getCollectiblesReport: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional(), date: z.date().optional() }))
+    .query(async ({ ctx, input }) => {
+      await assertReportsAccess(ctx, input.organizationId);
+      const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
+      const { start, end } = dayRange(input.date);
+      if (!campId) return { total: 0, rows: [] };
+
+      const rows = await ctx.prisma.scanEvent.groupBy({
+        by: ["station"],
+        where: {
+          campId,
+          result: "SUCCESS",
+          timestamp: { gte: start, lte: end },
+          metadata: { path: ["stationId"], equals: "COLLECTIBLE" },
+        },
+        _count: { _all: true },
+      });
+
+      const mapped = rows.map((r: any) => ({ station: r.station, count: r._count._all }));
+      const total = mapped.reduce((sum, r) => sum + r.count, 0);
+
+      return { total, rows: mapped };
     }),
 });
