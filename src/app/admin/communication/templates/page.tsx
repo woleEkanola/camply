@@ -331,7 +331,7 @@ export default function TemplatesPage() {
   const [dirty, setDirty] = useState(false);
 
   // Preview / Validation states
-  const [previewWidth, setPreviewWidth] = useState<"desktop" | "mobile">("desktop");
+  const [previewWidth, setPreviewWidth] = useState<"desktop" | "mobile" | "certificate">("desktop");
   const [previewHtml, setPreviewHtml] = useState("");
   const [resolvedSender, setResolvedSender] = useState("");
   const [resolvedReplyTo, setResolvedReplyTo] = useState("");
@@ -724,7 +724,11 @@ export default function TemplatesPage() {
                   <Select
                     label="Preview Event Context"
                     value={previewEvent}
-                    onChange={(e) => setPreviewEvent(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setPreviewEvent(next);
+                      setPreviewWidth(next === "CAMP_INVITATION" ? "certificate" : "desktop");
+                    }}
                     helpText="Preview template dynamically using this email event's variables and sender policies."
                   >
                     {ALL_EVENT_KEYS.map((key) => (
@@ -791,6 +795,16 @@ export default function TemplatesPage() {
                     >
                       <DevicePhoneMobileIcon className="h-4 w-4" />
                     </button>
+                    <button
+                      onClick={() => setPreviewWidth("certificate")}
+                      className={cn(
+                        "px-1.5 rounded-md transition-colors text-[10px] font-semibold",
+                        previewWidth === "certificate" ? "bg-accent-100 text-accent-700" : "text-txt-muted hover:text-txt-secondary"
+                      )}
+                      title="Certificate Layout (800px, e.g. Camp Invitation)"
+                    >
+                      A4
+                    </button>
                   </div>
                 </div>
 
@@ -799,7 +813,7 @@ export default function TemplatesPage() {
                   <div
                     className={cn(
                       "rounded-xl border border-border-default bg-surface shadow-lg overflow-hidden transition-all duration-300",
-                      previewWidth === "desktop" ? "w-[480px]" : "w-[320px]"
+                      previewWidth === "desktop" ? "w-[480px]" : previewWidth === "mobile" ? "w-[320px]" : "w-[800px] max-w-full"
                     )}
                   >
                     {previewHtml ? (

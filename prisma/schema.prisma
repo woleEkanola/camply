@@ -1189,6 +1189,7 @@ model EmailTemplate {
   content        Json               // TipTap JSON
   isDefault      Boolean            @default(false)
   active         Boolean            @default(true)
+  includeIdCard  Boolean            @default(false) // opts this template into {{camp_id_card}} substitution
   eventConfigs   EmailEventConfig[] // Events using this template
   campaigns      EmailCampaign[]
   deletedAt      DateTime?
@@ -1216,6 +1217,17 @@ model OrganizationBranding {
   facebookUrl    String?
   instagramUrl   String?
   address        String?
+  // Camp Invitation certificate email fields (Phase 2 email redesign)
+  tagline             String?      // shown under the org name in the certificate header
+  supportTitle        String?      // e.g. "Need Help?" — falls back to a hardcoded default if unset
+  supportDescription  String?      // e.g. "We're here to help."
+  footerCopyright     String?      // e.g. "© 2026 The Covenant Nation. All rights reserved."
+  phone               String?      // general org phone, distinct from supportPhone
+  xUrl                String?
+  linkedinUrl         String?
+  nextSteps           Json?        // [{ icon, title, description }] — admin-editable "What's Next" list
+  // Camp ID Card feature — org-level master switch (per-template opt-in lives on EmailTemplate.includeIdCard)
+  idCardEnabled  Boolean      @default(false)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 }
@@ -1296,6 +1308,14 @@ model EmailCampaign {
   updatedAt        DateTime        @updatedAt
   recipients       EmailRecipient[]
   sideEffects      SideEffect[]
+  // Personalized certificate-style campaigns (Phase 2 email redesign). When
+  // set, the sender resolves one recipient per APPROVED registration in
+  // personalizeCampId (not resolveAudience()'s flat user list) and renders
+  // via renderEmailWithEvent's event-assembler pipeline instead of the
+  // legacy renderEmail() TipTap-only path. Unset = today's unchanged
+  // broadcast behavior, fully backward compatible.
+  personalizeEvent String?
+  personalizeCampId String?
 
   @@index([organizationId, status])
   @@index([organizationId, createdAt])

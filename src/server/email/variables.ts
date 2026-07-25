@@ -37,6 +37,16 @@ export const EMAIL_VARIABLES: EmailVariable[] = [
   { key: "tribe_name", label: "Tribe Name", category: "camp", sampleValue: "Tribe of Judah" },
   { key: "tribe_color", label: "Tribe Color", category: "camp", sampleValue: "#E53935" },
 
+  // Accommodation (Camp Invitation email — omitted from the certificate when unassigned)
+  { key: "hostel_name", label: "Hostel Name", category: "camp", sampleValue: "Grace Hostel" },
+  { key: "room_name", label: "Room Name", category: "camp", sampleValue: "Room 12" },
+  { key: "bed_label", label: "Bed Label", category: "camp", sampleValue: "Bed A" },
+
+  // Check-in (Camp Invitation email)
+  { key: "checkin_date", label: "Check-in Date", category: "camp", sampleValue: "Wednesday, August 19, 2026" },
+  { key: "checkin_location", label: "Check-in Location", category: "camp", sampleValue: "Lekki Centre Pick-up Point" },
+  { key: "arrive_before", label: "Arrive Before", category: "camp", sampleValue: "8:00 AM" },
+
   // Organization
   { key: "organization_name", label: "Organization Name", category: "organization", sampleValue: "Grace Community Church" },
 

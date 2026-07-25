@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { Prisma } from "@prisma/client";
 import { DEFAULT_TEMPLATES, ALL_EVENT_KEYS } from "../../email/defaults";
 import { renderEmail, renderEmailWithEvent, type Branding } from "../../email/renderer";
 import { getSampleData } from "../../email/variables";
@@ -53,6 +54,43 @@ export function resolveApprovedQrSrc(params: { qrCode?: string; isRealSend: bool
   return qrCode?.startsWith("data:image")
     ? qrCode
     : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+}
+
+const ID_CARD_TOKEN = "{{camp_id_card}}";
+
+function contentHasIdCardToken(node: any): boolean {
+  if (!node || typeof node !== "object") return false;
+  if (node.type === "text" && typeof node.text === "string" && node.text.includes(ID_CARD_TOKEN)) return true;
+  if (Array.isArray(node.content)) return node.content.some(contentHasIdCardToken);
+  return false;
+}
+
+function stripIdCardToken(node: any): any {
+  if (!node || typeof node !== "object") return node;
+  if (node.type === "text" && typeof node.text === "string") {
+    return { ...node, text: node.text.split(ID_CARD_TOKEN).join("") };
+  }
+  if (Array.isArray(node.content)) {
+    const content = node.content
+      .map(stripIdCardToken)
+      .filter((n: any) => !(n.type === "text" && n.text === ""));
+    return { ...node, content };
+  }
+  return node;
+}
+
+/** Appends or removes the {{camp_id_card}} token paragraph from a TipTap doc. */
+function toggleIdCardTokenInContent(doc: any, include: boolean): any {
+  const safeDoc = doc && typeof doc === "object" ? doc : { type: "doc", content: [] };
+  if (!include) {
+    return stripIdCardToken(safeDoc);
+  }
+  if (contentHasIdCardToken(safeDoc)) return safeDoc;
+  const content = Array.isArray(safeDoc.content) ? safeDoc.content : [];
+  return {
+    ...safeDoc,
+    content: [...content, { type: "paragraph", content: [{ type: "text", text: ID_CARD_TOKEN }] }],
+  };
 }
 
 // ─── Router ─────────────────────────────────────────────────────────────────
@@ -271,6 +309,30 @@ export const communicationRouter = createTRPCRouter({
       });
     }),
 
+  /**
+   * Opts a template into (or out of) {{camp_id_card}} substitution. Toggling
+   * also inserts/strips the literal token text in the template's TipTap
+   * content so admins can see/move it in the editor like any other
+   * variable — `includeIdCard` is the actual render-time gate (see
+   * substituteIdCardToken in renderer.ts), so a stray typed token in a
+   * template that isn't opted in never renders an image.
+   */
+  templateSetIncludeIdCard: protectedProcedure
+    .input(z.object({ id: z.string(), include: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const existing = await ctx.prisma.emailTemplate.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const content = toggleIdCardTokenInContent(existing.content as any, input.include);
+
+      return ctx.prisma.emailTemplate.update({
+        where: { id: input.id },
+        data: { includeIdCard: input.include, content: content as any },
+      });
+    }),
+
   // ═══ Branding ═══════════════════════════════════════════════════════════════
 
   brandingGet: protectedProcedure.query(async ({ ctx }) => {
@@ -301,15 +363,61 @@ export const communicationRouter = createTRPCRouter({
         facebookUrl: z.string().nullable().optional(),
         instagramUrl: z.string().nullable().optional(),
         address: z.string().nullable().optional(),
+        // Camp Invitation certificate email fields (Phase 2 email redesign)
+        tagline: z.string().nullable().optional(),
+        supportTitle: z.string().nullable().optional(),
+        supportDescription: z.string().nullable().optional(),
+        footerCopyright: z.string().nullable().optional(),
+        phone: z.string().nullable().optional(),
+        xUrl: z.string().nullable().optional(),
+        linkedinUrl: z.string().nullable().optional(),
+        nextSteps: z
+          .array(z.object({ icon: z.string(), title: z.string(), description: z.string() }))
+          .nullable()
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
       const oid = orgId(ctx);
+      const { nextSteps, ...rest } = input;
+      const nextStepsValue =
+        nextSteps === null ? Prisma.JsonNull : nextSteps === undefined ? undefined : nextSteps;
       return ctx.prisma.organizationBranding.upsert({
         where: { organizationId: oid },
-        update: input,
-        create: { organizationId: oid, ...input },
+        update: { ...rest, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
+        create: { organizationId: oid, ...rest, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
+      });
+    }),
+
+  // ═══ Camp ID Card ═══════════════════════════════════════════════════════════
+
+  idCardSettingsGet: protectedProcedure.query(async ({ ctx }) => {
+    const currentUser = ctx.session?.user;
+    if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+    const oid = orgId(ctx);
+
+    let branding = await ctx.prisma.organizationBranding.findUnique({ where: { organizationId: oid } });
+    if (!branding) {
+      branding = await ctx.prisma.organizationBranding.create({ data: { organizationId: oid } });
+    }
+    const templates = await ctx.prisma.emailTemplate.findMany({
+      where: { organizationId: oid, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, includeIdCard: true },
+    });
+    return { idCardEnabled: branding.idCardEnabled, templates };
+  }),
+
+  idCardSettingsSetEnabled: protectedProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      return ctx.prisma.organizationBranding.upsert({
+        where: { organizationId: oid },
+        update: { idCardEnabled: input.enabled },
+        create: { organizationId: oid, idCardEnabled: input.enabled },
       });
     }),
 
@@ -602,6 +710,13 @@ export const communicationRouter = createTRPCRouter({
             facebookUrl: z.string().nullable().optional(),
             instagramUrl: z.string().nullable().optional(),
             address: z.string().nullable().optional(),
+            tagline: z.string().nullable().optional(),
+            supportTitle: z.string().nullable().optional(),
+            supportDescription: z.string().nullable().optional(),
+            footerCopyright: z.string().nullable().optional(),
+            phone: z.string().nullable().optional(),
+            xUrl: z.string().nullable().optional(),
+            linkedinUrl: z.string().nullable().optional(),
           })
           .optional(),
       })
@@ -624,6 +739,13 @@ export const communicationRouter = createTRPCRouter({
         facebookUrl: input.branding?.facebookUrl ?? null,
         instagramUrl: input.branding?.instagramUrl ?? null,
         address: input.branding?.address ?? null,
+        tagline: input.branding?.tagline ?? null,
+        supportTitle: input.branding?.supportTitle ?? null,
+        supportDescription: input.branding?.supportDescription ?? null,
+        footerCopyright: input.branding?.footerCopyright ?? null,
+        phone: input.branding?.phone ?? null,
+        xUrl: input.branding?.xUrl ?? null,
+        linkedinUrl: input.branding?.linkedinUrl ?? null,
       };
       return (await renderEmail({ tiptapJson: input.tiptapJson, variables, branding })).html;
     }),
@@ -637,6 +759,7 @@ export const communicationRouter = createTRPCRouter({
         previewText: z.string().nullable().optional(),
         variables: z.record(z.string()).optional(),
         to: z.string().email().optional(),
+        includeIdCard: z.boolean().optional(),
         broadcast: z
           .object({
             senderMode: z.string(),
@@ -676,6 +799,11 @@ export const communicationRouter = createTRPCRouter({
       const { text: interpolatedSubject } = interpolateSubject(input.subject, variables);
       const { text: interpolatedPreviewText } = interpolateSubject(input.previewText ?? "", variables);
 
+      const idCard = {
+        enabled: !!(branding?.idCardEnabled && input.includeIdCard),
+        imageUrl: `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/api/id-card/sample`,
+      };
+
       let html = "";
       const brandingParams = branding ? {
         logoUrl: branding.logoUrl,
@@ -691,13 +819,21 @@ export const communicationRouter = createTRPCRouter({
         facebookUrl: branding.facebookUrl,
         instagramUrl: branding.instagramUrl,
         address: branding.address,
+        tagline: branding.tagline,
+        supportTitle: branding.supportTitle,
+        supportDescription: branding.supportDescription,
+        footerCopyright: branding.footerCopyright,
+        phone: branding.phone,
+        xUrl: branding.xUrl,
+        linkedinUrl: branding.linkedinUrl,
+        nextSteps: branding.nextSteps as any,
       } : null;
 
       const isEventKey = ALL_EVENT_KEYS.includes(input.event as any);
 
       if (isEventKey) {
         let qrDataUrl: string | undefined;
-        if (input.event === "REGISTRATION_APPROVED") {
+        if (input.event === "REGISTRATION_APPROVED" || input.event === "CAMP_INVITATION") {
           qrDataUrl = resolveApprovedQrSrc({
             qrCode: variables.qr_code,
             isRealSend: !!input.to,
@@ -712,6 +848,7 @@ export const communicationRouter = createTRPCRouter({
           branding: brandingParams,
           qrDataUrl,
           previewText: interpolatedPreviewText,
+          idCard,
         });
         html = renderResult.html;
       } else {
@@ -719,6 +856,7 @@ export const communicationRouter = createTRPCRouter({
           tiptapJson: input.tiptapJson,
           variables,
           branding: brandingParams,
+          idCard,
         });
         html = renderResult.html;
       }
@@ -1008,6 +1146,8 @@ export const communicationRouter = createTRPCRouter({
       customFromLocalPart: z.string().nullable().optional(),
       replyTo: z.string().nullable().optional(),
       attachments: z.array(z.object({ url: z.string(), fileName: z.string(), fileType: z.string(), fileSize: z.number() })).optional(),
+      personalizeEvent: z.string().nullable().optional(),
+      personalizeCampId: z.string().nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const oid = orgId(ctx);
@@ -1036,6 +1176,8 @@ export const communicationRouter = createTRPCRouter({
       customFromLocalPart: z.string().nullable().optional(),
       replyTo: z.string().nullable().optional(),
       attachments: z.array(z.object({ url: z.string(), fileName: z.string(), fileType: z.string(), fileSize: z.number() })).optional(),
+      personalizeEvent: z.string().nullable().optional(),
+      personalizeCampId: z.string().nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);

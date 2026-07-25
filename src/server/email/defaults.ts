@@ -246,6 +246,19 @@ export const DEFAULT_TEMPLATES: Record<string, DefaultTemplate> = {
     },
   },
 
+  CAMP_INVITATION: {
+    name: "Camp Invitation",
+    description: "Certificate-style invitation sent to approved campers when the org is ready — campaign-triggered, not automatic on approval. Includes hostel/room once assigned.",
+    subject: "You're invited to {{camp_name}}!",
+    previewText: "Your camp invitation and check-in details are ready.",
+    content: {
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "We're excited to welcome you! Everything you need for check-in is below — see you at camp!" }] },
+      ],
+    },
+  },
+
   WELCOME_EMAIL: {
     name: "Welcome Email",
     description: "Sent to new users to verify their email address",
@@ -299,7 +312,9 @@ export const DEFAULT_TEMPLATES: Record<string, DefaultTemplate> = {
   },
 };
 
-/** All 9 event keys in a convenient array */
+/** All 10 event keys in a convenient array. CAMP_INVITATION is
+ * campaign-triggered only — it deliberately has no EmailEventConfig
+ * automatic-trigger binding (see src/server/email/campaign/sender.ts). */
 export const ALL_EVENT_KEYS = [
   "REGISTRATION_APPROVED",
   "REGISTRATION_REJECTED",
@@ -310,6 +325,7 @@ export const ALL_EVENT_KEYS = [
   "STAFF_REJECTED",
   "OTP_EMAIL",
   "WELCOME_EMAIL",
+  "CAMP_INVITATION",
 ] as const;
 
 export type EmailEventKey = (typeof ALL_EVENT_KEYS)[number];

@@ -14,6 +14,13 @@ import {
   SupportCard,
   EmailFooter,
   Section,
+  OrganizationHeader,
+  VerificationCard,
+  SplitInfoCard,
+  TimelineCompact,
+  NextStepsCard,
+  ContactCard,
+  CertificateFooter,
 } from "../components";
 import type { StatusType } from "../components/cards";
 
@@ -158,6 +165,79 @@ export function buildWelcomeEmail(p: AssemblerParams): string {
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
   return EmailLayout({ content, branding: p.branding, previewText: p.previewText || "Welcome to Camply — verify your email" });
+}
+
+// ─── CAMP_INVITATION ─────────────────────────────────────────────────────────
+// New, separate from REGISTRATION_APPROVED — admin-triggered (via a campaign,
+// not the registration engine) once an org is ready to invite approved
+// campers, typically after room/hostel assignment. Treated as an A4
+// admission certificate rather than a marketing email — see
+// src/server/email/components/certificate.ts.
+
+function registrationDetailRows(v: Record<string, string>) {
+  const rows: { label: string; value: string }[] = [];
+  if (v.camper_name) rows.push({ label: "Camper", value: v.camper_name });
+  if (v.camp_name) rows.push({ label: "Camp", value: v.camp_name });
+  if (v.centre_name) rows.push({ label: "Campus / Centre", value: v.centre_name });
+  if (v.reporting_date) rows.push({ label: "Reporting Date", value: v.reporting_date });
+  if (v.registration_number) rows.push({ label: "Registration Number", value: v.registration_number });
+  if (v.tribe_name) rows.push({ label: "Tribe / House", value: v.tribe_name });
+  // Confirmed decision: omit entirely (not a placeholder) until a room is
+  // actually assigned — accommodation is a separate, later admin step.
+  if (v.hostel_name && v.room_name) {
+    const bed = v.bed_label ? ` (${v.bed_label})` : "";
+    rows.push({ label: "Hostel & Room", value: `${v.hostel_name} — ${v.room_name}${bed}` });
+  }
+  return rows;
+}
+
+function checkInInfoRows(v: Record<string, string>) {
+  const rows: { label: string; value: string }[] = [];
+  if (v.checkin_date) rows.push({ label: "Check-in Date", value: v.checkin_date });
+  if (v.checkin_location) rows.push({ label: "Check-in Location", value: v.checkin_location });
+  if (v.arrive_before) rows.push({ label: "Arrive Before", value: v.arrive_before });
+  return rows;
+}
+
+export function buildCampInvitationEmail(p: AssemblerParams): string {
+  const v = p.variables;
+  const orgName = p.branding?.senderName || v.organization_name || "Camp";
+  const notice = p.branding?.supportEmail
+    ? `If you are unable to attend after approval, please email <a href="mailto:${p.branding.supportEmail}" style="color:inherit;">${p.branding.supportEmail}</a> with your name and centre.`
+    : undefined;
+
+  const content = [
+    OrganizationHeader({ branding: p.branding, orgName, rightLabel: `Date: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` }),
+    VerificationCard({
+      title: "Registration Approved!",
+      description: `<strong>${v.camper_name || "Camper"}</strong> has been approved for <strong>${v.camp_name || "camp"}</strong>.<br/><br/>We can't wait to have you with us!`,
+      qrSrc: p.qrSrc,
+      registrationNumber: v.registration_number || "",
+    }),
+    SplitInfoCard({
+      leftTitle: "Registration Details",
+      leftRows: registrationDetailRows(v),
+      rightTitle: "Important Check-in Info",
+      rightRows: checkInInfoRows(v),
+      notice,
+    }),
+    p.bodyContent ? Section({ children: p.bodyContent }) : "",
+    TimelineCompact({
+      title: "Your Registration Journey",
+      stages: [
+        { label: "Submitted", status: "completed" },
+        { label: "Under Review", status: "completed" },
+        { label: "Approved", status: "completed" },
+        { label: "Check-in", status: "current" },
+        { label: "Camp Complete", status: "upcoming" },
+      ],
+    }),
+    NextStepsCard({ steps: p.branding?.nextSteps }),
+    ContactCard({ branding: p.branding }),
+    CertificateFooter({ branding: p.branding, orgName }),
+  ].filter(Boolean).join("\n");
+
+  return EmailLayout({ content, branding: p.branding, width: 800, previewText: p.previewText || `You're invited to ${v.camp_name || "camp"}!` });
 }
 
 // ─── OTP_EMAIL ──────────────────────────────────────────────────────────────

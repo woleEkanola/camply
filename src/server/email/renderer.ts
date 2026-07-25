@@ -15,8 +15,29 @@ import {
   buildStaffRejectedEmail,
   buildWelcomeEmail,
   buildOtpEmail,
+  buildCampInvitationEmail,
 } from "./events/assemblers";
 import { interpolateTipTapJson } from "./interpolate";
+
+const ID_CARD_TOKEN_RE = /\{\{\s*camp_id_card\s*\}\}/g;
+
+/**
+ * Swaps the literal {{camp_id_card}} token for a hosted <img> block, or
+ * strips it to nothing when the feature/template isn't opted in or there's
+ * no image URL available (e.g. no registration context). Deliberately not a
+ * generic "HTML block variable" — camp_id_card is the only token that ever
+ * needs this, so it's handled as its own pre-pass rather than a new
+ * capability in interpolateHtml/interpolateTipTapJson, which only ever
+ * substitute plain (escaped) strings.
+ */
+export function substituteIdCardToken(html: string, opts: { enabled: boolean; imageUrl: string | null }): string {
+  if (!opts.enabled || !opts.imageUrl) {
+    return html.replace(ID_CARD_TOKEN_RE, "");
+  }
+  const escapedUrl = opts.imageUrl.replace(/"/g, "&quot;");
+  const img = `<img src="${escapedUrl}" alt="Camp ID Card" width="600" style="display:block;max-width:100%;width:100%;height:auto;border:0;" />`;
+  return html.replace(ID_CARD_TOKEN_RE, img);
+}
 
 export interface Branding {
   logoUrl?: string | null;
@@ -32,6 +53,21 @@ export interface Branding {
   facebookUrl?: string | null;
   instagramUrl?: string | null;
   address?: string | null;
+  // Camp Invitation certificate email fields (Phase 2 email redesign)
+  tagline?: string | null;
+  supportTitle?: string | null;
+  supportDescription?: string | null;
+  footerCopyright?: string | null;
+  phone?: string | null;
+  xUrl?: string | null;
+  linkedinUrl?: string | null;
+  nextSteps?: NextStepItem[] | null;
+}
+
+export interface NextStepItem {
+  icon: string;
+  title: string;
+  description: string;
 }
 
 // ─── TipTap → HTML ──────────────────────────────────────────────────────────
@@ -64,7 +100,10 @@ type EmailEventKey =
   | "STAFF_APPROVED"
   | "STAFF_REJECTED"
   | "OTP_EMAIL"
-  | "WELCOME_EMAIL";
+  | "WELCOME_EMAIL"
+  // Campaign-triggered only (never an automatic lifecycle trigger — not
+  // part of EmailEventConfig's event list) — see src/server/email/campaign/.
+  | "CAMP_INVITATION";
 
 const EVENT_ASSEMBLERS: Record<EmailEventKey, (p: {
   variables: Record<string, string>;
@@ -82,6 +121,7 @@ const EVENT_ASSEMBLERS: Record<EmailEventKey, (p: {
   STAFF_REJECTED: buildStaffRejectedEmail,
   OTP_EMAIL: buildOtpEmail,
   WELCOME_EMAIL: buildWelcomeEmail,
+  CAMP_INVITATION: buildCampInvitationEmail,
 };
 
 export async function renderEmailWithEvent(params: {
@@ -91,15 +131,18 @@ export async function renderEmailWithEvent(params: {
   tiptapJson?: Record<string, unknown>;
   qrDataUrl?: string;
   previewText?: string | null;
+  idCard?: { enabled: boolean; imageUrl: string | null };
 }): Promise<{ html: string; unknownTokens: string[] }> {
-  const { eventKey, variables, branding, tiptapJson, qrDataUrl, previewText } = params;
+  const { eventKey, variables, branding, tiptapJson, qrDataUrl, previewText, idCard } = params;
 
   let bodyContent: string | undefined;
   let unknownTokens: string[] = [];
 
   if (tiptapJson) {
     const contentResult = renderTemplateContent(tiptapJson, variables);
-    bodyContent = contentResult.html;
+    bodyContent = idCard
+      ? substituteIdCardToken(contentResult.html, idCard)
+      : contentResult.html;
     unknownTokens = contentResult.unknownTokens;
   }
 
@@ -135,8 +178,10 @@ export async function renderEmail(params: {
   tiptapJson: Record<string, unknown>;
   variables: Record<string, string>;
   branding: Branding | null;
+  idCard?: { enabled: boolean; imageUrl: string | null };
 }): Promise<{ html: string; unknownTokens: string[] }> {
-  const { html: content, unknownTokens } = renderTemplateContent(params.tiptapJson, params.variables);
+  const { html: rawContent, unknownTokens } = renderTemplateContent(params.tiptapJson, params.variables);
+  const content = params.idCard ? substituteIdCardToken(rawContent, params.idCard) : rawContent;
   if (params.branding) {
     const body = [
       Section({ children: content }),

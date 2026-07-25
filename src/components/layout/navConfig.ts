@@ -193,6 +193,12 @@ const ADMIN_GROUPS: NavGroup[] = [
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
       {
+        name: "Camp ID Card",
+        href: "/admin/communication/id-card",
+        icon: DocumentTextIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
         name: "Analytics",
         href: "/admin/communication/analytics",
         icon: ChartBarIcon,
