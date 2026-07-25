@@ -13,6 +13,10 @@ import { ScannerViewport } from "@/components/scan/ScannerViewport";
 import { StationHeader } from "@/components/scan/StationHeader";
 import { StationSheet } from "@/components/scan/StationSheet";
 import { MedicalBanner } from "@/components/scan/MedicalBanner";
+import { SearchSheet } from "@/components/scan/SearchSheet";
+import { OfflineSheet } from "@/components/scan/OfflineSheet";
+import { HistorySheet } from "@/components/scan/HistorySheet";
+import { ScanTabBar } from "@/components/scan/ScanTabBar";
 import { CheckoutSignaturePad } from "./CheckoutSignaturePad";
 import { useOfflineScanner } from "@/hooks/useOfflineScanner";
 import { STATIONS, resolveInitialStation, getStationLabel, type StationId } from "@/lib/stations";
@@ -20,8 +24,6 @@ import { computeStationStats, computeStationProgress, EMPTY_SESSION_STATS, type 
 import { classifyMedical } from "@/lib/medical";
 import {
   MagnifyingGlassIcon,
-  ArrowPathIcon,
-  CpuChipIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
@@ -56,6 +58,9 @@ export function ScanCenterShell({
     resolveInitialStation({ routeDefault: (defaultStationId as StationId) ?? null, sessionPick: null })
   );
   const [stationSheetOpen, setStationSheetOpen] = useState(false);
+  const [searchSheetOpen, setSearchSheetOpen] = useState(false);
+  const [offlineSheetOpen, setOfflineSheetOpen] = useState(false);
+  const [historySheetOpen, setHistorySheetOpen] = useState(false);
   const [stationLocation, setStationLocation] = useState("");
   const [deviceIdentifier, setDeviceIdentifier] = useState("");
   const [customStationName, setCustomStationName] = useState("");
@@ -456,38 +461,50 @@ export function ScanCenterShell({
         onDeviceChange={handleDeviceChange}
       />
 
-      {/* Offline status — collapsed to a single chip; maintenance actions
-          (sync/cache refresh) are one tap away, not permanently on screen. */}
+      {/* Offline status — collapsed to a single tappable chip; sync/cache
+          are maintenance actions handled in the OfflineSheet, not
+          permanent header controls. */}
       <div className="flex flex-wrap items-center gap-3">
-        <Badge tone={offlineScanner.isOnline ? "success" : "warning"}>
-          <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
-          {offlineScanner.isOnline ? "Online" : `Offline · ${offlineScanner.offlineQueueCount} waiting`}
-        </Badge>
-
-        {!offlineScanner.isOnline && offlineScanner.offlineQueueCount > 0 && (
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<ArrowPathIcon className="h-3 w-3" />}
-            loading={offlineScanner.isSyncing}
-            onClick={() => offlineScanner.syncOfflineQueue()}
-          >
-            Sync Queue
-          </Button>
-        )}
-
-        <Button
-          size="sm"
-          variant="secondary"
-          icon={<CpuChipIcon className="h-3 w-3" />}
-          loading={isRefreshingCache}
-          onClick={handleOfflineCacheRefresh}
-        >
-          Cache offline ({lastCacheSyncTime})
-        </Button>
+        <button type="button" onClick={() => setOfflineSheetOpen(true)}>
+          <Badge tone={offlineScanner.isOnline ? "success" : "warning"}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
+            {offlineScanner.isOnline ? "Online" : `Offline · ${offlineScanner.offlineQueueCount} waiting`}
+          </Badge>
+        </button>
       </div>
 
-      <div className="space-y-6 animate-fade-in">
+      <OfflineSheet
+        open={offlineSheetOpen}
+        onClose={() => setOfflineSheetOpen(false)}
+        isOnline={offlineScanner.isOnline}
+        offlineQueueCount={offlineScanner.offlineQueueCount}
+        isSyncing={offlineScanner.isSyncing}
+        onSyncNow={() => offlineScanner.syncOfflineQueue()}
+        isRefreshingCache={isRefreshingCache}
+        onRefreshCache={handleOfflineCacheRefresh}
+        lastCacheSyncTime={lastCacheSyncTime}
+      />
+
+      <SearchSheet
+        open={searchSheetOpen}
+        onClose={() => setSearchSheetOpen(false)}
+        onSearch={(query) => handleScanSubmit({ query })}
+      />
+
+      <HistorySheet
+        open={historySheetOpen}
+        onClose={() => setHistorySheetOpen(false)}
+        scans={recentScans}
+        timeTick={timeTick}
+        activeStation={activeStation}
+        allowsUndo={activeStationDef.allowsUndo}
+        isUndoing={undoCheckInMutation.isPending}
+        onUndo={(registrationId) =>
+          undoCheckInMutation.mutate({ registrationId, reason: "Volunteer operator error / duplicate sync correction" })
+        }
+      />
+
+      <div className="space-y-6 animate-fade-in pb-20 md:pb-0">
         {/* Scanner Viewport — always live once a station is active, never
             gated behind a launch button; stays mounted through result
             overlays (paused, not stopped) so resuming is instant. */}
@@ -500,8 +517,10 @@ export function ScanCenterShell({
           />
         </div>
 
-        {/* Fallback Manual Query Search */}
-          <Card className="border-border-default">
+        {/* Search is the exception path — a floating icon + sheet on
+            mobile (see ScanTabBar), a persistent field on desktop where
+            there's room and a keyboard ([/] shortcut retained). */}
+        <Card className="hidden md:block border-border-default">
             <CardBody className="p-4">
               <form onSubmit={handleSearchSubmit} className="flex gap-3">
                 <div className="relative flex-1">
@@ -523,52 +542,38 @@ export function ScanCenterShell({
             </CardBody>
           </Card>
 
-          {/* Recent Scans Activity Logs & Quick Undo Timer (30s) */}
+          {/* Compact recent-activity strip — last 4, auto-updates after
+              every scan. Full session history + undo lives in HistorySheet
+              via the "View all" trigger / History tab. */}
           {recentScans.length > 0 && (
             <Card className="border-border-default">
               <CardBody className="p-6 space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-wider text-txt-muted">
-                  Recent Station Activity
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-txt-muted">Recent Activity</h3>
+                  <button
+                    type="button"
+                    onClick={() => setHistorySheetOpen(true)}
+                    className="text-xs font-bold text-accent-600 hover:underline"
+                  >
+                    View all
+                  </button>
+                </div>
                 <div className="divide-y divide-neutral-100">
-                  {recentScans.map((scan) => {
-                    const elapsedSeconds = Math.floor((timeTick - scan.timestamp) / 1000);
-                    const isUndoable = elapsedSeconds < 30 && activeStation !== "CHECKOUT" && !activeStation.includes("LOOKUP");
-                    const remainingSeconds = 30 - elapsedSeconds;
-
-                    return (
-                      <div key={scan.registrationId} className="py-3 flex items-center justify-between text-sm">
-                        <div>
-                          <span className="font-bold text-neutral-900 block">{scan.name}</span>
-                          <span className="text-xs text-neutral-500">
-                            {scan.registrationNumber} · {scan.station} at{" "}
-                            {new Date(scan.timestamp).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        {isUndoable && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold border-none"
-                            loading={undoCheckInMutation.isPending}
-                            onClick={() =>
-                              undoCheckInMutation.mutate({
-                                registrationId: scan.registrationId,
-                                reason: "Volunteer operator error / duplicate sync correction",
-                              })
-                            }
-                          >
-                            Undo ({remainingSeconds}s)
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {recentScans.slice(0, 4).map((scan) => (
+                    <div key={`${scan.registrationId}-${scan.timestamp}`} className="py-2.5 flex items-center justify-between text-sm">
+                      <span className="font-bold text-neutral-900">{scan.name}</span>
+                      <span className="text-xs text-neutral-500">
+                        {scan.station} · {new Date(scan.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </CardBody>
             </Card>
           )}
         </div>
+
+      <ScanTabBar onHistory={() => setHistorySheetOpen(true)} onSearch={() => setSearchSheetOpen(true)} />
 
       {/* ═══ OVERLAY 1: SUCCESS FEEDBACK OVERLAY ═══ */}
       {successData && (
