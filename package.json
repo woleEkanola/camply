@@ -47,6 +47,7 @@
     "next-auth": "^4.24.14",
     "papaparse": "^5.5.4",
     "pdf-lib": "^1.17.1",
+    "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

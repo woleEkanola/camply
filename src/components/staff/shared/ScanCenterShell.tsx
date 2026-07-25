@@ -10,14 +10,11 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
-import { Fab } from "@/components/ui/Fab";
 import { useToast } from "@/components/ui/Toast";
-import { useIsMobile } from "@/hooks/useMediaQuery";
-import { CameraScanner } from "./CameraScanner";
+import { ScannerViewport } from "@/components/scan/ScannerViewport";
 import { CheckoutSignaturePad } from "./CheckoutSignaturePad";
 import { useOfflineScanner } from "@/hooks/useOfflineScanner";
 import {
-  QrCodeIcon,
   MagnifyingGlassIcon,
   ArrowPathIcon,
   CpuChipIcon,
@@ -71,7 +68,6 @@ export function ScanCenterShell({
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
-  const isMobile = useIsMobile();
 
   // Active Station Configuration State
   const [activeStation, setActiveStation] = useState<string | null>(null);
@@ -138,10 +134,12 @@ export function ScanCenterShell({
       const preset = STATION_PRESETS.find((p) => p.id === defaultStationId);
       if (preset) {
         setActiveStation(preset.id);
+        setScannerActive(true);
         if (preset.id === "PICKUP_POINT" && savedCustom) setCustomStationName(savedCustom);
       }
     } else if (savedStation) {
       setActiveStation(savedStation);
+      setScannerActive(true);
       if (savedCustom) setCustomStationName(savedCustom);
     }
 
@@ -195,10 +193,8 @@ export function ScanCenterShell({
       setCustomStationName("Lekki Pickup Point");
       localStorage.setItem("camply-scan-custom-name", "Lekki Pickup Point");
     }
-    // Launch scanner on station activation on mobile
-    if (isMobile) {
-      setScannerActive(true);
-    }
+    // Camera is always live once a station is active — no launch button.
+    setScannerActive(true);
   };
 
   const handleChangeStation = () => {
@@ -634,32 +630,17 @@ export function ScanCenterShell({
             </Button>
           </div>
 
-          {/* Scanner Card Viewport */}
-          <Card className="overflow-hidden border-border-default">
-            <CardBody className="p-6 text-center space-y-4">
-              <div className="max-w-md mx-auto">
-                <Button
-                  size="lg"
-                  className="w-full flex items-center justify-center gap-2 h-14 text-lg font-bold shadow-md bg-accent-600 hover:bg-accent-700 text-white border-none"
-                  onClick={() => setScannerActive((prev) => !prev)}
-                >
-                  <QrCodeIcon className="h-6 w-6" />
-                  {scannerActive ? "Close Camera Scanner" : "Launch Camera Scanner"}
-                </Button>
-                <p className="mt-1.5 text-xs text-txt-muted">Allows instant hands-free camper lookup/check-in</p>
-              </div>
-
-              {scannerActive && (
-                <div className="pt-2">
-                  <CameraScanner
-                    active={scannerActive}
-                    onScanSuccess={handleScanSuccess}
-                    onScanFailure={(err) => console.log("Scanner loop:", err)}
-                  />
-                </div>
-              )}
-            </CardBody>
-          </Card>
+          {/* Scanner Viewport — always live once a station is active, never
+              gated behind a launch button; stays mounted through result
+              overlays (paused, not stopped) so resuming is instant. */}
+          <div className="max-w-md mx-auto w-full">
+            <ScannerViewport
+              enabled={activeStation !== null}
+              paused={!scannerActive}
+              onDecode={handleScanSuccess}
+              className="aspect-video md:aspect-square w-full rounded-xl border border-neutral-800 shadow-2xl"
+            />
+          </div>
 
           {/* Fallback Manual Query Search */}
           <Card className="border-border-default">
@@ -1195,10 +1176,6 @@ export function ScanCenterShell({
         </div>
       )}
 
-      {/* Floating Action Button to launch scanner without scrolling */}
-      {!scannerActive && activeStation !== null && !successData && !duplicateData && !checkoutTargetReg && !medicalData && !lookupData && !emergencyLookupData && (
-        <Fab icon={<QrCodeIcon className="h-6 w-6" />} label="Scan camper" onClick={() => setScannerActive(true)} />
-      )}
     </div>
   );
 }
