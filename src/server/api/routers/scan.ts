@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { normalizeScannedQRToken } from "../../../lib/qr";
+import { classifyMedical } from "../../../lib/medical";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
@@ -242,12 +243,28 @@ export const scanRouter = createTRPCRouter({
       const classification =
         (input.stationId && STATION_ID_CLASSIFICATION[input.stationId]) || classifyStation(input.station);
 
-      // Pre-check for medical warnings/alerts on the server side
-      const hasMedical = !!(registration.camper.allergies || registration.camper.medicalConditions || registration.camper.dietaryRestrictions);
-      if (!input.skipMedicalAlerts && classification !== "LOOKUP" && classification !== "CHECKOUT" && hasMedical && !input.acknowledgedMedical) {
+      // Medical severity triage (src/lib/medical.ts): only genuinely
+      // life-safety CRITICAL conditions (anaphylaxis, "do not release",
+      // isolation, medical hold, epilepsy, insulin-dependence, ...) block
+      // scanning with a full-screen interrupt. Routine allergy/dietary
+      // notes (INFO) are surfaced as a banner inside the normal result
+      // instead — the previous all-or-nothing gate fired on ANY non-empty
+      // medical field, which was frequent enough that volunteers disabled
+      // it entirely via a "skip medical alerts" toggle, silencing the
+      // critical cases along with the routine ones.
+      const medicalClassification = classifyMedical(registration.camper);
+      if (
+        !input.skipMedicalAlerts &&
+        classification !== "LOOKUP" &&
+        classification !== "CHECKOUT" &&
+        medicalClassification.severity === "CRITICAL" &&
+        !input.acknowledgedMedical
+      ) {
         return {
           result: "REQUIRES_MEDICAL_ACKNOWLEDGEMENT" as const,
           registration,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
         };
       }
 
@@ -361,6 +378,8 @@ export const scanRouter = createTRPCRouter({
           actionPerformed: `Served ${mealType.toLowerCase()}`,
           registration,
           mealRecord,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
         };
       }
 
@@ -458,6 +477,8 @@ export const scanRouter = createTRPCRouter({
           result: "SUCCESS" as const,
           actionPerformed: "Checked Out",
           registration: updatedReg,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
         };
       }
 
@@ -484,6 +505,8 @@ export const scanRouter = createTRPCRouter({
           result: "SUCCESS" as const,
           actionPerformed: "Identity Resolved",
           registration,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
         };
       }
 
@@ -571,6 +594,8 @@ export const scanRouter = createTRPCRouter({
         result: "SUCCESS" as const,
         actionPerformed: `Checked In at ${input.station}`,
         registration: updatedReg,
+        medicalSeverity: medicalClassification.severity,
+        medicalFlags: medicalClassification.flags,
       };
     }),
 

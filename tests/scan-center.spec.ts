@@ -93,13 +93,13 @@ test.describe("Scan Center - Unified Operations Platform", () => {
     await searchInput.fill(registrationNumber);
     await page.getByRole("button", { name: "Search", exact: true }).click();
  
-    const duplicateOverlay = page.locator("text=Already Recorded");
+    const duplicateOverlay = page.getByRole("heading", { name: "Already Checked In", exact: true });
     await expect(duplicateOverlay).toBeVisible({ timeout: 20000 });
     await expect(page.getByText("Camp Arrival already recorded offline.")).not.toBeVisible(); // server duplicate message
     await expect(page.getByText("Camper already checked in at Camp Arrival")).toBeVisible();
- 
+
     // Dismiss duplicate overlay
-    await page.click("text=Already Recorded");
+    await page.click("text=Already Checked In");
     await expect(duplicateOverlay).not.toBeVisible();
   });
 
@@ -115,8 +115,8 @@ test.describe("Scan Center - Unified Operations Platform", () => {
     await page.goto("/admin/check-in");
     await page.waitForLoadState("networkidle");
 
-    // 1. Click "Change Station" and select "Breakfast Station"
-    await page.getByRole("button", { name: "Change Station" }).click();
+    // 1. Open the station sheet and select "Breakfast Station"
+    await page.getByRole("button", { name: "Change station" }).click();
     await page.getByRole("button", { name: "Breakfast Station" }).click();
 
     // Verify active station header changes
@@ -139,12 +139,12 @@ test.describe("Scan Center - Unified Operations Platform", () => {
     await searchInput.fill(registrationNumber);
     await page.getByRole("button", { name: "Search", exact: true }).click();
 
-    // Verify blue duplicate overlay
-    const duplicateOverlay = page.locator("text=Already Recorded");
+    // Verify blue duplicate overlay, station-specific copy
+    const duplicateOverlay = page.getByRole("heading", { name: "Already Collected Breakfast", exact: true });
     await expect(duplicateOverlay).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Breakfast already collected.")).toBeVisible();
 
     // Dismiss
-    await page.click("text=Already Recorded");
+    await page.click("text=Already Collected Breakfast");
   });
 });

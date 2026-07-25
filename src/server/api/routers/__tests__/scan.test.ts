@@ -269,6 +269,66 @@ describe("scanRouter - processScan", () => {
     expect(distributionsPostDup).toHaveLength(1); // Should still be 1
   });
 
+  it("routine allergy notes (INFO severity) do not block scanning and are attached to the SUCCESS response", async () => {
+    await prisma.camper.update({
+      where: { id: (await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } })).camperId! },
+      data: { allergies: "Peanuts" },
+    });
+
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const result = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Pickup Point",
+    });
+
+    expect(result.result).toBe("SUCCESS");
+    if (result.result === "SUCCESS") {
+      expect(result.medicalSeverity).toBe("INFO");
+      expect(result.medicalFlags).toContain("allergies");
+    }
+  });
+
+  it("critical medical conditions (anaphylaxis) block scanning with REQUIRES_MEDICAL_ACKNOWLEDGEMENT, acknowledging proceeds", async () => {
+    await prisma.camper.update({
+      where: { id: (await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } })).camperId! },
+      data: { allergies: "Severe peanut anaphylaxis" },
+    });
+
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const blocked = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Pickup Point",
+    });
+    expect(blocked.result).toBe("REQUIRES_MEDICAL_ACKNOWLEDGEMENT");
+    if (blocked.result === "REQUIRES_MEDICAL_ACKNOWLEDGEMENT") {
+      expect(blocked.medicalSeverity).toBe("CRITICAL");
+    }
+
+    const acknowledged = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Pickup Point",
+      acknowledgedMedical: true,
+    });
+    expect(acknowledged.result).toBe("SUCCESS");
+  });
+
   it("stationId overrides label substring-matching: a custom checkpoint named 'Lunch Gate' does not record a meal", async () => {
     const caller = appRouter.createCaller({
       prisma,

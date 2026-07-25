@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ScannerViewport } from "@/components/scan/ScannerViewport";
 import { StationHeader } from "@/components/scan/StationHeader";
 import { StationSheet } from "@/components/scan/StationSheet";
+import { MedicalBanner } from "@/components/scan/MedicalBanner";
 import { CheckoutSignaturePad } from "./CheckoutSignaturePad";
 import { useOfflineScanner } from "@/hooks/useOfflineScanner";
 import { STATIONS, resolveInitialStation, getStationLabel, type StationId } from "@/lib/stations";
@@ -63,7 +64,10 @@ export function ScanCenterShell({
   const [searchQuery, setSearchQuery] = useState("");
   const [scannerActive, setScannerActive] = useState(true);
   const [lastCacheSyncTime, setLastCacheSyncTime] = useState<string>("Never");
-  const [skipMedicalAlerts, setSkipMedicalAlerts] = useState(false);
+  // Duplicate-token guard: ignore the same decoded token within 3s even
+  // after the scanner resumes, so a badge left lingering in frame doesn't
+  // re-fire the same scan repeatedly.
+  const lastDecodedRef = useRef<{ token: string; at: number } | null>(null);
 
   // Hook for Offline capabilities
   const offlineScanner = useOfflineScanner(organizationId);
@@ -135,6 +139,28 @@ export function ScanCenterShell({
     const timer = setInterval(() => setTimeTick(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Auto-dismiss success/duplicate overlays so the volunteer never needs to
+  // tap through — the camera stays live underneath and resumes the instant
+  // the overlay clears. Success: 1.5s. Duplicate: 2.5s (a touch longer,
+  // since it's read for context rather than just confirmed at a glance).
+  useEffect(() => {
+    if (!successData) return;
+    const timer = setTimeout(() => {
+      setSuccessData(null);
+      setScannerActive(true);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [successData]);
+
+  useEffect(() => {
+    if (!duplicateData) return;
+    const timer = setTimeout(() => {
+      setDuplicateData(null);
+      setScannerActive(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [duplicateData]);
 
   // Keyboard shortcut: slash key focuses search, Escape closes overlays
   useEffect(() => {
@@ -212,7 +238,6 @@ export function ScanCenterShell({
         device: deviceIdentifier || undefined,
         location: stationLocation || undefined,
         acknowledgedMedical: payload.acknowledgedMedical,
-        skipMedicalAlerts,
         checkoutDetails: payload.checkoutDetails,
       });
 
@@ -297,9 +322,14 @@ export function ScanCenterShell({
         return;
       }
 
-      // Pre-check for Medical Alert on regular Check-ins (only if not already acknowledged - client fallback for offline)
-      const hasMedical = camper.allergies || camper.medicalConditions || camper.dietaryRestrictions;
-      if (!skipMedicalAlerts && activeStation !== "CHECKOUT" && hasMedical && !payload.acknowledgedMedical) {
+      // Client-side medical severity fallback — only relevant offline,
+      // where useOfflineScanner's mocked response never runs the server's
+      // classification. Only CRITICAL blocks; INFO renders as an inline
+      // banner in the success overlay below, never a separate interrupt.
+      const medical = "medicalSeverity" in response && response.medicalSeverity
+        ? { severity: response.medicalSeverity, flags: response.medicalFlags ?? [] }
+        : classifyMedical(camper);
+      if (activeStation !== "CHECKOUT" && medical.severity === "CRITICAL" && !payload.acknowledgedMedical) {
         setMedicalData({
           registration: reg,
           qrToken: payload.qrToken,
@@ -320,7 +350,8 @@ export function ScanCenterShell({
         ...prev.slice(0, 9),
       ]);
 
-      // Show large success overlay
+      // Show success overlay — auto-dismisses; a non-critical medical note
+      // (if any) renders inline via MedicalBanner rather than interrupting.
       setSuccessData({
         camperName: camper.name,
         photoUrl: camper.photoUrl,
@@ -331,6 +362,8 @@ export function ScanCenterShell({
         room: reg.room?.name,
         bed: reg.bed?.label,
         teacherName: reg.teacher?.name,
+        medicalFlags: medical.severity === "INFO" ? medical.flags : [],
+        camper,
       });
 
     } catch (err: any) {
@@ -340,6 +373,10 @@ export function ScanCenterShell({
   };
 
   const handleScanSuccess = (decodedText: string) => {
+    const now = Date.now();
+    const last = lastDecodedRef.current;
+    if (last && last.token === decodedText && now - last.at < 3000) return;
+    lastDecodedRef.current = { token: decodedText, at: now };
     handleScanSubmit({ qrToken: decodedText });
   };
 
@@ -586,7 +623,11 @@ export function ScanCenterShell({
               )}
             </div>
 
-            <p className="text-xs opacity-60">Tapping anywhere will skip and return to scanning</p>
+            {successData.medicalFlags?.length > 0 && (
+              <MedicalBanner flags={successData.medicalFlags} camper={successData.camper} />
+            )}
+
+            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
           </div>
         </div>
       )}
@@ -604,7 +645,7 @@ export function ScanCenterShell({
             <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
             
             <div className="space-y-2">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight">Already Recorded</h1>
+              <h1 className="text-4xl md:text-5xl font-black tracking-tight">{STATIONS[activeStation].duplicateVerb}</h1>
               <p className="text-2xl md:text-3xl font-bold opacity-90">{duplicateData.camperName}</p>
               <p className="text-sm font-semibold tracking-wider opacity-75 uppercase">{duplicateData.regNumber}</p>
             </div>
@@ -648,7 +689,7 @@ export function ScanCenterShell({
               )}
             </div>
 
-            <p className="text-xs opacity-60">Tapping anywhere will return to scanning</p>
+            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
           </div>
         </div>
       )}
@@ -827,13 +868,16 @@ export function ScanCenterShell({
         </div>
       )}
 
-      {/* ═══ OVERLAY 5: MEDICAL PRE-VERIFICATION OVERLAY ═══ */}
+      {/* ═══ OVERLAY 5: CRITICAL MEDICAL INTERRUPT — only genuinely
+          life-safety CRITICAL conditions reach this overlay (see
+          src/lib/medical.ts classifyMedical); everything else renders as
+          an inline MedicalBanner in the success overlay instead. ═══ */}
       {medicalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-amber-600 p-6 text-white overflow-y-auto">
+        <div role="alertdialog" aria-live="assertive" className="fixed inset-0 z-50 flex items-center justify-center bg-red-700 p-6 text-white overflow-y-auto">
           <div className="flex flex-col max-w-xl w-full text-center space-y-6 py-6">
             <div className="flex flex-col items-center space-y-3">
-              <ExclamationTriangleIcon className="h-20 w-20 text-amber-100 animate-bounce" />
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight">⚠ Medical & safety alert</h1>
+              <ExclamationTriangleIcon className="h-20 w-20 text-red-100 animate-bounce" />
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight">⚠ Critical Medical Alert</h1>
               <p className="text-xl md:text-2xl font-bold opacity-95">{medicalData.registration.camper.name}</p>
             </div>
 
@@ -841,13 +885,13 @@ export function ScanCenterShell({
               {medicalData.registration.camper.allergies && (
                 <div>
                   <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Allergies</span>
-                  <span className="font-bold text-lg text-amber-50">{medicalData.registration.camper.allergies}</span>
+                  <span className="font-bold text-lg text-red-50">{medicalData.registration.camper.allergies}</span>
                 </div>
               )}
               {medicalData.registration.camper.medicalConditions && (
                 <div>
                   <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Medical Conditions</span>
-                  <span className="font-bold text-lg text-amber-50">{medicalData.registration.camper.medicalConditions}</span>
+                  <span className="font-bold text-lg text-red-50">{medicalData.registration.camper.medicalConditions}</span>
                 </div>
               )}
               {medicalData.registration.camper.dietaryRestrictions && (
@@ -861,7 +905,7 @@ export function ScanCenterShell({
             <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full">
               <Button
                 size="lg"
-                className="flex-1 bg-surface text-amber-700 hover:bg-surface-raised font-bold py-4 text-base border-none shadow-lg"
+                className="flex-1 bg-surface text-red-700 hover:bg-surface-raised font-bold py-4 text-base border-none shadow-lg"
                 onClick={() => {
                   const payload = {
                     qrToken: medicalData.qrToken,

@@ -96,17 +96,12 @@ test.describe("Teacher check-in", () => {
     await page.locator('input[placeholder*="Enter Registration #"]').fill(registrationNumber);
     await page.getByRole("button", { name: "Search", exact: true }).click();
 
-    // Medical alert overlay appears because of Asthma condition.
-    await expect(page.getByText("Medical & safety alert")).toBeVisible({ timeout: 20000 });
-    await expect(page.getByText("Checkin Camper")).toBeVisible();
-    await expect(page.getByText("Asthma")).toBeVisible();
- 
-    // Acknowledge and confirm scan.
-    await page.getByRole("button", { name: "Acknowledge & Confirm Scan" }).click();
- 
-    // Success overlay appears.
+    // Asthma is a routine (non-critical) medical note, so it renders as an
+    // inline banner on the success overlay rather than a blocking screen.
     await expect(page.getByRole("heading", { name: "Checked In at Camp Arrival", exact: true })).toBeVisible({ timeout: 20000 });
-    
+    await expect(page.getByText("Medical Note")).toBeVisible();
+    await expect(page.getByText("Asthma")).toBeVisible();
+
     // Dismiss overlay by clicking it
     await page.click("text=Checked In at Camp Arrival");
     await expect(page.getByRole("heading", { name: "Checked In at Camp Arrival" })).not.toBeVisible();
