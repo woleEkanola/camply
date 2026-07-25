@@ -215,6 +215,56 @@
   --color-attention-900: #581c87;
 }
 
+/*
+ * Scan station theme — set once per active station via inline style on the
+ * scan page root (`--station-bg` etc.), so switching stations is a single
+ * CSS-variable write with zero component re-render (matters on low-end
+ * Android). Values are supplied per-station from src/lib/stations.ts;
+ * these are just neutral fallbacks if unset.
+ */
+:root {
+  --station-bg: #475569;
+  --station-bg-strong: #334155;
+  --station-fg: #f8fafc;
+  --station-ring: #94a3b8;
+  --station-tint: rgba(71, 85, 105, 0.12);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes scan-guide-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@utility animate-fade-in {
+  animation: fade-in 220ms ease-out both;
+}
+
+@utility animate-slide-up-in {
+  animation: slide-up-in 220ms ease-out both;
+}
+
+@utility animate-scan-guide-pulse {
+  animation: scan-guide-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up-in,
+  .animate-scan-guide-pulse {
+    animation: none !important;
+  }
+}
+
 @utility scrollbar-hide {
   scrollbar-width: none;
   -ms-overflow-style: none;

@@ -10,6 +10,7 @@ export * from "./SearchBar";
 export * from "./Tabs";
 export * from "./Dialog";
 export * from "./Drawer";
+export * from "./BottomSheet";
 export * from "./StatCard";
 export * from "./Table";
 export * from "./Toast";
