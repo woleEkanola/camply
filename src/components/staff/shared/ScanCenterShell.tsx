@@ -22,6 +22,7 @@ import { useOfflineScanner } from "@/hooks/useOfflineScanner";
 import { STATIONS, resolveInitialStation, getStationLabel, type StationId } from "@/lib/stations";
 import { computeStationStats, computeStationProgress, EMPTY_SESSION_STATS, type SessionScanStats } from "@/lib/stationStats";
 import { classifyMedical } from "@/lib/medical";
+import { playScanCue, vibrateForCue } from "@/lib/scanCues";
 import {
   MagnifyingGlassIcon,
   CheckCircleIcon,
@@ -264,8 +265,10 @@ export function ScanCenterShell({
         return;
       }
  
-      // B. REQUIRES MEDICAL ACKNOWLEDGEMENT (SERVER INTERCEPT)
+      // B. REQUIRES MEDICAL ACKNOWLEDGEMENT (SERVER INTERCEPT) — always CRITICAL severity
       if (response.result === "REQUIRES_MEDICAL_ACKNOWLEDGEMENT") {
+        playScanCue("critical");
+        vibrateForCue("critical");
         setMedicalData({
           registration: response.registration,
           qrToken: payload.qrToken,
@@ -276,6 +279,8 @@ export function ScanCenterShell({
 
       // C. DUPLICATE SCAN
       if (response.result === "DUPLICATE") {
+        playScanCue("duplicate");
+        vibrateForCue("duplicate");
         setSessionStats((prev) => ({ ...prev, duplicates: prev.duplicates + 1 }));
         setDuplicateData({
           camperName: response.registration.camper.name,
@@ -357,6 +362,8 @@ export function ScanCenterShell({
 
       // Show success overlay — auto-dismisses; a non-critical medical note
       // (if any) renders inline via MedicalBanner rather than interrupting.
+      playScanCue("success");
+      vibrateForCue("success");
       setSuccessData({
         camperName: camper.name,
         photoUrl: camper.photoUrl,
@@ -436,7 +443,7 @@ export function ScanCenterShell({
   const stationProgress = computeStationProgress(activeStation, operationalStats);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div data-scan-root className="mx-auto max-w-4xl space-y-6">
       {/* ═══ STATION DASHBOARD — the most obvious element on screen; always
           visible, color-coded per station, so a volunteer knows exactly
           which operational mode the device is in without reading anything. ═══ */}

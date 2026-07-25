@@ -88,7 +88,9 @@ export const STATIONS: Record<StationId, StationDef> = {
     verb: "Checking In Arrivals",
     successVerb: "Checked In",
     duplicateVerb: "Already Checked In",
-    theme: { bg: "#16a34a", bgStrong: "#15803d", fg: "#f8fafc", ring: "#86efac", tint: "rgba(22,163,74,0.12)" },
+    // bg darkened from the brand green (#16a34a, 3.15:1) to meet WCAG AA
+    // 4.5:1 against fg — see the contrast audit in Phase 6 of the redesign.
+    theme: { bg: "#15803d", bgStrong: "#166534", fg: "#f8fafc", ring: "#86efac", tint: "rgba(22,163,74,0.12)" },
     icon: MapPinIcon,
     stats: ["CHECKED_IN", "EXPECTED", "REMAINING"],
     allowsUndo: true,
@@ -112,7 +114,8 @@ export const STATIONS: Record<StationId, StationDef> = {
     verb: "Serving Breakfast",
     successVerb: "Breakfast Recorded",
     duplicateVerb: "Already Collected Breakfast",
-    theme: { bg: "#ea580c", bgStrong: "#c2410c", fg: "#fff7ed", ring: "#fdba74", tint: "rgba(234,88,12,0.12)" },
+    // bg darkened from #ea580c (3.35:1) to meet WCAG AA 4.5:1.
+    theme: { bg: "#c2410c", bgStrong: "#9a3412", fg: "#fff7ed", ring: "#fdba74", tint: "rgba(234,88,12,0.12)" },
     icon: CakeIcon,
     stats: ["SERVED", "REMAINING", "DUPLICATES"],
     allowsUndo: false,
@@ -124,7 +127,8 @@ export const STATIONS: Record<StationId, StationDef> = {
     verb: "Serving Lunch",
     successVerb: "Lunch Recorded",
     duplicateVerb: "Already Collected Lunch",
-    theme: { bg: "#d97706", bgStrong: "#b45309", fg: "#fffbeb", ring: "#fcd34d", tint: "rgba(217,119,6,0.12)" },
+    // bg darkened from #d97706 (3.07:1) to meet WCAG AA 4.5:1.
+    theme: { bg: "#b45309", bgStrong: "#92400e", fg: "#fffbeb", ring: "#fcd34d", tint: "rgba(217,119,6,0.12)" },
     icon: CakeIcon,
     stats: ["SERVED", "REMAINING", "DUPLICATES"],
     allowsUndo: false,
@@ -148,7 +152,8 @@ export const STATIONS: Record<StationId, StationDef> = {
     verb: "Processing Checkout",
     successVerb: "Checked Out",
     duplicateVerb: "Already Checked Out",
-    theme: { bg: "#dc2626", bgStrong: "#b91c1c", fg: "#fef2f2", ring: "#fca5a5", tint: "rgba(220,38,38,0.12)" },
+    // bg darkened from #dc2626 (4.41:1) to comfortably clear WCAG AA 4.5:1.
+    theme: { bg: "#b91c1c", bgStrong: "#991b1b", fg: "#fef2f2", ring: "#fca5a5", tint: "rgba(220,38,38,0.12)" },
     icon: ArrowLeftOnRectangleIcon,
     stats: ["RELEASED", "STILL_IN_CAMP"],
     allowsUndo: false,

@@ -263,6 +263,17 @@
   .animate-scan-guide-pulse {
     animation: none !important;
   }
+
+  /* Safety net for the scan experience's remaining Tailwind built-in
+     animations (animate-bounce/animate-pulse on overlay icons), which
+     don't respect prefers-reduced-motion on their own. Scoped to the scan
+     overlays/header rather than global so it doesn't affect unrelated
+     animated UI (spinners, skeletons) elsewhere in the app. */
+  [data-scan-root] .animate-bounce,
+  [data-scan-root] .animate-pulse {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 @utility scrollbar-hide {
