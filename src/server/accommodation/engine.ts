@@ -279,13 +279,21 @@ export interface BedAssignmentResult {
 export async function bulkAutoAssignBeds(params: { venueId: string; actorId: string }): Promise<BedAssignmentResult[]> {
   const venue = await prisma.venue.findUniqueOrThrow({ where: { id: params.venueId } });
 
+  // Postgres gives no row-order guarantee for a findMany with no orderBy —
+  // when capacity runs out mid-batch, which occupant wins the last bed vs.
+  // gets a "no bed available" failure would otherwise be nondeterministic.
+  // Deterministic FIFO (createdAt, then id as a tiebreaker for same-instant
+  // rows) so bulk assignment is reproducible and earlier-registered/approved
+  // occupants are prioritized when beds are scarce.
   const [unassignedRegistrations, unassignedStaff] = await Promise.all([
     prisma.registration.findMany({
       where: { campId: venue.campId, venueId: params.venueId, status: "APPROVED", roomId: null, deletedAt: null },
       include: { camper: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
     prisma.staffProfile.findMany({
       where: { campId: venue.campId, assignedVenueId: params.venueId, status: "APPROVED", assignedRoomId: null, deletedAt: null },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
   ]);
 
