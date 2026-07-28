@@ -3,9 +3,9 @@ import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
 import { sendStaffApprovedEmail, sendStaffRejectedEmail } from "../../email/sendStaffEmails";
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { normalizeEmail } from "../../../lib/email";
+import { hashPassword } from "../../../lib/auth";
 import { isCompleteNigerianPhone } from "../../../lib/phone";
 
 
@@ -681,7 +681,7 @@ export const staffRouter = createTRPCRouter({
         }
       }
 
-      const placeholderPassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+      const placeholderPassword = await hashPassword(crypto.randomBytes(32).toString("hex"));
       const firstName = systemValues.firstName || "";
       const lastName = systemValues.lastName || "";
       const phone = systemValues.phone || "";

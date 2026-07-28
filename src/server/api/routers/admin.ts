@@ -2,9 +2,9 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import { TRPCError } from "@trpc/server";
-import bcrypt from "bcryptjs";
 import { softDeleteUser } from "../../trash/userCascade";
 import { normalizeEmail } from "../../../lib/email";
+import { hashPassword } from "../../../lib/auth";
 
 // PermissionType is not exported from @prisma/client after downgrade. Define as local enum to match schema.
 export enum PermissionType {
@@ -61,7 +61,7 @@ export const adminRouter = createTRPCRouter({
       }
 
       // Hash the password
-      const hashedPassword = await bcrypt.hash(input.password, 10);
+      const hashedPassword = await hashPassword(input.password);
 
       // Create the admin user with a transaction to ensure all operations succeed or fail together
       return prisma.$transaction(async (tx: any) => {

@@ -2,8 +2,9 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
-import bcrypt from "bcryptjs";
 import { normalizeEmail } from "../../../lib/email";
+import { rateLimit } from "../../rateLimit";
+import { hashPassword } from "../../../lib/auth";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -55,7 +56,7 @@ export const authRouter = createTRPCRouter({
         }
 
         // Hash the password
-        const hashedPassword = await bcrypt.hash(input.password, 10);
+        const hashedPassword = await hashPassword(input.password);
 
         // Create the user
         const user = await prisma.user.create({
@@ -96,6 +97,13 @@ export const authRouter = createTRPCRouter({
     .mutation(async ({ input }) => {
       const normalizedEmail = normalizeEmail(input.email);
 
+      // Public, unauthenticated mutation with no other throttle — without
+      // this, anonymous mass creation of Organizations + OWNER accounts is
+      // unbounded.
+      if (!rateLimit(`register-org:${normalizedEmail}`, 3, 15 * 60 * 1000)) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." });
+      }
+
       // 1. Check if user already exists
       const existingUser = await prisma.user.findUnique({
         where: { email: normalizedEmail }
@@ -125,7 +133,7 @@ export const authRouter = createTRPCRouter({
         });
 
         // Hash the password
-        const hashedPassword = await bcrypt.hash(input.password, 10);
+        const hashedPassword = await hashPassword(input.password);
 
         // Create the user with role OWNER
         const user = await tx.user.create({

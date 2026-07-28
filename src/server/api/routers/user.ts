@@ -5,6 +5,7 @@ import { softDeleteUser } from "../../trash/userCascade";
 import { normalizeEmail } from "../../../lib/email";
 import { isCompleteNigerianPhone } from "../../../lib/phone";
 import { assertSameOrg } from "../trpc/scoping";
+import { hashPassword } from "../../../lib/auth";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT";
@@ -404,7 +405,7 @@ export const userRouter = createTRPCRouter({
             throw new Error("Incorrect current password");
           }
         }
-        updateData.password = await bcrypt.hash(input.newPassword, 10);
+        updateData.password = await hashPassword(input.newPassword);
         updateData.passwordSet = true;
       }
 
@@ -461,7 +462,7 @@ export const userRouter = createTRPCRouter({
         throw new Error("Password has already been set. Use change password instead.");
       }
 
-      const hashedPassword = await bcrypt.hash(input.password, 10);
+      const hashedPassword = await hashPassword(input.password);
 
       await ctx.prisma.user.update({
         where: { id: userId },
@@ -590,7 +591,7 @@ export const userRouter = createTRPCRouter({
       }
 
       // Hash the password
-      const hashedPassword = await bcrypt.hash(input.password, 10);
+      const hashedPassword = await hashPassword(input.password);
 
       // Create the user
       const user = await ctx.prisma.user.create({
@@ -715,7 +716,7 @@ export const userRouter = createTRPCRouter({
 
       // Hash the password if provided
       if (updateData.password) {
-        updateData.password = await bcrypt.hash(updateData.password, 10);
+        updateData.password = await hashPassword(updateData.password);
       }
 
       // Normalize email if provided

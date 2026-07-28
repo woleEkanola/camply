@@ -21,13 +21,13 @@ export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
 
-    // Verify webhook signature if secret is configured
+    // Fail closed, matching cron/effects/route.ts's CRON_SECRET check — an
+    // unset RESEND_WEBHOOK_SECRET previously skipped verification entirely,
+    // letting anyone POST unauthenticated events that write delivery state.
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const signature = request.headers.get("svix-signature") ?? "";
-      if (!signature || !verifySignature(rawBody, signature, webhookSecret)) {
-        return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-      }
+    const signature = request.headers.get("svix-signature") ?? "";
+    if (!webhookSecret || !signature || !verifySignature(rawBody, signature, webhookSecret)) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     const body = JSON.parse(rawBody);

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/server/db";
 import { resolveSignupLinkByToken } from "@/server/registration/resolveSignupLink";
 import { sendWelcomeEmail } from "@/server/email/sendWelcomeEmail";
 import { normalizeEmail } from "@/lib/email";
+import { hashPassword } from "@/lib/auth";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await hashPassword(password);
 
     // Create user
     const user = await prisma.user.create({
