@@ -170,10 +170,11 @@ export const CampusCard: React.FC<CampusCardProps> = ({
             {canSelect && (
               <div
                 className="pt-1 shrink-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect?.(campus.id);
-                }}
+                // Only stop the click from reaching the card's own onClick —
+                // the input's onChange already calls onSelect. Calling it here
+                // too fired it twice per click, toggling selection on and
+                // straight back off, so the checkbox could never be checked.
+                onClick={(e) => e.stopPropagation()}
               >
                 <input
                   type="checkbox"
