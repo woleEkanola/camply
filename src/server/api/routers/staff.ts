@@ -108,11 +108,13 @@ export const staffRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
       const where = { organizationId: input.organizationId, campId: input.campId, type: input.type, deletedAt: null };
-      const [total, pending, approved, assigned] = await Promise.all([
+      const [total, pending, approved, assigned, male, female] = await Promise.all([
         ctx.prisma.staffProfile.count({ where }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "PENDING" } }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED" } }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED", assignedVenueId: { not: null } } }),
+        ctx.prisma.staffProfile.count({ where: { ...where, gender: "Male" } }),
+        ctx.prisma.staffProfile.count({ where: { ...where, gender: "Female" } }),
       ]);
 
       const result: Record<string, any> = {
@@ -120,6 +122,8 @@ export const staffRouter = createTRPCRouter({
         pending,
         approved,
         assigned,
+        male,
+        female,
         unassigned: Math.max(approved - assigned, 0),
       };
 

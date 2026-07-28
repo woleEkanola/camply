@@ -15,13 +15,15 @@ export interface BadgeProps {
   tone?: BadgeTone;
   children: React.ReactNode;
   className?: string;
+  title?: string;
   "data-testid"?: string;
 }
 
-export function Badge({ tone = "neutral", children, className, "data-testid": dataTestId }: BadgeProps) {
+export function Badge({ tone = "neutral", children, className, title, "data-testid": dataTestId }: BadgeProps) {
   return (
     <span
       data-testid={dataTestId}
+      title={title}
       className={cn(
         "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
         toneClasses[tone],

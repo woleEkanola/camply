@@ -303,7 +303,7 @@ export function Table<T>(props: TableProps<T>) {
         <>
           {/* Desktop: unchanged table, gated to md+. */}
           <div className="hidden overflow-x-auto md:block">
-            <table className="min-w-full divide-y divide-border-default">
+            <table className="w-full table-fixed divide-y divide-border-default">
               <thead className="bg-surface-raised">
                 <tr>
                   {selectable && (
@@ -321,7 +321,13 @@ export function Table<T>(props: TableProps<T>) {
                     <th
                       key={i}
                       scope="col"
-                      style={columnWidths[i] ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` } : undefined}
+                      style={
+                        columnWidths[i]
+                          ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` }
+                          : column.primary
+                          ? { width: "26%", minWidth: "180px" }
+                          : undefined
+                      }
                       className={cn(
                         "relative px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-txt-secondary group select-none overflow-hidden",
                         column.sortable && "cursor-pointer hover:bg-surface-hover",

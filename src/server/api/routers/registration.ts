@@ -32,6 +32,74 @@ function toTRPCError(error: unknown): TRPCError {
   return new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Unknown error" });
 }
 
+type DuplicateScanRow = {
+  id: string;
+  camperId: string;
+  status: string;
+  camper: { id: string; name: string | null; firstName: string | null; lastName: string | null; dateOfBirth: Date | null } | null;
+};
+
+/**
+ * A registration is flagged a "possible duplicate" if another registration in
+ * the same scope shares its camperId, or (fallback, for distinct Camper rows
+ * that are themselves duplicates) the same lowercased full name + DOB. Used
+ * by both `getAdminListStats` (count only) and `adminList` (count + grouped
+ * ordering + sibling info) — kept as one function so the two never drift.
+ */
+function computeDuplicateGroups(regs: DuplicateScanRow[]) {
+  const camperIdCounts = new Map<string, number>();
+  const nameDobMap = new Map<string, string[]>();
+  for (const r of regs) {
+    camperIdCounts.set(r.camperId, (camperIdCounts.get(r.camperId) || 0) + 1);
+    const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
+    const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
+    if (name) {
+      const key = `${name}|${dob}`;
+      const list = nameDobMap.get(key) || [];
+      list.push(r.id);
+      nameDobMap.set(key, list);
+    }
+  }
+
+  const duplicateRegIds = new Set<string>();
+  const groupKeyByRegId = new Map<string, string>();
+  for (const r of regs) {
+    const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
+    const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
+    const nameDobKey = `${name}|${dob}`;
+    if ((camperIdCounts.get(r.camperId) || 0) > 1) {
+      duplicateRegIds.add(r.id);
+      groupKeyByRegId.set(r.id, `camper:${r.camperId}`);
+    } else if ((nameDobMap.get(nameDobKey)?.length || 0) > 1) {
+      duplicateRegIds.add(r.id);
+      groupKeyByRegId.set(r.id, `namedob:${nameDobKey}`);
+    }
+  }
+
+  const siblingsByRegId = new Map<string, { id: string; status: string }[]>();
+  for (const r of regs) {
+    const groupKey = groupKeyByRegId.get(r.id);
+    if (!groupKey) continue;
+    const siblings = regs.filter((other) => other.id !== r.id && groupKeyByRegId.get(other.id) === groupKey);
+    siblingsByRegId.set(r.id, siblings.map((s) => ({ id: s.id, status: s.status })));
+  }
+
+  return { duplicateRegIds, groupKeyByRegId, siblingsByRegId };
+}
+
+/** Best-to-worst-for-keeping status ordering, used to sort duplicate siblings
+ * together with the "likely keep" registration first and the "likely safe to
+ * delete" ones last. */
+const DUPLICATE_STATUS_PRIORITY = [
+  "APPROVED", "CHECKED_IN", "COMPLETED",
+  "PENDING", "WAITLISTED", "REQUIRES_ACTION", "SUBMITTED", "DRAFT",
+  "REJECTED", "CANCELLED", "ARCHIVED",
+];
+function duplicateStatusRank(status: string): number {
+  const idx = DUPLICATE_STATUS_PRIORITY.indexOf(status);
+  return idx === -1 ? DUPLICATE_STATUS_PRIORITY.length : idx;
+}
+
 // In a TWO_STEP org, only an org admin may give final approval — a campus
 // rep's role there is limited to endorsing (see the `endorse` mutation).
 // SINGLE_STEP orgs keep the existing rep-or-admin approve authorization.
@@ -1748,37 +1816,11 @@ export const registrationRouter = createTRPCRouter({
         select: {
           id: true,
           camperId: true,
+          status: true,
           camper: { select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true } },
         },
       });
-
-      const camperIdCounts = new Map<string, number>();
-      const nameDobMap = new Map<string, string[]>();
-      for (const r of allRegsInScope) {
-        camperIdCounts.set(r.camperId, (camperIdCounts.get(r.camperId) || 0) + 1);
-        const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
-        const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
-        if (name) {
-          const key = `${name}|${dob}`;
-          const list = nameDobMap.get(key) || [];
-          list.push(r.id);
-          nameDobMap.set(key, list);
-        }
-      }
-
-      const duplicateRegIds = new Set<string>();
-      for (const r of allRegsInScope) {
-        if ((camperIdCounts.get(r.camperId) || 0) > 1) {
-          duplicateRegIds.add(r.id);
-        } else {
-          const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
-          const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
-          const key = `${name}|${dob}`;
-          if ((nameDobMap.get(key)?.length || 0) > 1) {
-            duplicateRegIds.add(r.id);
-          }
-        }
-      }
+      const { duplicateRegIds } = computeDuplicateGroups(allRegsInScope);
 
       return {
         countsByStatus,
@@ -1833,37 +1875,11 @@ export const registrationRouter = createTRPCRouter({
         select: {
           id: true,
           camperId: true,
+          status: true,
           camper: { select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true } },
         },
       });
-
-      const camperIdCounts = new Map<string, number>();
-      const nameDobMap = new Map<string, string[]>();
-      for (const r of allRegsInScope) {
-        camperIdCounts.set(r.camperId, (camperIdCounts.get(r.camperId) || 0) + 1);
-        const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
-        const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
-        if (name) {
-          const key = `${name}|${dob}`;
-          const list = nameDobMap.get(key) || [];
-          list.push(r.id);
-          nameDobMap.set(key, list);
-        }
-      }
-
-      const duplicateRegIds = new Set<string>();
-      for (const r of allRegsInScope) {
-        if ((camperIdCounts.get(r.camperId) || 0) > 1) {
-          duplicateRegIds.add(r.id);
-        } else {
-          const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
-          const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
-          const key = `${name}|${dob}`;
-          if ((nameDobMap.get(key)?.length || 0) > 1) {
-            duplicateRegIds.add(r.id);
-          }
-        }
-      }
+      const { duplicateRegIds, groupKeyByRegId, siblingsByRegId } = computeDuplicateGroups(allRegsInScope);
 
       const endorsedFilter = { review: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } };
       const notEndorsedFilter = { OR: [{ review: null }, { review: { NOT: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } } }] };
@@ -1889,38 +1905,62 @@ export const registrationRouter = createTRPCRouter({
         }),
       };
 
-      const rawItems = await ctx.prisma.registration.findMany({
-        where,
-        include: {
-          camper: { include: { user: true } },
-          campus: true,
-          camp: {
-            include: {
-              documentRequirements: {
-                where: { deletedAt: null },
-              },
+      const includeShape = {
+        camper: { include: { user: true } },
+        campus: true,
+        camp: {
+          include: {
+            documentRequirements: {
+              where: { deletedAt: null },
             },
           },
-          documents: {
-            where: { deletedAt: null },
-            select: { id: true, status: true, fileName: true, requirementId: true },
-          },
-          review: { select: { verificationStatus: true, recommendation: true, verifiedById: true, verifiedAt: true, assignedToId: true } },
         },
-        orderBy: { createdAt: "desc" },
-        take: input.limit + 1,
-        ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
-      });
+        documents: {
+          where: { deletedAt: null },
+          select: { id: true, status: true, fileName: true, requirementId: true },
+        },
+        review: { select: { verificationStatus: true, recommendation: true, verifiedById: true, verifiedAt: true, assignedToId: true } },
+      } as const;
 
+      let rawItems: Awaited<ReturnType<typeof ctx.prisma.registration.findMany>>;
       let nextCursor: string | undefined;
-      if (rawItems.length > input.limit) {
-        const next = rawItems.pop();
-        nextCursor = next?.id;
+
+      if (input.duplicatesOnly) {
+        // Grouping breaks simple orderBy/cursor pagination, and duplicate sets
+        // are inherently small — fetch everything in scope (bounded) and sort
+        // in JS so siblings always render adjacently, "likely to keep" first.
+        rawItems = await ctx.prisma.registration.findMany({
+          where,
+          include: includeShape,
+          take: 300,
+        });
+        rawItems.sort((a: any, b: any) => {
+          const groupA = groupKeyByRegId.get(a.id) ?? "";
+          const groupB = groupKeyByRegId.get(b.id) ?? "";
+          if (groupA !== groupB) return groupA < groupB ? -1 : 1;
+          const rankDiff = duplicateStatusRank(a.status) - duplicateStatusRank(b.status);
+          if (rankDiff !== 0) return rankDiff;
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        });
+        nextCursor = undefined;
+      } else {
+        rawItems = await ctx.prisma.registration.findMany({
+          where,
+          include: includeShape,
+          orderBy: { createdAt: "desc" },
+          take: input.limit + 1,
+          ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+        });
+        if (rawItems.length > input.limit) {
+          const next = rawItems.pop();
+          nextCursor = next?.id;
+        }
       }
 
-      const items = rawItems.map((item) => ({
+      const items = rawItems.map((item: any) => ({
         ...item,
         isDuplicate: duplicateRegIds.has(item.id),
+        duplicateSiblings: siblingsByRegId.get(item.id) ?? [],
       }));
 
       const totalCount = await ctx.prisma.registration.count({ where });

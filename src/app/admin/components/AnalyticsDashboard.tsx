@@ -10,6 +10,7 @@ import {
   UsersIcon,
   ShieldCheckIcon,
   UserGroupIcon,
+  AcademicCapIcon,
   BuildingOffice2Icon,
   ClipboardDocumentListIcon,
   CalendarIcon,
@@ -149,6 +150,16 @@ export default function AnalyticsDashboard() {
     { enabled: !!activeCamp?.id }
   );
 
+  const { data: camperStats, isLoading: camperStatsLoading } = api.camper.getAdminListStats.useQuery(
+    { organizationId: organizationId!, campId: activeCamp?.id },
+    { enabled: !!organizationId }
+  );
+
+  const { data: tribesData, isLoading: tribesLoading } = api.tribe.listByCamp.useQuery(
+    { campId: activeCamp?.id! },
+    { enabled: !!activeCamp?.id }
+  );
+
   const firstName = userProfile?.firstName;
   const regItems = recentRegistrations?.items ?? [];
 
@@ -180,37 +191,7 @@ export default function AnalyticsDashboard() {
       />
 
       {/* ─── Section 2: Organization Overview Stats ─── */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Link
-          href="/admin/users"
-          data-testid="stat-card-parents"
-          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
-        >
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-            <UsersIcon className="h-5 w-5" />
-          </div>
-          <p className="text-sm text-txt-secondary">Parents</p>
-          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
-            {usersLoading ? "\u2026" : usersData?.length ?? 0}
-          </p>
-          <p className="mt-1 text-xs text-txt-muted">Total parents</p>
-        </Link>
-
-        <Link
-          href="/admin/access-control"
-          data-testid="stat-card-admins"
-          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
-        >
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
-            <ShieldCheckIcon className="h-5 w-5" />
-          </div>
-          <p className="text-sm text-txt-secondary">Admins</p>
-          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
-            {adminsLoading ? "\u2026" : adminsData?.length ?? 0}
-          </p>
-          <p className="mt-1 text-xs text-txt-muted">Total admins</p>
-        </Link>
-
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <Link
           href="/admin/campers"
           data-testid="stat-card-campers"
@@ -221,9 +202,129 @@ export default function AnalyticsDashboard() {
           </div>
           <p className="text-sm text-txt-secondary">Campers</p>
           <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
-            {campersLoading ? "\u2026" : campersData?.length ?? 0}
+            {camperStatsLoading ? "…" : camperStats?.totalCount ?? 0}
           </p>
           <p className="mt-1 text-xs text-txt-muted">Total campers</p>
+        </Link>
+
+        <Link
+          href="/admin/campers"
+          data-testid="stat-card-checked-in"
+          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
+            <CheckCircleIcon className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-txt-secondary">Checked In</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
+            {camperStatsLoading ? "…" : camperStats?.inCampCount ?? 0}
+          </p>
+          <p className="mt-1 text-xs text-txt-muted">Currently in camp</p>
+        </Link>
+
+        <Link
+          href="/admin/campers"
+          data-testid="stat-card-campers-male"
+          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <UserGroupIcon className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-txt-secondary">Male Campers</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
+            {camperStatsLoading ? "…" : camperStats?.maleCount ?? 0}
+          </p>
+          <p className="mt-1 text-xs text-txt-muted">Total male</p>
+        </Link>
+
+        <Link
+          href="/admin/campers"
+          data-testid="stat-card-campers-female"
+          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <UserGroupIcon className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-txt-secondary">Female Campers</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
+            {camperStatsLoading ? "…" : camperStats?.femaleCount ?? 0}
+          </p>
+          <p className="mt-1 text-xs text-txt-muted">Total female</p>
+        </Link>
+
+        <Link
+          href="/admin/campers"
+          data-testid="stat-card-checked-out"
+          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-neutral-500/10 text-neutral-400 border border-neutral-500/20">
+            <CheckCircleIcon className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-txt-secondary">Checked Out</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
+            {camperStatsLoading ? "…" : camperStats?.exitedCampCount ?? 0}
+          </p>
+          <p className="mt-1 text-xs text-txt-muted">Exited camp</p>
+        </Link>
+
+        <Link
+          href="/admin/teachers"
+          data-testid="stat-card-teachers"
+          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
+            <AcademicCapIcon className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-txt-secondary">Teachers</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
+            {teacherStats?.total ?? "…"}
+          </p>
+          <p className="mt-1 text-xs text-txt-muted">Total teachers</p>
+        </Link>
+
+        <Link
+          href="/admin/teachers"
+          data-testid="stat-card-teachers-male"
+          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <AcademicCapIcon className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-txt-secondary">Teachers (Male)</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
+            {teacherStats?.male ?? "…"}
+          </p>
+          <p className="mt-1 text-xs text-txt-muted">Male teachers</p>
+        </Link>
+
+        <Link
+          href="/admin/teachers"
+          data-testid="stat-card-teachers-female"
+          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <AcademicCapIcon className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-txt-secondary">Teachers (Female)</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
+            {teacherStats?.female ?? "…"}
+          </p>
+          <p className="mt-1 text-xs text-txt-muted">Female teachers</p>
+        </Link>
+
+        <Link
+          href="/admin/tribes"
+          data-testid="stat-card-tribes"
+          className="group rounded-xl border border-border-default bg-surface p-5 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <UserGroupIcon className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-txt-secondary">Tribes</p>
+          <p className="mt-1 text-3xl font-extrabold tracking-tight text-txt-primary">
+            {tribesLoading ? "…" : tribesData?.length ?? 0}
+          </p>
+          <p className="mt-1 text-xs text-txt-muted">Total tribes</p>
         </Link>
 
         <Link

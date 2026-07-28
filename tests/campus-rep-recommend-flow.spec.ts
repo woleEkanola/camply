@@ -154,8 +154,9 @@ test.describe("Campus-rep recommend flow + filters + duplicates", () => {
 
     const dupRows = page.locator("tr", { hasText: dupName });
     await expect(dupRows).toHaveCount(2, { timeout: 10000 });
-    // Each duplicate row carries the warning "Duplicate" badge.
-    await expect(dupRows.first().getByText("Duplicate", { exact: true })).toBeVisible();
-    await expect(dupRows.nth(1).getByText("Duplicate", { exact: true })).toBeVisible();
+    // Each duplicate row carries the warning "Duplicate" badge, with a
+    // sibling-status hint appended (e.g. "Duplicate · 1 Pending").
+    await expect(dupRows.first().getByText(/^Duplicate/)).toBeVisible();
+    await expect(dupRows.nth(1).getByText(/^Duplicate/)).toBeVisible();
   });
 });

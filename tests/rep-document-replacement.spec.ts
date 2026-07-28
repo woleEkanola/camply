@@ -28,7 +28,7 @@ test.describe("Rep document replacement permissions", () => {
   let requirementId: string;
 
   test.beforeAll(async () => {
-    const { organizationId, campId } = await getFixtureOrgContext();
+    const { organizationId, campId, venueId } = await getFixtureOrgContext();
 
     const campusA = await prisma.campus.create({
       data: { name: `E2E Rep Doc Campus A ${Date.now()}`, slug: `e2e-rep-doc-a-${Date.now()}`, address: "1 A St", city: "Testville", country: "Testland", organizationId },
@@ -57,7 +57,10 @@ test.describe("Rep document replacement permissions", () => {
     const camperA = await prisma.camper.create({ data: { name: "E2E Rep Doc Camper A", userId: parentA.id, organizationId, homeCampusId: campusAId } });
     const camperB = await prisma.camper.create({ data: { name: "E2E Rep Doc Camper B", userId: parentB.id, organizationId, homeCampusId: campusBId } });
 
-    const registrationA = await prisma.registration.create({ data: { camperId: camperA.id, campId, campusId: campusAId, status: "REQUIRES_ACTION" } });
+    // venueId pre-assigned so the later "approve directly after replace" test
+    // doesn't hit the separate VENUE_NOT_ASSIGNED gate — this spec is only
+    // exercising the REQUIRES_ACTION -> PENDING -> APPROVED transition.
+    const registrationA = await prisma.registration.create({ data: { camperId: camperA.id, campId, campusId: campusAId, venueId, status: "REQUIRES_ACTION" } });
     registrationAId = registrationA.id;
     const registrationB = await prisma.registration.create({ data: { camperId: camperB.id, campId, campusId: campusBId, status: "REQUIRES_ACTION" } });
     registrationBId = registrationB.id;
@@ -118,6 +121,29 @@ test.describe("Rep document replacement permissions", () => {
     const action = await prisma.documentAction.findFirstOrThrow({ where: { documentId: documentAId } });
     expect(action.status).toBe("RESOLVED");
     expect(action.resolutionType).toBe("REP_UPLOAD");
+
+    // Regression: replacing the last flagged document used to leave the
+    // registration stranded at REQUIRES_ACTION forever (nothing in the
+    // replace flow ever transitioned it), which then made endorse/approve
+    // fail downstream with "Only a pending registration can be endorsed" /
+    // "Cannot move from REQUIRES_ACTION to APPROVED". It must auto-heal back
+    // to PENDING once its only flagged document is resolved.
+    const registration = await prisma.registration.findUniqueOrThrow({ where: { id: registrationAId } });
+    expect(registration.status).toBe("PENDING");
+    expect(registration.correctionRequest).toBeNull();
+  });
+
+  test("registration A can be approved directly after its flagged document was replaced", async ({ page }) => {
+    await loginWithPassword(page, repAEmail, "password123");
+
+    const res = await page.request.post("/api/trpc/registration.approve?batch=1", {
+      data: { "0": { json: { registrationId: registrationAId } } },
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(res.ok()).toBe(true);
+    const registration = await prisma.registration.findUniqueOrThrow({ where: { id: registrationAId } });
+    expect(registration.status).toBe("APPROVED");
   });
 
   test("Upload Replacement file input actually reaches the client-side requirement check", async ({ page }) => {

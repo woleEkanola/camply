@@ -77,7 +77,11 @@ test.describe("Mobile operational flows — registrations", () => {
     await expect(filtersButton.getByText("1", { exact: true })).toBeVisible();
 
     // The fixture registration's card, with its inline Approve action.
-    const card = page.locator("li", { hasText: camperName }).first();
+    // MobileRegistrationCard's root is a <div class="... rounded-2xl ...">,
+    // not a semantic <li> — scope to that specific card class so a plain
+    // `hasText` div match doesn't also grab the outer list container (which
+    // contains every card's text and would make "Approve" ambiguous).
+    const card = page.locator("div.rounded-2xl", { hasText: camperName }).first();
     await expect(card).toBeVisible();
     // exact:true — the card's outer div has role="button" too (onRowClick
     // opens the detail drawer) with no aria-label, so its accessible name

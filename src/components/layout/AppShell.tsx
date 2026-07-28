@@ -4,7 +4,7 @@ import { useState, Fragment, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, UserIcon } from "@heroicons/react/24/outline";
+import { ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, UserIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import NotificationBell from "@/components/NotificationBell";
@@ -65,6 +65,23 @@ export default function AppShell({ area, children }: AppShellProps) {
   const groups = getNavGroups(role, area, managedCampuses.length > 0);
   const bottomNavItems = getBottomNavItems(role, area, managedCampuses.length > 0);
 
+  // Collapsible groups (Communication, Settings) start closed; auto-expand
+  // whichever one contains the current route so the active link is never
+  // hidden behind a collapsed header.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    for (const group of groups) {
+      if (!group.collapsible) continue;
+      const containsActive = group.items.some(
+        (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
+      );
+      if (containsActive) {
+        setOpenGroups((prev) => (prev[group.name] ? prev : { ...prev, [group.name]: true }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, role]);
+
   const handleLogout = async () => {
     await signOut({ redirect: false });
     router.push("/login");
@@ -97,11 +114,31 @@ export default function AppShell({ area, children }: AppShellProps) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto scrollbar-hide px-2 py-2"
       >
-        {groups.map((group) => (
+        {groups.map((group) => {
+          // Icon-only collapsed sidebar has no header to click, so always show
+          // items there regardless of the group's open/closed state.
+          const groupOpen = !group.collapsible || !sidebarOpen || !!openGroups[group.name];
+          return (
           <div key={group.name} className="mb-4">
-            <div className={cn("mb-1 px-3 text-xs font-semibold uppercase tracking-wide text-txt-muted", !sidebarOpen && "hidden")}>
-              {group.name}
-            </div>
+            {group.collapsible ? (
+              <button
+                type="button"
+                onClick={() => setOpenGroups((prev) => ({ ...prev, [group.name]: !prev[group.name] }))}
+                className={cn(
+                  "mb-1 flex w-full items-center justify-between rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide text-txt-muted hover:text-txt-secondary",
+                  !sidebarOpen && "hidden"
+                )}
+                aria-expanded={groupOpen}
+              >
+                {group.name}
+                <ChevronRightIcon className={cn("h-3.5 w-3.5 shrink-0 transition-transform", groupOpen && "rotate-90")} aria-hidden="true" />
+              </button>
+            ) : (
+              <div className={cn("mb-1 px-3 text-xs font-semibold uppercase tracking-wide text-txt-muted", !sidebarOpen && "hidden")}>
+                {group.name}
+              </div>
+            )}
+            {groupOpen && (
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 // Links requiring exact path matching to prevent sub-paths from incorrectly triggering active highlight.
@@ -134,8 +171,10 @@ export default function AppShell({ area, children }: AppShellProps) {
                 );
               })}
             </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       <div className="border-t border-sidebar-border p-2">

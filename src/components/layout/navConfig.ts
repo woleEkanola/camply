@@ -47,11 +47,16 @@ export interface NavItem {
 export interface NavGroup {
   name: string;
   items: NavItem[];
+  /** Renders the group header as a click-to-expand toggle (collapsed by
+   * default) instead of an always-visible section. Reserved for the largest,
+   * least-frequently-used groups (Communication, Settings) — every other
+   * group stays always-expanded. */
+  collapsible?: boolean;
 }
 
 /**
- * Navigation grouped by workflow (Dashboard / Registration / Organization /
- * Camp Operations / People / Communication / Settings) rather than by
+ * Navigation grouped by workflow (Dashboard / Registration / People /
+ * Camp Management / Organization / Communication / Settings) rather than by
  * entity — replaces the old flat 8-item list in ModernDashboardLayout's
  * getMenuItems(). Role gates below reproduce that function's exact logic.
  * Campuses (permanent church branches) and Camps (temporary events) are
@@ -87,22 +92,8 @@ const ADMIN_GROUPS: NavGroup[] = [
     ],
   },
   {
-    name: "Organization",
-    items: [
-      { name: "Campuses", href: "/admin/campuses", icon: MapPinIcon },
-      { name: "Camps", href: "/admin/camps", icon: CalendarIcon, roles: ["SUPER_ADMIN", "OWNER"] },
-    ],
-  },
-  {
-    name: "Camp Operations",
-    items: [
-      { name: "Venues", href: "/admin/venues", icon: BuildingOffice2Icon, roles: ["SUPER_ADMIN", "OWNER", "ADMIN"] },
-    ],
-  },
-  {
     name: "People",
     items: [
-      { name: "Users", href: "/admin/users", icon: UsersIcon },
       { name: "Campers", href: "/admin/campers", icon: UserGroupIcon },
       {
         name: "Teachers",
@@ -142,7 +133,16 @@ const ADMIN_GROUPS: NavGroup[] = [
     ],
   },
   {
+    name: "Organization",
+    items: [
+      { name: "Campuses", href: "/admin/campuses", icon: MapPinIcon },
+      { name: "Camps", href: "/admin/camps", icon: CalendarIcon, roles: ["SUPER_ADMIN", "OWNER"] },
+      { name: "Venues", href: "/admin/venues", icon: BuildingOffice2Icon, roles: ["SUPER_ADMIN", "OWNER", "ADMIN"] },
+    ],
+  },
+  {
     name: "Communication",
+    collapsible: true,
     items: [
       {
         name: "Dashboard",
@@ -208,7 +208,9 @@ const ADMIN_GROUPS: NavGroup[] = [
   },
   {
     name: "Settings",
+    collapsible: true,
     items: [
+      { name: "Users", href: "/admin/users", icon: UsersIcon },
       {
         name: "Profile Fields",
         href: "/admin/profile-fields",

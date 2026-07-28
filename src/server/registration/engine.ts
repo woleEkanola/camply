@@ -671,54 +671,70 @@ export async function flagDocumentRequiresAction(params: {
   });
 }
 
+/**
+ * Shared tail end of every "leave REQUIRES_ACTION" path: flips the
+ * registration back to PENDING, clears the correction message, and resets a
+ * stale endorsed RegistrationReview back to NOT_STARTED (a correction/
+ * resubmission means the data changed since any prior vetting, so a stale
+ * endorsement can't be trusted — keep the assigned verifier so the same
+ * person is re-prompted rather than needing re-assignment).
+ */
+async function clearRequiresAction(
+  tx: Prisma.TransactionClient,
+  params: { registrationId: string; actorId: string; action: string }
+) {
+  const registration = await tx.registration.findUniqueOrThrow({
+    where: { id: params.registrationId },
+    include: { camper: true },
+  });
+
+  assertTransition(registration.status, "PENDING");
+
+  const updated = await tx.registration.update({
+    where: { id: registration.id },
+    data: { status: "PENDING", correctionRequest: null },
+  });
+
+  const existingReview = await tx.registrationReview.findUnique({ where: { registrationId: registration.id } });
+  let reviewReset = false;
+  if (existingReview && isEndorsed(existingReview)) {
+    await tx.registrationReview.update({
+      where: { registrationId: registration.id },
+      data: { verificationStatus: "NOT_STARTED", recommendation: null, verifiedById: null, verifiedAt: null },
+    });
+    reviewReset = true;
+  }
+
+  await logEvent(tx, {
+    organizationId: registration.camper.organizationId,
+    registrationId: registration.id,
+    actorId: params.actorId,
+    action: params.action,
+    previousValue: { status: registration.status },
+    newValue: { status: "PENDING", reviewReset },
+  });
+
+  return updated;
+}
+
 /** Parent resubmits after a correction request or a rejection (if allowed). */
 export async function resubmitRegistration(params: { registrationId: string; actorId: string }) {
   const result = await prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camper: true, camp: true },
+      include: { camp: true },
     });
 
     if (registration.status === "REJECTED" && !registration.camp.allowResubmission) {
       throw new RegistrationEngineError("RESUBMISSION_NOT_ALLOWED", "This camp does not allow resubmission after rejection.");
     }
 
-    assertTransition(registration.status, "PENDING");
-
     const failures = await validateSubmission(tx, { registrationId: registration.id, parentUserId: params.actorId });
     if (failures.length > 0) {
       throw new RegistrationValidationError(failures);
     }
 
-    const updated = await tx.registration.update({
-      where: { id: registration.id },
-      data: { status: "PENDING", correctionRequest: null, rejectionReason: null },
-    });
-
-    // A correction/resubmission means the data changed since any prior
-    // vetting, so a stale endorsement can't be trusted — reset it back to
-    // NOT_STARTED (keep the assigned verifier so the same person is
-    // re-prompted rather than needing re-assignment).
-    const existingReview = await tx.registrationReview.findUnique({ where: { registrationId: registration.id } });
-    let reviewReset = false;
-    if (existingReview && isEndorsed(existingReview)) {
-      await tx.registrationReview.update({
-        where: { registrationId: registration.id },
-        data: { verificationStatus: "NOT_STARTED", recommendation: null, verifiedById: null, verifiedAt: null },
-      });
-      reviewReset = true;
-    }
-
-    await logEvent(tx, {
-      organizationId: registration.camper.organizationId,
-      registrationId: registration.id,
-      actorId: params.actorId,
-      action: "REGISTRATION_RESUBMITTED",
-      previousValue: { status: registration.status },
-      newValue: { status: "PENDING", reviewReset },
-    });
-
-    return updated;
+    return clearRequiresAction(tx, { registrationId: params.registrationId, actorId: params.actorId, action: "REGISTRATION_RESUBMITTED" });
   });
 
   await runSideEffectsNow(result.id, "REGISTRATION_SUBMITTED");
@@ -731,30 +747,40 @@ export async function resubmitRegistration(params: { registrationId: string; act
  * use resubmitRegistration instead.
  */
 export async function advanceFromRequiresAction(params: { registrationId: string; actorId: string }) {
-  return prisma.$transaction(async (tx) => {
-    const registration = await tx.registration.findUniqueOrThrow({
-      where: { id: params.registrationId },
-      include: { camper: true },
-    });
+  return prisma.$transaction((tx) =>
+    clearRequiresAction(tx, { registrationId: params.registrationId, actorId: params.actorId, action: "REGISTRATION_ADVANCED_FROM_REQUIRES_ACTION" })
+  );
+}
 
-    assertTransition(registration.status, "PENDING");
+/**
+ * Auto-heals a registration out of REQUIRES_ACTION once every flagged
+ * DocumentAction tied to it (registration-scoped or camper-scoped) has been
+ * resolved. Called from the document-replace flow so parents/staff don't
+ * have to separately click "Submit"/"Advance to Review" just to un-stick a
+ * registration whose only outstanding issue was the flagged document. A
+ * no-op if the registration isn't in REQUIRES_ACTION, or if other flagged
+ * documents are still unresolved.
+ */
+export async function advanceIfDocumentActionsResolved(
+  tx: Prisma.TransactionClient,
+  params: { registrationId: string; actorId: string }
+) {
+  const registration = await tx.registration.findUniqueOrThrow({ where: { id: params.registrationId } });
+  if (registration.status !== "REQUIRES_ACTION") {
+    return registration;
+  }
 
-    const updated = await tx.registration.update({
-      where: { id: registration.id },
-      data: { status: "PENDING", correctionRequest: null },
-    });
-
-    await logEvent(tx, {
-      organizationId: registration.camper.organizationId,
-      registrationId: registration.id,
-      actorId: params.actorId,
-      action: "REGISTRATION_ADVANCED_FROM_REQUIRES_ACTION",
-      previousValue: { status: registration.status },
-      newValue: { status: "PENDING" },
-    });
-
-    return updated;
+  const remaining = await tx.documentAction.count({
+    where: {
+      status: "REQUIRES_ACTION",
+      document: { deletedAt: null, OR: [{ registrationId: params.registrationId }, { camperId: registration.camperId }] },
+    },
   });
+  if (remaining > 0) {
+    return registration;
+  }
+
+  return clearRequiresAction(tx, { registrationId: params.registrationId, actorId: params.actorId, action: "REGISTRATION_ADVANCED_FROM_REQUIRES_ACTION" });
 }
 
 export async function cancelRegistration(params: { registrationId: string; actorId: string; reason?: string }) {
