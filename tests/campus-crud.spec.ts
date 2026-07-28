@@ -8,9 +8,15 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
   let campusId: string | undefined;
 
   test.afterAll(async () => {
-    if (campusId) {
-      await prisma.signupLink.deleteMany({ where: { campusId } });
-      await prisma.campus.deleteMany({ where: { id: campusId } });
+    // Clean up by NAME, not by the id captured mid-test: `campusId` is only
+    // assigned after the first assertion, so any earlier failure used to leave
+    // the created campus behind forever. Thirteen had accumulated in the
+    // shared fixture org before this was fixed.
+    const strays = await prisma.campus.findMany({ where: { name: campusName }, select: { id: true } });
+    const ids = strays.map((c) => c.id);
+    if (ids.length) {
+      await prisma.signupLink.deleteMany({ where: { campusId: { in: ids } } });
+      await prisma.campus.deleteMany({ where: { id: { in: ids } } });
     }
   });
 
@@ -28,6 +34,11 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     await dialog.getByLabel("City").fill("Testville");
     await dialog.getByLabel("Country").fill("Testland");
     await dialog.getByRole("button", { name: "Add Campus", exact: true }).click();
+
+    // The dialog closes in the mutation's onSuccess, so this is the signal
+    // that the create actually resolved. Without it the next step raced the
+    // request and searched a list that couldn't contain the campus yet.
+    await expect(dialog).toBeHidden({ timeout: 15000 });
 
     const card = await findCampusCard(page, campusName);
     await expect(card).toBeVisible({ timeout: 10000 });
