@@ -842,6 +842,7 @@ export const scanRouter = createTRPCRouter({
           const stationLower = scan.station.toLowerCase();
           const idMeal = scan.stationId ? STATION_ID_MEAL[scan.stationId] : undefined;
           const idIsCheckout = scan.stationId ? scan.stationId === "CHECKOUT" : undefined;
+          const idIsCollectible = scan.stationId ? STATION_ID_CLASSIFICATION[scan.stationId] === "COLLECTIBLE" : false;
 
           // A. MEALS
           if (idMeal || (idIsCheckout === undefined && ["breakfast", "lunch", "dinner"].includes(stationLower))) {
@@ -956,7 +957,62 @@ export const scanRouter = createTRPCRouter({
 
             syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "SUCCESS" });
           }
-          // C. CHECK-IN
+          // C. COLLECTIBLES — mirrors the online path's dedicated branch
+          // (which deliberately never touches registration.status). This
+          // branch didn't exist here at all, so a queued offline collectible
+          // scan (merch table, gift bag, etc.) fell through to the generic
+          // check-in branch below and got recorded as the camper having
+          // arrived at camp.
+          else if (idIsCollectible) {
+            const startOfToday = new Date(parsedTimestamp);
+            startOfToday.setHours(0, 0, 0, 0);
+            const endOfToday = new Date(parsedTimestamp);
+            endOfToday.setHours(23, 59, 59, 999);
+
+            const existingCollection = await ctx.prisma.scanEvent.findFirst({
+              where: {
+                registrationId: reg.id,
+                station: scan.station,
+                result: "SUCCESS",
+                timestamp: { gte: startOfToday, lte: endOfToday },
+              },
+            });
+
+            if (existingCollection) {
+              await ctx.prisma.scanEvent.create({
+                data: {
+                  registrationId: reg.id,
+                  campId,
+                  station: scan.station,
+                  timestamp: parsedTimestamp,
+                  volunteerId: ctx.userId,
+                  device: scan.device,
+                  location: scan.location,
+                  result: "DUPLICATE",
+                  metadata: { offlineSync: true, stationId: "COLLECTIBLE" },
+                },
+              });
+              syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "DUPLICATE" });
+              continue;
+            }
+
+            await ctx.prisma.scanEvent.create({
+              data: {
+                registrationId: reg.id,
+                campId,
+                station: scan.station,
+                timestamp: parsedTimestamp,
+                volunteerId: ctx.userId,
+                device: scan.device,
+                location: scan.location,
+                result: "SUCCESS",
+                metadata: { offlineSync: true, stationId: "COLLECTIBLE" },
+              },
+            });
+
+            syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "SUCCESS" });
+          }
+          // D. CHECK-IN
           else {
             const startOfToday = new Date(parsedTimestamp);
             startOfToday.setHours(0, 0, 0, 0);

@@ -735,11 +735,23 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
-      // Delete the registration (soft delete — recoverable from Trash for 60 days)
-      return await ctx.prisma.registration.update({
-        where: { id: input.id },
-        data: { deletedAt: new Date() },
-      });
+      // Delete the registration (soft delete — recoverable from Trash for 60
+      // days). Previously left the Bed row pointing at this registration
+      // with status OCCUPIED forever — permanently unallocatable, since
+      // suggestBed only considers AVAILABLE beds and deleteBed/deleteRoom
+      // refuse to remove an occupied one. Release it in the same
+      // transaction, matching unassignCamperFromBed's clear-both pattern.
+      const [, updated] = await ctx.prisma.$transaction([
+        ctx.prisma.bed.updateMany({
+          where: { registrationId: input.id },
+          data: { registrationId: null, status: "AVAILABLE" },
+        }),
+        ctx.prisma.registration.update({
+          where: { id: input.id },
+          data: { deletedAt: new Date(), roomId: null },
+        }),
+      ]);
+      return updated;
     }),
 
   // ── Registration Engine procedures (PRD Part 4) ──────────────────────────
@@ -1128,7 +1140,14 @@ export const registrationRouter = createTRPCRouter({
         }
 
         try {
-          await ctx.prisma.registration.update({ where: { id }, data: { deletedAt: new Date() } });
+          // Same bed-release fix as the single-delete procedure above.
+          await ctx.prisma.$transaction([
+            ctx.prisma.bed.updateMany({
+              where: { registrationId: id },
+              data: { registrationId: null, status: "AVAILABLE" },
+            }),
+            ctx.prisma.registration.update({ where: { id }, data: { deletedAt: new Date(), roomId: null } }),
+          ]);
           details.push({ id, status: "success" });
           succeeded++;
         } catch (error) {
