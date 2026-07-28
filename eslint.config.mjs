@@ -14,8 +14,16 @@ export default [
   {
     ignores: [
       'src/generated/**',
+      '.next/**',
+      'out/**',
+      'build/**',
+      'coverage/**',
+      'playwright-report/**',
+      'blob-report/**',
+      'test-results/**',
+      'playwright/.cache/**',
+      'graphify-out/**',
     ],
-    ...compat.extends("next/core-web-vitals", "next/typescript"),
-    // Add any additional config here
   },
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
