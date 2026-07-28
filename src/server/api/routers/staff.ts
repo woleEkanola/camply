@@ -654,9 +654,22 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
       const normalizedEmail = normalizeEmail(input.email);
-      const existing = await ctx.prisma.user.findUnique({ where: { email: normalizedEmail } });
-      if (existing) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "A user with this email already exists" });
+      // An existing user may be given staff capability rather than rejected —
+      // a parent who also teaches is one person. Their `role` is left alone
+      // (it stays their primary role / default dashboard); the StaffProfile
+      // below is what grants the capability. See server/auth/capabilities.ts.
+      const existingUser = await ctx.prisma.user.findUnique({ where: { email: normalizedEmail } });
+      if (existingUser) {
+        const duplicate = await ctx.prisma.staffProfile.findFirst({
+          where: { userId: existingUser.id, campId: input.campId, deletedAt: null },
+          select: { id: true },
+        });
+        if (duplicate) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "This person is already registered as staff for this camp.",
+          });
+        }
       }
 
       const fields = await ctx.prisma.formField.findMany({
@@ -688,18 +701,20 @@ export const staffRouter = createTRPCRouter({
       const gender = systemValues.gender || "";
 
       return ctx.prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({
-          data: {
-            email: normalizedEmail,
-            password: placeholderPassword,
-            role: input.type,
-            firstName,
-            lastName,
-            organizationId: input.organizationId,
-            homeCampusId: systemValues.preferredCampusId || undefined,
-            active: true,
-          }
-        });
+        const user =
+          existingUser ??
+          (await tx.user.create({
+            data: {
+              email: normalizedEmail,
+              password: placeholderPassword,
+              role: input.type,
+              firstName,
+              lastName,
+              organizationId: input.organizationId,
+              homeCampusId: systemValues.preferredCampusId || undefined,
+              active: true,
+            },
+          }));
 
         const profile = await tx.staffProfile.create({
           data: {

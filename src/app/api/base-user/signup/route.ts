@@ -28,7 +28,19 @@ export async function POST(req: NextRequest) {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return NextResponse.json({ message: "An account with this email already exists. Please log in instead." }, { status: 400 });
+      // Deliberately still refused, even though one person may now hold both
+    // parent and staff capability: this is the password path, and a submitted
+    // password proves nothing about who owns the existing account. Attaching
+    // here would be an account-takeover hole. The OTP path
+    // (/api/staff/send-otp) is the supported way to add a capability to an
+    // existing account, because the OTP proves control of the inbox.
+    return NextResponse.json(
+      {
+        message:
+          "You already have a Camply account with this email. Please log in — you can join as a teacher or volunteer from there.",
+      },
+      { status: 400 }
+    );
     }
 
     // Generate email verification token
