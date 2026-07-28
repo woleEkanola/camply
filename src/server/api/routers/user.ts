@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { softDeleteUser } from "../../trash/userCascade";
 import { normalizeEmail } from "../../../lib/email";
 import { isCompleteNigerianPhone } from "../../../lib/phone";
+import { assertSameOrg } from "../trpc/scoping";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT";
@@ -147,7 +148,11 @@ export const userRouter = createTRPCRouter({
           return users;
         }
 
-        // For any other role, just return users from the same organization
+        // For any other role: the fallback below has no org gate of its own
+        // (unlike the SUPER_ADMIN/OWNER/ADMIN branches above), so it must be
+        // asserted here — otherwise any authenticated non-admin could dump
+        // another org's full user list by passing its id as input.
+        assertSameOrg(ctx, input.organizationId);
         console.log("User has another role, fetching users from same organization");
         const users = await ctx.prisma.user.findMany({
           where: {
@@ -178,13 +183,16 @@ export const userRouter = createTRPCRouter({
         throw new Error("User not authenticated");
       }
 
-      // Check if user has permission to view campus reps
-      if (
-        currentUser.role !== "SUPER_ADMIN" &&
-        currentUser.role !== "OWNER" &&
-        currentUser.role !== "ADMIN" &&
-        currentUser.organizationId !== input.organizationId
-      ) {
+      // Check if user has permission to view campus reps. The previous `&&`
+      // chain made the org comparison unreachable for OWNER/ADMIN (the first
+      // three clauses already short-circuit to false for those roles before
+      // the org check ever runs) — an ADMIN of org A could read org B's
+      // campus reps outright.
+      if (currentUser.role === "SUPER_ADMIN") {
+        // org-less by design, may view any org's reps
+      } else if (["OWNER", "ADMIN"].includes(currentUser.role)) {
+        assertSameOrg(ctx, input.organizationId);
+      } else if (currentUser.organizationId !== input.organizationId) {
         throw new Error("Not authorized to view campus representatives");
       }
 
@@ -234,6 +242,21 @@ export const userRouter = createTRPCRouter({
         throw new Error("User not found");
       }
 
+      // Neither id was previously checked against the caller's org — an
+      // ADMIN of org A could connect themselves (or anyone) as a rep of a
+      // campus in org B, which is a real privilege escalation since
+      // assertOrgAdminOrCampusRep grants access purely on the Campus.reps
+      // relation. SUPER_ADMIN is org-less by design and may cross orgs.
+      if (currentUser.role !== "SUPER_ADMIN") {
+        const campus = await ctx.prisma.campus.findUnique({ where: { id: input.campusId }, select: { organizationId: true } });
+        if (!campus || campus.organizationId !== currentUser.organizationId) {
+          throw new Error("Campus not found in your organization");
+        }
+        if (userToUpdate.organizationId !== currentUser.organizationId) {
+          throw new Error("User not found in your organization");
+        }
+      }
+
       // Any active user can be granted Campus Rep capability for a specific
       // campus, independent of their primary role (e.g. a Teacher can also
       // be a Campus Rep) — capability comes from the Campus.reps relation,
@@ -280,6 +303,17 @@ export const userRouter = createTRPCRouter({
 
       if (!userToUpdate || userToUpdate.deletedAt) {
         throw new Error("User not found");
+      }
+
+      // Same cross-tenant check as assignCampusToRep above.
+      if (currentUser.role !== "SUPER_ADMIN") {
+        const campus = await ctx.prisma.campus.findUnique({ where: { id: input.campusId }, select: { organizationId: true } });
+        if (!campus || campus.organizationId !== currentUser.organizationId) {
+          throw new Error("Campus not found in your organization");
+        }
+        if (userToUpdate.organizationId !== currentUser.organizationId) {
+          throw new Error("User not found in your organization");
+        }
       }
 
       // Remove the campus from the rep
@@ -572,10 +606,17 @@ export const userRouter = createTRPCRouter({
         },
       });
 
-      // If user is a Campus Representative, connect them to the specified campuses
+      // If user is a Campus Representative, connect them to the specified
+      // campuses — but only ones actually in this user's own org, otherwise
+      // an admin could connect the new user as a rep of a foreign org's
+      // campus by passing its id here.
       if (input.role === "CAMPUS_REPRESENTATIVE" && input.managedCampuses && input.managedCampuses.length > 0) {
+        const validCampuses = await ctx.prisma.campus.findMany({
+          where: { id: { in: input.managedCampuses }, organizationId: input.organizationId },
+          select: { id: true },
+        });
         await Promise.all(
-          input.managedCampuses.map(async (campusId) => {
+          validCampuses.map(async ({ id: campusId }) => {
             await ctx.prisma.campus.update({
               where: { id: campusId },
               data: {
@@ -717,10 +758,17 @@ export const userRouter = createTRPCRouter({
           );
         }
 
-        // Connect new campuses
-        if (campusesToConnect.length > 0) {
+        // Connect new campuses — only ones in the user's (possibly
+        // just-updated) org, otherwise an admin could connect this user as a
+        // rep of a foreign org's campus by passing its id in managedCampuses.
+        if (campusesToConnect.length > 0 && (updateData.organizationId ?? userToUpdate.organizationId)) {
+          const targetOrgId = (updateData.organizationId ?? userToUpdate.organizationId)!;
+          const validCampuses = await ctx.prisma.campus.findMany({
+            where: { id: { in: campusesToConnect }, organizationId: targetOrgId },
+            select: { id: true },
+          });
           await Promise.all(
-            campusesToConnect.map(async (campusId) => {
+            validCampuses.map(async ({ id: campusId }) => {
               await ctx.prisma.campus.update({
                 where: { id: campusId },
                 data: {

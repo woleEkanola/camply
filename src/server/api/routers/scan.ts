@@ -54,8 +54,11 @@ async function assertCanScan(
   if (ADMIN_ROLES.includes(currentUser.role) && currentUser.organizationId === organizationId) return;
 
   if (["TEACHER", "VOLUNTEER"].includes(currentUser.role)) {
+    // Scoped to organizationId — previously any approved staff profile in
+    // *any* org satisfied this check, letting a volunteer pass a foreign
+    // org's id and scan/check-in/check-out that org's campers.
     const profile = await ctx.prisma.staffProfile.findFirst({
-      where: { userId: ctx.userId, status: "APPROVED", deletedAt: null },
+      where: { userId: ctx.userId, organizationId, status: "APPROVED", deletedAt: null },
     });
     if (profile) return;
   }
@@ -995,6 +998,17 @@ export const scanRouter = createTRPCRouter({
   getCamperScanHistory: protectedProcedure
     .input(z.object({ registrationId: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Previously had no authorization check at all — any authenticated
+      // user could read any camper's full movement history (check-in/out,
+      // meals, station, device, plus the scanning volunteers' names/emails)
+      // by registration id alone.
+      const registration = await ctx.prisma.registration.findUnique({
+        where: { id: input.registrationId },
+        select: { campus: { select: { organizationId: true } } },
+      });
+      if (!registration) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertReportsAccess(ctx, registration.campus.organizationId);
+
       const scans = await ctx.prisma.scanEvent.findMany({
         where: { registrationId: input.registrationId },
         orderBy: { timestamp: "desc" },
@@ -1025,8 +1039,10 @@ export const scanRouter = createTRPCRouter({
   getOperationalStats: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session?.user;
-      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      // Previously took organizationId with no comparison to the caller's
+      // own org — any authenticated user could pass a foreign org's id and
+      // read its operational (meal/checkin/checkout) stats.
+      await assertReportsAccess(ctx, input.organizationId);
 
       let campId = input.campId;
       if (!campId) {

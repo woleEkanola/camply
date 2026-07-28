@@ -31,13 +31,21 @@ export const searchRouter = createTRPCRouter({
       const q = input.query.trim();
       if (!q) return [];
 
-      const orgId = input.organizationId || currentUser.organizationId || "";
+      // Non-SUPER_ADMIN callers always search their own org, never one from
+      // the input — the previous version trusted input.organizationId
+      // outright, and fell back to searching *every* organization in the
+      // system whenever it (or the caller's own org) was empty. SUPER_ADMINs
+      // are org-less by design (User.organizationId is nullable), so they're
+      // the only role allowed to pass an explicit organizationId; without
+      // one, they get an empty result rather than a system-wide search.
+      const orgId = currentUser.role === "SUPER_ADMIN" ? (input.organizationId ?? "") : currentUser.organizationId ?? "";
+      if (!orgId) return [];
 
       // 1. Search Campers
       const campers = await ctx.prisma.camper.findMany({
         where: {
           deletedAt: null,
-          ...(orgId ? { organizationId: orgId } : {}),
+          organizationId: orgId,
           OR: [
             { name: { contains: q, mode: "insensitive" } },
             { firstName: { contains: q, mode: "insensitive" } },
@@ -53,7 +61,7 @@ export const searchRouter = createTRPCRouter({
       const registrations = await ctx.prisma.registration.findMany({
         where: {
           deletedAt: null,
-          ...(orgId ? { campus: { organizationId: orgId } } : {}),
+          campus: { organizationId: orgId },
           OR: [
             { registrationNumber: { contains: q, mode: "insensitive" } },
             { camper: { name: { contains: q, mode: "insensitive" } } },
@@ -70,7 +78,7 @@ export const searchRouter = createTRPCRouter({
       const users = await ctx.prisma.user.findMany({
         where: {
           deletedAt: null,
-          ...(orgId ? { organizationId: orgId } : {}),
+          organizationId: orgId,
           OR: [
             { firstName: { contains: q, mode: "insensitive" } },
             { lastName: { contains: q, mode: "insensitive" } },
@@ -78,13 +86,14 @@ export const searchRouter = createTRPCRouter({
           ],
         },
         take: input.limit,
+        select: { id: true, firstName: true, lastName: true, email: true, role: true },
       });
 
       // 4. Search Campuses
       const campuses = await ctx.prisma.campus.findMany({
         where: {
           deletedAt: null,
-          ...(orgId ? { organizationId: orgId } : {}),
+          organizationId: orgId,
           OR: [
             { name: { contains: q, mode: "insensitive" } },
             { campusCode: { contains: q, mode: "insensitive" } },

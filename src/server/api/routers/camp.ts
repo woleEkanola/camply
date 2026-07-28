@@ -32,12 +32,15 @@ export const campRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
 
-      // Check if user has permission to view camps in this organization
+      // Check if user has permission to view camps in this organization.
+      // OWNER/ADMIN previously passed for ANY organizationId with no org
+      // comparison — only SUPER_ADMIN (org-less by design) should bypass it.
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
-        ((currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId);
+        (currentUser.organizationId === input.organizationId &&
+          (currentUser.role === "OWNER" ||
+            currentUser.role === "ADMIN" ||
+            (currentUser.managedCampuses?.length ?? 0) > 0));
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -84,6 +87,13 @@ export const campRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
 
+      // Previously had no authorization beyond "logged in" — any
+      // authenticated user (including a PARENT) could read any org's active
+      // camp by id.
+      if (currentUser.role !== "SUPER_ADMIN" && currentUser.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized for this organization" });
+      }
+
       const organization = await ctx.prisma.organization.findUnique({
         where: { id: input.organizationId },
         include: { activeCamp: true }
@@ -114,12 +124,13 @@ export const campRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
       }
 
-      // Check if user has permission to view this camp
+      // Check if user has permission to view this camp. OWNER previously
+      // bypassed the org comparison entirely — any OWNER could read camps
+      // (and, via the branch below, treat them as active) in any org.
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
         (currentUser.organizationId === camp.organizationId &&
-         (currentUser.role === "ADMIN" || (currentUser.managedCampuses?.length ?? 0) > 0));
+         (currentUser.role === "OWNER" || currentUser.role === "ADMIN" || (currentUser.managedCampuses?.length ?? 0) > 0));
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -156,10 +167,12 @@ export const campRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
 
-      // Check if user has permission to create camps
+      // Check if user has permission to create camps. OWNER previously had
+      // no org comparison — any OWNER could create (and, via the `active`
+      // branch below, activate) a camp in any organization.
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER";
+        (currentUser.role === "OWNER" && currentUser.organizationId === input.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -234,16 +247,21 @@ export const campRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
       }
 
-      // Check if user has permission to update this camp
+      // Check if user has permission to update this camp. OWNER previously
+      // had no org comparison — any OWNER could reconfigure any org's camp.
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER";
+        (currentUser.role === "OWNER" && currentUser.organizationId === camp.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Not authorized to update camps"
         });
+      }
+
+      if (currentUser.role !== "SUPER_ADMIN" && input.data.organizationId && input.data.organizationId !== camp.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to move a camp to another organization" });
       }
 
       // If name is being changed, check for uniqueness
@@ -309,10 +327,14 @@ export const campRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
 
-      // Check if user has permission to set active camp
+      // Check if user has permission to set active camp. OWNER previously
+      // had no org comparison against input.organizationId — the campId
+      // check below only verifies internal consistency (camp belongs to
+      // that org), not that the caller belongs to that org, so any OWNER
+      // could re-activate camps in any organization.
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER";
+        (currentUser.role === "OWNER" && currentUser.organizationId === input.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -430,6 +452,12 @@ export const campRouter = createTRPCRouter({
       });
       if (!camp || camp.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
 
+      // Previously had no authorization beyond "logged in" — any
+      // authenticated user could view any org's camp readiness checklist.
+      if (currentUser.role !== "SUPER_ADMIN" && currentUser.organizationId !== camp.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized for this camp" });
+      }
+
       // Correctness fix vs. the old year.ts: readiness for THIS camp must count
       // Venues scoped to this camp, not a global org-wide Location count.
       const venueCount = await ctx.prisma.venue.count({ where: { campId: camp.id, visible: true, deletedAt: null } });
@@ -471,10 +499,13 @@ export const campRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
       }
 
-      // Check if user has permission to delete this camp
+      // Check if user has permission to delete this camp. OWNER previously
+      // had no org comparison — any OWNER could soft-delete-cascade (Venues,
+      // Hostels, Rooms, Beds, Tribes, Departments, DocumentRequirements,
+      // StaffProfiles) any organization's camp.
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER";
+        (currentUser.role === "OWNER" && currentUser.organizationId === camp.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
