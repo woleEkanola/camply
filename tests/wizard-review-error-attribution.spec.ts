@@ -7,6 +7,7 @@ import {
   resetSystemFieldDefaults,
   relaxRequiredCustomFields,
   restoreRequiredCustomFields,
+  acceptAllDeclarations,
 } from "./helpers";
 
 /**
@@ -203,11 +204,7 @@ test.describe("Review step attributes submit errors to the correct teen", () => 
 
     // ── Review: both teens present, submit both together ──
     await expect(page.getByRole("heading", { name: "Review Your Registration" })).toBeVisible({ timeout: 5000 });
-    const checkboxes = page.locator('input[type="checkbox"]');
-    const cbCount = await checkboxes.count();
-    for (let i = 0; i < cbCount; i++) {
-      await checkboxes.nth(i).check();
-    }
+    await acceptAllDeclarations(page);
     await page.getByRole("button", { name: "Submit Registration" }).click();
 
     // The error is attributed to Bob by name and does NOT implicate Alice.

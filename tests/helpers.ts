@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "crypto";
-import type { Locator, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { ensureSystemFields, SYSTEM_FIELD_REGISTRY } from "../src/server/registration/systemFieldRegistry";
 
 // Shared across specs — Playwright runs each test file in its own worker
@@ -213,6 +213,41 @@ export function visibleText(page: Page, text: string | RegExp) {
  */
 export function drawerPanel(page: Page): Locator {
   return page.getByTestId("drawer-panel");
+}
+
+/**
+ * Ticks every consent declaration on the registration wizard's Review step,
+ * then leaves the page ready to submit.
+ *
+ * Declarations are fetched asynchronously (`registrationConfig.listDeclarations`
+ * in `src/app/register/[token]/steps/Review.tsx`) and mount *after* the
+ * "Review Your Registration" heading renders. Counting checkboxes as soon as
+ * that heading appears therefore misses whichever haven't arrived yet, leaving
+ * a required declaration unticked — submit is then rejected client-side with
+ * "Please accept all required declarations." and the spec fails waiting for a
+ * success message that will never come.
+ *
+ * That race was the single biggest source of wizard-spec flakiness (roughly
+ * one run in three). Waiting for the network to settle and then re-checking
+ * until every box is ticked removes it.
+ */
+export async function acceptAllDeclarations(page: Page) {
+  await page.waitForLoadState("networkidle");
+  const checkboxes = page.locator('input[type="checkbox"]');
+  await expect(checkboxes.first()).toBeVisible({ timeout: 15000 });
+  await expect
+    .poll(
+      async () => {
+        const boxes = await checkboxes.all();
+        for (const box of boxes) {
+          if (!(await box.isChecked())) await box.check();
+        }
+        const states = await Promise.all(boxes.map((b) => b.isChecked()));
+        return boxes.length > 0 && states.every(Boolean);
+      },
+      { timeout: 15000 }
+    )
+    .toBe(true);
 }
 
 export function emailInput(page: Page) {
