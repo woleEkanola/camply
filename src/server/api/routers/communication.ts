@@ -211,8 +211,9 @@ export const communicationRouter = createTRPCRouter({
   // ═══ Templates ══════════════════════════════════════════════════════════════
 
   templateList: protectedProcedure.query(async ({ ctx }) => {
-    const currentUser = ctx.session?.user;
-    if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+    // Org-scoped but not role-scoped — any authenticated user in the org
+    // (including a PARENT) could otherwise browse email templates.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
 
     return ctx.prisma.emailTemplate.findMany({
@@ -429,8 +430,8 @@ export const communicationRouter = createTRPCRouter({
   broadcastList: protectedProcedure
     .input(z.object({ cursor: z.string().optional(), limit: z.number().min(1).max(50).default(10) }).optional())
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session?.user;
-      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const limit = input?.limit ?? 10;
 
@@ -964,8 +965,8 @@ export const communicationRouter = createTRPCRouter({
   // ═══ Dashboard ═══════════════════════════════════════════════════════════════
 
   dashboardStats: protectedProcedure.query(async ({ ctx }) => {
-    const currentUser = ctx.session?.user;
-    if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+    // Org-scoped but not role-scoped.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1020,6 +1021,8 @@ export const communicationRouter = createTRPCRouter({
   // ═══ Audiences ═══════════════════════════════════════════════════════════════
 
   audienceList: protectedProcedure.query(async ({ ctx }) => {
+    // Org-scoped but not role-scoped.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
     return ctx.prisma.savedAudience.findMany({
       where: { organizationId: oid },
@@ -1050,6 +1053,12 @@ export const communicationRouter = createTRPCRouter({
     .input(z.object({ id: z.string(), name: z.string().min(1).optional(), description: z.string().nullable().optional(), filterDefinition: audienceFilterSchema.optional() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
+      // Previously updated by id alone with no ownership lookup — an admin
+      // of org A could rewrite org B's saved audience. Match the ownership
+      // check every template mutation in this file already does.
+      const oid = orgId(ctx);
+      const existing = await ctx.prisma.savedAudience.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       const { id, ...data } = input;
       return ctx.prisma.savedAudience.update({ where: { id }, data: data as any });
     }),
@@ -1058,6 +1067,9 @@ export const communicationRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const existing = await ctx.prisma.savedAudience.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       return ctx.prisma.savedAudience.delete({ where: { id: input.id } });
     }),
 
@@ -1067,7 +1079,10 @@ export const communicationRouter = createTRPCRouter({
       const oid = orgId(ctx);
       let filterDefinition = input.filterDefinition;
       if (input.savedAudienceId) {
-        const saved = await ctx.prisma.savedAudience.findUniqueOrThrow({ where: { id: input.savedAudienceId } });
+        // Previously looked up by id alone with no org check — cross-tenant
+        // read of another org's saved audience filter definition.
+        const saved = await ctx.prisma.savedAudience.findFirst({ where: { id: input.savedAudienceId, organizationId: oid } });
+        if (!saved) throw new TRPCError({ code: "NOT_FOUND" });
         filterDefinition = saved.filterDefinition as any;
       }
       if (!filterDefinition) throw new TRPCError({ code: "BAD_REQUEST", message: "No filter definition provided" });
@@ -1079,6 +1094,8 @@ export const communicationRouter = createTRPCRouter({
   campaignList: protectedProcedure
     .input(z.object({ cursor: z.string().optional(), limit: z.number().min(1).max(50).default(10), status: z.string().optional(), search: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const limit = input?.limit ?? 10;
       const where: Record<string, unknown> = { organizationId: oid, deletedAt: null };
@@ -1109,6 +1126,8 @@ export const communicationRouter = createTRPCRouter({
   campaignGet: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const campaign = await ctx.prisma.emailCampaign.findFirst({
         where: { id: input.id, organizationId: oid },
@@ -1276,6 +1295,8 @@ export const communicationRouter = createTRPCRouter({
   campaignGetStats: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const campaign = await ctx.prisma.emailCampaign.findFirst({
         where: { id: input.id, organizationId: oid },
@@ -1398,6 +1419,8 @@ export const communicationRouter = createTRPCRouter({
       search: z.string().optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const limit = input?.limit ?? 20;
       // Org attribution lives on SideEffect.organizationId (backfilled for legacy
@@ -1432,6 +1455,8 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   queueStats: protectedProcedure.query(async ({ ctx }) => {
+    // Org-scoped but not role-scoped.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
     const items = await ctx.prisma.sideEffect.findMany({
       where: {
@@ -1552,6 +1577,10 @@ export const communicationRouter = createTRPCRouter({
       dateTo: z.string().optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped — any PARENT in the org could
+      // otherwise enumerate every other member's email address and message
+      // subjects via this endpoint.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const limit = input?.limit ?? 20;
 
@@ -1588,6 +1617,8 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   deliveryLogStats: protectedProcedure.query(async ({ ctx }) => {
+    // Org-scoped but not role-scoped.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
     const items = await ctx.prisma.emailRecipient.findMany({
       where: { organizationId: oid },

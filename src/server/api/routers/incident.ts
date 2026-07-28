@@ -19,6 +19,16 @@ export const incidentRouter = createTRPCRouter({
       if (!currentUser || ![...ADMIN_ROLES, "TEACHER", "VOLUNTEER"].includes(currentUser.role)) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+      // organizationId/campId were only role-checked, never verified against
+      // the caller's own org — any eligible-role user could write an
+      // incident report into any organization.
+      if (currentUser.role !== "SUPER_ADMIN" && currentUser.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized for this organization" });
+      }
+      const camp = await ctx.prisma.camp.findUnique({ where: { id: input.campId }, select: { organizationId: true } });
+      if (!camp || camp.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found in this organization" });
+      }
       return ctx.prisma.incidentReport.create({
         data: { ...input, reportedById: ctx.userId, status: "OPEN" },
       });
