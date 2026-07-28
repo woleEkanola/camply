@@ -1993,6 +1993,13 @@ export const registrationRouter = createTRPCRouter({
 
       await assertOrgAdmin(ctx, registration.campus.organizationId);
 
+      // newCampusId was never validated — an org admin could reassign a
+      // registration to a campus belonging to a different organization.
+      const newCampus = await ctx.prisma.campus.findUnique({ where: { id: input.newCampusId }, select: { organizationId: true } });
+      if (!newCampus || newCampus.organizationId !== registration.campus.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Destination campus not found in this organization" });
+      }
+
       const updated = await ctx.prisma.registration.update({
         where: { id: input.registrationId },
         data: { campusId: input.newCampusId },
@@ -2022,35 +2029,51 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      // Fetch first registration to check organizational authorization
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({
-        where: { id: input.ids[0] },
+      // Previously authorized on ids[0] only, then updated every id in the
+      // batch — an org admin could smuggle registrations from any other
+      // tenant into their own campus by including a foreign id alongside
+      // their own. Load every registration and require them ALL to already
+      // be in one org (the caller's), not just the first.
+      const registrations = await ctx.prisma.registration.findMany({
+        where: { id: { in: input.ids } },
         include: { campus: true },
       });
+      if (registrations.length !== input.ids.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "One or more registrations not found" });
+      }
+      const orgIds = new Set(registrations.map((r) => r.campus.organizationId));
+      if (orgIds.size !== 1) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "All registrations must belong to the same organization" });
+      }
+      const organizationId = [...orgIds][0];
+      await assertOrgAdmin(ctx, organizationId);
 
-      await assertOrgAdmin(ctx, registration.campus.organizationId);
+      // newCampusId was also never validated against that org.
+      const newCampus = await ctx.prisma.campus.findUnique({ where: { id: input.newCampusId }, select: { organizationId: true } });
+      if (!newCampus || newCampus.organizationId !== organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Destination campus not found in this organization" });
+      }
 
-      // Perform update inside transaction
-      await ctx.prisma.$transaction(
-        input.ids.map((id) =>
+      // Perform update + audit logs in one transaction — wholesale reject
+      // rather than partially applying if anything above already threw.
+      await ctx.prisma.$transaction([
+        ...input.ids.map((id) =>
           ctx.prisma.registration.update({
             where: { id },
             data: { campusId: input.newCampusId },
           })
-        )
-      );
-
-      // Create audit logs in bulk
-      await ctx.prisma.auditLog.createMany({
-        data: input.ids.map((id) => ({
-          organizationId: registration.campus.organizationId,
-          registrationId: id,
-          actorId: currentUser.id,
-          action: "REGISTRATION_TRANSFERRED_CAMPUS",
-          previousValue: { campusId: "bulk_transfer" } as any,
-          newValue: { campusId: input.newCampusId } as any,
-        })),
-      });
+        ),
+        ctx.prisma.auditLog.createMany({
+          data: registrations.map((r) => ({
+            organizationId,
+            registrationId: r.id,
+            actorId: currentUser.id,
+            action: "REGISTRATION_TRANSFERRED_CAMPUS",
+            previousValue: { campusId: r.campusId } as any,
+            newValue: { campusId: input.newCampusId } as any,
+          })),
+        }),
+      ]);
 
       return { success: true, count: input.ids.length };
     }),

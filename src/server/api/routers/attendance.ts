@@ -24,6 +24,13 @@ export const attendanceRouter = createTRPCRouter({
     .input(z.object({ campId: z.string(), organizationId: z.string(), name: z.string(), date: z.date(), tribeId: z.string().optional(), venueId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       await assertAdminOrOwnTribe(ctx, input.organizationId, input.tribeId);
+      // input.campId was never checked against input.organizationId — a
+      // caller in-org could create an attendance session against a camp
+      // belonging to a different organization entirely.
+      const camp = await ctx.prisma.camp.findUnique({ where: { id: input.campId }, select: { organizationId: true } });
+      if (!camp || camp.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found in this organization" });
+      }
       return ctx.prisma.attendanceSession.create({
         data: { campId: input.campId, name: input.name, date: input.date, tribeId: input.tribeId, venueId: input.venueId, createdById: ctx.userId },
       });
@@ -34,6 +41,14 @@ export const attendanceRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      if (currentUser.role !== "SUPER_ADMIN" && currentUser.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized for this organization" });
+      }
+      // input.campId was never verified to belong to input.organizationId.
+      const camp = await ctx.prisma.camp.findUnique({ where: { id: input.campId }, select: { organizationId: true } });
+      if (!camp || camp.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found in this organization" });
+      }
       let tribeId = input.tribeId;
       if (currentUser.role === "TEACHER") {
         const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId, organizationId: input.organizationId } });
@@ -50,8 +65,19 @@ export const attendanceRouter = createTRPCRouter({
   rosterForTribe: protectedProcedure
     .input(z.object({ tribeId: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Previously had no authorization at all — any authenticated user
+      // (including a PARENT) could read the full camper roster of any tribe
+      // in any organization, including allergies/medications/emergency
+      // contacts via the camper include below.
+      const tribe = await ctx.prisma.tribe.findUnique({
+        where: { id: input.tribeId },
+        select: { campId: true, camp: { select: { organizationId: true } } },
+      });
+      if (!tribe) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertAdminOrOwnTribe(ctx, tribe.camp.organizationId, input.tribeId);
+
       return ctx.prisma.registration.findMany({
-        where: { tribeId: input.tribeId, status: { in: ["APPROVED", "CHECKED_IN", "COMPLETED"] } },
+        where: { tribeId: input.tribeId, status: { in: ["APPROVED", "CHECKED_IN", "COMPLETED"] }, deletedAt: null },
         include: { camper: true },
         orderBy: { camper: { name: "asc" } },
       });
@@ -62,9 +88,14 @@ export const attendanceRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const session = await ctx.prisma.attendanceSession.findUnique({
         where: { id: input.id },
-        include: { records: { include: { registration: { include: { camper: true } } } } },
+        include: {
+          records: { include: { registration: { include: { camper: true } } } },
+          camp: { select: { organizationId: true } },
+        },
       });
       if (!session) throw new TRPCError({ code: "NOT_FOUND" });
+      // Previously had no authorization at all.
+      await assertAdminOrOwnTribe(ctx, session.camp.organizationId, session.tribeId);
       return session;
     }),
 
@@ -74,12 +105,22 @@ export const attendanceRouter = createTRPCRouter({
       records: z.array(z.object({ registrationId: z.string(), status: z.enum(["PRESENT", "ABSENT", "LATE"]) })),
     }))
     .mutation(async ({ ctx, input }) => {
-      const session = await ctx.prisma.attendanceSession.findUnique({ where: { id: input.sessionId } });
+      const session = await ctx.prisma.attendanceSession.findUnique({
+        where: { id: input.sessionId },
+        include: { camp: { select: { organizationId: true } } },
+      });
       if (!session) throw new TRPCError({ code: "NOT_FOUND" });
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      if (!ADMIN_ROLES.includes(currentUser.role)) {
-        const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId, organizationId: currentUser.organizationId } });
+      if (ADMIN_ROLES.includes(currentUser.role)) {
+        // Previously skipped org verification entirely for every admin role
+        // — an admin of org A could record attendance for a session
+        // belonging to org B.
+        if (currentUser.role !== "SUPER_ADMIN" && currentUser.organizationId !== session.camp.organizationId) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+      } else {
+        const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId, organizationId: session.camp.organizationId } });
         if (!profile || profile.assignedTribeId !== session.tribeId) throw new TRPCError({ code: "FORBIDDEN" });
       }
 
