@@ -124,7 +124,14 @@ export async function validateSubmission(
     }
   }
 
-  // Step 6: Duplicate detection (also enforced by a DB unique constraint)
+  // Step 6: Duplicate detection. Also enforced by a DB partial unique index
+  // (Registration_camperId_campId_key, prisma/migrations/20260728000000_partial_unique_indexes)
+  // as the real backstop against the race this check alone can't close —
+  // createDraft's findFirst-then-reuse below has the same gap between check
+  // and write. That index has no status exclusion (unlike this check), but
+  // createDraft/resubmitRegistration always operate on the same existing row
+  // rather than creating a second one, so the two never actually disagree in
+  // the normal flow.
   const duplicate = await tx.registration.findFirst({
     where: {
       camperId: camper.id,

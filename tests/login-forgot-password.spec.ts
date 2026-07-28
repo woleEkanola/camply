@@ -103,9 +103,9 @@ test.describe("Login page: back / resend code / forgot password", () => {
       // configured in this environment — see the test above for that.
       const otp = "482913";
       await prisma.oTP.upsert({
-        where: { email },
+        where: { email_purpose: { email, purpose: "PASSWORD_RESET" } },
         update: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), attempts: 0 },
-        create: { email, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+        create: { email, purpose: "PASSWORD_RESET", code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
       });
 
       const res = await page.request.post("/api/base-user/reset-password", {
@@ -115,7 +115,7 @@ test.describe("Login page: back / resend code / forgot password", () => {
 
       const updated = await prisma.user.findUniqueOrThrow({ where: { id: userId! } });
       expect(await bcrypt.compare(newPassword, updated.password)).toBe(true);
-      expect(await prisma.oTP.findUnique({ where: { email } })).toBeNull();
+      expect(await prisma.oTP.findUnique({ where: { email_purpose: { email, purpose: "PASSWORD_RESET" } } })).toBeNull();
 
       await page.goto("/login");
       await page.locator('button:visible', { hasText: "Password" }).first().click();

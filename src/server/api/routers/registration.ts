@@ -45,6 +45,15 @@ type DuplicateScanRow = {
  * that are themselves duplicates) the same lowercased full name + DOB. Used
  * by both `getAdminListStats` (count only) and `adminList` (count + grouped
  * ordering + sibling info) — kept as one function so the two never drift.
+ *
+ * The camperId-based branch can now only ever match rows that predate
+ * Registration_camperId_campId_key (prisma/migrations/20260728000000_partial_unique_indexes),
+ * which makes two live (non-soft-deleted) registrations for the same
+ * camper+camp impossible to create going forward, regardless of status. It's
+ * kept for exactly that historical-cleanup case, not because new rows of
+ * this kind are still expected. The name+DOB branch is unaffected — it
+ * catches a parent creating two separate Camper records for what's actually
+ * the same child, which no camperId-scoped constraint can prevent.
  */
 function computeDuplicateGroups(regs: DuplicateScanRow[]) {
   const camperIdCounts = new Map<string, number>();

@@ -60,9 +60,9 @@ export async function POST(req: NextRequest) {
 
   // Save OTP to database (associate with user/email)
   await prisma.oTP.upsert({
-    where: { email },
+    where: { email_purpose: { email, purpose: "LOGIN" } },
     update: { code: otp, expiresAt, attempts: 0 },
-    create: { email, code: otp, expiresAt },
+    create: { email, purpose: "LOGIN", code: otp, expiresAt },
   });
 
   // Resolve org slug for the from address

@@ -49,9 +49,9 @@ export async function POST(req: NextRequest) {
     // Store OTP in DB (create a table for OTPs if not exists, or use a cache)
     try {
       await prisma.oTP.upsert({
-        where: { email: normalizedEmail },
+        where: { email_purpose: { email: normalizedEmail, purpose: "LOGIN" } },
         update: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), attempts: 0 }, // 10 min expiry
-        create: { email: normalizedEmail, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+        create: { email: normalizedEmail, purpose: "LOGIN", code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
       });
       console.log("[SEND-OTP] OTP stored in DB", { email: normalizedEmail });
     } catch (err) {

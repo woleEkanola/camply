@@ -159,7 +159,10 @@ export async function deleteCamperByEmail(email: string) {
 export async function waitForOtp(email: string, timeoutMs = 10000): Promise<string> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const otp = await prisma.oTP.findUnique({ where: { email } });
+    // `email` is no longer the sole key (OTP.purpose splits login/staff-signup/
+    // password-reset codes) — tests don't care which purpose, just the most
+    // recently issued code for this email.
+    const otp = await prisma.oTP.findFirst({ where: { email }, orderBy: { expiresAt: "desc" } });
     if (otp) return otp.code;
     await new Promise((r) => setTimeout(r, 250));
   }

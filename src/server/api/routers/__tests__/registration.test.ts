@@ -53,6 +53,13 @@ beforeEach(async () => {
 afterEach(async () => {
   await prisma.user.deleteMany({ where: { organizationId: orgId } });
   await prisma.organization.deleteMany({ where: { id: orgId } });
+  // Recreated unconditionally (idempotent) in case the test dropped it via
+  // withDuplicateConstraintSuspended — must happen after the cascade-delete
+  // above clears any legacy-duplicate rows the test inserted, since those
+  // rows would themselves violate the index while it's being rebuilt.
+  await prisma.$executeRawUnsafe(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "Registration_camperId_campId_key" ON "Registration"("camperId", "campId") WHERE "deletedAt" IS NULL`
+  );
 });
 
 afterAll(async () => {
@@ -94,10 +101,33 @@ async function makeCamperAndReg(params: { name: string; dob: Date; status: Regis
   return { camper, reg };
 }
 
+// `Registration_camperId_campId_key` (prisma/migrations/20260728000000_partial_unique_indexes)
+// makes a second live registration for the same camper+camp impossible to
+// create going forward — that's the point of the constraint. The
+// camperId-based branch of computeDuplicateGroups exists to surface rows
+// that predate that migration (or arrived via some other historical path);
+// since a real Postgres unique index is enforced on every write path
+// regardless of ORM vs raw SQL, the only way to simulate that legacy state
+// in a test is to drop the index for the duration of the insert. The shared
+// `afterEach` above recreates it unconditionally once this test's fixtures
+// (including the duplicate rows) are cascade-deleted — it can't be recreated
+// while those rows still exist, since they'd violate it themselves.
+async function withDuplicateConstraintSuspended<T>(fn: () => Promise<T>): Promise<T> {
+  await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "Registration_camperId_campId_key"`);
+  return fn();
+}
+
 describe("registrationRouter - duplicate detection", () => {
   it("getAdminListStats counts a camperId-based duplicate pair", async () => {
-    const { camper } = await makeCamperAndReg({ name: "Dup CamperId", dob: new Date(2013, 0, 1), status: "PENDING" });
-    await makeCamperAndReg({ name: "Dup CamperId", dob: new Date(2013, 0, 1), status: "APPROVED", camperId: camper.id });
+    // Camper-id-based duplicates for the same camp are now prevented at the
+    // DB level going forward (Registration_camperId_campId_key) — this
+    // simulates a row that predates that constraint, which the admin report
+    // must still be able to surface for cleanup.
+    const { camper } = await withDuplicateConstraintSuspended(async () => {
+      const first = await makeCamperAndReg({ name: "Dup CamperId", dob: new Date(2013, 0, 1), status: "PENDING" });
+      await makeCamperAndReg({ name: "Dup CamperId", dob: new Date(2013, 0, 1), status: "APPROVED", camperId: first.camper.id });
+      return first;
+    });
 
     const caller = adminCaller();
     const stats = await caller.registration.getAdminListStats({ organizationId: orgId, campId });
@@ -122,9 +152,14 @@ describe("registrationRouter - duplicate detection", () => {
   });
 
   it("adminList with duplicatesOnly groups siblings adjacently, best-status-first, with duplicateSiblings populated", async () => {
-    const { camper } = await makeCamperAndReg({ name: "Grouped Camper", dob: new Date(2013, 2, 2), status: "REJECTED" });
-    await makeCamperAndReg({ name: "Grouped Camper", dob: new Date(2013, 2, 2), status: "PENDING", camperId: camper.id });
-    await makeCamperAndReg({ name: "Grouped Camper", dob: new Date(2013, 2, 2), status: "APPROVED", camperId: camper.id });
+    // See the comment on the previous test — these three siblings simulate
+    // pre-constraint legacy data.
+    const camper = await withDuplicateConstraintSuspended(async () => {
+      const first = await makeCamperAndReg({ name: "Grouped Camper", dob: new Date(2013, 2, 2), status: "REJECTED" });
+      await makeCamperAndReg({ name: "Grouped Camper", dob: new Date(2013, 2, 2), status: "PENDING", camperId: first.camper.id });
+      await makeCamperAndReg({ name: "Grouped Camper", dob: new Date(2013, 2, 2), status: "APPROVED", camperId: first.camper.id });
+      return first.camper;
+    });
     // An unrelated, non-duplicate registration that must be excluded entirely.
     await makeCamperAndReg({ name: "Unrelated Camper", dob: new Date(2010, 1, 1), status: "PENDING" });
 

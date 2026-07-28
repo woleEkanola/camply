@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
 
   const otp = crypto.randomInt(100000, 1000000).toString();
   await prisma.oTP.upsert({
-    where: { email },
+    where: { email_purpose: { email, purpose: "STAFF_SIGNUP" } },
     update: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), attempts: 0 },
-    create: { email, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+    create: { email, purpose: "STAFF_SIGNUP", code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
   });
 
   // Best-effort delivery — the OTP is already persisted, so a transient email

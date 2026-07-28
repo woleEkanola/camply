@@ -87,6 +87,11 @@ export async function createDraft(params: {
   actorId: string;
 }) {
   return prisma.$transaction(async (tx) => {
+    // The gap between this read and the create() below is a real race (two
+    // concurrent calls can both see no `existing` row and both proceed to
+    // create); Registration_camperId_campId_key (prisma/migrations/20260728000000_partial_unique_indexes)
+    // is the actual backstop — the loser gets a P2002 unique-constraint
+    // error instead of a silent duplicate row.
     const existing = await tx.registration.findFirst({
       where: { camperId: params.camperId, campId: params.campId, deletedAt: null },
     });
