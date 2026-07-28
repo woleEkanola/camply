@@ -59,11 +59,17 @@ function UserDashboard() {
     if (status === "loading") return;
     if (!session) { router.push("/login"); return; }
     const role = session.user.role;
+    // Anyone with parent capability belongs here, whatever their primary role
+    // is — a teacher who is also a parent reaches this page via the context
+    // switcher, and bouncing them on `role !== "PARENT"` made that link a dead
+    // end. Only send people away when this genuinely isn't one of their areas.
+    if (session.user.capabilities?.parent ?? role === "PARENT") return;
+
     if (role === "OWNER" || role === "ADMIN") router.push("/admin");
     else if (role === "CAMPUS_REPRESENTATIVE") router.push("/campus-rep-dashboard");
     else if (role === "TEACHER") router.push("/teacher");
     else if (role === "VOLUNTEER") router.push("/volunteer");
-    else if (role !== "PARENT") router.push("/login");
+    else router.push("/login");
   }, [session, status, router]);
 
   const { data: campers, isLoading: loadingCampers } = api.camper.getByUserId.useQuery(undefined, { enabled: !!session?.user?.id });

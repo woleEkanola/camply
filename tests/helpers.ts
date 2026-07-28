@@ -294,7 +294,9 @@ export async function loginWithPassword(page: Page, email: string, password: str
   await emailInput(page).fill(email);
   await passwordInput(page).fill(password);
   await loginButton(page).click();
-  await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard)/, { timeout: 45000 });
+  // Includes the staff areas: TEACHER/VOLUNTEER accounts land on /teacher or
+  // /volunteer, and this helper used to hang for 45s on those.
+  await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard|teacher|volunteer)/, { timeout: 45000 });
 }
 
 /**

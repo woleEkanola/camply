@@ -75,7 +75,7 @@ export function CampersList({
 }: CampersListProps) {
   const { data: session } = useSession();
   const user = session?.user;
-  const isCampusRep = user?.role === "SUPER_ADMIN" || user?.role === "OWNER" || user?.role === "ADMIN" || user?.role === "CAMPUS_REPRESENTATIVE" || (user?.role === "TEACHER" && ((user as any)?.managedCampuses?.length ?? 0) > 0);
+  const isCampusRep = user?.role === "SUPER_ADMIN" || user?.role === "OWNER" || user?.role === "ADMIN" || user?.role === "CAMPUS_REPRESENTATIVE" || (((user as any)?.managedCampuses?.length ?? 0) > 0);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [campusFilter, setCampusFilter] = useState<string | "all">("all");

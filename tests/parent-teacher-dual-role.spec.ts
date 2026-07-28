@@ -242,4 +242,65 @@ test.describe("Parent + Teacher on one account", () => {
       await prisma.user.deleteMany({ where: { email: { in: [dualEmail, soloEmail] } } });
     }
   });
+
+  test("the reverse direction: an existing TEACHER can be a parent and reach their own camper", async ({ page }) => {
+    // create-and-send-otp already reused an existing user without a role check,
+    // so a TEACHER could always *authenticate* as a parent — but kept role
+    // TEACHER, so the old `role === "PARENT"` guard denied them their own
+    // camper. Authenticated but non-functional. Ownership-based authorization
+    // is what closes that.
+    const email = `e2e-dual-rev-${Date.now()}@camply.test`;
+    const password = "password123";
+    const { organizationId, campId, campusId } = await getFixtureOrgContext();
+    let teacherId = "";
+
+    try {
+      const teacher = await prisma.user.create({
+        data: {
+          email,
+          password: await bcrypt.hash(password, 10),
+          role: "TEACHER",
+          organizationId,
+          active: true,
+        },
+      });
+      teacherId = teacher.id;
+      await prisma.staffProfile.create({
+        data: {
+          userId: teacher.id, organizationId, campId, type: "TEACHER", status: "APPROVED",
+          firstName: "Rev", lastName: "Teacher", phone: "+1-555-0150", email,
+        },
+      });
+
+      // They register their own child — same account.
+      const camper = await prisma.camper.create({
+        data: {
+          name: "Reverse Camper", firstName: "Reverse", lastName: "Camper", gender: "Male",
+          dateOfBirth: new Date(2013, 5, 1), userId: teacher.id, organizationId, homeCampusId: campusId,
+        },
+      });
+      const registration = await prisma.registration.create({
+        data: {
+          camperId: camper.id, campId, campusId, status: "PENDING",
+          registrationNumber: `REG-REV-${Date.now()}`,
+        },
+      });
+
+      await loginWithPassword(page, email, password);
+
+      // Both capabilities, so the switcher is offered even though role=TEACHER.
+      await page.goto("/dashboard");
+      await expect(page.getByRole("button", { name: "Switch context" })).toBeVisible({ timeout: 15000 });
+
+      // And the registration detail page is actually reachable — this is the
+      // part that used to fail.
+      await page.goto(`/dashboard/register/${registration.id}`);
+      await expect(page.getByText(/Reverse Camper|In Review/i).first()).toBeVisible({ timeout: 15000 });
+    } finally {
+      await prisma.registration.deleteMany({ where: { camper: { userId: teacherId } } });
+      await prisma.camper.deleteMany({ where: { userId: teacherId } });
+      await prisma.staffProfile.deleteMany({ where: { email } });
+      await prisma.user.deleteMany({ where: { email } });
+    }
+  });
 });
