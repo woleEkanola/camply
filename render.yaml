@@ -9,6 +9,22 @@ services:
   envVars:
   - key: NODE_ENV
     value: production
+  # Dashboard-managed (not committed here) — set manually in the Render
+  # dashboard. Previously undeclared entirely, so a fresh deploy from this
+  # file alone booted straight into a runtime auth/DB failure with no
+  # indication these were even needed.
+  - key: DATABASE_URL
+    sync: false
+  - key: NEXTAUTH_SECRET
+    sync: false
+  - key: NEXTAUTH_URL
+    sync: false
+  - key: RESEND_API_KEY
+    sync: false
+  - key: CRON_SECRET
+    sync: false
+  - key: APP_URL
+    sync: false
 # Daily purge of Trash items soft-deleted more than 60 days ago (see
 # src/server/trash/service.ts, src/app/api/cron/purge-trash/route.ts). CRON_SECRET
 # must match the same env var configured on the `next-js` web service above, and

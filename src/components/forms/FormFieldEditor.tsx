@@ -53,12 +53,17 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
   const invalidate = () => utils.formField.list.invalidate({ organizationId, audience });
 
   const [error, setError] = useState("");
+  // Separate from `error` — a successful bulk delete was previously reported
+  // via setError(...), rendering a genuine success message inside the same
+  // bg-danger-50/text-danger-700 box as real errors, so it looked like the
+  // delete had failed.
+  const [notice, setNotice] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const create = api.formField.create.useMutation({ onSuccess: () => { setEdit(null); invalidate(); }, onError: (e) => setError(e.message) });
   const remove = api.formField.remove.useMutation({ onSuccess: () => { setSelectedIds(new Set()); invalidate(); }, onError: (e) => setError(e.message) });
   const removeMany = api.formField.removeMany.useMutation({
     onSuccess: (result) => {
-      setError(`Deleted ${result.deleted} field(s).${result.skipped > 0 ? ` Skipped ${result.skipped} (system or in-use).` : ""}`);
+      setNotice(`Deleted ${result.deleted} field(s).${result.skipped > 0 ? ` Skipped ${result.skipped} (system or in-use).` : ""}`);
       setSelectedIds(new Set());
       invalidate();
     },
@@ -204,6 +209,7 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
       </div>
 
       {error && !edit && <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
+      {notice && !edit && <div className="mb-4 rounded-md bg-success-50 p-3 text-sm text-success-700">{notice}</div>}
 
       {/* Bulk actions bar */}
       {selectedIds.size > 0 && (
