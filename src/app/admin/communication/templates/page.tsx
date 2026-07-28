@@ -39,6 +39,13 @@ import {
 
 type ExtendedUser = { id: string; role: string; organizationId?: string };
 
+/**
+ * Usable height of one A4 page at 96dpi: 1123px total (297mm) minus 10mm
+ * top/bottom print margins. The Camp Invitation certificate is meant to print
+ * on a single sheet, so the editor warns once a render exceeds this.
+ */
+const A4_USABLE_PX = 1047;
+
 interface TemplateListItem {
   id: string;
   name: string;
@@ -337,6 +344,8 @@ export default function TemplatesPage() {
   const [resolvedReplyTo, setResolvedReplyTo] = useState("");
   const [unknownTokens, setUnknownTokens] = useState<string[]>([]);
   const [previewEvent, setPreviewEvent] = useState<string>("REGISTRATION_APPROVED");
+  /** Pixels the Camp Invitation certificate overflows one A4 page by, or null. */
+  const [a4OverflowPx, setA4OverflowPx] = useState<number | null>(null);
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [testSendToast, setTestSendToast] = useState<string | null>(null);
 
@@ -447,6 +456,50 @@ export default function TemplatesPage() {
       return () => clearTimeout(timer);
     }
   }, [editorCounter, subject, previewText, previewEvent, selectedId, editor]);
+
+  // ─── A4 one-page check (Camp Invitation only) ─────────────────────────────
+  // The Camp Invitation is a printable A4 certificate. Its own chrome leaves
+  // only ~70px of slack, which admin body copy eats quickly — and character
+  // count is a poor proxy, because paragraph margins cost far more height than
+  // the text itself. So measure the real render: mount the preview HTML
+  // offscreen at true A4 width and compare against the usable page height.
+  useEffect(() => {
+    if (previewEvent !== "CAMP_INVITATION" || !previewHtml) {
+      setA4OverflowPx(null);
+      return;
+    }
+
+    let cancelled = false;
+    const host = document.createElement("div");
+    // Offscreen rather than display:none — a hidden element has no layout.
+    host.style.cssText = "position:fixed;left:-99999px;top:0;width:794px;visibility:hidden;pointer-events:none;";
+    host.innerHTML = previewHtml;
+    document.body.appendChild(host);
+
+    // Mirror the @media print rule in components/layout.ts, which zeroes this
+    // padding — otherwise we'd measure ~72px of screen-only chrome.
+    host.querySelector<HTMLElement>(".camply-email-outer-td")?.style.setProperty("padding", "0", "important");
+
+    const measure = () => {
+      if (cancelled) return;
+      const height = host.getBoundingClientRect().height;
+      setA4OverflowPx(Math.round(height - A4_USABLE_PX));
+    };
+
+    const images = Array.from(host.querySelectorAll("img"));
+    const loaded = Promise.all(
+      images.map((img) =>
+        img.complete ? null : new Promise((res) => { img.onload = res; img.onerror = res; })
+      )
+    );
+    // Don't block on a slow/broken image — measure anyway after a beat.
+    Promise.race([loaded, new Promise((res) => setTimeout(res, 1500))]).then(measure);
+
+    return () => {
+      cancelled = true;
+      host.remove();
+    };
+  }, [previewHtml, previewEvent]);
 
   // Handler methods
   const handleNew = () => {
@@ -769,6 +822,25 @@ export default function TemplatesPage() {
                       ))}
                     </div>
                   </div>
+                )}
+
+                {/* A4 one-page warning — Camp Invitation certificate only */}
+                {a4OverflowPx !== null && a4OverflowPx > 0 && (
+                  <div className="rounded-lg border border-warning-200 bg-warning-50/50 p-3 space-y-1">
+                    <span className="flex items-center gap-1 text-xs font-semibold text-warning-800">
+                      <ExclamationTriangleIcon className="h-4 w-4" /> Won&apos;t fit on one A4 page
+                    </span>
+                    <p className="text-[11px] text-warning-700">
+                      This certificate is {a4OverflowPx}px taller than a single A4 page allows, so printing it
+                      will spill onto a second sheet. Shortening the body copy — especially removing whole
+                      paragraphs, which cost more height than long sentences — is the quickest fix.
+                    </p>
+                  </div>
+                )}
+                {a4OverflowPx !== null && a4OverflowPx <= 0 && (
+                  <p className="text-[11px] text-txt-muted">
+                    Fits one A4 page, with {Math.abs(a4OverflowPx)}px to spare.
+                  </p>
                 )}
 
                 {/* Desktop/Mobile Size Selector */}
