@@ -1,15 +1,26 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { hasStaffCapability } from "../../auth/capabilities";
+
+const STAFF_MODULE_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
 /** Rejects PARENT outright — Camp Structure is a staff/admin-only module. */
-function assertStaffModuleAccess(ctx: { session: any }) {
+async function assertStaffModuleAccess(ctx: { session: any; userId: string }) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (currentUser.role === "PARENT") throw new TRPCError({ code: "FORBIDDEN", message: "Not available for this account type" });
-  return currentUser;
+  // Staff modules are for people with staff capability. Gate on that, not on
+  // `role !== "PARENT"`: a parent who also teaches keeps role PARENT and would
+  // otherwise be locked out of modules they legitimately belong to — while a
+  // parent with no staff profile must still be refused.
+  // See server/auth/capabilities.ts.
+  if (STAFF_MODULE_ADMIN_ROLES.includes(currentUser.role)) return currentUser;
+  if (await hasStaffCapability(ctx.userId, { organizationId: currentUser.organizationId ?? undefined })) {
+    return currentUser;
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Not available for this account type" });
 }
 
 function assertOrgAccess(currentUser: { role: string; organizationId?: string | null }, organizationId: string) {
@@ -37,7 +48,7 @@ export const orgStructureRouter = createTRPCRouter({
   getLeadershipTree: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
       const positions = await ctx.prisma.position.findMany({
@@ -83,7 +94,7 @@ export const orgStructureRouter = createTRPCRouter({
   getDepartmentStructure: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
       const departments = await ctx.prisma.department.findMany({
@@ -121,7 +132,7 @@ export const orgStructureRouter = createTRPCRouter({
   getTribeStructure: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
       const tribes = await ctx.prisma.tribe.findMany({
@@ -168,9 +179,11 @@ export const orgStructureRouter = createTRPCRouter({
   getMyPosition: protectedProcedure
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
 
-      if (currentUser.role === "TEACHER" || currentUser.role === "VOLUNTEER") {
+      // Anyone holding a staff profile has a position to show, whatever their
+      // primary role happens to be.
+      if (currentUser.role !== "SUPER_ADMIN" && currentUser.role !== "OWNER" && currentUser.role !== "ADMIN") {
         const profile = await ctx.prisma.staffProfile.findFirst({
           where: { userId: ctx.userId, campId: input.campId },
           include: {
@@ -232,7 +245,7 @@ export const orgStructureRouter = createTRPCRouter({
   getPersonProfile: protectedProcedure
     .input(z.object({ staffProfileId: z.string() }))
     .query(async ({ ctx, input }) => {
-      assertStaffModuleAccess(ctx);
+      await assertStaffModuleAccess(ctx);
       const profile = await ctx.prisma.staffProfile.findUnique({
         where: { id: input.staffProfileId },
         include: {
@@ -256,7 +269,7 @@ export const orgStructureRouter = createTRPCRouter({
   search: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string(), query: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
       const q = input.query;
 

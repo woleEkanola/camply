@@ -1,15 +1,26 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { hasStaffCapability } from "../../auth/capabilities";
+
+const STAFF_MODULE_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 import { syncStaffProfileFromPositions, syncPositionOccupantsAndDescendants } from "../../utils/hierarchySync";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
-function assertStaffAccess(ctx: { session: any }) {
+async function assertStaffAccess(ctx: { session: any; userId: string }) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (currentUser.role === "PARENT") throw new TRPCError({ code: "FORBIDDEN" });
-  return currentUser;
+  // Staff modules are for people with staff capability. Gate on that, not on
+  // `role !== "PARENT"`: a parent who also teaches keeps role PARENT and would
+  // otherwise be locked out of modules they legitimately belong to — while a
+  // parent with no staff profile must still be refused.
+  // See server/auth/capabilities.ts.
+  if (STAFF_MODULE_ADMIN_ROLES.includes(currentUser.role)) return currentUser;
+  if (await hasStaffCapability(ctx.userId, { organizationId: currentUser.organizationId ?? undefined })) {
+    return currentUser;
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Not available for this account type" });
 }
 
 async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
@@ -26,7 +37,7 @@ export const positionRouter = createTRPCRouter({
   getHierarchy: protectedProcedure
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      assertStaffAccess(ctx);
+      await assertStaffAccess(ctx);
 
       const positions = await ctx.prisma.position.findMany({
         where: { campId: input.campId, deletedAt: null },
@@ -71,7 +82,7 @@ export const positionRouter = createTRPCRouter({
       displayOrder: z.number().int().min(0).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      assertStaffAccess(ctx);
+      await assertStaffAccess(ctx);
       await assertCanManageCamp(ctx, input.campId);
 
       return ctx.prisma.position.create({
