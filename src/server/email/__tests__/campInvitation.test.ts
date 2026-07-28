@@ -133,6 +133,27 @@ describe("buildCampInvitationEmail — icons", () => {
     expect(html).not.toContain("/api/email-icon/🚌");
   });
 
+  it("renders the amber notice icon only when a support email is configured", () => {
+    // The notice (and so its exclamation-circle) is branding-dependent —
+    // assemblers.ts:244 only builds it when supportEmail is set. Pinned here,
+    // where branding is controlled, rather than in the Playwright spec, whose
+    // org state isn't.
+    const without = buildCampInvitationEmail({ variables: baseVariables, branding: null });
+    expect(without).not.toContain("/api/email-icon/exclamation-circle?");
+
+    const withSupport = buildCampInvitationEmail({
+      variables: baseVariables,
+      branding: {
+        primaryColor: "#E67E22",
+        accentColor: "#E67E22",
+        buttonColor: "#E67E22",
+        supportEmail: "help@example.com",
+      },
+    });
+    // Amber, matching the reference's notice styling.
+    expect(withSupport).toContain("/api/email-icon/exclamation-circle?c=D97706");
+  });
+
   it("renders brand-mark icons for social links instead of plain text", () => {
     const branding: Branding = {
       primaryColor: "#E67E22",

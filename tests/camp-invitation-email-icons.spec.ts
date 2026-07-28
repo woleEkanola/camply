@@ -10,12 +10,22 @@ test.describe.configure({ mode: "serial" });
 /**
  * Icons the certificate always renders, regardless of org configuration.
  *
- * Deliberately excludes the What's Next four (printer/qr-code/clock/backpack)
- * and the contact/social marks: those come from Branding, and orgs that saved
- * nextSteps before the registry existed still hold emoji there — which the
- * fallback in NextStepsCard renders raw, by design. Branding-driven icons are
- * covered by the unit tests in
- * src/server/email/__tests__/campInvitation.test.ts, which control branding.
+ * Deliberately excludes every branding-dependent icon:
+ *  - the What's Next four (printer/qr-code/clock/backpack), because orgs that
+ *    saved nextSteps before the registry existed still hold emoji there, which
+ *    NextStepsCard renders raw by design;
+ *  - the contact bar and social marks, which only render when the org has a
+ *    support email / phone / website / social URLs;
+ *  - exclamation-circle, which belongs to the "unable to attend" notice and so
+ *    only renders when Branding.supportEmail is set (assemblers.ts:244).
+ *
+ * That last one caused a real full-suite failure: this spec sorts before
+ * camp-invitation-email.spec.ts (a "-" sorts before "."), which is the only
+ * spec that populates supportEmail — so whether the icon existed depended on
+ * leftover state from an earlier session.
+ *
+ * All branding-driven icons are covered instead by
+ * src/server/email/__tests__/campInvitation.test.ts, which controls branding.
  */
 const EXPECTED_ICONS = [
   // section headers + registration detail rows
@@ -25,8 +35,7 @@ const EXPECTED_ICONS = [
   "tent",
   "map-pin",
   "user-group",
-  // notice + verified badge
-  "exclamation-circle",
+  // verified badge — always rendered alongside the QR
   "check-badge",
   // timeline stages
   "document-check",

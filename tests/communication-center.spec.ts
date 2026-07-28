@@ -137,8 +137,14 @@ test.describe("Communication Center", () => {
 
     // Clicking a template should load the editor
     await page.locator('button:has-text("Registration Approved")').click();
-    // Subject field should appear
-    await expect(page.locator('input[value*="approved for"]')).toBeVisible();
+    // Subject field should appear, populated from the template.
+    // Use toHaveValue, not an [value*=...] attribute selector: the subject input
+    // is a controlled React input, so its `value` *attribute* isn't kept in sync
+    // with the live value — the attribute selector matched only by luck and
+    // failed intermittently in full-suite runs.
+    await expect(page.locator('input[placeholder="Enter subject line..."]')).toHaveValue(/approved for/i, {
+      timeout: 15000,
+    });
   });
 
   test("P7: Branding page loads with form and preview", async ({ page }) => {
