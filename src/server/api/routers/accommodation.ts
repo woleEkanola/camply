@@ -51,11 +51,18 @@ export const accommodationRouter = createTRPCRouter({
       if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, hostel.organizationId);
 
+      // Previously only counted registrationId — a hostel full of staff
+      // (registrationId null, staffProfileId set) soft-deleted cleanly,
+      // orphaning StaffProfile.assignedHostelId/assignedRoomId.
       const occupiedCount = await ctx.prisma.bed.count({
-        where: { room: { hostelId: input.id }, registrationId: { not: null }, deletedAt: null },
+        where: {
+          room: { hostelId: input.id },
+          deletedAt: null,
+          OR: [{ registrationId: { not: null } }, { staffProfileId: { not: null } }],
+        },
       });
       if (occupiedCount > 0) {
-        throw new TRPCError({ code: "CONFLICT", message: `Cannot delete this hostel: ${occupiedCount} bed(s) are still occupied. Unassign campers first.` });
+        throw new TRPCError({ code: "CONFLICT", message: `Cannot delete this hostel: ${occupiedCount} bed(s) are still occupied. Unassign campers/staff first.` });
       }
 
       const now = new Date();
@@ -125,11 +132,16 @@ export const accommodationRouter = createTRPCRouter({
       if (!room || room.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, room.hostel.organizationId);
 
+      // Same staffProfileId gap as deleteHostel above.
       const occupiedCount = await ctx.prisma.bed.count({
-        where: { roomId: input.id, registrationId: { not: null }, deletedAt: null },
+        where: {
+          roomId: input.id,
+          deletedAt: null,
+          OR: [{ registrationId: { not: null } }, { staffProfileId: { not: null } }],
+        },
       });
       if (occupiedCount > 0) {
-        throw new TRPCError({ code: "CONFLICT", message: `Cannot delete this room: ${occupiedCount} bed(s) are still occupied. Unassign campers first.` });
+        throw new TRPCError({ code: "CONFLICT", message: `Cannot delete this room: ${occupiedCount} bed(s) are still occupied. Unassign campers/staff first.` });
       }
 
       const now = new Date();

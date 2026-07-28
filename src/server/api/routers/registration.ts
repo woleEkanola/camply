@@ -2019,22 +2019,30 @@ export const registrationRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Destination campus not found in this organization" });
       }
 
-      const updated = await ctx.prisma.registration.update({
-        where: { id: input.registrationId },
-        data: { campusId: input.newCampusId },
-      });
-
-      // Log audit event
-      await ctx.prisma.auditLog.create({
-        data: {
-          organizationId: registration.campus.organizationId,
-          registrationId: registration.id,
-          actorId: currentUser.id,
-          action: "REGISTRATION_TRANSFERRED_CAMPUS",
-          previousValue: { campusId: registration.campusId } as any,
-          newValue: { campusId: input.newCampusId } as any,
-        },
-      });
+      // Update + audit log as one transaction, not two separate writes.
+      // Note (not fixed here): registrationNumber embeds the old campus's
+      // code (ORG-CAMP-CAMPUS-SEQ) and isn't regenerated on transfer, so a
+      // printed badge/ID card disagrees with the camper's actual campus
+      // after this runs — and it doesn't decrement the old campus's
+      // RegistrationCounter either. Regenerating a number that may already
+      // be on a physical badge is a product decision, not something to
+      // change unilaterally in a security/concurrency-focused pass.
+      const [updated] = await ctx.prisma.$transaction([
+        ctx.prisma.registration.update({
+          where: { id: input.registrationId },
+          data: { campusId: input.newCampusId },
+        }),
+        ctx.prisma.auditLog.create({
+          data: {
+            organizationId: registration.campus.organizationId,
+            registrationId: registration.id,
+            actorId: currentUser.id,
+            action: "REGISTRATION_TRANSFERRED_CAMPUS",
+            previousValue: { campusId: registration.campusId } as any,
+            newValue: { campusId: input.newCampusId } as any,
+          },
+        }),
+      ]);
 
       return updated;
     }),
