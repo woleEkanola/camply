@@ -88,11 +88,14 @@ test.describe("Camp Invitation certificate — icons and A4 fit", () => {
         timeout: 15000,
       });
 
-      // The preview re-renders a couple of times as template + branding load;
-      // wait for the certificate render specifically rather than the first
-      // srcdoc that happens to contain a QR.
+      // The preview re-renders a couple of times as template + branding load.
+      // Wait for something only the Camp Invitation renders: the journey
+      // timeline. "/api/email-icon/" is no longer specific enough — the
+      // REGISTRATION_APPROVED template was rebuilt on the same certificate
+      // components, so it carries icons too, and polling on those settled on
+      // the wrong template's render.
       await expect
-        .poll(async () => ((await previewFrame.getAttribute("srcdoc")) ?? "").includes("/api/email-icon/"), {
+        .poll(async () => ((await previewFrame.getAttribute("srcdoc")) ?? "").includes("Your Registration Journey"), {
           timeout: 20000,
         })
         .toBe(true);
