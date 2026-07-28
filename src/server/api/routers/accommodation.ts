@@ -208,22 +208,41 @@ export const accommodationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const bed = await ctx.prisma.bed.findUnique({ where: { id: input.bedId }, include: { room: { include: { hostel: true } } } });
       if (!bed) throw new TRPCError({ code: "NOT_FOUND", message: "Bed not found" });
-      if (bed.registrationId && bed.registrationId !== input.registrationId) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "This bed is already occupied" });
-      }
-      const registration = await ctx.prisma.registration.findUnique({ where: { id: input.registrationId } });
-      if (!registration) throw new TRPCError({ code: "NOT_FOUND", message: "Registration not found" });
       await assertOrgAdmin(ctx, bed.room.hostel.organizationId);
 
-      await ctx.prisma.$transaction(async (tx: any) => {
-        // Clear any previous bed this camper occupied (one camper : one bed).
-        await tx.bed.updateMany({
-          where: { registrationId: input.registrationId, id: { not: input.bedId } },
-          data: { registrationId: null, status: "AVAILABLE" },
-        });
-        await tx.bed.update({ where: { id: input.bedId }, data: { registrationId: input.registrationId, status: "OCCUPIED" } });
-        await tx.registration.update({ where: { id: input.registrationId }, data: { roomId: bed.roomId } });
+      // Previously fetched with no org check — only the bed's org was
+      // asserted, so an admin could pull another tenant's registration into
+      // their own hostel. Also previously duplicated assignBedInTx's logic
+      // by hand here, missing its staffProfileId/deletedAt/MAINTENANCE
+      // checks and its guarded (race-safe) write — now delegates to the one
+      // real implementation instead of maintaining two.
+      const registration = await ctx.prisma.registration.findFirst({
+        where: { id: input.registrationId, campus: { organizationId: bed.room.hostel.organizationId } },
+        include: { camper: true },
       });
+      if (!registration) throw new TRPCError({ code: "NOT_FOUND", message: "Registration not found in this organization" });
+
+      try {
+        await ctx.prisma.$transaction(async (tx) => {
+          await accommodationEngine.assignBedInTx(tx, {
+            bedId: input.bedId,
+            occupant: {
+              kind: "CAMPER",
+              registrationId: registration.id,
+              gender: registration.camper.gender,
+              dateOfBirth: registration.camper.dateOfBirth,
+              groupId: registration.tribeId,
+              campusId: registration.campusId,
+            },
+            actorId: ctx.userId,
+          });
+        });
+      } catch (err) {
+        if (err instanceof accommodationEngine.BedAllocationError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
+        }
+        throw err;
+      }
 
       return { success: true };
     }),
