@@ -9,13 +9,14 @@ import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import NotificationBell from "@/components/NotificationBell";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
-import { getNavGroups, getBottomNavItems, type Role } from "./navConfig";
+import { getNavGroups, getBottomNavItems, type Role, type AppArea } from "./navConfig";
+import { ContextSwitcher } from "./ContextSwitcher";
 import { CommandPalette } from "./CommandPalette";
 import { BottomNav } from "./BottomNav";
 import { Menu, Transition } from "@headlessui/react";
 
 export interface AppShellProps {
-  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer";
+  area: AppArea;
   children: React.ReactNode;
 }
 
@@ -226,6 +227,7 @@ export default function AppShell({ area, children }: AppShellProps) {
             <kbd className="rounded border border-border-default bg-surface-raised px-1.5 py-0.5 text-xs text-txt-muted">⌘K</kbd>
           </button>
           <div className="flex items-center gap-2">
+            <ContextSwitcher capabilities={session?.user?.capabilities} currentArea={area} />
             <NotificationBell />
             <ThemeToggle />
             {session?.user?.email && (
