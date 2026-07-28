@@ -125,6 +125,38 @@ async function seedDepartments(organizationId: string, campId: string) {
   console.log(`\nDepartments: ${created} created, ${updated} updated\n`);
 }
 
+// A registration-flow E2E consent checkbox needs at least one
+// RegistrationDeclaration to render at all (Review.tsx only shows the
+// consent section when `declarations.length > 0`, and treats zero
+// declarations as vacuously already-declared) — without this, every spec
+// using tests/helpers.ts's acceptAllDeclarations() against the seeded org
+// times out waiting for a checkbox that will never appear.
+const DECLARATIONS = [
+  { label: "I confirm the information provided is accurate to the best of my knowledge.", required: true, sortOrder: 0 },
+  { label: "I consent to my child participating in camp activities.", required: true, sortOrder: 1 },
+];
+
+async function seedDeclarations(organizationId: string) {
+  console.log(`\nSeeding ${DECLARATIONS.length} registration declarations...\n`);
+  let created = 0, updated = 0;
+  for (const decl of DECLARATIONS) {
+    const existing = await prisma.registrationDeclaration.findFirst({
+      where: { organizationId, label: decl.label },
+    });
+    if (existing) {
+      await prisma.registrationDeclaration.update({
+        where: { id: existing.id },
+        data: { required: decl.required, sortOrder: decl.sortOrder },
+      });
+      updated++;
+    } else {
+      await prisma.registrationDeclaration.create({ data: { organizationId, ...decl } });
+      created++;
+    }
+  }
+  console.log(`\nDeclarations: ${created} created, ${updated} updated\n`);
+}
+
 async function main() {
   // Create a Super Admin user if it doesn't exist
   const superAdminEmail = "superadmin@camply.com";
@@ -410,6 +442,7 @@ async function main() {
   await seedCampuses(organization.id);
   await seedTribes(camp.id);
   await seedDepartments(organization.id, camp.id);
+  await seedDeclarations(organization.id);
 
   console.log("Seed completed");
 }

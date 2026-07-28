@@ -194,9 +194,20 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const submitRef = useRef(false);
+  // Tracks teens whose submit already succeeded, across retries. Without
+  // this, a retry after a partial multi-teen failure re-submitted every
+  // teen unconditionally — harmless for a teen still in
+  // SUBMITTED/PENDING/REQUIRES_ACTION/REJECTED (submitRegistration on the
+  // server is idempotent for those, and internally delegates
+  // REQUIRES_ACTION/REJECTED to a resubmit), but for a camp with
+  // approvalMode "AUTO" the successful teen may already be APPROVED, and
+  // re-submitting an APPROVED registration hits an illegal state
+  // transition — the family could never get past Review. There's
+  // deliberately no separate client-side "resubmit" call: the server's
+  // submitRegistration already handles every one of those states itself.
+  const [succeededIds, setSucceededIds] = useState<Set<string>>(new Set());
 
   const submitRegistration = api.registration.submit.useMutation();
-  const resubmitRegistration = api.registration.resubmit.useMutation();
   const { data: declarations } = api.registrationConfig.listDeclarations.useQuery(
     { organizationId: state.campData?.organizationId ?? "" },
     { enabled: !!state.campData?.organizationId }
@@ -226,15 +237,23 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
 
     submitRef.current = true;
     setSubmitting(true);
+
+    // Only retry teens that haven't already succeeded — see the
+    // succeededIds comment above for why this matters.
+    const pendingTeens = state.teens.filter((t) => !succeededIds.has(t.registrationId));
     const results = await Promise.allSettled(
-      state.teens.map((teen) =>
+      pendingTeens.map((teen) =>
         submitRegistration.mutateAsync({ registrationId: teen.registrationId })
       )
     );
 
+    const newSucceeded = new Set(succeededIds);
     const errorMessages = results.flatMap((r, i) => {
-      if (r.status !== "rejected") return [];
-      const teen = state.teens[i];
+      const teen = pendingTeens[i];
+      if (r.status !== "rejected") {
+        if (teen) newSucceeded.add(teen.registrationId);
+        return [];
+      }
       const name = teen ? `${teen.firstName} ${teen.lastName}` : "One camper";
       const rawMsg = (r.reason as { message?: string })?.message ?? "Submission failed";
       if (rawMsg.startsWith("[") && rawMsg.endsWith("]")) {
@@ -247,6 +266,8 @@ export function StepReview({ state, dispatch }: StepReviewProps) {
       }
       return [`${name}: ${rawMsg}`];
     });
+    setSucceededIds(newSucceeded);
+
     if (errorMessages.length > 0) {
       setErrors(errorMessages);
       setSubmitting(false);

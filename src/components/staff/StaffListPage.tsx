@@ -237,7 +237,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         </div>
       ),
     },
-    { header: "Status", accessor: (row) => <StatusBadge status={row.status} />, mobileHidden: true },
+    // Was mobileHidden — the Approve action below branches on row.status, so
+    // a mobile admin saw an approve button on some rows and not others with
+    // no visible field explaining why.
+    { header: "Status", accessor: (row) => <StatusBadge status={row.status} /> },
   ];
 
   const actions = (row: any) => (
@@ -246,7 +249,8 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         <>
           <button
             onClick={() => bulkApprove.mutate({ ids: [row.id] })}
-            className="rounded-md p-1.5 text-success-600 hover:bg-success-50"
+            disabled={bulkApprove.isPending}
+            className="rounded-md p-1.5 text-success-600 hover:bg-success-50 disabled:cursor-not-allowed disabled:opacity-50"
             title="Approve"
           >
             <CheckIcon className="h-4 w-4" />

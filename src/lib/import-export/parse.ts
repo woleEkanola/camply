@@ -159,10 +159,23 @@ function parseMarkdown(text: string): RawBundle {
   return bundle;
 }
 
+// Import files are small structured data (campuses/tribes/departments) —
+// nothing legitimate approaches this size. Without a cap, the <input> at
+// ImportPanel.tsx accepts anything matching the extension list and this
+// function reads the whole thing into memory with file.arrayBuffer()/
+// file.text(), so a large file freezes or OOMs the admin's tab with no
+// feedback.
+const MAX_IMPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+
 export async function detectAndParse(
   file: File,
   entityHint?: EntityKind
 ): Promise<{ bundle: RawBundle; warnings: string[] }> {
+  if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
+    throw new Error(
+      `This file is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the maximum for an import is ${MAX_IMPORT_FILE_SIZE_BYTES / (1024 * 1024)}MB. Split it into smaller files.`
+    );
+  }
   const warnings: string[] = [];
   const ext = file.name.split(".").pop()?.toLowerCase();
 

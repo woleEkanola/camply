@@ -133,6 +133,16 @@ export function CampersList({
   }, [responseData?.items, cursor]);
 
   const exportCsv = () => {
+    // allItems only holds the cursor pages loaded so far (limit: 50 per
+    // page, grown by "Load more") — exporting without warning silently
+    // produced a CSV of just the first page, with no indication it was
+    // partial.
+    if (responseData?.nextCursor) {
+      const proceed = window.confirm(
+        "Not all campers matching this filter have been loaded yet — this export would only include what's currently on screen. Click \"Load more\" until the full list is shown, then export again. Export the partial list anyway?"
+      );
+      if (!proceed) return;
+    }
     const rows = allItems.map((item) => {
       const reg = item.registrations[0];
       return {
@@ -152,9 +162,17 @@ export function CampersList({
     });
     if (rows.length === 0) return;
     const headers = Object.keys(rows[0]!);
+    // A leading =, +, -, or @ makes Excel/Sheets interpret the cell as a
+    // formula rather than text — camper/parent-entered fields (name,
+    // allergies, etc.) were written to the CSV unescaped against that.
+    // Prefixing with a straight quote is the standard mitigation: it forces
+    // text interpretation without changing the visible value.
+    const escapeFormula = (v: string) => (/^[=+\-@]/.test(v) ? `'${v}` : v);
     const csv = [
       headers.join(","),
-      ...rows.map((row) => headers.map((h) => `"${String((row as any)[h]).replace(/"/g, '""')}"`).join(",")),
+      ...rows.map((row) =>
+        headers.map((h) => `"${escapeFormula(String((row as any)[h])).replace(/"/g, '""')}"`).join(",")
+      ),
     ].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);

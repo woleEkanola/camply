@@ -64,7 +64,11 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
     },
     onError: (e) => setError(e.message),
   });
-  const reorder = api.formField.reorder.useMutation({ onSuccess: invalidate });
+  // Previously had no error path — on failure, DraggableFieldList's local
+  // drag state would eventually snap back to the server order (unchanged,
+  // since invalidate() never ran) with no message, so the admin believed
+  // the reorder saved when it silently didn't.
+  const reorder = api.formField.reorder.useMutation({ onSuccess: invalidate, onError: (e) => setError(e.message) });
 
   const [optimisticVisible, setOptimisticVisible] = useState<Record<string, boolean>>({});
   const [optimisticRequired, setOptimisticRequired] = useState<Record<string, boolean>>({});
@@ -73,10 +77,17 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
   const updateRequired = api.formField.update.useMutation({ onSuccess: invalidate });
   const update = api.formField.update.useMutation({ onSuccess: () => { setEdit(null); invalidate(); }, onError: (e) => setError(e.message) });
 
+  // Previously only cleared on error, never on success — so the optimistic
+  // value permanently took precedence over the refetched server value
+  // (optimisticVisible[field.id] ?? field.visible) even after the mutation
+  // completed, meaning a server-side coercion or another admin's concurrent
+  // edit could never show up in this checkbox again for the rest of the
+  // session. Clear on both outcomes; on error the checkbox reverts to
+  // whatever the last real fetch said.
   const toggleVisible = useCallback((id: string, checked: boolean) => {
     setOptimisticVisible((prev) => ({ ...prev, [id]: checked }));
     updateVisible.mutate({ id, visible: checked }, {
-      onError: () => setOptimisticVisible((prev) => {
+      onSettled: () => setOptimisticVisible((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -87,7 +98,7 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
   const toggleRequired = useCallback((id: string, checked: boolean) => {
     setOptimisticRequired((prev) => ({ ...prev, [id]: checked }));
     updateRequired.mutate({ id, required: checked }, {
-      onError: () => setOptimisticRequired((prev) => {
+      onSettled: () => setOptimisticRequired((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
