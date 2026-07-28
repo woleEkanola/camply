@@ -51,18 +51,54 @@ function regInfoRows(v: Record<string, string>) {
 
 // ─── REGISTRATION_APPROVED ──────────────────────────────────────────────────
 
+/**
+ * Sent automatically the moment a registration is approved
+ * (engine.ts's runSideEffectsNow → effects.ts).
+ *
+ * Shares the Camp Invitation's certificate look so the two approval-adjacent
+ * emails don't diverge, but deliberately stays shorter: no journey timeline
+ * and no "What's Next?" block. Those belong on the invitation, which is sent
+ * later as a deliberate campaign once check-in details are settled — at
+ * approval time the reporting date and pickup point often aren't known yet.
+ */
 export function buildApprovedEmail(p: AssemblerParams): string {
   const v = p.variables;
+  const orgName = p.branding?.senderName || v.organization_name || "Camp";
+  const checkInRows = checkInInfoRows(v);
+
   const content = [
-    EmailHero({ illustration: "🎉" }),
-    StatusBanner({ type: "success", title: "Registration Approved", subtitle: `${v.camper_name || "Camper"} has been approved for ${v.camp_name || "camp"}.` }),
-    InfoCard({ rows: regInfoRows(v) }),
-    p.qrSrc ? QRCodeCard({ qrSrc: p.qrSrc, registrationNumber: v.registration_number || "" }) : "",
-    p.bodyContent ? Section({ children: p.bodyContent }) : "",
-    SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
-    EmailFooter({ branding: p.branding }),
+    OrganizationHeader({
+      branding: p.branding,
+      orgName,
+      rightLabel: `Date: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`,
+    }),
+    VerificationCard({
+      title: "Registration Approved!",
+      description: `<strong>${v.camper_name || "Camper"}</strong> has been approved for <strong>${v.camp_name || "camp"}</strong>.<br/><br/>We can't wait to have you with us!`,
+      qrSrc: p.qrSrc,
+      registrationNumber: v.registration_number || "",
+    }),
+    // Check-in details are frequently unset at approval time; SplitInfoCard
+    // drops an empty column on its own, so only the left card renders then.
+    SplitInfoCard({
+      leftTitle: "Registration Details",
+      leftRows: registrationDetailRows(v),
+      leftIcon: "identification",
+      rightTitle: "Important Check-in Info",
+      rightRows: checkInRows,
+      rightIcon: "calendar-days",
+    }),
+    p.bodyContent ? Section({ children: p.bodyContent, padding: `0 0 12px` }) : "",
+    ContactCard({ branding: p.branding }),
+    CertificateFooter({ branding: p.branding, orgName }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Approved for ${v.camp_name || "camp"}` });
+
+  return EmailLayout({
+    content,
+    branding: p.branding,
+    width: 800,
+    previewText: p.previewText || `Approved for ${v.camp_name || "camp"}`,
+  });
 }
 
 // ─── REGISTRATION_SUBMITTED ─────────────────────────────────────────────────
