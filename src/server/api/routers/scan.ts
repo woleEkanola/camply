@@ -95,13 +95,31 @@ async function resolveReportCampId(ctx: { prisma: any }, organizationId: string,
 
 /** Reports default to "today" server time — confirmed with the user that
  * meal/collectible/arrival recording never lets a volunteer backdate a
- * scan, so a report's day picker is the only place history is browsed. */
+ * scan, so a report's day picker is the only place history is browsed.
+ * Correct for ScanEvent.timestamp (a real DateTime) but NOT for
+ * MealDistribution.date (@db.Date, always UTC-truncated by Prisma on
+ * write) — use utcDayRange() below for that one. */
 function dayRange(date?: Date): { start: Date; end: Date } {
   const base = date ?? new Date();
   const start = new Date(base);
   start.setHours(0, 0, 0, 0);
   const end = new Date(base);
   end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+/** UTC day boundaries, for querying @db.Date columns (MealDistribution.date)
+ * whose stored value is always the UTC calendar date of the JS Date that was
+ * written, regardless of server timezone. dayRange() above uses server-local
+ * boundaries via setHours, which — on any non-UTC deployment — don't line up
+ * with what's actually in that column: a dinner served at 00:30 local can
+ * land under the *previous* UTC date, so a local-boundary range either lets
+ * the same meal be "found" twice across that hour (dedupe-adjacent reads) or
+ * excludes/duplicates rows at the report's day edges. */
+function utcDayRange(date?: Date): { start: Date; end: Date } {
+  const base = date ?? new Date();
+  const start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 0, 0, 0, 0));
+  const end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 23, 59, 59, 999));
   return { start, end };
 }
 
@@ -1162,8 +1180,12 @@ export const scanRouter = createTRPCRouter({
         campus: { organizationId: input.organizationId },
       };
 
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
+      // Previously filtered meals by servedAt (a real DateTime) using a
+      // server-local "today" boundary, while getMealReport filtered the
+      // same data by `date` (@db.Date, always UTC-truncated) — the two
+      // dashboards disagreed on any non-UTC deployment. Both now query
+      // `date` with the same UTC boundary.
+      const { start: startOfToday, end: endOfToday } = utcDayRange();
 
       const [registered, checkedIn, breakfastCount, lunchCount, dinnerCount, checkedOutCount] =
         await Promise.all([
@@ -1177,15 +1199,15 @@ export const scanRouter = createTRPCRouter({
           }),
           // Breakfast today
           ctx.prisma.mealDistribution.count({
-            where: { campId, meal: "BREAKFAST", servedAt: { gte: startOfToday } },
+            where: { campId, meal: "BREAKFAST", date: { gte: startOfToday, lte: endOfToday } },
           }),
           // Lunch today
           ctx.prisma.mealDistribution.count({
-            where: { campId, meal: "LUNCH", servedAt: { gte: startOfToday } },
+            where: { campId, meal: "LUNCH", date: { gte: startOfToday, lte: endOfToday } },
           }),
           // Dinner today
           ctx.prisma.mealDistribution.count({
-            where: { campId, meal: "DINNER", servedAt: { gte: startOfToday } },
+            where: { campId, meal: "DINNER", date: { gte: startOfToday, lte: endOfToday } },
           }),
           // Checked out
           ctx.prisma.registration.count({
@@ -1274,7 +1296,10 @@ export const scanRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await assertReportsAccess(ctx, input.organizationId);
       const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
-      const { start, end } = dayRange(input.date);
+      // Queries the @db.Date `date` column — must use UTC boundaries, not
+      // server-local ones, or this disagrees with getOperationalStats and
+      // with what the meal dedupe check itself considers "today".
+      const { start, end } = utcDayRange(input.date);
       if (!campId) return { breakfast: 0, lunch: 0, dinner: 0 };
 
       const [breakfast, lunch, dinner] = await Promise.all([
