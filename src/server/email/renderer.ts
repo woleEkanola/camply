@@ -4,7 +4,7 @@ import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import { EmailButton } from "./buttonExtension";
-import { EmailLayout, EmailFooter, SupportCard, Section } from "./components";
+import { EmailLayout, EmailFooter, SupportCard, Section, APPEND_SLOT } from "./components";
 import {
   buildApprovedEmail,
   buildSubmittedEmail,
@@ -22,21 +22,42 @@ import { interpolateTipTapJson } from "./interpolate";
 const ID_CARD_TOKEN_RE = /\{\{\s*camp_id_card\s*\}\}/g;
 
 /**
- * Swaps the literal {{camp_id_card}} token for a hosted <img> block, or
- * strips it to nothing when the feature/template isn't opted in or there's
- * no image URL available (e.g. no registration context). Deliberately not a
- * generic "HTML block variable" — camp_id_card is the only token that ever
- * needs this, so it's handled as its own pre-pass rather than a new
+ * Removes the literal {{camp_id_card}} token from template content.
+ *
+ * The card is never rendered inline where the token happens to sit — it is
+ * always appended as its own page at the very end of the email (see
+ * renderIdCardPage / appendIdCardPage). The token remains in the editor so
+ * admins can see the template is opted in, but its position is ignored.
+ *
+ * Deliberately not a generic "HTML block variable": camp_id_card is the only
+ * token that expands to markup, so it stays a pre-pass rather than a new
  * capability in interpolateHtml/interpolateTipTapJson, which only ever
  * substitute plain (escaped) strings.
  */
-export function substituteIdCardToken(html: string, opts: { enabled: boolean; imageUrl: string | null }): string {
-  if (!opts.enabled || !opts.imageUrl) {
-    return html.replace(ID_CARD_TOKEN_RE, "");
-  }
+export function stripIdCardToken(html: string): string {
+  return html.replace(ID_CARD_TOKEN_RE, "");
+}
+
+/**
+ * The Camp ID card as a standalone page, or "" when the feature/template
+ * isn't opted in or there's no image (e.g. no registration context).
+ *
+ * `page-break-before` is what makes it land on a second sheet when printed;
+ * email clients that ignore print CSS simply show it at the bottom, which is
+ * the intended reading order either way.
+ */
+export function renderIdCardPage(opts: { enabled: boolean; imageUrl: string | null }): string {
+  if (!opts.enabled || !opts.imageUrl) return "";
   const escapedUrl = opts.imageUrl.replace(/"/g, "&quot;");
-  const img = `<img src="${escapedUrl}" alt="Camp ID Card" width="600" style="display:block;max-width:100%;width:100%;height:auto;border:0;" />`;
-  return html.replace(ID_CARD_TOKEN_RE, img);
+  return `
+<div class="camply-id-card-page" style="page-break-before:always;break-before:page;margin-top:24px;">
+  <img src="${escapedUrl}" alt="Camp ID Card" width="600" style="display:block;max-width:100%;width:100%;height:auto;border:0;" />
+</div>`;
+}
+
+/** Fills the layout's append slot (or clears it when nothing is appended). */
+export function appendIdCardPage(fullHtml: string, opts?: { enabled: boolean; imageUrl: string | null }): string {
+  return fullHtml.replace(APPEND_SLOT, opts ? renderIdCardPage(opts) : "");
 }
 
 export interface Branding {
@@ -140,9 +161,9 @@ export async function renderEmailWithEvent(params: {
 
   if (tiptapJson) {
     const contentResult = renderTemplateContent(tiptapJson, variables);
-    bodyContent = idCard
-      ? substituteIdCardToken(contentResult.html, idCard)
-      : contentResult.html;
+    // Always strip the token from the body — the card is appended as its own
+    // page at the end, never rendered where the token sits.
+    bodyContent = stripIdCardToken(contentResult.html);
     unknownTokens = contentResult.unknownTokens;
   }
 
@@ -155,19 +176,25 @@ export async function renderEmailWithEvent(params: {
       EmailFooter({ branding }),
     ].filter(Boolean).join("\n");
     return {
-      html: EmailLayout({ content, branding, previewText: previewText || "Camply Notification" }),
+      html: appendIdCardPage(
+        EmailLayout({ content, branding, previewText: previewText || "Camply Notification" }),
+        idCard
+      ),
       unknownTokens,
     };
   }
 
   return {
-    html: assembler({
-      variables,
-      branding,
-      bodyContent,
-      qrSrc: qrDataUrl,
-      previewText: previewText ?? undefined,
-    }),
+    html: appendIdCardPage(
+      assembler({
+        variables,
+        branding,
+        bodyContent,
+        qrSrc: qrDataUrl,
+        previewText: previewText ?? undefined,
+      }),
+      idCard
+    ),
     unknownTokens,
   };
 }
@@ -181,7 +208,7 @@ export async function renderEmail(params: {
   idCard?: { enabled: boolean; imageUrl: string | null };
 }): Promise<{ html: string; unknownTokens: string[] }> {
   const { html: rawContent, unknownTokens } = renderTemplateContent(params.tiptapJson, params.variables);
-  const content = params.idCard ? substituteIdCardToken(rawContent, params.idCard) : rawContent;
+  const content = stripIdCardToken(rawContent);
   if (params.branding) {
     const body = [
       Section({ children: content }),
@@ -189,12 +216,15 @@ export async function renderEmail(params: {
       EmailFooter({ branding: params.branding }),
     ].filter(Boolean).join("\n");
     return {
-      html: EmailLayout({ content: body, branding: params.branding }),
+      html: appendIdCardPage(EmailLayout({ content: body, branding: params.branding }), params.idCard),
       unknownTokens,
     };
   }
+  // Unbranded fallback has no EmailLayout (and so no append slot) — put the
+  // card page directly after the content instead.
+  const idCardPage = params.idCard ? renderIdCardPage(params.idCard) : "";
   return {
-    html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:16px;">${content}</body></html>`,
+    html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:16px;">${content}${idCardPage}</body></html>`,
     unknownTokens,
   };
 }

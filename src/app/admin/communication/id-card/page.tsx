@@ -94,7 +94,8 @@ export default function IdCardSettingsPage() {
               <CardBody className="space-y-3">
                 <p className="text-xs text-txt-secondary">
                   Toggling a template on inserts a {"{{camp_id_card}}"} token into its content; toggling
-                  off removes it. Edit the template in Email Templates to reposition the token.
+                  off removes it. The card is always appended as its own page at the end of the email,
+                  so moving the token in Email Templates has no effect on where it appears.
                 </p>
                 {data.templates.length === 0 ? (
                   <p className="text-sm text-txt-secondary">No email templates yet.</p>

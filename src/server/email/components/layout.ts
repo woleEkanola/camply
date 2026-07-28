@@ -19,6 +19,14 @@ export function Divider(): string {
 
 // ─── EmailLayout (full document shell) ──────────────────────────────────────
 
+/**
+ * Marker rendered at the very end of the content column. Blocks that must
+ * come after everything else regardless of where their token sits in the
+ * template — currently only the Camp ID card page — are swapped in here by
+ * the renderer. Left in place (and stripped) when nothing is appended.
+ */
+export const APPEND_SLOT = "<!--CAMPLY_APPEND_SLOT-->";
+
 export function EmailLayout(params: { content: string; branding: Branding | null; previewText?: string; width?: number }): string {
   const b = params.branding;
   const width = params.width ?? 600;
@@ -50,6 +58,7 @@ export function EmailLayout(params: { content: string; branding: Branding | null
     <tr><td align="center" class="camply-email-outer-td" style="padding:${theme.spacing.lg} ${theme.spacing.md} ${theme.spacing.xxl};">
       <div class="camply-email-content" style="width:100%;max-width:${width}px;margin:0 auto;">
         ${params.content}
+        ${APPEND_SLOT}
       </div>
     </td></tr>
   </table>

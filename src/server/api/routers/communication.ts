@@ -310,12 +310,15 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   /**
-   * Opts a template into (or out of) {{camp_id_card}} substitution. Toggling
+   * Opts a template into (or out of) the {{camp_id_card}} block. Toggling
    * also inserts/strips the literal token text in the template's TipTap
-   * content so admins can see/move it in the editor like any other
-   * variable — `includeIdCard` is the actual render-time gate (see
-   * substituteIdCardToken in renderer.ts), so a stray typed token in a
-   * template that isn't opted in never renders an image.
+   * content so admins can see it in the editor like any other variable —
+   * `includeIdCard` is the actual render-time gate (see renderIdCardPage in
+   * renderer.ts), so a stray typed token in a template that isn't opted in
+   * never renders an image.
+   *
+   * Note the token's *position* is ignored: the card is always appended as
+   * its own page at the end of the email, never rendered inline.
    */
   templateSetIncludeIdCard: protectedProcedure
     .input(z.object({ id: z.string(), include: z.boolean() }))
