@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
 export interface AuditEventInput {
   organizationId: string;

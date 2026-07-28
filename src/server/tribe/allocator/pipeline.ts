@@ -16,7 +16,7 @@ import { generateExplanation } from "./explainer";
 import { computeQualityReport } from "./quality";
 
 export async function runAllocationPipeline(
-  tx: PrismaClient,
+  tx: PrismaClient<any>,
   campId: string,
   options: {
     rules?: unknown;
@@ -129,7 +129,7 @@ export async function runAllocationPipeline(
 }
 
 export async function simulateAllocation(
-  tx: PrismaClient,
+  tx: PrismaClient<any>,
   campId: string,
   options?: { rules?: unknown; targetSize?: number | null; scope?: "approved" | "all" },
 ): Promise<SimulationResult> {

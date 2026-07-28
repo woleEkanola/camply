@@ -4,7 +4,7 @@ import type { AudienceFilter } from "../audience/filters";
 import { injectTracking } from "../tracking/injectTracking";
 import { CAMP_INVITATION_INCLUDE, buildCampInvitationVariables } from "./personalize";
 
-type TxClient = PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+type TxClient = PrismaClient<any> | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
 
 interface SendCampaignResult {
   recipientCount: number;

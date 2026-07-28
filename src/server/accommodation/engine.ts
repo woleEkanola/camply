@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { logEvent } from "../audit";
 import { calculateAge } from "../registration/validation";
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
 export class BedAllocationError extends Error {
   code: string;

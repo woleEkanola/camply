@@ -347,6 +347,7 @@ export const userRouter = createTRPCRouter({
 
       const user = await ctx.prisma.user.findUnique({
         where: { id: userId },
+        omit: { password: false },
       });
 
       if (!user) {
@@ -453,6 +454,7 @@ export const userRouter = createTRPCRouter({
 
       const user = await ctx.prisma.user.findUnique({
         where: { id: userId },
+        omit: { password: false },
       });
 
       if (!user || user.deletedAt) {

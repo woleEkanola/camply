@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
 // A department "slot" is reserved the moment someone signs up (PENDING), not
 // just once an admin approves them — otherwise two concurrent applicants

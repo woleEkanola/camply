@@ -1,5 +1,6 @@
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import type { PrismaClient } from "@prisma/client";
 import { prisma } from "../db";
 import { verifyPassword } from "../../lib/auth";
 import { normalizeEmail } from "../../lib/email";
@@ -11,7 +12,11 @@ import { type NextAuthOptions } from "next-auth";
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT" | "TEACHER" | "VOLUNTEER";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  // Cast: PrismaAdapter's declared type predates the `omit` feature and
+  // expects a bare PrismaClient generic. It only touches Session/Account/
+  // VerificationToken/User CRUD for NextAuth's own bookkeeping — never
+  // User.password — so this doesn't bypass the global omit in practice.
+  adapter: PrismaAdapter(prisma as PrismaClient),
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -41,6 +46,7 @@ export const authOptions: NextAuthOptions = {
 
         const user = await prisma.user.findUnique({
           where: { email: normalizedEmail },
+          omit: { password: false },
         });
 
         // Reject soft-deleted AND deactivated accounts. The admin Users page

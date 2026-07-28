@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { ensureSystemFields, type SystemFieldAudience } from "./systemFieldRegistry";
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
 export interface FieldValidationFailure {
   fieldId: string;

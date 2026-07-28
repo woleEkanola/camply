@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Invalid or expired code." }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email }, omit: { password: false } });
     if (!user || user.deletedAt || !user.active || !user.password) {
       // Consume the OTP either way so it can't be retried against a
       // different outcome.

@@ -4,7 +4,7 @@ import { calculateAge } from "./age";
 
 export { calculateAge };
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
 export interface ValidationFailure {
   step: string;

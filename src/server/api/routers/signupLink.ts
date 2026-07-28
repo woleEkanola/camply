@@ -16,7 +16,7 @@ const signupLinkSchema = z.object({
 // authoritative gate, this is only a courtesy heads-up before a parent starts
 // filling out the form.
 async function computeQuotaReached(
-  prisma: PrismaClient,
+  prisma: PrismaClient<any>,
   signupLink: { campusId: string; campId: string; quota: number; quotaFullBehavior: string }
 ): Promise<boolean> {
   if (signupLink.quota <= 0 || signupLink.quotaFullBehavior !== "CLOSE") return false;

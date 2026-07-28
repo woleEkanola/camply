@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     // password on file can request one. Checked BEFORE the rate limit below
     // so a non-existent or ineligible email can never exhaust the bucket for
     // a real account that later needs it (see the same fix in send-otp).
-    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail }, omit: { password: false } });
     if (!user || user.deletedAt || !user.active || !user.password) {
       return NextResponse.json(GENERIC_OK, { status: 200 });
     }

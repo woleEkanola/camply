@@ -19,7 +19,7 @@ async function isTwoStepOrg(tx: TxClient, organizationId: string): Promise<boole
   return org?.approvalWorkflow === "TWO_STEP";
 }
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
 export class RegistrationEngineError extends Error {
   code: string;
