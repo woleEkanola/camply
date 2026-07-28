@@ -29,32 +29,35 @@ test.describe("Communication Center", () => {
     await loginAsAdmin(page);
   });
 
-  test("P1: Communication nav group renders all 5 items", async ({ page }) => {
+  test("P1: Communication nav group expands to reveal its items", async ({ page }) => {
     // Scoped to the visible <nav> — BottomNav (src/components/layout/BottomNav.tsx)
     // adds a second, always-mounted <nav aria-label="Primary"> (CSS-hidden below
     // md via `md:hidden`), so a bare `page.locator('nav')` is ambiguous now.
-    const nav = onlyVisible(page.locator('nav'));
-    // Verify the Communication nav group exists with all 5 items
+    const nav = onlyVisible(page.locator("nav"));
+
+    // Communication is a collapsible group (navConfig.ts: `collapsible: true`)
+    // and starts closed unless the current route is inside it — so its items
+    // are genuinely absent from the DOM until the header is clicked.
     await expect(nav).toContainText("Communication");
-    await expect(nav).toContainText("Overview");
-    await expect(nav).toContainText("Email Events");
-    await expect(nav).toContainText("Templates");
-    await expect(nav).toContainText("Broadcast");
-    await expect(nav).toContainText("Branding");
+    await expect(nav).not.toContainText("Delivery Queue");
+
+    await nav.getByText("Communication", { exact: true }).click();
+
+    for (const item of ["Dashboard", "Campaigns", "Audiences", "Delivery Queue", "Delivery Logs", "Templates", "Event Settings", "Branding", "Camp ID Card"]) {
+      await expect(nav).toContainText(item);
+    }
   });
 
-  test("P2: Overview page loads with 4 cards and recent activity", async ({ page }) => {
+  test("P2: /admin/communication redirects to the dashboard, which loads its stat cards", async ({ page }) => {
+    // The old overview page (4 nav cards + Recent Email Activity) is gone —
+    // src/app/admin/communication/page.tsx is now a pure redirect.
     await page.goto("/admin/communication");
-    await expect(page.locator("h1")).toContainText("Communication");
+    await expect(page).toHaveURL(/\/admin\/communication\/dashboard/, { timeout: 15000 });
 
-    // 4 navigation cards should be visible
-    await expect(page.getByRole("heading", { name: "Email Events" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Templates" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Broadcast" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Branding" })).toBeVisible();
-
-    // Recent Email Activity section
-    await expect(page.getByRole("heading", { name: "Recent Email Activity" })).toBeVisible();
+    await expect(page.getByText("Communication Dashboard")).toBeVisible();
+    for (const label of ["Sent Today", "Failed", "Queue Size", "Success Rate", "Open Rate"]) {
+      await expect(page.getByText(label, { exact: true })).toBeVisible();
+    }
   });
 
   test("P3: Email Events page shows 9 event cards with toggles", async ({ page }) => {

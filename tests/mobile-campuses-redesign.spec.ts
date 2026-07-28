@@ -99,7 +99,11 @@ test.describe("Mobile Campus Redesign E2E", () => {
 
     // Check campus identity (Level 1 hierarchy title & badge)
     await expect(card.getByRole("heading", { name: campusName })).toBeVisible();
-    await expect(card.getByText("MOB")).toBeVisible();
+    // The campus code sits in a mixed text/element paragraph
+    // ("MOB" + <span>•</span> + "Order #N", CampusCard.tsx:199) and also
+    // appears in the heading, so assert containment on the card itself
+    // rather than trying to pin one text node.
+    await expect(card).toContainText("MOB");
     await expect(card.getByText("• Active").first()).toBeVisible();
 
     // Check Section 2 — Quick Info (reps count + address row + copy link)

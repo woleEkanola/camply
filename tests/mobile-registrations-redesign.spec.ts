@@ -68,8 +68,9 @@ test.describe("Mobile Registrations Redesign E2E", () => {
     // 3. Search for the specific camper created in test
     await searchInput.fill(camperName);
 
-    // 4. Verify listitem containing camper card is displayed
-    const camperItem = page.getByRole("listitem").filter({ hasText: camperName }).first();
-    await expect(camperItem).toBeVisible({ timeout: 15000 });
+    // 4. Verify the camper's card is displayed. MobileRegistrationCard renders
+    // as a plain <div> (MobileRegistrationsView.tsx:864) — there is no
+    // listitem role to filter on any more.
+    await expect(page.getByText(camperName).first()).toBeVisible({ timeout: 15000 });
   });
 });

@@ -32,7 +32,10 @@ test.describe("Login page: back / resend code / forgot password", () => {
     // regardless of whether the mail service works — the step should always
     // advance and show the generic confirmation message.
     await expect(page.locator('[aria-label="Digit 1 of 6"]:visible')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("div.bg-green-50:visible")).toBeVisible({ timeout: 10000 });
+    // The success banner is styled with the `status-success` utility now, not
+    // a raw `bg-green-50` — see the `{!error && info && (...)}` block in
+    // src/app/login/page.tsx.
+    await expect(page.locator("div.status-success:visible")).toBeVisible({ timeout: 10000 });
   });
 
   test("Resend code button sends another code and enters a cooldown", async ({ page }) => {
@@ -121,7 +124,9 @@ test.describe("Login page: back / resend code / forgot password", () => {
       // Old password no longer works.
       await page.locator('input[placeholder="Enter Password"]:visible').fill(originalPassword);
       await loginButton(page).click();
-      await expect(page.locator("div.bg-red-100:visible")).toBeVisible({ timeout: 10000 });
+      // Error banner uses the `status-danger` utility now, not `bg-red-100`
+      // (src/app/login/page.tsx, the `{error && (...)}` block).
+      await expect(page.locator("div.status-danger:visible")).toBeVisible({ timeout: 10000 });
 
       // New password logs in successfully.
       await page.locator('input[placeholder="Enter Password"]:visible').fill(newPassword);

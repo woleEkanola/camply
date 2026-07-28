@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { loginWithPassword, loginWithOtp } from "./helpers";
+import { loginWithPassword, loginWithOtp, getFixtureOrgContext, drawerPanel } from "./helpers";
 
 const prisma = new PrismaClient();
 
@@ -17,14 +17,14 @@ test.describe("Camper View Modes & Replications", () => {
     camperName = `View Camper ${suffix}`;
     const email = `e2e-view-${suffix}@camply.test`;
 
-    const org = await prisma.organization.findFirst({ where: { name: "Demo Organization" } });
-    if (!org) throw new Error("Demo Organization not found in DB");
-
-    const camp = await prisma.camp.findFirst({ where: { organizationId: org.id } });
-    if (!camp) throw new Error("Active camp not found in DB");
-
-    const campus = await prisma.campus.findFirst({ where: { organizationId: org.id } });
-    if (!campus) throw new Error("Campus not found in DB");
+    // Must be the org owner@camply.com actually belongs to — resolving by the
+    // name "Demo Organization" picks a different org that exists in this DB but
+    // has no seeded logins, so everything created here was invisible to the
+    // admin the test logs in as. See getFixtureOrgContext's doc comment.
+    const ctx = await getFixtureOrgContext();
+    const org = { id: ctx.organizationId };
+    const camp = { id: ctx.campId };
+    const campus = { id: ctx.campusId };
 
     // 1. Create a parent and camper
     const parent = await prisma.user.create({
@@ -109,7 +109,11 @@ test.describe("Camper View Modes & Replications", () => {
     await page.waitForLoadState("networkidle");
 
     // 2. Default List View verification
-    await expect(page.getByRole("heading", { name: "Campers" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Campers", exact: true })).toBeVisible();
+    // The shared fixture org has accumulated enough campers that this one is
+    // no longer on the first page — narrow to it rather than relying on it
+    // happening to be visible.
+    await page.getByPlaceholder("Search name, email, or registration #").fill(camperName);
     await expect(page.getByText(camperName).first()).toBeVisible({ timeout: 20000 });
 
     // Verify removed columns (Parent / Created should not be headers in table)
@@ -127,18 +131,39 @@ test.describe("Camper View Modes & Replications", () => {
     await expect(page.getByText(camperName).first()).toBeVisible();
     await expect(page.getByText("⚠️ Medical Alert").first()).toBeVisible();
 
-    // 5. Click card to open CamperQuickProfileDrawer
-    await page.click(`text=${camperName}`);
-    await expect(page.getByRole("heading", { name: "Camper Profile" })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Allergies: Peanuts")).toBeVisible();
+    // 5. Click the card to open CamperQuickProfileDrawer. Target the card
+    // element itself — a bare `text=` selector also matches the value sitting
+    // in the search box, so the click didn't reliably hit the card.
+    await page
+      .locator("div.cursor-pointer")
+      .filter({ hasText: camperName })
+      .first()
+      .click();
+    // Assert the camper's name, not the "Camper Profile" fallback: the drawer
+    // title is `camper?.name ?? "Camper Profile"` (CamperQuickProfile.tsx:18),
+    // so the fallback only shows for the instant before the camper loads.
+    // Use drawerPanel(), not getByRole("dialog") — see the helper's comment
+    // for why a visibility assertion on the dialog root always fails.
+    const profileDrawer = drawerPanel(page);
+    await expect(profileDrawer).toBeVisible({ timeout: 10000 });
+    await expect(profileDrawer.getByRole("heading", { name: camperName }).first()).toBeVisible();
+    // Label and value are separate spans in CamperProfileView.tsx:296-300 —
+    // there is no single "Allergies: Peanuts" string to match.
+    const allergyBlock = page.locator("div").filter({ hasText: /^Allergies/ }).last();
+    await expect(allergyBlock).toContainText("Peanuts");
 
-    // 6. Click profile photo in drawer to expand
-    await page.locator("img.cursor-pointer").click();
-    await expect(page.getByRole("heading", { name: "Full Teen Photo" })).toBeVisible();
+    // 6. Click profile photo in drawer to expand. The old "Full Teen Photo"
+    // heading is gone — CamperPhotoCropperModal renders an empty Dialog title
+    // and labels its view mode "Camper Photo Preview" instead.
+    await page.locator("img.cursor-pointer").first().click();
+    const photoPreview = page.getByText("Camper Photo Preview");
+    await expect(photoPreview).toBeVisible({ timeout: 10000 });
 
-    // Close Dialog using specific dialog close button
-    await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
-    await expect(page.getByRole("heading", { name: "Full Teen Photo" })).not.toBeVisible();
+    // Close the photo modal. It has no Close button — Dialog.tsx only renders
+    // one when `title` is non-empty, and the cropper passes title="" — so
+    // dismiss via Escape, which HeadlessDialog's onClose handles.
+    await page.keyboard.press("Escape");
+    await expect(photoPreview).not.toBeVisible();
   });
 
   test("volunteer dashboard - campers page can toggle view modes", async ({ page }) => {
@@ -146,11 +171,15 @@ test.describe("Camper View Modes & Replications", () => {
 
     // 1. Log in as the approved volunteer user using OTP
     await loginWithOtp(page, volunteerEmail);
+    // Let the post-login redirect settle first — navigating immediately races
+    // it, and Playwright aborts the goto ("interrupted by another navigation").
+    await page.waitForURL(/\/(volunteer|dashboard|admin)/, { timeout: 20000 });
     await page.goto("/volunteer/campers");
     await page.waitForLoadState("networkidle");
 
-    // 2. Verify dashboard elements are loaded
-    await expect(page.getByRole("heading", { name: "Campers" })).toBeVisible();
+    // 2. Verify dashboard elements are loaded. `exact` matters: the page also
+    // renders an "All Campers" heading, which a substring match picks up too.
+    await expect(page.getByRole("heading", { name: "Campers", exact: true })).toBeVisible();
     await expect(page.getByText("All Campers")).toBeVisible();
   });
 });

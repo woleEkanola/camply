@@ -95,7 +95,9 @@ test.describe("E2E Verification: Duplicate Filtering, Quota Label & Image Croppe
     // Verify duplicate camper row is displayed with Duplicate badge
     const camperCell = page.locator("tr", { hasText: "Duplicate Child Test" }).first();
     await expect(camperCell).toBeVisible({ timeout: 10000 });
-    await expect(camperCell.getByText("Duplicate", { exact: true })).toBeVisible();
+    // The badge appends a siblings hint when one exists ("Duplicate · …"),
+    // so an exact match no longer holds (RegistrationQueue.tsx:229).
+    await expect(camperCell.getByText(/^Duplicate\b/).first()).toBeVisible();
   });
 
   test("2. Campus Page: Registration Capacity shows Submitted (Drafts excluded) label", async ({ page }) => {

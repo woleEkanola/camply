@@ -196,6 +196,25 @@ export function visibleText(page: Page, text: string | RegExp) {
   return onlyVisible(page.getByText(text));
 }
 
+/**
+ * The open Drawer's panel (src/components/ui/Drawer.tsx).
+ *
+ * Use this instead of asserting `toBeVisible()` on `getByRole("dialog")`:
+ * HeadlessUI's dialog root is a zero-size `relative` wrapper whose panel is a
+ * `fixed` child, so the root has no bounding box and Playwright correctly
+ * reports it hidden — even while the drawer is fully open on screen. The
+ * failure looks like "Received: hidden", which reads as "the drawer didn't
+ * open" and sends you hunting the wrong bug.
+ *
+ * `getByRole("dialog")` is still fine for *scoping* to children
+ * (`page.getByRole("dialog").getByRole("button", …)`); it's only visibility
+ * assertions on the root that break. Same applies to Dialog.tsx, which
+ * exposes `data-testid="dialog-panel"` for the same reason.
+ */
+export function drawerPanel(page: Page): Locator {
+  return page.getByTestId("drawer-panel");
+}
+
 export function emailInput(page: Page) {
   return page.locator('input[placeholder="Enter your email"]:visible');
 }

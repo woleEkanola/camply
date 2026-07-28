@@ -1,6 +1,15 @@
 import { test, expect } from "@playwright/test";
 import bcrypt from "bcryptjs";
-import { prisma, getFixtureOrgContext, loginWithPassword, loginWithOtp, fieldByLabel } from "./helpers";
+import {
+  prisma,
+  getFixtureOrgContext,
+  loginWithPassword,
+  loginWithOtp,
+  fieldByLabel,
+  resetSystemFieldDefaults,
+  relaxRequiredCustomFields,
+  restoreRequiredCustomFields,
+} from "./helpers";
 
 /**
  * Document-level correction flagging: an admin or campus rep can flag one
@@ -20,9 +29,17 @@ test.describe("Document flagging requires action", () => {
   let documentId: string;
   let requirementId: string;
   let campusId: string;
+  let relaxedFields: { id: string; required: boolean }[] = [];
 
   test.beforeAll(async () => {
     const { organizationId, campId } = await getFixtureOrgContext();
+    // The wizard's "Continue to Documents" step won't advance while any
+    // visible+required field is blank, and required CUSTOM fields accumulate
+    // on the shared fixture org — so relax them to a known baseline, else the
+    // documents step is never reached and the Action Required badge never
+    // renders.
+    await resetSystemFieldDefaults("CAMPER");
+    relaxedFields = await relaxRequiredCustomFields("CAMPER");
     const campus = await prisma.campus.findFirstOrThrow({ where: { organizationId } });
     campusId = campus.id;
 
@@ -77,6 +94,7 @@ test.describe("Document flagging requires action", () => {
   });
 
   test.afterAll(async () => {
+    await restoreRequiredCustomFields(relaxedFields);
     await prisma.documentAction.deleteMany({ where: { documentId } });
     await prisma.document.deleteMany({ where: { id: documentId } });
     await prisma.documentRequirement.deleteMany({ where: { id: requirementId } });

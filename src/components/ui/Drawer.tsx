@@ -48,7 +48,10 @@ export function Drawer({ open, onClose, title, subtitle, children, width = "lg" 
             leaveFrom="translate-x-0"
             leaveTo="translate-x-full"
           >
-            <HeadlessDialog.Panel className={cn("h-full w-full overflow-y-auto bg-surface shadow-xl scrollbar-hide", widthClasses[width])}>
+            <HeadlessDialog.Panel
+              data-testid="drawer-panel"
+              className={cn("h-full w-full overflow-y-auto bg-surface shadow-xl scrollbar-hide", widthClasses[width])}
+            >
               {(title || subtitle) && (
                 <div className="sticky top-0 z-10 flex items-start justify-between border-b border-border-default bg-surface px-6 py-4">
                   <div>

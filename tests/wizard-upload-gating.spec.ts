@@ -128,7 +128,10 @@ test.describe("Wizard upload gating and retry-safe submit", () => {
     await signUpAndAddTeen(page, "Photo", "Teen");
 
     // Empty-state avatar placeholder box next to the photo upload button.
-    const photoLabel = page.getByText("Photo", { exact: true });
+    // The label is admin-editable and this fixture org renamed it to "Photo Of
+    // Teen"; resetSystemFieldDefaults() deliberately doesn't reset labels, so
+    // match the prefix rather than pinning the exact string.
+    const photoLabel = page.getByText(/^Photo\b/).first();
     await expect(photoLabel).toBeVisible({ timeout: 10000 });
     const uploadButton = page.getByRole("button", { name: "Upload File" });
     await expect(uploadButton).toBeVisible();

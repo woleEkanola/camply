@@ -51,7 +51,7 @@ test.describe("Authentication", () => {
     await loginButton(page).click();
 
     await expect(
-      page.locator("div.bg-red-100:visible", { hasText: /invalid|incorrect|failed/i })
+      page.locator("div.status-danger:visible", { hasText: /invalid|incorrect|failed/i })
     ).toBeVisible({ timeout: 10000 });
     await expect(page).not.toHaveURL(/\/admin/);
   });
@@ -74,7 +74,7 @@ test.describe("Authentication", () => {
     await loginButton(page).click();
 
     await expect(
-      page.locator("div.bg-red-100:visible", { hasText: /invalid|incorrect|failed/i })
+      page.locator("div.status-danger:visible", { hasText: /invalid|incorrect|failed/i })
     ).toBeVisible({ timeout: 10000 });
     await expect(page).not.toHaveURL(/\/admin/);
   });
@@ -87,7 +87,7 @@ test.describe("Authentication", () => {
     await loginButton(page).click();
 
     await expect(
-      page.locator("div.bg-accent-50:visible", { hasText: /verification code|Email OTP|reset your password/i })
+      page.locator("div.brand-tint:visible", { hasText: /verification code|Email OTP|reset your password/i })
     ).toBeVisible({ timeout: 10000 });
   });
 });
