@@ -88,6 +88,66 @@ describe("buildCampInvitationEmail — Next Steps", () => {
   });
 });
 
+describe("buildCampInvitationEmail — icons", () => {
+  it("renders icons as hosted PNGs, never inline SVG or data URIs", () => {
+    const html = buildCampInvitationEmail({ variables: baseVariables, branding: null });
+    // Gmail/Outlook.com strip <svg> and data: URIs — this is the whole reason
+    // the icons go through /api/email-icon at all.
+    expect(html).not.toContain("<svg");
+    expect(html).not.toContain('src="data:');
+    expect(html).toMatch(/<img src="https?:\/\/[^"]+\/api\/email-icon\/[a-z-]+\?c=[0-9A-Fa-f]{6}&amp;s=\d+"/);
+  });
+
+  it("icons every registration detail row and both section headers", () => {
+    const html = buildCampInvitationEmail({ variables: baseVariables, branding: null });
+    for (const name of ["user", "tent", "map-pin", "calendar-days", "identification", "user-group"]) {
+      expect(html).toContain(`/api/email-icon/${name}?`);
+    }
+  });
+
+  it("uses the reference timeline icons with Approved as the active stage", () => {
+    const html = buildCampInvitationEmail({ variables: baseVariables, branding: null });
+    for (const name of ["document-check", "magnifying-glass-circle", "check", "shield-check"]) {
+      expect(html).toContain(`/api/email-icon/${name}?`);
+    }
+    // Active stage is a white check on solid green, not a coloured outline.
+    expect(html).toContain("/api/email-icon/check?c=FFFFFF");
+  });
+
+  it("renders default Next Steps icons from the registry", () => {
+    const html = buildCampInvitationEmail({ variables: baseVariables, branding: null });
+    for (const name of ["printer", "qr-code", "clock", "backpack"]) {
+      expect(html).toContain(`/api/email-icon/${name}?`);
+    }
+  });
+
+  it("still renders legacy emoji stored in Branding.nextSteps", () => {
+    const branding: Branding = {
+      primaryColor: "#E67E22",
+      accentColor: "#E67E22",
+      buttonColor: "#E67E22",
+      nextSteps: [{ icon: "🚌", title: "Board the Bus", description: "Meet at the pickup point." }],
+    };
+    const html = buildCampInvitationEmail({ variables: baseVariables, branding });
+    expect(html).toContain("🚌");
+    expect(html).not.toContain("/api/email-icon/🚌");
+  });
+
+  it("renders brand-mark icons for social links instead of plain text", () => {
+    const branding: Branding = {
+      primaryColor: "#E67E22",
+      accentColor: "#E67E22",
+      buttonColor: "#E67E22",
+      facebookUrl: "https://facebook.com/tcn",
+      instagramUrl: "https://instagram.com/tcn",
+    };
+    const html = buildCampInvitationEmail({ variables: baseVariables, branding });
+    expect(html).toContain("/api/email-icon/facebook?");
+    expect(html).toContain("/api/email-icon/instagram?");
+    expect(html).not.toContain(">Facebook</a>");
+  });
+});
+
 describe("buildCampInvitationEmail — layout", () => {
   it("uses the wider 800px certificate width", () => {
     const html = buildCampInvitationEmail({ variables: baseVariables, branding: null });

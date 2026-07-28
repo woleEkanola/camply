@@ -16,11 +16,14 @@ interface NextStepItem {
   description: string;
 }
 
+// Icon names resolve against the email icon registry (src/server/email/icons.ts)
+// and render as hosted PNGs. Emoji still work for orgs that saved them before
+// the registry existed — see NextStepsCard's fallback.
 const DEFAULT_NEXT_STEPS: NextStepItem[] = [
-  { icon: "🖨️", title: "Print This Page", description: "Bring a printed or saved copy for check-in." },
-  { icon: "📱", title: "Bring Your QR Code", description: "Have it ready on your phone or printed." },
-  { icon: "⏰", title: "Arrive On Time", description: "Check-in closes shortly after the start time." },
-  { icon: "🎒", title: "Pack & Prepare", description: "See the packing list in your welcome email." },
+  { icon: "printer", title: "Print This Page", description: "Bring a printed or saved copy for check-in." },
+  { icon: "qr-code", title: "Bring Your QR Code", description: "Have it ready on your phone or printed." },
+  { icon: "clock", title: "Arrive On Time", description: "Check-in closes shortly after the start time." },
+  { icon: "backpack", title: "Pack & Prepare", description: "See the packing list in your welcome email." },
 ];
 
 // ─── Page ───────────────────────────────────────────────────────────────────

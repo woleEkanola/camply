@@ -2,6 +2,7 @@
 // Each assembler receives variables (from template interpolation) + branding + optional extra params.
 
 import type { Branding } from "../renderer";
+import type { CertificateInfoRow } from "../components/certificate";
 import {
   EmailLayout,
   EmailHero,
@@ -174,25 +175,27 @@ export function buildWelcomeEmail(p: AssemblerParams): string {
 // admission certificate rather than a marketing email — see
 // src/server/email/components/certificate.ts.
 
-function registrationDetailRows(v: Record<string, string>) {
-  const rows: { label: string; value: string }[] = [];
-  if (v.camper_name) rows.push({ label: "Camper", value: v.camper_name });
-  if (v.camp_name) rows.push({ label: "Camp", value: v.camp_name });
-  if (v.centre_name) rows.push({ label: "Campus / Centre", value: v.centre_name });
-  if (v.reporting_date) rows.push({ label: "Reporting Date", value: v.reporting_date });
-  if (v.registration_number) rows.push({ label: "Registration Number", value: v.registration_number });
-  if (v.tribe_name) rows.push({ label: "Tribe / House", value: v.tribe_name });
+function registrationDetailRows(v: Record<string, string>): CertificateInfoRow[] {
+  const rows: CertificateInfoRow[] = [];
+  if (v.camper_name) rows.push({ label: "Camper", value: v.camper_name, icon: "user" });
+  if (v.camp_name) rows.push({ label: "Camp", value: v.camp_name, icon: "tent" });
+  if (v.centre_name) rows.push({ label: "Campus / Centre", value: v.centre_name, icon: "map-pin" });
+  if (v.reporting_date) rows.push({ label: "Reporting Date", value: v.reporting_date, icon: "calendar-days" });
+  if (v.registration_number) rows.push({ label: "Registration Number", value: v.registration_number, icon: "identification" });
+  if (v.tribe_name) rows.push({ label: "Tribe / House", value: v.tribe_name, icon: "user-group" });
   // Confirmed decision: omit entirely (not a placeholder) until a room is
   // actually assigned — accommodation is a separate, later admin step.
   if (v.hostel_name && v.room_name) {
     const bed = v.bed_label ? ` (${v.bed_label})` : "";
-    rows.push({ label: "Hostel & Room", value: `${v.hostel_name} — ${v.room_name}${bed}` });
+    rows.push({ label: "Hostel & Room", value: `${v.hostel_name} — ${v.room_name}${bed}`, icon: "map-pin" });
   }
   return rows;
 }
 
-function checkInInfoRows(v: Record<string, string>) {
-  const rows: { label: string; value: string }[] = [];
+// Check-in rows deliberately carry no icons — the reference stacks them as
+// label-over-value, unlike the iconified single-line registration rows.
+function checkInInfoRows(v: Record<string, string>): CertificateInfoRow[] {
+  const rows: CertificateInfoRow[] = [];
   if (v.checkin_date) rows.push({ label: "Check-in Date", value: v.checkin_date });
   if (v.checkin_location) rows.push({ label: "Check-in Location", value: v.checkin_location });
   if (v.arrive_before) rows.push({ label: "Arrive Before", value: v.arrive_before });
@@ -217,19 +220,24 @@ export function buildCampInvitationEmail(p: AssemblerParams): string {
     SplitInfoCard({
       leftTitle: "Registration Details",
       leftRows: registrationDetailRows(v),
+      leftIcon: "identification",
       rightTitle: "Important Check-in Info",
       rightRows: checkInInfoRows(v),
+      rightIcon: "calendar-days",
       notice,
     }),
-    p.bodyContent ? Section({ children: p.bodyContent }) : "",
+    // Section's default 24/32px padding is tuned for 600px marketing emails;
+    // on the A4 certificate the surrounding cards already supply the gutter.
+    p.bodyContent ? Section({ children: p.bodyContent, padding: `0 0 12px` }) : "",
     TimelineCompact({
       title: "Your Registration Journey",
+      // Approval is what triggers this email, so Approved is the active stage.
       stages: [
-        { label: "Submitted", status: "completed" },
-        { label: "Under Review", status: "completed" },
-        { label: "Approved", status: "completed" },
-        { label: "Check-in", status: "current" },
-        { label: "Camp Complete", status: "upcoming" },
+        { label: "Submitted", status: "completed", icon: "document-check" },
+        { label: "Under Review", status: "completed", icon: "magnifying-glass-circle" },
+        { label: "Approved", status: "current", icon: "check" },
+        { label: "Check-in", status: "upcoming", icon: "calendar-days" },
+        { label: "Camp Complete", status: "upcoming", icon: "shield-check" },
       ],
     }),
     NextStepsCard({ steps: p.branding?.nextSteps }),
