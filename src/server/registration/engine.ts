@@ -281,8 +281,13 @@ async function approveRegistrationInTx(
   // Re-check capacity under lock to prevent overbooking on concurrent approvals.
   if (registration.venue && registration.venue.quota > 0) {
     await tx.$queryRaw`SELECT id FROM "Venue" WHERE id = ${registration.venue.id} FOR UPDATE`;
+    // Must count CHECKED_IN too — the lock is correct but this predicate
+    // wasn't: as campers check in and move off APPROVED, the count *drops*,
+    // so late approvals sailed straight past a venue that's actually full.
+    // Also missing deletedAt: null, so a soft-deleted registration still
+    // consumed a slot.
     const approvedCount = await tx.registration.count({
-      where: { venueId: registration.venue.id, status: "APPROVED" },
+      where: { venueId: registration.venue.id, status: { in: ["APPROVED", "CHECKED_IN"] }, deletedAt: null },
     });
     if (approvedCount >= registration.venue.quota) {
       if (registration.venue.fullBehavior === "PENDING_OK") {
@@ -314,8 +319,9 @@ async function approveRegistrationInTx(
   });
   if (signupLink && signupLink.quota > 0) {
     await tx.$queryRaw`SELECT id FROM "SignupLink" WHERE id = ${signupLink.id} FOR UPDATE`;
+    // Same predicate fix as the Venue quota check above.
     const approvedCampusCount = await tx.registration.count({
-      where: { campusId: registration.campusId, campId: registration.campId, status: "APPROVED" },
+      where: { campusId: registration.campusId, campId: registration.campId, status: { in: ["APPROVED", "CHECKED_IN"] }, deletedAt: null },
     });
     if (approvedCampusCount >= signupLink.quota) {
       const waitlisted = await tx.registration.update({
@@ -951,8 +957,15 @@ export async function transferVenue(params: { registrationId: string; actorId: s
     });
 
     const newVenue = await tx.venue.findUniqueOrThrow({ where: { id: params.newVenueId } });
-    if (newVenue.quota > 0 && registration.status === "APPROVED") {
-      const approvedCount = await tx.registration.count({ where: { venueId: newVenue.id, status: "APPROVED" } });
+    if (newVenue.quota > 0 && (registration.status === "APPROVED" || registration.status === "CHECKED_IN")) {
+      // Previously had no lock at all — two concurrent transfers into the
+      // last slot could both read approvedCount = quota-1 and both commit.
+      // Mirrors the FOR UPDATE + recount pattern in approveRegistrationInTx
+      // above (and staff/departmentCapacity.ts's assertDepartmentHasCapacity).
+      await tx.$queryRaw`SELECT id FROM "Venue" WHERE id = ${newVenue.id} FOR UPDATE`;
+      const approvedCount = await tx.registration.count({
+        where: { venueId: newVenue.id, status: { in: ["APPROVED", "CHECKED_IN"] }, deletedAt: null },
+      });
       if (approvedCount >= newVenue.quota) {
         throw new RegistrationEngineError("VENUE_FULL", "The destination venue is at capacity.");
       }

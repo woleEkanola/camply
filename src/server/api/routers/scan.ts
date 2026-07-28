@@ -188,7 +188,12 @@ export const scanRouter = createTRPCRouter({
       const normalizedToken = normalizeScannedQRToken(rawToken);
 
       if (normalizedToken) {
-        // A. Primary lookup: search qrToken, registrationNumber, registration ID, or camper ID under active camp
+        // A. Primary lookup: search qrToken, registrationNumber, registration ID, or camper ID under active camp.
+        // qrToken/id/registrationNumber are all @unique so those three can
+        // only ever match one row; camperId is NOT unique (a camper can have
+        // a registration per camp across years), so the orderBy makes which
+        // one wins deterministic rather than "whichever Postgres returns
+        // first" if that clause is ever what matches.
         registration = await ctx.prisma.registration.findFirst({
           where: {
             campId,
@@ -200,10 +205,17 @@ export const scanRouter = createTRPCRouter({
               { camperId: normalizedToken },
             ],
           },
+          orderBy: { createdAt: "desc" },
           include,
         });
 
-        // B. Secondary lookup: search across any camp in the organization if active camp didn't yield a match
+        // B. Secondary lookup: search across any camp in the organization if active camp didn't yield a match.
+        // The `contains` substring clause this used to have here is gone —
+        // combined with findFirst and no orderBy, a partially-read/smudged
+        // badge (lib/qr.ts's normalizer returns unparseable input verbatim)
+        // could match several registrations and resolve to whichever one
+        // Postgres happened to return first. On the checkout station that
+        // meant a real risk of releasing a child to the wrong adult.
         if (!registration) {
           registration = await ctx.prisma.registration.findFirst({
             where: {
@@ -214,9 +226,9 @@ export const scanRouter = createTRPCRouter({
                 { id: normalizedToken },
                 { registrationNumber: { equals: normalizedToken, mode: "insensitive" } },
                 { camperId: normalizedToken },
-                { registrationNumber: { contains: normalizedToken, mode: "insensitive" } },
               ],
             },
+            orderBy: { createdAt: "desc" },
             include,
           });
         }
@@ -403,31 +415,33 @@ export const scanRouter = createTRPCRouter({
           };
         }
 
-        // Record meal distribution
-        const mealRecord = await ctx.prisma.mealDistribution.create({
-          data: {
-            campId,
-            registrationId,
-            meal: mealType,
-            date: activeTime,
-            servedById: ctx.userId,
-            servedAt: activeTime,
-          },
-        });
-
-        // Log SUCCESS scan event
-        await ctx.prisma.scanEvent.create({
-          data: {
-            registrationId,
-            campId,
-            station: input.station,
-            timestamp: activeTime,
-            volunteerId: ctx.userId,
-            device: input.device,
-            location: input.location,
-            result: "SUCCESS",
-          },
-        });
+        // Record meal distribution + SUCCESS scan event as one transaction,
+        // matching the check-in path's fix — otherwise a failure between the
+        // two leaves a served meal with no audit trail (or vice versa).
+        const [mealRecord] = await ctx.prisma.$transaction([
+          ctx.prisma.mealDistribution.create({
+            data: {
+              campId,
+              registrationId,
+              meal: mealType,
+              date: activeTime,
+              servedById: ctx.userId,
+              servedAt: activeTime,
+            },
+          }),
+          ctx.prisma.scanEvent.create({
+            data: {
+              registrationId,
+              campId,
+              station: input.station,
+              timestamp: activeTime,
+              volunteerId: ctx.userId,
+              device: input.device,
+              location: input.location,
+              result: "SUCCESS",
+            },
+          }),
+        ]);
 
         return {
           result: "SUCCESS" as const,
@@ -483,51 +497,51 @@ export const scanRouter = createTRPCRouter({
           };
         }
 
-        // Perform checkout
-        const updatedReg = await ctx.prisma.registration.update({
-          where: { id: registrationId },
-          data: {
-            checkedOutAt: activeTime,
-            checkedOutById: ctx.userId,
-            checkoutCollectorName: input.checkoutDetails.collectorName,
-            checkoutCollectorRelationship: input.checkoutDetails.collectorRelationship,
-            checkoutDetails: input.checkoutDetails.details || null,
-          },
-          include,
-        });
-
-        // Log SUCCESS scan event
-        await ctx.prisma.scanEvent.create({
-          data: {
-            registrationId,
-            campId,
-            station: input.station,
-            timestamp: activeTime,
-            volunteerId: ctx.userId,
-            device: input.device,
-            location: input.location,
-            result: "SUCCESS",
-            metadata: {
-              collectorName: input.checkoutDetails.collectorName,
-              relationship: input.checkoutDetails.collectorRelationship,
-            },
-          },
-        });
-
-        // Add to main audit log as well
-        await ctx.prisma.auditLog.create({
-          data: {
-            organizationId: input.organizationId,
-            registrationId,
-            actorId: ctx.userId,
-            action: "CHECK_OUT_COMPLETED",
-            newValue: {
+        // Perform checkout + scan event + audit log as one transaction —
+        // previously unwrapped, so a failure partway through could leave
+        // checkedOutAt set with no matching ScanEvent/AuditLog trail.
+        const [updatedReg] = await ctx.prisma.$transaction([
+          ctx.prisma.registration.update({
+            where: { id: registrationId },
+            data: {
               checkedOutAt: activeTime,
-              collectorName: input.checkoutDetails.collectorName,
-              collectorRelationship: input.checkoutDetails.collectorRelationship,
+              checkedOutById: ctx.userId,
+              checkoutCollectorName: input.checkoutDetails.collectorName,
+              checkoutCollectorRelationship: input.checkoutDetails.collectorRelationship,
+              checkoutDetails: input.checkoutDetails.details || null,
             },
-          },
-        });
+            include,
+          }),
+          ctx.prisma.scanEvent.create({
+            data: {
+              registrationId,
+              campId,
+              station: input.station,
+              timestamp: activeTime,
+              volunteerId: ctx.userId,
+              device: input.device,
+              location: input.location,
+              result: "SUCCESS",
+              metadata: {
+                collectorName: input.checkoutDetails.collectorName,
+                relationship: input.checkoutDetails.collectorRelationship,
+              },
+            },
+          }),
+          ctx.prisma.auditLog.create({
+            data: {
+              organizationId: input.organizationId,
+              registrationId,
+              actorId: ctx.userId,
+              action: "CHECK_OUT_COMPLETED",
+              newValue: {
+                checkedOutAt: activeTime,
+                collectorName: input.checkoutDetails.collectorName,
+                collectorRelationship: input.checkoutDetails.collectorRelationship,
+              },
+            },
+          }),
+        ]);
 
         return {
           result: "SUCCESS" as const,
@@ -678,42 +692,63 @@ export const scanRouter = createTRPCRouter({
         };
       }
 
-      // Record SUCCESS check-in scan event
-      await ctx.prisma.scanEvent.create({
-        data: {
-          registrationId,
-          campId,
-          station: input.station,
-          timestamp: activeTime,
-          volunteerId: ctx.userId,
-          device: input.device,
-          location: input.location,
-          result: "SUCCESS",
-          metadata: arrivalStationIdTag,
-        },
-      });
-
-      // Update main registration status to CHECKED_IN (if not already)
+      // Record SUCCESS check-in scan event + status update + audit log as
+      // one transaction. Previously the SUCCESS ScanEvent was written first,
+      // outside any transaction — if the registration.update below then
+      // failed (connection blip, timeout), the ScanEvent was already
+      // committed, so the dedupe guard above (`existingCheckIn`) would
+      // reject every retry with "already checked in", leaving the camper
+      // permanently un-check-in-able at this station for the rest of the
+      // day even though status never actually advanced.
       let updatedReg = registration;
       if (registration.status !== "CHECKED_IN") {
-        updatedReg = await ctx.prisma.registration.update({
-          where: { id: registrationId },
+        const [, newReg] = await ctx.prisma.$transaction([
+          ctx.prisma.scanEvent.create({
+            data: {
+              registrationId,
+              campId,
+              station: input.station,
+              timestamp: activeTime,
+              volunteerId: ctx.userId,
+              device: input.device,
+              location: input.location,
+              result: "SUCCESS",
+              metadata: arrivalStationIdTag,
+            },
+          }),
+          ctx.prisma.registration.update({
+            where: { id: registrationId },
+            data: {
+              status: "CHECKED_IN",
+              checkedInAt: registration.checkedInAt ?? activeTime,
+              checkedInById: registration.checkedInById ?? ctx.userId,
+            },
+            include,
+          }),
+          ctx.prisma.auditLog.create({
+            data: {
+              organizationId: input.organizationId,
+              registrationId,
+              actorId: ctx.userId,
+              action: "CHECK_IN_COMPLETED",
+              previousValue: { status: registration.status },
+              newValue: { status: "CHECKED_IN" },
+            },
+          }),
+        ]);
+        updatedReg = newReg;
+      } else {
+        await ctx.prisma.scanEvent.create({
           data: {
-            status: "CHECKED_IN",
-            checkedInAt: registration.checkedInAt ?? activeTime,
-            checkedInById: registration.checkedInById ?? ctx.userId,
-          },
-          include,
-        });
-
-        await ctx.prisma.auditLog.create({
-          data: {
-            organizationId: input.organizationId,
             registrationId,
-            actorId: ctx.userId,
-            action: "CHECK_IN_COMPLETED",
-            previousValue: { status: registration.status },
-            newValue: { status: "CHECKED_IN" },
+            campId,
+            station: input.station,
+            timestamp: activeTime,
+            volunteerId: ctx.userId,
+            device: input.device,
+            location: input.location,
+            result: "SUCCESS",
+            metadata: arrivalStationIdTag,
           },
         });
       }
