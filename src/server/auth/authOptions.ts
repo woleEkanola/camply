@@ -6,6 +6,7 @@ import { normalizeEmail } from "../../lib/email";
 import { rateLimit, clearRateLimit } from "../rateLimit";
 import { MAX_OTP_ATTEMPTS, normalizeOtp, otpEqual } from "../otp";
 import { type NextAuthOptions } from "next-auth";
+import { getUserCapabilities, EMPTY_CAPABILITIES, type UserCapabilities } from "./capabilities";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT" | "TEACHER" | "VOLUNTEER";
@@ -149,6 +150,11 @@ export const authOptions: NextAuthOptions = {
           include: { managedCampuses: true },
         });
         token.managedCampuses = dbUser?.managedCampuses?.map((c: { id: string }) => c.id) || [];
+        // Same reasoning as managedCampuses above, generalised: one person is
+        // often both a parent and a teacher, and `role` can only hold one of
+        // them. Capabilities are derived from relations that already exist —
+        // see server/auth/capabilities.ts.
+        token.capabilities = await getUserCapabilities(user.id);
       }
       return token;
     },
@@ -158,6 +164,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role;
         session.user.organizationId = token.organizationId as string;
         session.user.managedCampuses = token.managedCampuses || [];
+        session.user.capabilities = (token.capabilities as UserCapabilities) ?? EMPTY_CAPABILITIES;
       }
       return session;
     },
