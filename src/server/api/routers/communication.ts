@@ -401,16 +401,33 @@ export const communicationRouter = createTRPCRouter({
     if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
     const oid = orgId(ctx);
 
-    let branding = await ctx.prisma.organizationBranding.findUnique({ where: { organizationId: oid } });
-    if (!branding) {
-      branding = await ctx.prisma.organizationBranding.create({ data: { organizationId: oid } });
+    const organization = await ctx.prisma.organization.findUnique({ where: { id: oid } });
+    if (!organization) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Your organization was not found. Please sign out and sign back in.",
+      });
     }
-    const templates = await ctx.prisma.emailTemplate.findMany({
-      where: { organizationId: oid, deletedAt: null },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, includeIdCard: true },
-    });
-    return { idCardEnabled: branding.idCardEnabled, templates };
+
+    try {
+      let branding = await ctx.prisma.organizationBranding.findUnique({ where: { organizationId: oid } });
+      if (!branding) {
+        branding = await ctx.prisma.organizationBranding.create({ data: { organizationId: oid } });
+      }
+      const templates = await ctx.prisma.emailTemplate.findMany({
+        where: { organizationId: oid, deletedAt: null },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, includeIdCard: true },
+      });
+      return { idCardEnabled: branding.idCardEnabled, templates };
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      console.error("[idCardSettingsGet] Failed to load ID card settings:", err);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Unable to load ID card settings. Please try again later.",
+      });
+    }
   }),
 
   idCardSettingsSetEnabled: protectedProcedure

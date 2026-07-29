@@ -10,6 +10,8 @@ import {
 } from "./helpers";
 import { submitRegistration } from "../src/server/registration/engine";
 
+test.describe.configure({ mode: "serial" });
+
 test.describe("Request correction & resubmission flow", () => {
   const stamp = Date.now();
   const parentEmail = `e2e-correction-parent-${stamp}@camply.test`;
@@ -110,6 +112,13 @@ test.describe("Request correction & resubmission flow", () => {
   });
 
   test("parent sees dashboard status and can navigate to resubmit", async ({ page }) => {
+    // The engine test above resubmitted the shared registration to PENDING.
+    // Reset it to REQUIRES_ACTION so the dashboard shows the "Continue Registration" CTA.
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: { status: "REQUIRES_ACTION", correctionRequest: "Please update profile details." },
+    });
+
     await loginWithPassword(page, parentEmail, parentPassword);
     await page.goto("/dashboard");
 

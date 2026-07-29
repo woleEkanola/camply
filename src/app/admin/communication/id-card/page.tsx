@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { signOut } from "next-auth/react";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -10,7 +11,7 @@ import { api } from "@/utils/trpc";
 import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 
 export default function IdCardSettingsPage() {
-  const { data, isLoading, isError, refetch } = api.communication.idCardSettingsGet.useQuery();
+  const { data, isLoading, isError, error, refetch } = api.communication.idCardSettingsGet.useQuery();
 
   const setEnabled = api.communication.idCardSettingsSetEnabled.useMutation({
     onSuccess: () => refetch(),
@@ -36,8 +37,18 @@ export default function IdCardSettingsPage() {
           </Card>
         ) : isError || !data ? (
           <Card>
-            <CardBody>
-              <p className="text-sm text-danger-600">Failed to load ID Card settings. Please refresh the page.</p>
+            <CardBody className="space-y-4">
+              <p className="text-sm text-danger-600">
+                {error?.message ?? "Failed to load ID Card settings. Please refresh the page."}
+              </p>
+              {error?.message?.includes("sign out") && (
+                <Button
+                  variant="secondary"
+                  onClick={() => void signOut({ callbackUrl: "/login" })}
+                >
+                  Sign out
+                </Button>
+              )}
             </CardBody>
           </Card>
         ) : (
