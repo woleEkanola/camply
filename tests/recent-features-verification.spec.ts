@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, switchRegistrationsToListView } from "./helpers";
+import {
+  prisma,
+  getFixtureOrgContext,
+  loginWithPassword,
+  switchRegistrationsToListView,
+  suspendDuplicateConstraint,
+  restoreDuplicateConstraint,
+} from "./helpers";
 
 test.describe("E2E Verification: Duplicate Filtering, Quota Label & Image Cropper", () => {
   test.describe.configure({ mode: "serial" });
@@ -53,7 +60,11 @@ test.describe("E2E Verification: Duplicate Filtering, Quota Label & Image Croppe
     });
     camperId = camper.id;
 
-    // Create 2 registrations for the exact same camper to simulate duplicate
+    // Create 2 registrations for the exact same camper to simulate duplicate.
+    // Registration_camperId_campId_key (partial unique index) forbids this
+    // going forward — suspend it for fixture creation, restore in afterAll
+    // after these rows are deleted.
+    await suspendDuplicateConstraint();
     const reg1 = await prisma.registration.create({
       data: {
         camperId: camper.id,
@@ -80,6 +91,7 @@ test.describe("E2E Verification: Duplicate Filtering, Quota Label & Image Croppe
     await prisma.camper.deleteMany({ where: { id: camperId } });
     await prisma.user.deleteMany({ where: { id: userId } });
     await prisma.campus.deleteMany({ where: { id: campusId } });
+    await restoreDuplicateConstraint();
   });
 
   test("1. Registrations Page: Duplicates StatCard and Duplicate Badges", async ({ page }) => {

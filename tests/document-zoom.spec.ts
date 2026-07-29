@@ -169,7 +169,11 @@ test.describe("Document Zoom Lightbox Modal E2E", () => {
     await expect(closeBtn).toBeVisible();
     await closeBtn.click();
 
-    // Verify modal is closed
-    await expect(page.getByText("100%").first()).not.toBeVisible();
+    // Verify modal is closed. Note: a bare "100%" text assertion is too
+    // broad here — the registration list row behind the drawer shows its own
+    // "Documents: 1 of 1 uploaded 100%" progress badge, which stays visible
+    // and gives a false "not closed" reading. Assert on the zoom control
+    // itself instead.
+    await expect(closeBtn).not.toBeVisible();
   });
 });

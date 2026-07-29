@@ -111,13 +111,19 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
         const profile: Record<string, unknown> = {};
         const fieldValues: { fieldId: string; value: string }[] = [];
 
-        // Always send every visible field's current value, including empty
-        // ones — the previous version omitted empty values from the
-        // payload entirely, so clearing a wrong allergy or phone number
-        // showed blank in the UI while the old value stayed live in the DB
-        // (and is what staff/medical actually see).
+        // Send every field the component actually loaded or the user
+        // touched — including ones now explicitly empty — so clearing a
+        // wrong allergy or phone number really clears it in the DB rather
+        // than leaving the old value live for staff/medical to see. But
+        // skip a key that was never loaded into `newValues` at all
+        // (`undefined`, not `""`): that means this field's backend value
+        // is unknown to this render (e.g. updated out-of-band since the
+        // load effect populated `values`), and sending "" for it would
+        // silently wipe data this component never saw, not clear anything
+        // the user actually edited.
         for (const f of visibleFields) {
           const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
+          if (!(key in newValues)) continue;
           const val = newValues[key] ?? "";
           if (f.source === "SYSTEM" && f.systemKey) {
             profile[f.systemKey] = val;
@@ -213,13 +219,15 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
       return;
     }
 
-    // Final save before navigating — same "send every field, including
-    // empty ones" fix as persistToBackend above.
+    // Final save before navigating — same "send loaded/touched fields,
+    // including explicit empties, but skip never-loaded keys" fix as
+    // persistToBackend above.
     const profile: Record<string, unknown> = {};
     const fieldValues: { fieldId: string; value: string }[] = [];
 
     for (const f of visibleFields) {
       const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
+      if (!(key in values)) continue;
       const val = values[key] ?? "";
       if (f.source === "SYSTEM" && f.systemKey) {
         profile[f.systemKey] = val;

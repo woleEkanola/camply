@@ -8,6 +8,38 @@ import { ensureSystemFields, SYSTEM_FIELD_REGISTRY } from "../src/server/registr
 export const prisma = new PrismaClient();
 
 /**
+ * `Registration_camperId_campId_key` (prisma/migrations/20260728000000_partial_unique_indexes)
+ * makes two live (non-soft-deleted) registrations for the same camper+camp
+ * impossible to create going forward. A handful of specs simulate legacy
+ * data that predates that constraint (e.g. testing the admin
+ * "duplicatesOnly" cleanup view, which exists precisely to surface rows
+ * from before this migration) — since a real Postgres unique index is
+ * enforced on every write path regardless of ORM vs raw SQL, the only way
+ * to create that state in a test is to drop the index for the duration of
+ * the inserts.
+ *
+ * Two separate functions, not one wrap-and-restore helper: the duplicate
+ * fixture rows created while suspended typically need to stay live through
+ * an entire `test()` body (e.g. beforeAll creates them, the test asserts
+ * against them, afterAll deletes them) — restoreDuplicateConstraint() would
+ * fail if called before those rows are gone, since they'd violate the index
+ * being recreated. Call suspendDuplicateConstraint() in beforeAll right
+ * before creating the duplicate rows, and restoreDuplicateConstraint() in
+ * afterAll right after deleting them. Safe in this suite because Playwright
+ * runs each spec file in its own worker/DB connection and every spec using
+ * this builds its own isolated org/camp/camper fixtures.
+ */
+export async function suspendDuplicateConstraint(): Promise<void> {
+  await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "Registration_camperId_campId_key"`);
+}
+
+export async function restoreDuplicateConstraint(): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "Registration_camperId_campId_key" ON "Registration"("camperId", "campId") WHERE "deletedAt" IS NULL`
+  );
+}
+
+/**
  * `formField.list` lazily seeds an org's SYSTEM fields on first read — a
  * wizard page load triggers this naturally, but a test that queries
  * FormField directly via Prisma before any page has loaded can't assume

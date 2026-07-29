@@ -129,7 +129,13 @@ test.describe("Mobile Campus Redesign E2E", () => {
     await card.getByText("Representatives").first().click();
     const repDialog = page.getByRole("dialog");
     await expect(repDialog.getByText(`Representatives — ${campusName}`)).toBeVisible({ timeout: 5000 });
-    await expect(repDialog.getByText("Grace Kemka")).toBeVisible();
+    // An already-assigned rep legitimately appears twice by design
+    // (CampusRepsSheet.tsx): once in the "Assigned Roster" list, and again
+    // in the "Add Representative" candidate list (pre-checked, with a
+    // "Selected" badge) — that list intentionally isn't filtered to exclude
+    // current reps. .first() scopes to the roster entry, which renders
+    // first in DOM order.
+    await expect(repDialog.getByText("Grace Kemka").first()).toBeVisible();
     await repDialog.getByRole("button", { name: "Cancel" }).click();
 
     // 5. Open Registration Analytics Modal

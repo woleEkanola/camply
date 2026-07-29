@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import {
+  prisma,
+  getFixtureOrgContext,
+  loginWithPassword,
+  suspendDuplicateConstraint,
+  restoreDuplicateConstraint,
+} from "./helpers";
 
 /**
  * Admin registrations page: "Duplicates Only" used to return duplicate rows
@@ -40,6 +46,12 @@ test.describe("Duplicate registrations: grouping + sibling-status hint", () => {
 
     // Created oldest-first so plain createdAt-desc ordering would normally
     // interleave these with unrelated rows — grouping must override that.
+    // These three share camperId+campId, which Registration_camperId_campId_key
+    // (partial unique index, WHERE deletedAt IS NULL) now forbids going
+    // forward — suspend it for the duration of fixture creation to simulate
+    // legacy pre-constraint duplicate data. Restored in afterAll, after these
+    // rows are deleted.
+    await suspendDuplicateConstraint();
     const rejected = await prisma.registration.create({ data: { camperId: camper.id, campId, campusId, status: "REJECTED" } });
     rejectedRegId = rejected.id;
     const pending = await prisma.registration.create({ data: { camperId: camper.id, campId, campusId, status: "PENDING" } });
@@ -53,6 +65,7 @@ test.describe("Duplicate registrations: grouping + sibling-status hint", () => {
     await prisma.camper.deleteMany({ where: { id: camperId } });
     await prisma.user.deleteMany({ where: { id: parentId } });
     await prisma.campus.deleteMany({ where: { id: campusId } });
+    await restoreDuplicateConstraint();
   });
 
   test("Duplicates Only shows all 3 siblings adjacently, best-status-first, with a status hint", async ({ page }) => {

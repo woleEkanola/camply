@@ -20,8 +20,17 @@ const ARRIVAL_TYPE_LABELS: Record<string, string> = {
   PICKUP_POINT: "Pickup Point",
 };
 
+// toISOString() always converts to UTC first — whenever the admin's local
+// timezone is ahead of UTC, that shifts the "today" default back a full
+// calendar day (e.g. local midnight on the 29th is still 23:00 on the 28th
+// in UTC), silently defaulting the report to yesterday with zero data for
+// "today". Use local date components instead, matching what an <input
+// type="date"> and a human calling it "today" both mean.
 function toDateInputValue(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 export default function AdminReportsPage() {
