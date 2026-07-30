@@ -114,7 +114,7 @@ test.beforeAll(async () => {
               select: { id: true, qrToken: true, camperId: true, registrationNumber: true },
             })
           )
-          .then((reg) => ({ ...reg, qrToken: reg.qrToken!, camperName }))
+          .then((reg) => ({ ...reg, qrToken: reg.qrToken!, registrationNumber: reg.registrationNumber!, camperName }))
       );
     }
     registrations.push(...(await Promise.all(ops)));

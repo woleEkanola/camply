@@ -93,6 +93,68 @@ function toggleIdCardTokenInContent(doc: any, include: boolean): any {
   };
 }
 
+/**
+ * Ensure every organization has an EmailTemplate and EmailEventConfig for each
+ * event key in ALL_EVENT_KEYS. This is idempotent and race-safe: parallel
+ * callers will reuse existing rows or recover from unique-constraint errors.
+ */
+async function ensureDefaultEmailTemplates(prisma: any, organizationId: string) {
+  const existingConfigs = await prisma.emailEventConfig.findMany({
+    where: { organizationId },
+    select: { event: true },
+  });
+  const existingEvents = new Set(existingConfigs.map((c: { event: string }) => c.event));
+  const missingEvents = ALL_EVENT_KEYS.filter((e) => !existingEvents.has(e));
+
+  for (const event of missingEvents) {
+    const def = DEFAULT_TEMPLATES[event];
+    if (!def) continue;
+
+    let template = await prisma.emailTemplate.findUnique({
+      where: { organizationId_name: { organizationId, name: def.name } },
+    });
+
+    if (!template) {
+      try {
+        template = await prisma.emailTemplate.create({
+          data: {
+            organizationId,
+            name: def.name,
+            description: def.description,
+            subject: def.subject,
+            previewText: def.previewText,
+            content: def.content as any,
+            isDefault: true,
+          },
+        } as any);
+      } catch (err) {
+        // Another concurrent call created it between findUnique and create.
+        if ((err as any)?.code !== "P2002") throw err;
+        template = await prisma.emailTemplate.findUnique({
+          where: { organizationId_name: { organizationId, name: def.name } },
+        });
+      }
+    }
+
+    if (!template) continue;
+
+    try {
+      await prisma.emailEventConfig.create({
+        data: {
+          organizationId,
+          event,
+          templateId: template.id,
+        },
+      });
+    } catch (err) {
+      // Another concurrent call created the config already.
+      if ((err as any)?.code !== "P2002") throw err;
+    }
+  }
+
+  return missingEvents.length > 0;
+}
+
 // ─── Router ─────────────────────────────────────────────────────────────────
 
 export const communicationRouter = createTRPCRouter({
@@ -103,49 +165,16 @@ export const communicationRouter = createTRPCRouter({
     if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
     const oid = orgId(ctx);
 
-    let configs = await ctx.prisma.emailEventConfig.findMany({
+    // Backfill missing default templates/configs before returning, so the
+    // response is complete even when a new event key (e.g. CAMP_INVITATION)
+    // was added after the organization was first created.
+    await ensureDefaultEmailTemplates(ctx.prisma, oid);
+
+    const configs = await ctx.prisma.emailEventConfig.findMany({
       where: { organizationId: oid },
       include: { template: { select: { id: true, name: true } } },
       orderBy: { event: "asc" },
     });
-
-    // Auto-seed: if no configs exist yet, create defaults for all 9 events
-    if (configs.length === 0) {
-      const templates = await Promise.all(
-        ALL_EVENT_KEYS.map((event) => {
-          const def = DEFAULT_TEMPLATES[event];
-          return ctx.prisma.emailTemplate.create({
-            data: {
-              organizationId: oid,
-              name: def.name,
-              description: def.description,
-              subject: def.subject,
-              previewText: def.previewText,
-              content: def.content as any,
-              isDefault: true,
-            },
-          } as any);
-        })
-      );
-
-      await Promise.all(
-        ALL_EVENT_KEYS.map((event, i) =>
-          ctx.prisma.emailEventConfig.create({
-            data: {
-              organizationId: oid,
-              event,
-              templateId: templates[i].id,
-            },
-          })
-        )
-      );
-
-      configs = await ctx.prisma.emailEventConfig.findMany({
-        where: { organizationId: oid },
-        include: { template: { select: { id: true, name: true } } },
-        orderBy: { event: "asc" },
-      });
-    }
 
     const org = await ctx.prisma.organization.findUnique({
       where: { id: oid },
@@ -215,6 +244,10 @@ export const communicationRouter = createTRPCRouter({
     // (including a PARENT) could otherwise browse email templates.
     requireAdmin(ctx);
     const oid = orgId(ctx);
+
+    // Backfill missing default templates/configs before listing, so new event
+    // keys (e.g. CAMP_INVITATION) appear immediately without a manual migration.
+    await ensureDefaultEmailTemplates(ctx.prisma, oid);
 
     return ctx.prisma.emailTemplate.findMany({
       where: { organizationId: oid, deletedAt: null },
@@ -422,6 +455,20 @@ export const communicationRouter = createTRPCRouter({
       return { idCardEnabled: branding.idCardEnabled, templates };
     } catch (err) {
       if (err instanceof TRPCError) throw err;
+
+      // If the idCardEnabled / includeIdCard columns have not been migrated
+      // yet, fail open so the admin page still renders. The feature stays
+      // disabled until the migration is applied.
+      const message = (err as Error)?.message ?? "";
+      const isMissingColumnError =
+        (err as any)?.code === "P2022" ||
+        message.includes("includeIdCard") ||
+        message.includes("idCardEnabled");
+
+      if (isMissingColumnError) {
+        return { idCardEnabled: false, templates: [] };
+      }
+
       console.error("[idCardSettingsGet] Failed to load ID card settings:", err);
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",

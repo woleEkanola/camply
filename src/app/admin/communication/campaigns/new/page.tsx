@@ -69,6 +69,9 @@ function ComposerInner() {
     { organizationId: session?.user?.organizationId ?? "" },
     { enabled: !!session?.user?.organizationId }
   );
+  const { data: eventConfigs } = api.communication.eventList.useQuery();
+  const campInvitationEnabled =
+    eventConfigs?.some((c) => c.event === "CAMP_INVITATION") ?? false;
   const createMut = api.communication.campaignCreate.useMutation();
   const updateMut = api.communication.campaignUpdate.useMutation();
   const sendMut = api.communication.campaignSend.useMutation();
@@ -202,11 +205,12 @@ function ComposerInner() {
         <Card>
           <CardHeader><CardTitle>Recipients</CardTitle></CardHeader>
           <CardBody className="space-y-4">
-            <label className="flex items-start gap-2 rounded-lg border border-border-default p-3">
+            <label className={`flex items-start gap-2 rounded-lg border border-border-default p-3 ${campInvitationEnabled ? "" : "opacity-60"}`}>
               <input
                 type="checkbox"
                 checked={personalize}
                 onChange={(e) => setPersonalize(e.target.checked)}
+                disabled={!campInvitationEnabled}
                 className="mt-0.5"
               />
               <span>
@@ -217,6 +221,12 @@ function ComposerInner() {
                   Sends one certificate-style Camp Invitation email per approved registration in the
                   selected camp (camper name, QR code, hostel/room), instead of one shared message to
                   the audience below.
+                  {!campInvitationEnabled && (
+                    <span className="block text-status-warning mt-1">
+                      The Camp Invitation template is not available yet. Visit the Email Templates page
+                      or wait for the pending database update to enable this option.
+                    </span>
+                  )}
                 </span>
               </span>
             </label>
