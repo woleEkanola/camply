@@ -69,7 +69,8 @@ function ComposerInner() {
     { organizationId: session?.user?.organizationId ?? "" },
     { enabled: !!session?.user?.organizationId }
   );
-  const { data: eventConfigs } = api.communication.eventList.useQuery();
+  const { data: eventListData } = api.communication.eventList.useQuery();
+  const eventConfigs = eventListData?.configs;
   const campInvitationEnabled =
     eventConfigs?.some((c) => c.event === "CAMP_INVITATION") ?? false;
   const createMut = api.communication.campaignCreate.useMutation();

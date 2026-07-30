@@ -353,13 +353,31 @@ export default function TemplatesPage() {
   const [mobileTab, setMobileTab] = useState<"editor" | "preview" | "list">("editor");
 
   // Queries & Mutations
-  const { data: templates = [], refetch: refetchList } = api.communication.templateList.useQuery();
-  const { data: configs } = api.communication.eventList.useQuery();
+  const {
+    data: templateListData,
+    error: templateListError,
+    isLoading: isTemplatesLoading,
+    refetch: refetchList,
+  } = api.communication.templateList.useQuery();
+  const templates = templateListData?.templates ?? [];
+  const templateListMigrationStatus = templateListData?.migrationStatus;
+
+  const {
+    data: eventListData,
+    error: eventListError,
+    isLoading: isEventsLoading,
+    refetch: refetchEvents,
+  } = api.communication.eventList.useQuery();
+  const configs = eventListData?.configs;
+  const eventListMigrationStatus = eventListData?.migrationStatus;
 
   const { data: selectedTemplate, refetch: refetchSelected } = api.communication.templateGetById.useQuery(
     { id: selectedId ?? "" },
     { enabled: !!selectedId }
   );
+
+  const showMigrationPending =
+    templateListMigrationStatus === "migration_pending" || eventListMigrationStatus === "migration_pending";
 
   const createMutation = api.communication.templateCreate.useMutation({
     onSuccess: (newTemplate) => {
@@ -563,6 +581,37 @@ export default function TemplatesPage() {
     <AppShell area="admin">
       <h1 className="sr-only">Email Templates</h1>
       <div className="flex flex-col h-[calc(100vh-100px)] -m-6 overflow-hidden">
+        {(templateListError || eventListError || showMigrationPending) && (
+          <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-4 py-3">
+            <div className="flex items-start gap-2 text-amber-800">
+              <ExclamationTriangleIcon className="h-5 w-5 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                {showMigrationPending && (
+                  <p className="font-medium">
+                    Communication setup is incomplete — a required database migration is pending.
+                    Some features (branding, certificate emails, Camp ID cards) will be unavailable until the migration runs.
+                  </p>
+                )}
+                {(templateListError || eventListError) && (
+                  <p>
+                    Could not load templates/events: {templateListError?.message || eventListError?.message}
+                    .{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (templateListError) void refetchList();
+                        if (eventListError) void refetchEvents();
+                      }}
+                      className="underline hover:text-amber-900"
+                    >
+                      Retry
+                    </button>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {/* Responsive Mobile Tabs Header */}
         <div className="md:hidden flex border-b border-border-default bg-surface">
           <button
@@ -642,7 +691,13 @@ export default function TemplatesPage() {
                 </button>
               ))}
               {filteredTemplates.length === 0 && (
-                <p className="px-4 py-6 text-center text-xs text-txt-muted">No templates found.</p>
+                <p className="px-4 py-6 text-center text-xs text-txt-muted">
+                  {isTemplatesLoading
+                    ? "Loading templates..."
+                    : templateListError
+                    ? "Unable to load templates."
+                    : "No templates found."}
+                </p>
               )}
             </div>
           </div>

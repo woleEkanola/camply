@@ -11,7 +11,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
-import { PencilIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { PencilIcon, CheckIcon, XMarkIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -88,13 +88,24 @@ function eventDescription(event: string): string {
 export default function EmailEventsPage() {
   // Data
   const {
-    data: configs,
+    data: eventListData,
+    error: eventListError,
     isLoading,
     isError,
     refetch,
   } = api.communication.eventList.useQuery();
+  const configs = eventListData?.configs;
+  const eventListMigrationStatus = eventListData?.migrationStatus;
 
-  const { data: templates = [] } = api.communication.templateList.useQuery();
+  const {
+    data: templateListData,
+    error: templateListError,
+  } = api.communication.templateList.useQuery();
+  const templates = templateListData?.templates ?? [];
+  const templateListMigrationStatus = templateListData?.migrationStatus;
+
+  const showMigrationPending =
+    eventListMigrationStatus === "migration_pending" || templateListMigrationStatus === "migration_pending";
 
   const eventUpdate = api.communication.eventUpdate.useMutation({
     onSuccess: () => {
@@ -206,6 +217,35 @@ export default function EmailEventsPage() {
           title="Email Events"
           description="Configure which automated emails are sent and who receives them"
         />
+
+        {(isError || showMigrationPending) && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <div className="flex items-start gap-2 text-amber-800">
+              <ExclamationTriangleIcon className="h-5 w-5 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                {showMigrationPending && (
+                  <p className="font-medium">
+                    Communication setup is incomplete — a required database migration is pending.
+                    Some features (branding, certificate emails, Camp ID cards) will be unavailable until the migration runs.
+                  </p>
+                )}
+                {isError && (
+                  <p>
+                    Failed to load email events: {eventListError?.message || templateListError?.message}.
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => refetch()}
+                      className="underline hover:text-amber-900"
+                    >
+                      Retry
+                    </button>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="space-y-6">

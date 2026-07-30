@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { api } from "@/utils/trpc";
-import { CheckIcon, PlusIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, PlusIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 
 interface NextStepItem {
   icon: string;
@@ -34,8 +34,11 @@ export default function BrandingPage() {
     data: branding,
     isLoading,
     isError,
+    error: brandingError,
     refetch,
   } = api.communication.brandingGet.useQuery();
+
+  const showMigrationPending = branding?.migrationStatus === "migration_pending";
 
   const brandingUpdate = api.communication.brandingUpdate.useMutation({
     onSuccess: () => {
@@ -215,6 +218,35 @@ export default function BrandingPage() {
           title="Email Branding"
           description="Customize the look and feel of all outgoing emails from your organization"
         />
+
+        {(isError || showMigrationPending) && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <div className="flex items-start gap-2 text-amber-800">
+              <ExclamationTriangleIcon className="h-5 w-5 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                {showMigrationPending && (
+                  <p className="font-medium">
+                    Communication setup is incomplete — a required database migration is pending.
+                    Some features (branding, certificate emails, Camp ID cards) will be unavailable until the migration runs.
+                  </p>
+                )}
+                {isError && (
+                  <p>
+                    Failed to load branding settings: {brandingError?.message}.
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => refetch()}
+                      className="underline hover:text-amber-900"
+                    >
+                      Retry
+                    </button>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <Card>

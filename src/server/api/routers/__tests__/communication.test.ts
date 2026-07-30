@@ -77,8 +77,8 @@ describe("communicationRouter - default template backfill", () => {
 
   it("eventList backfills missing default templates and event configs", async () => {
     const caller = adminCaller();
-    const configs = await caller.communication.eventList();
-    const events = configs.map((c: any) => c.event);
+    const result = await caller.communication.eventList();
+    const events = result.configs.map((c: any) => c.event);
 
     expect(events).toContain("CAMP_INVITATION");
     expect(events).toContain("REGISTRATION_APPROVED");
@@ -103,8 +103,8 @@ describe("communicationRouter - default template backfill", () => {
       where: { organizationId: orgId, name: "Camp Invitation" },
     });
 
-    const templates = await caller.communication.templateList();
-    expect(templates.map((t: any) => t.name)).toContain("Camp Invitation");
+    const result = await caller.communication.templateList();
+    expect(result.templates.map((t: any) => t.name)).toContain("Camp Invitation");
 
     const configs = await prisma.emailEventConfig.findMany({
       where: { organizationId: orgId },

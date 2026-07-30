@@ -301,7 +301,8 @@ function ComposeTab({ onSent }: { onSent: () => void }) {
 
   // Queries & Mutations
   const { data: branding } = api.communication.brandingGet.useQuery();
-  const { data: configs } = api.communication.eventList.useQuery();
+  const { data: eventListData } = api.communication.eventList.useQuery();
+  const configs = eventListData?.configs;
 
   const createMutation = api.communication.broadcastCreate.useMutation();
   const sendMutation = api.communication.broadcastSend.useMutation({

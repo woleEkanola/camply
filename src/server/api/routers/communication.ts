@@ -94,66 +94,140 @@ function toggleIdCardTokenInContent(doc: any, include: boolean): any {
 }
 
 /**
+ * Detects Prisma errors caused by the database schema lagging behind the
+ * Prisma client (e.g. a migration has not been applied yet). This lets us
+ * fail open on read paths so the admin UI remains usable while the missing
+ * columns are being migrated.
+ */
+function isPrismaMissingColumnError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as any).code;
+  const message = String((err as Error).message ?? "").toLowerCase();
+  return (
+    code === "P2022" ||
+    (message.includes("column") && message.includes("does not exist")) ||
+    (message.includes("field") && message.includes("does not exist"))
+  );
+}
+
+/**
+ * Builds a safe OrganizationBranding-shaped object for use when the real
+ * branding table cannot be queried because the schema migration has not run
+ * yet. This keeps the admin pages renderable.
+ */
+function defaultOrganizationBranding(organizationId: string) {
+  const now = new Date();
+  return {
+    id: "",
+    organizationId,
+    logoUrl: null,
+    primaryColor: "#E67E22",
+    accentColor: "#E67E22",
+    buttonColor: "#E67E22",
+    headerImageUrl: null,
+    senderName: null,
+    footerText: null,
+    supportEmail: null,
+    supportPhone: null,
+    websiteUrl: null,
+    facebookUrl: null,
+    instagramUrl: null,
+    address: null,
+    tagline: null,
+    supportTitle: null,
+    supportDescription: null,
+    footerCopyright: null,
+    phone: null,
+    xUrl: null,
+    linkedinUrl: null,
+    nextSteps: null,
+    idCardEnabled: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
  * Ensure every organization has an EmailTemplate and EmailEventConfig for each
  * event key in ALL_EVENT_KEYS. This is idempotent and race-safe: parallel
  * callers will reuse existing rows or recover from unique-constraint errors.
+ *
+ * If the database schema is still missing columns required by EmailTemplate
+ * (e.g. `includeIdCard`), the helper logs the issue and returns `false` so the
+ * calling query can still return whatever data is available, instead of
+ * crashing the page.
  */
 async function ensureDefaultEmailTemplates(prisma: any, organizationId: string) {
-  const existingConfigs = await prisma.emailEventConfig.findMany({
-    where: { organizationId },
-    select: { event: true },
-  });
-  const existingEvents = new Set(existingConfigs.map((c: { event: string }) => c.event));
-  const missingEvents = ALL_EVENT_KEYS.filter((e) => !existingEvents.has(e));
-
-  for (const event of missingEvents) {
-    const def = DEFAULT_TEMPLATES[event];
-    if (!def) continue;
-
-    let template = await prisma.emailTemplate.findUnique({
-      where: { organizationId_name: { organizationId, name: def.name } },
+  try {
+    const existingConfigs = await prisma.emailEventConfig.findMany({
+      where: { organizationId },
+      select: { event: true },
     });
+    const existingEvents = new Set(existingConfigs.map((c: { event: string }) => c.event));
+    const missingEvents = ALL_EVENT_KEYS.filter((e) => !existingEvents.has(e));
 
-    if (!template) {
+    for (const event of missingEvents) {
+      const def = DEFAULT_TEMPLATES[event];
+      if (!def) continue;
+
+      let template = await prisma.emailTemplate.findUnique({
+        where: { organizationId_name: { organizationId, name: def.name } },
+      });
+
+      if (!template) {
+        try {
+          template = await prisma.emailTemplate.create({
+            data: {
+              organizationId,
+              name: def.name,
+              description: def.description,
+              subject: def.subject,
+              previewText: def.previewText,
+              content: def.content as any,
+              isDefault: true,
+            },
+          } as any);
+        } catch (err) {
+          // Another concurrent call created it between findUnique and create.
+          if ((err as any)?.code !== "P2002") throw err;
+          template = await prisma.emailTemplate.findUnique({
+            where: { organizationId_name: { organizationId, name: def.name } },
+          });
+        }
+      }
+
+      if (!template) continue;
+
       try {
-        template = await prisma.emailTemplate.create({
+        await prisma.emailEventConfig.create({
           data: {
             organizationId,
-            name: def.name,
-            description: def.description,
-            subject: def.subject,
-            previewText: def.previewText,
-            content: def.content as any,
-            isDefault: true,
+            event,
+            templateId: template.id,
           },
-        } as any);
-      } catch (err) {
-        // Another concurrent call created it between findUnique and create.
-        if ((err as any)?.code !== "P2002") throw err;
-        template = await prisma.emailTemplate.findUnique({
-          where: { organizationId_name: { organizationId, name: def.name } },
         });
+      } catch (err) {
+        // Another concurrent call created the config already.
+        if ((err as any)?.code !== "P2002") throw err;
       }
     }
 
-    if (!template) continue;
-
-    try {
-      await prisma.emailEventConfig.create({
-        data: {
-          organizationId,
-          event,
-          templateId: template.id,
-        },
-      });
-    } catch (err) {
-      // Another concurrent call created the config already.
-      if ((err as any)?.code !== "P2002") throw err;
+    return missingEvents.length > 0;
+  } catch (err) {
+    if (isPrismaMissingColumnError(err)) {
+      console.warn(
+        `[ensureDefaultEmailTemplates] Skipping default-template backfill for org ${organizationId} because required columns are not migrated yet.`
+      );
+      return false;
     }
+    throw err;
   }
-
-  return missingEvents.length > 0;
 }
+
+// ═══ Migration-pending signal ════════════════════════════════════════════════
+
+// Returned on fallback paths so the UI can show a "migration pending" banner.
+const MIGRATION_PENDING = "migration_pending" as const;
 
 // ─── Router ─────────────────────────────────────────────────────────────────
 
@@ -176,17 +250,32 @@ export const communicationRouter = createTRPCRouter({
       orderBy: { event: "asc" },
     });
 
-    const org = await ctx.prisma.organization.findUnique({
-      where: { id: oid },
-      include: { branding: true },
-    });
+    let branding: Awaited<ReturnType<typeof ctx.prisma.organizationBranding.findUnique>> | null = null;
+    let migrationStatus: typeof MIGRATION_PENDING | undefined = undefined;
+    try {
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: oid },
+        include: { branding: true },
+      });
+      branding = org?.branding ?? null;
+    } catch (err) {
+      if (isPrismaMissingColumnError(err)) {
+        console.warn(
+          `[eventList] Unable to load branding for org ${oid} because required columns are not migrated yet.`
+        );
+        migrationStatus = MIGRATION_PENDING;
+        branding = defaultOrganizationBranding(oid);
+      } else {
+        throw err;
+      }
+    }
 
     const configsWithResolved = await Promise.all(
       configs.map(async (c) => {
         const { from } = await resolveFromAddress({
           organizationId: oid,
           event: c.event,
-          senderName: org?.branding?.senderName,
+          senderName: branding?.senderName,
           senderMode: c.senderMode,
           customFromLocalPart: c.customFromLocalPart,
           replyTo: c.replyTo,
@@ -198,7 +287,7 @@ export const communicationRouter = createTRPCRouter({
       })
     );
 
-    return configsWithResolved;
+    return { configs: configsWithResolved, migrationStatus };
   }),
 
   eventUpdate: protectedProcedure
@@ -249,11 +338,22 @@ export const communicationRouter = createTRPCRouter({
     // keys (e.g. CAMP_INVITATION) appear immediately without a manual migration.
     await ensureDefaultEmailTemplates(ctx.prisma, oid);
 
-    return ctx.prisma.emailTemplate.findMany({
-      where: { organizationId: oid, deletedAt: null },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, description: true, subject: true, isDefault: true, active: true, updatedAt: true },
-    });
+    try {
+      const templates = await ctx.prisma.emailTemplate.findMany({
+        where: { organizationId: oid, deletedAt: null },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, description: true, subject: true, isDefault: true, active: true, updatedAt: true },
+      });
+      return { templates, migrationStatus: undefined as undefined };
+    } catch (err) {
+      if (isPrismaMissingColumnError(err)) {
+        console.warn(
+          `[templateList] Returning empty template list for org ${oid} because required columns are not migrated yet.`
+        );
+        return { templates: [], migrationStatus: MIGRATION_PENDING };
+      }
+      throw err;
+    }
   }),
 
   templateGetById: protectedProcedure
@@ -377,11 +477,19 @@ export const communicationRouter = createTRPCRouter({
     if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
     const oid = orgId(ctx);
 
-    let branding = await ctx.prisma.organizationBranding.findUnique({ where: { organizationId: oid } });
-    if (!branding) {
-      branding = await ctx.prisma.organizationBranding.create({ data: { organizationId: oid } });
+    try {
+      let branding = await ctx.prisma.organizationBranding.findUnique({ where: { organizationId: oid } });
+      if (!branding) {
+        branding = await ctx.prisma.organizationBranding.create({ data: { organizationId: oid } });
+      }
+      return { ...branding, migrationStatus: undefined as undefined };
+    } catch (err) {
+      if (isPrismaMissingColumnError(err)) {
+        console.warn(`[brandingGet] Returning default branding for org ${oid} because required columns are not migrated yet.`);
+        return { ...defaultOrganizationBranding(oid), migrationStatus: MIGRATION_PENDING };
+      }
+      throw err;
     }
-    return branding;
   }),
 
   brandingUpdate: protectedProcedure
@@ -452,21 +560,18 @@ export const communicationRouter = createTRPCRouter({
         orderBy: { name: "asc" },
         select: { id: true, name: true, includeIdCard: true },
       });
-      return { idCardEnabled: branding.idCardEnabled, templates };
+      return { idCardEnabled: branding.idCardEnabled, templates, migrationStatus: undefined as undefined };
     } catch (err) {
       if (err instanceof TRPCError) throw err;
 
       // If the idCardEnabled / includeIdCard columns have not been migrated
       // yet, fail open so the admin page still renders. The feature stays
       // disabled until the migration is applied.
-      const message = (err as Error)?.message ?? "";
-      const isMissingColumnError =
-        (err as any)?.code === "P2022" ||
-        message.includes("includeIdCard") ||
-        message.includes("idCardEnabled");
-
-      if (isMissingColumnError) {
-        return { idCardEnabled: false, templates: [] };
+      if (isPrismaMissingColumnError(err)) {
+        console.warn(
+          `[idCardSettingsGet] Returning default ID card settings for org ${oid} because required columns are not migrated yet.`
+        );
+        return { idCardEnabled: false, templates: [], migrationStatus: MIGRATION_PENDING };
       }
 
       console.error("[idCardSettingsGet] Failed to load ID card settings:", err);
