@@ -6,6 +6,17 @@ export { calculateAge };
 
 type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
+const NIGERIA_OFFSET_HOURS = 1; // WAT, no DST
+
+/** Returns end-of-day (23:59:59.999) in WAT for the given UTC date so
+ *  registration closes at 11:59 PM Nigerian time on the configured day
+ *  rather than midnight UTC (which is 1:00 AM WAT). */
+function endOfDayLocal(closeDate: Date): Date {
+  const d = new Date(closeDate);
+  d.setUTCHours(24 - NIGERIA_OFFSET_HOURS - 1, 59, 59, 999);
+  return d;
+}
+
 export interface ValidationFailure {
   step: string;
   code: string;
@@ -58,7 +69,7 @@ export async function validateSubmission(
     if (camp.registrationOpensAt && now < camp.registrationOpensAt) {
       failures.push({ step: "camp", code: "REGISTRATION_NOT_OPEN_YET", message: "Registration has not opened yet." });
     }
-    if (camp.registrationClosesAt && now > camp.registrationClosesAt) {
+    if (camp.registrationClosesAt && now > endOfDayLocal(camp.registrationClosesAt)) {
       failures.push({ step: "camp", code: "REGISTRATION_CLOSED", message: "Registration has closed." });
     }
   }
