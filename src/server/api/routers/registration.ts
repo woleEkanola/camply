@@ -1009,7 +1009,7 @@ export const registrationRouter = createTRPCRouter({
   bulkTransition: protectedProcedure
     .input(z.object({
       ids: z.array(z.string()).min(1),
-      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "ARCHIVE"]),
+      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN"]),
       reason: z.string().optional(),
       message: z.string().optional(),
       sendEmail: z.boolean().default(true),
@@ -1072,6 +1072,12 @@ export const registrationRouter = createTRPCRouter({
               break;
             case "ARCHIVE":
               await engine.archiveRegistration({ registrationId: id, actorId: currentUser.id });
+              break;
+            case "REVOKE_APPROVAL":
+              await engine.revokeApproval({ registrationId: id, actorId: currentUser.id, reason: input.reason });
+              break;
+            case "UNDO_CHECK_IN":
+              await engine.undoCheckIn({ registrationId: id, actorId: currentUser.id, reason: input.reason ?? "" });
               break;
           }
 
@@ -1561,7 +1567,7 @@ export const registrationRouter = createTRPCRouter({
   transitionWithOptions: protectedProcedure
     .input(z.object({
       registrationId: z.string(),
-      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "CANCEL", "ARCHIVE"]),
+      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "CANCEL", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN"]),
       reason: z.string().optional(),
       message: z.string().optional(),
       sendEmail: z.boolean().default(true),
@@ -1608,6 +1614,12 @@ export const registrationRouter = createTRPCRouter({
             break;
           case "ARCHIVE":
             result = await engine.archiveRegistration({ registrationId: input.registrationId, actorId });
+            break;
+          case "REVOKE_APPROVAL":
+            result = await engine.revokeApproval({ registrationId: input.registrationId, actorId, reason: input.reason });
+            break;
+          case "UNDO_CHECK_IN":
+            result = await engine.undoCheckIn({ registrationId: input.registrationId, actorId, reason: input.reason ?? "" });
             break;
         }
         // Update communication log after successful transition
