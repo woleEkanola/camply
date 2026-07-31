@@ -1009,7 +1009,7 @@ export const registrationRouter = createTRPCRouter({
   bulkTransition: protectedProcedure
     .input(z.object({
       ids: z.array(z.string()).min(1),
-      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN"]),
+      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN", "ADVANCE_FROM_REQUIRES_ACTION"]),
       reason: z.string().optional(),
       message: z.string().optional(),
       sendEmail: z.boolean().default(true),
@@ -1078,6 +1078,9 @@ export const registrationRouter = createTRPCRouter({
               break;
             case "UNDO_CHECK_IN":
               await engine.undoCheckIn({ registrationId: id, actorId: currentUser.id, reason: input.reason ?? "" });
+              break;
+            case "ADVANCE_FROM_REQUIRES_ACTION":
+              await engine.advanceFromRequiresAction({ registrationId: id, actorId: currentUser.id });
               break;
           }
 
@@ -1567,7 +1570,7 @@ export const registrationRouter = createTRPCRouter({
   transitionWithOptions: protectedProcedure
     .input(z.object({
       registrationId: z.string(),
-      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "CANCEL", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN"]),
+      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "CANCEL", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN", "ADVANCE_FROM_REQUIRES_ACTION"]),
       reason: z.string().optional(),
       message: z.string().optional(),
       sendEmail: z.boolean().default(true),
@@ -1620,6 +1623,9 @@ export const registrationRouter = createTRPCRouter({
             break;
           case "UNDO_CHECK_IN":
             result = await engine.undoCheckIn({ registrationId: input.registrationId, actorId, reason: input.reason ?? "" });
+            break;
+          case "ADVANCE_FROM_REQUIRES_ACTION":
+            result = await engine.advanceFromRequiresAction({ registrationId: input.registrationId, actorId });
             break;
         }
         // Update communication log after successful transition
