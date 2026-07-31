@@ -1,5 +1,11 @@
 import { createCanvas, loadImage, type SKRSContext2D, type Image } from "@napi-rs/canvas";
+import { registerFont } from "@napi-rs/canvas/node-canvas";
 import QRCode from "qrcode";
+import { join } from "path";
+
+const FONTS_DIR = join(process.cwd(), "public/fonts");
+registerFont(join(FONTS_DIR, "Inter-Regular.woff2"), { family: "Inter" });
+registerFont(join(FONTS_DIR, "Inter-Bold.woff2"), { family: "Inter", weight: "bold" });
 
 export interface CampIdCardData {
   camperName: string;
@@ -58,10 +64,10 @@ function fitFontSize(
   opts: { start: number; min: number; step: number }
 ): number {
   let size = opts.start;
-  ctx.font = `bold ${size}px sans-serif`;
+  ctx.font = `bold ${size}px Inter, sans-serif`;
   while (size > opts.min && ctx.measureText(text).width > maxWidth) {
     size -= opts.step;
-    ctx.font = `bold ${size}px sans-serif`;
+    ctx.font = `bold ${size}px Inter, sans-serif`;
   }
   return size;
 }
@@ -267,7 +273,7 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
     ctx.fillStyle = "#EFF6FF";
     ctx.fillRect(badgeCx - badgeR, badgeCy - badgeR, badgeR * 2, badgeR * 2);
     ctx.fillStyle = ACCENT_COLOR;
-    ctx.font = "bold 30px sans-serif";
+    ctx.font = "bold 30px Inter, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(initials(data.campName), badgeCx, badgeCy);
@@ -288,10 +294,10 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.fillStyle = DARK_TEXT;
   const campUpper = data.campName.toUpperCase();
   const campSize = fitFontSize(ctx, campUpper, campMaxWidth, { start: 38, min: 20, step: 2 });
-  ctx.font = `bold ${campSize}px sans-serif`;
+  ctx.font = `bold ${campSize}px Inter, sans-serif`;
   ctx.fillText(truncateToFit(ctx, campUpper, campMaxWidth), campTextX, 84);
   ctx.fillStyle = ACCENT_COLOR;
-  ctx.font = "bold 32px sans-serif";
+  ctx.font = "bold 32px Inter, sans-serif";
   ctx.fillText(data.campYear, campTextX, 128);
 
   // Vertical hairline between the camp block and the band.
@@ -309,7 +315,7 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.fillStyle = "#FFFFFF";
   const tribeUpper = data.tribeName.toUpperCase();
   const tribeSize = fitFontSize(ctx, tribeUpper, bandInnerWidth, { start: 60, min: 24, step: 2 });
-  ctx.font = `bold ${tribeSize}px sans-serif`;
+  ctx.font = `bold ${tribeSize}px Inter, sans-serif`;
   ctx.fillText(
     truncateToFit(ctx, tribeUpper, bandInnerWidth),
     BAND_X + (CARD_WIDTH - BAND_X) / 2,
@@ -325,7 +331,7 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   let nameSize = 92;
   let nameLines: string[] | null = null;
   while (nameSize >= 30) {
-    ctx.font = `bold ${nameSize}px sans-serif`;
+    ctx.font = `bold ${nameSize}px Inter, sans-serif`;
     nameLines = wrapToLines(ctx, data.camperName, BODY_MAX_WIDTH, 2);
     if (nameLines) break;
     nameSize -= 2;
@@ -333,10 +339,10 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   if (!nameLines) {
     // A single unbreakable word wider than the column even at the floor size.
     nameSize = 30;
-    ctx.font = `bold ${nameSize}px sans-serif`;
+    ctx.font = `bold ${nameSize}px Inter, sans-serif`;
     nameLines = [truncateToFit(ctx, data.camperName, BODY_MAX_WIDTH)];
   }
-  ctx.font = `bold ${nameSize}px sans-serif`;
+  ctx.font = `bold ${nameSize}px Inter, sans-serif`;
   const nameLineHeight = Math.round(nameSize * 1.1);
   // Anchor the block so one- and two-line names share the same optical centre:
   // a short single-line name drops lower so the body doesn't sit top-heavy.
@@ -370,10 +376,10 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
     const valueMaxWidth = BODY_MAX_WIDTH - (textX - BODY_X);
     ctx.textAlign = "left";
     ctx.fillStyle = MUTED_TEXT;
-    ctx.font = "bold 18px sans-serif";
+    ctx.font = "bold 18px Inter, sans-serif";
     fillTextTracked(ctx, label.toUpperCase(), textX, centerY - 8, 1.6);
     ctx.fillStyle = DARK_TEXT;
-    ctx.font = "bold 26px sans-serif";
+    ctx.font = "bold 26px Inter, sans-serif";
     ctx.fillText(truncateToFit(ctx, value, valueMaxWidth), textX, centerY + 24);
   }
 
