@@ -1385,7 +1385,7 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   campaignSend: protectedProcedure
-    .input(z.object({ id: z.string() }))
+    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional() }))
     .mutation(async ({ ctx, input }) => {
       const oid = orgId(ctx);
       await assertCampaignSender(ctx, oid);
@@ -1397,7 +1397,7 @@ export const communicationRouter = createTRPCRouter({
         data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "CAMPAIGN_SENT", targetType: "CAMPAIGN", targetId: input.id, metadata: { name: campaign.name } },
       });
 
-      return sendCampaign(ctx.prisma, input.id);
+      return sendCampaign(ctx.prisma, input.id, { manualEmails: input.manualEmails });
     }),
 
   campaignSchedule: protectedProcedure
@@ -1536,6 +1536,49 @@ export const communicationRouter = createTRPCRouter({
         select: { id: true, name: true, subject: true, recipientCount: true, startedAt: true },
       });
       return { isDuplicate: !!recent, lastCampaign: recent };
+    }),
+
+  /** Pre-send check: given manual emails, returns how many match APPROVED
+   * registrations (personalized) or org users (regular) so the admin can
+   * confirm before firing. No schema change — the manual emails are a
+   * mutation parameter, not stored on the campaign. */
+  campaignCheckManualRecipients: protectedProcedure
+    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()) }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const campaign = await ctx.prisma.emailCampaign.findFirst({
+        where: { id: input.id, organizationId: oid },
+        select: { personalizeEvent: true, personalizeCampId: true },
+      });
+      if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
+
+      if (campaign.personalizeEvent && campaign.personalizeCampId) {
+        const registrations = await (ctx.prisma as any).registration.findMany({
+          where: {
+            campId: campaign.personalizeCampId,
+            status: "APPROVED",
+            deletedAt: null,
+            camper: { user: { email: { in: input.manualEmails } } },
+          },
+          include: { camper: { select: { user: { select: { email: true } } } } },
+        });
+        const matchedEmails = new Set(registrations.map((r: any) => r.camper?.user?.email).filter(Boolean));
+        return {
+          matched: matchedEmails.size,
+          unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e)),
+        };
+      }
+
+      const users = await ctx.prisma.user.findMany({
+        where: { email: { in: input.manualEmails }, organizationId: oid },
+        select: { email: true },
+      });
+      const matchedEmails = new Set(users.map((u) => u.email));
+      return {
+        matched: matchedEmails.size,
+        unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e)),
+      };
     }),
 
   campaignSendToNonOpeners: protectedProcedure

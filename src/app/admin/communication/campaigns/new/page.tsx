@@ -44,6 +44,7 @@ function ComposerInner() {
   const [previewText, setPreviewText] = useState("");
   const [audienceType, setAudienceType] = useState("ALL");
   const [savedAudienceId, setSavedAudienceId] = useState("");
+  const [manualEmailsText, setManualEmailsText] = useState("");
   const [personalize, setPersonalize] = useState(false);
   const [personalizeCampId, setPersonalizeCampId] = useState("");
   const [senderMode, setSenderMode] = useState("ORG_SLUG");
@@ -55,6 +56,7 @@ function ComposerInner() {
   const [confirmDraftId, setConfirmDraftId] = useState("");
   const [confirmData, setConfirmData] = useState<{ isDuplicate: boolean; lastCampaign?: any } | null>(null);
   const [sending, setSending] = useState(false);
+  const [manualRecipientCheck, setManualRecipientCheck] = useState<{ matched: number; unmatched: string[] } | null>(null);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -77,6 +79,7 @@ function ComposerInner() {
   const updateMut = api.communication.campaignUpdate.useMutation();
   const sendMut = api.communication.campaignSend.useMutation();
   const previewMut = api.communication.previewEmail.useMutation();
+  const checkManualRecipientsMut = api.communication.campaignCheckManualRecipients.useMutation();
 
   const { data: existingCampaign } = api.communication.campaignGet.useQuery(
     { id: editId! },
@@ -150,6 +153,21 @@ function ComposerInner() {
       subject,
     });
 
+    // Check manual email recipients if provided
+    const rawEmails = manualEmailsText
+      .split(/[\s,;\n]+/)
+      .map((e) => e.trim())
+      .filter((e) => e.includes("@"));
+    if (rawEmails.length > 0) {
+      const checkResult = await checkManualRecipientsMut.mutateAsync({
+        id: draftId,
+        manualEmails: rawEmails,
+      });
+      setManualRecipientCheck(checkResult);
+    } else {
+      setManualRecipientCheck(null);
+    }
+
     setConfirmDraftId(draftId);
     setConfirmData(duplicateCheck);
     setShowConfirm(true);
@@ -157,7 +175,11 @@ function ComposerInner() {
 
   const handleConfirmSend = async () => {
     setSending(true);
-    await sendMut.mutateAsync({ id: confirmDraftId });
+    const emails = manualEmailsText
+      .split(/[\s,;\n]+/)
+      .map((e) => e.trim())
+      .filter((e) => e.includes("@"));
+    await sendMut.mutateAsync({ id: confirmDraftId, manualEmails: emails.length > 0 ? emails : undefined });
     setShowConfirm(false);
     router.push(`/admin/communication/campaigns/${confirmDraftId}`);
   };
@@ -260,6 +282,22 @@ function ComposerInner() {
                 ]} />
               </>
             )}
+
+            <div className="border-t border-border-default pt-4">
+              <label className="text-xs font-medium text-txt-secondary">
+                Override recipients (optional)
+              </label>
+              <textarea
+                value={manualEmailsText}
+                onChange={(e) => setManualEmailsText(e.target.value)}
+                placeholder="Paste parent email addresses — comma or line separated — to send only to these parents instead of the full audience. Leave blank to use the audience above."
+                rows={3}
+                className="mt-1 w-full rounded-md border border-border-default px-3 py-2 text-xs text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              />
+              <p className="mt-1 text-[10px] text-txt-muted">
+                Overrides the audience selector above. {personalize ? "Only APPROVED registrations whose parent email matches will receive the invitation." : "Only users matching these emails will receive the broadcast."}
+              </p>
+            </div>
           </CardBody>
         </Card>
 
@@ -318,8 +356,12 @@ function ComposerInner() {
                 View Previous
               </Button>
             )}
-            <Button onClick={handleConfirmSend} loading={sending}>
-              {confirmData?.isDuplicate ? "Send Again Anyway" : "Confirm Send"}
+            <Button
+              onClick={handleConfirmSend}
+              loading={sending}
+              disabled={manualRecipientCheck ? manualRecipientCheck.matched === 0 : false}
+            >
+              {confirmData?.isDuplicate ? "Send Again Anyway" : manualRecipientCheck ? `Send to ${manualRecipientCheck.matched}` : "Confirm Send"}
             </Button>
           </div>
         }>
@@ -337,7 +379,42 @@ function ComposerInner() {
                 </p>
               </div>
             )}
-            <p>This campaign will be sent to the selected audience.</p>
+
+            {manualRecipientCheck && (
+              <div className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-700">
+                    {manualRecipientCheck.matched}
+                  </span>
+                  <span className="font-medium text-txt-primary">
+                    {manualRecipientCheck.matched === 1 ? "1 recipient matched" : `${manualRecipientCheck.matched} recipients matched`}
+                  </span>
+                </div>
+                {manualRecipientCheck.unmatched.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-amber-700 mb-1">
+                      {manualRecipientCheck.unmatched.length} {manualRecipientCheck.unmatched.length === 1 ? "email" : "emails"} not found:
+                    </p>
+                    <div className="max-h-24 overflow-y-auto space-y-0.5">
+                      {manualRecipientCheck.unmatched.map((e) => (
+                        <div key={e} className="flex items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs">
+                          <span className="text-amber-600">⚠</span>
+                          <code className="text-amber-800">{e}</code>
+                          <span className="text-amber-600">— no approved campers on file</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {manualRecipientCheck.matched === 0 && (
+                  <p className="text-xs text-danger-600 font-medium">
+                    No recipients to send to. Check the email addresses and try again.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!manualRecipientCheck && <p>This campaign will be sent to the selected audience.</p>}
             <p className="text-txt-secondary">Sender: {senderPreview}</p>
             <p className="text-txt-secondary">Subject: {subject}</p>
           </div>

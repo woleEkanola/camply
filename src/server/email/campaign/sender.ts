@@ -200,7 +200,8 @@ async function renderAndSendCampaignEmail(
  */
 export async function sendCampaign(
   prisma: TxClient,
-  campaignId: string
+  campaignId: string,
+  opts?: { manualEmails?: string[] }
 ): Promise<SendCampaignResult> {
   const campaign = await (prisma as any).emailCampaign.findUnique({
     where: { id: campaignId },
@@ -219,13 +220,56 @@ export async function sendCampaign(
     filter = (campaign.audienceFilter || { recipientType: "ALL" }) as AudienceFilter;
   }
 
-  // Personalized certificate-style campaigns (e.g. Camp Invitation) resolve
-  // one recipient per APPROVED registration in the target camp, not
-  // resolveAudience()'s flat one-per-user list — see resolvePersonalizedRecipients.
-  const users: (ResolvedUser | ResolvedPersonalizedUser)[] =
-    campaign.personalizeEvent && campaign.personalizeCampId
+  // Manual email override — when specific parent emails are provided, resolve
+  // only registrations (personalized) or users (regular) matching those emails,
+  // bypassing the normal audience filter entirely. No DB schema change needed:
+  // manual emails are passed as a mutation parameter, not stored on the campaign.
+  const manualEmails = opts?.manualEmails?.filter(Boolean) ?? [];
+
+  let users: (ResolvedUser | ResolvedPersonalizedUser)[];
+  if (manualEmails.length > 0) {
+    if (campaign.personalizeEvent && campaign.personalizeCampId) {
+      const registrations = await (prisma as any).registration.findMany({
+        where: {
+          campId: campaign.personalizeCampId,
+          status: "APPROVED",
+          deletedAt: null,
+          camper: { user: { email: { in: manualEmails } } },
+        },
+        include: CAMP_INVITATION_INCLUDE,
+      });
+      const resolved: ResolvedPersonalizedUser[] = [];
+      for (const r of registrations) {
+        const personalized = buildCampInvitationVariables(r);
+        if (!personalized) continue;
+        resolved.push({
+          id: personalized.parentUserId,
+          email: personalized.email,
+          firstName: null,
+          lastName: null,
+          role: "PARENT",
+          registrationId: r.id,
+        });
+      }
+      users = resolved;
+    } else {
+      const matchedUsers = await (prisma as any).user.findMany({
+        where: { email: { in: manualEmails }, organizationId: campaign.organizationId },
+      });
+      users = matchedUsers.map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        firstName: u.firstName ?? null,
+        lastName: u.lastName ?? null,
+        role: u.role,
+      }));
+    }
+  } else {
+    // Standard audience resolution
+    users = campaign.personalizeEvent && campaign.personalizeCampId
       ? await resolvePersonalizedRecipients(prisma, campaign.organizationId, campaign.personalizeCampId, filter)
       : (await resolveAudience(prisma, campaign.organizationId, filter)).users;
+  }
 
   // Resume-safe dedupe: recipients already created for THIS campaign. Keyed
   // by registrationId when personalized (a parent with two approved
