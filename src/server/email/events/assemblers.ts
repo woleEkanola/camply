@@ -18,7 +18,6 @@ import {
   OrganizationHeader,
   VerificationCard,
   SplitInfoCard,
-  TimelineCompact,
   NextStepsCard,
   ContactCard,
   CertificateFooter,
@@ -265,17 +264,6 @@ export function buildCampInvitationEmail(p: AssemblerParams): string {
     // Section's default 24/32px padding is tuned for 600px marketing emails;
     // on the A4 certificate the surrounding cards already supply the gutter.
     p.bodyContent ? Section({ children: p.bodyContent, padding: `0 0 12px` }) : "",
-    TimelineCompact({
-      title: "Your Registration Journey",
-      // Approval is what triggers this email, so Approved is the active stage.
-      stages: [
-        { label: "Submitted", status: "completed", icon: "document-check" },
-        { label: "Under Review", status: "completed", icon: "magnifying-glass-circle" },
-        { label: "Approved", status: "current", icon: "check" },
-        { label: "Check-in", status: "upcoming", icon: "calendar-days" },
-        { label: "Camp Complete", status: "upcoming", icon: "shield-check" },
-      ],
-    }),
     NextStepsCard({ steps: p.branding?.nextSteps }),
     ContactCard({ branding: p.branding }),
     CertificateFooter({ branding: p.branding, orgName }),

@@ -105,13 +105,11 @@ describe("buildCampInvitationEmail — icons", () => {
     }
   });
 
-  it("uses the reference timeline icons with Approved as the active stage", () => {
+  it("does not render the registration journey timeline (removed per request)", () => {
     const html = buildCampInvitationEmail({ variables: baseVariables, branding: null });
-    for (const name of ["document-check", "magnifying-glass-circle", "check", "shield-check"]) {
-      expect(html).toContain(`/api/email-icon/${name}?`);
-    }
-    // Active stage is a white check on solid green, not a coloured outline.
-    expect(html).toContain("/api/email-icon/check?c=FFFFFF");
+    expect(html).not.toContain("Your Registration Journey");
+    expect(html).not.toContain("/api/email-icon/document-check");
+    expect(html).not.toContain("/api/email-icon/magnifying-glass-circle");
   });
 
   it("renders default Next Steps icons from the registry", () => {
