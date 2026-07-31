@@ -59,6 +59,19 @@ export function buildCampInvitationVariables(registration: RegistrationWithCampI
     organization_name: registration.camp.organization?.slug ?? "",
   };
 
+  // Derive check-in date, time, and location from camp.arrivalDate + campus
+  const arrival = registration.camp.arrivalDate;
+  if (arrival) {
+    const hasTime = arrival.getHours() !== 0 || arrival.getMinutes() !== 0;
+    variables.checkin_date = arrival.toLocaleDateString("en-US", {
+      weekday: "long", month: "long", day: "numeric", year: "numeric",
+    });
+    variables.arrive_before = hasTime
+      ? arrival.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+      : "7:00 AM";
+  }
+  variables.checkin_location = `${registration.campus.name} Pick-up Point`;
+
   // Confirmed decision: omit entirely, no placeholder, until both are set.
   if (registration.room?.name && registration.room.hostel?.name) {
     variables.hostel_name = registration.room.hostel.name;
