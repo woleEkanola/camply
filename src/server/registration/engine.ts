@@ -238,6 +238,22 @@ async function approveRegistrationInTx(
     include: { camper: true, camp: { include: { venues: true } }, campus: true, venue: true },
   });
 
+  // When a registration is awaiting a correction and an admin approves anyway,
+  // auto-advance it out of REQUIRES_ACTION first — the admin is deciding that
+  // the flagged issue is resolved or not worth blocking approval over.
+  if (registration.status === "REQUIRES_ACTION") {
+    await clearRequiresAction(tx, {
+      registrationId: registration.id,
+      actorId: params.actorId ?? "",
+      action: "REGISTRATION_ADVANCED_FROM_REQUIRES_ACTION",
+    });
+    // Re-fetch with the full include shape approveRegistrationInTx needs.
+    registration = await tx.registration.findUniqueOrThrow({
+      where: { id: params.registrationId },
+      include: { camper: true, camp: { include: { venues: true } }, campus: true, venue: true },
+    });
+  }
+
   assertTransition(registration.status, "APPROVED");
 
   // Two-layer approval: in a TWO_STEP org, a campus rep can only endorse
@@ -943,6 +959,53 @@ export async function undoCheckIn(params: {
       action: "CHECK_IN_UNDONE",
       previousValue: { status: "CHECKED_IN" },
       newValue: { status: "APPROVED", reason: params.reason },
+    });
+
+    return updated;
+  });
+}
+
+/**
+ * Revokes a registration approval, moving it back to PENDING for re-review.
+ * Clears qrToken, registrationNumber, and bed assignment so they're reissued
+ * on next approval. Org admins only — this is a deliberate override, not a
+ * routine transition.
+ */
+export async function revokeApproval(params: { registrationId: string; actorId: string; reason?: string }) {
+  return prisma.$transaction(async (tx) => {
+    const registration = await tx.registration.findUniqueOrThrow({
+      where: { id: params.registrationId },
+      include: { camper: true, bed: true },
+    });
+
+    assertTransition(registration.status, "PENDING");
+
+    const updateData: Record<string, unknown> = {
+      status: "PENDING",
+      qrToken: null,
+      registrationNumber: null,
+    };
+
+    // Release bed if assigned so it can be reallocated on next approval.
+    if (registration.bed) {
+      await tx.bed.update({
+        where: { id: registration.bed.id },
+        data: { status: "AVAILABLE" },
+      });
+    }
+
+    const updated = await tx.registration.update({
+      where: { id: registration.id },
+      data: updateData as any,
+    });
+
+    await logEvent(tx, {
+      organizationId: registration.camper.organizationId,
+      registrationId: registration.id,
+      actorId: params.actorId,
+      action: "REGISTRATION_APPROVAL_REVOKED",
+      previousValue: { status: registration.status },
+      newValue: { status: "PENDING", reason: params.reason },
     });
 
     return updated;
