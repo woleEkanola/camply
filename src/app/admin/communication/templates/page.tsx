@@ -349,6 +349,38 @@ export default function TemplatesPage() {
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [testSendToast, setTestSendToast] = useState<string | null>(null);
 
+  // ─── Resizable panel widths ──────────────────────────────────────────────────
+  const [leftPanelWidth, setLeftPanelWidth] = useState(320);
+  const [rightPanelWidth, setRightPanelWidth] = useState(400);
+  const [resizingEdge, setResizingEdge] = useState<"left" | "right" | null>(null);
+
+  function handleResizeStart(edge: "left" | "right", e: React.PointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = edge === "left" ? leftPanelWidth : rightPanelWidth;
+    const setWidth = edge === "left" ? setLeftPanelWidth : setRightPanelWidth;
+    const minW = edge === "left" ? 160 : 200;
+    const maxW = 800;
+    setResizingEdge(edge);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    const onMove = (ev: PointerEvent) => {
+      const delta = ev.clientX - startX;
+      const clamped = edge === "left"
+        ? Math.max(minW, Math.min(maxW, startWidth + delta))
+        : Math.max(minW, Math.min(maxW, startWidth - delta));
+      setWidth(clamped);
+    };
+    const onUp = () => {
+      setResizingEdge(null);
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
   // Responsive panel controls (for mobile views)
   const [mobileTab, setMobileTab] = useState<"editor" | "preview" | "list">("editor");
 
@@ -454,6 +486,7 @@ export default function TemplatesPage() {
         subject,
         previewText: previewText || null,
         variables: {}, // defaults to backend sample values
+        includeIdCard: selectedTemplate?.includeIdCard ?? false,
       },
       {
         onSuccess: (data) => {
@@ -464,7 +497,7 @@ export default function TemplatesPage() {
         },
       }
     );
-  }, [editor, subject, previewText, previewEvent, previewEmailMutation]);
+  }, [editor, subject, previewText, previewEvent, previewEmailMutation, selectedTemplate?.includeIdCard]);
 
   useEffect(() => {
     if (selectedId && editor) {
@@ -557,6 +590,7 @@ export default function TemplatesPage() {
         previewText: previewText || null,
         variables: {},
         to: testTo,
+        includeIdCard: selectedTemplate?.includeIdCard ?? false,
       },
       {
         onSuccess: () => {
@@ -639,9 +673,10 @@ export default function TemplatesPage() {
           {/* ═══ COLUMN 1: TEMPLATE LIST SIDEBAR ═══ */}
           <div
             className={cn(
-              "w-80 shrink-0 border-r border-border-default bg-surface flex flex-col h-full overflow-hidden",
+              "shrink-0 border-r border-border-default bg-surface flex flex-col h-full overflow-hidden",
               mobileTab !== "list" && "hidden md:flex"
             )}
+            style={{ width: leftPanelWidth }}
           >
             {/* Search and New Template Header */}
             <div className="p-3 border-b border-border-subtle space-y-2">
@@ -701,6 +736,15 @@ export default function TemplatesPage() {
               )}
             </div>
           </div>
+
+          {/* ─── Resize handle (list ↔ editor) ─── */}
+          <div
+            className={cn(
+              "hidden md:block shrink-0 w-2 cursor-col-resize hover:bg-accent-400/50 transition-colors",
+              resizingEdge === "left" && "bg-accent-500"
+            )}
+            onPointerDown={(e) => handleResizeStart("left", e)}
+          />
 
           {/* ═══ COLUMN 2: WORKSPACE EDITOR PANEL ═══ */}
           <div
@@ -801,12 +845,22 @@ export default function TemplatesPage() {
             )}
           </div>
 
+          {/* ─── Resize handle (editor ↔ preview) ─── */}
+          <div
+            className={cn(
+              "hidden md:block shrink-0 w-2 cursor-col-resize hover:bg-accent-400/50 transition-colors",
+              resizingEdge === "right" && "bg-accent-500"
+            )}
+            onPointerDown={(e) => handleResizeStart("right", e)}
+          />
+
           {/* ═══ COLUMN 3: PREVIEW / INSPECT PANEL ═══ */}
           <div
             className={cn(
-              "w-[400px] shrink-0 bg-surface-raised flex flex-col h-full overflow-y-auto p-4 border-l border-border-default space-y-5",
+              "shrink-0 bg-surface-raised flex flex-col h-full overflow-y-auto p-4 border-l border-border-default space-y-5",
               mobileTab !== "preview" && "hidden md:flex"
             )}
+            style={{ width: rightPanelWidth }}
           >
             {/* Context / Preview Configuration */}
             {selectedId && (

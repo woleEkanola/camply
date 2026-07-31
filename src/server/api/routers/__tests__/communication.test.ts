@@ -31,6 +31,93 @@ describe("resolveApprovedQrSrc", () => {
   });
 });
 
+describe("communicationRouter - previewEmail idCard include", () => {
+  let orgId: string;
+  let adminId: string;
+
+  beforeEach(async () => {
+    const org = await prisma.organization.create({
+      data: { name: `ID Card Preview Test ${Date.now()}-${Math.random()}` },
+    });
+    orgId = org.id;
+    const admin = await prisma.user.create({
+      data: {
+        email: `idcard-preview-admin-${Date.now()}-${Math.random()}@test.com`,
+        password: "x",
+        role: "ADMIN",
+        organizationId: orgId,
+      },
+    });
+    adminId = admin.id;
+
+    await prisma.organizationBranding.create({
+      data: { organizationId: orgId, idCardEnabled: true },
+    });
+  });
+
+  afterEach(async () => {
+    await prisma.emailTemplate.deleteMany({ where: { organizationId: orgId } });
+    await prisma.organizationBranding.deleteMany({ where: { organizationId: orgId } });
+    await prisma.user.deleteMany({ where: { id: adminId } });
+    await prisma.organization.deleteMany({ where: { id: orgId } });
+  });
+
+  function adminCaller() {
+    return appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+  }
+
+  it("includes the id card image when includeIdCard is true", async () => {
+    const caller = adminCaller();
+    const template = await prisma.emailTemplate.create({
+      data: {
+        organizationId: orgId,
+        name: "ID Card Test",
+        subject: "Test",
+        includeIdCard: true,
+        content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hello" }] }] },
+      },
+    });
+
+    const result = await caller.communication.previewEmail({
+      event: "REGISTRATION_APPROVED",
+      tiptapJson: template.content as Record<string, unknown>,
+      subject: "Test",
+      includeIdCard: true,
+    });
+
+    expect(result.html).toContain("/api/id-card/sample-sheet.png");
+    expect(result.html).toContain('class="camply-id-card-page"');
+  });
+
+  it("omits the id card image when includeIdCard is false even if branding is enabled", async () => {
+    const caller = adminCaller();
+    const template = await prisma.emailTemplate.create({
+      data: {
+        organizationId: orgId,
+        name: "No ID Card Test",
+        subject: "Test",
+        includeIdCard: false,
+        content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hello" }] }] },
+      },
+    });
+
+    const result = await caller.communication.previewEmail({
+      event: "REGISTRATION_APPROVED",
+      tiptapJson: template.content as Record<string, unknown>,
+      subject: "Test",
+      includeIdCard: false,
+    });
+
+    expect(result.html).not.toContain("camply-id-card-page");
+  });
+});
+
 describe("communicationRouter - default template backfill", () => {
   let orgId: string;
   let adminId: string;

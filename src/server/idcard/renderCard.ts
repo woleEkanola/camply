@@ -418,3 +418,33 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
 
   return canvas.encode("png");
 }
+
+const SHEET_COLS = 2;
+const SHEET_ROWS = 3;
+const SHEET_GAP = 12;
+const SHEET_SCALE = 0.5;
+const SHEET_CARD_W = Math.round(CARD_WIDTH * SHEET_SCALE);
+const SHEET_CARD_H = Math.round(CARD_HEIGHT * SHEET_SCALE);
+const SHEET_W = SHEET_CARD_W * SHEET_COLS + SHEET_GAP * (SHEET_COLS + 1);
+const SHEET_H = SHEET_CARD_H * SHEET_ROWS + SHEET_GAP * (SHEET_ROWS + 1);
+
+export async function renderCampIdCardSheetPng(data: CampIdCardData): Promise<Buffer> {
+  const singlePng = await renderCampIdCardPng(data);
+  const singleImg = await loadImage(singlePng);
+
+  const canvas = createCanvas(SHEET_W, SHEET_H);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, SHEET_W, SHEET_H);
+
+  for (let row = 0; row < SHEET_ROWS; row++) {
+    for (let col = 0; col < SHEET_COLS; col++) {
+      const x = SHEET_GAP + col * (SHEET_CARD_W + SHEET_GAP);
+      const y = SHEET_GAP + row * (SHEET_CARD_H + SHEET_GAP);
+      ctx.drawImage(singleImg, x, y, SHEET_CARD_W, SHEET_CARD_H);
+    }
+  }
+
+  return canvas.encode("png");
+}

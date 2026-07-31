@@ -147,7 +147,7 @@ async function renderAndSendCampaignEmail(
       idCard: {
         enabled: !!branding?.idCardEnabled,
         imageUrl: registration.qrToken
-          ? `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/api/id-card/${registration.qrToken}`
+          ? `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/api/id-card/${registration.qrToken}/sheet`
           : null,
       },
     }));

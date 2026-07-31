@@ -974,7 +974,7 @@ export const communicationRouter = createTRPCRouter({
 
       const idCard = {
         enabled: !!(branding?.idCardEnabled && input.includeIdCard),
-        imageUrl: `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/api/id-card/sample`,
+        imageUrl: `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/api/id-card/sample-sheet.png`,
       };
 
       let html = "";

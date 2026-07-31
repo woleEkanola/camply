@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { renderCampIdCardPng, type CampIdCardData } from "../renderCard";
+import { renderCampIdCardPng, renderCampIdCardSheetPng, type CampIdCardData } from "../renderCard";
 
 const SAMPLE: CampIdCardData = {
   camperName: "James Adelabu",
@@ -62,5 +62,18 @@ describe("renderCampIdCardPng", () => {
   it("renders with no gender set", async () => {
     const png = await renderCampIdCardPng({ ...SAMPLE, gender: null });
     expect(png.subarray(0, 8)).toEqual(PNG_MAGIC);
+  });
+});
+
+describe("renderCampIdCardSheetPng", () => {
+  it("renders a 2×3 grid PNG (six cards on one image)", async () => {
+    const png = await renderCampIdCardSheetPng(SAMPLE);
+    expect(Buffer.isBuffer(png)).toBe(true);
+    expect(png.subarray(0, 8)).toEqual(PNG_MAGIC);
+
+    const width = png.readUInt32BE(16);
+    const height = png.readUInt32BE(20);
+    expect(width).toBeGreaterThan(1000);
+    expect(height).toBeGreaterThan(900);
   });
 });

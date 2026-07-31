@@ -166,10 +166,12 @@ function ComposerInner() {
     const to = window.prompt("Send test to email address:");
     if (!to || !editor) return;
     await previewMut.mutateAsync({
-      event: "BROADCAST",
+      event: personalize ? "CAMP_INVITATION" : "BROADCAST",
       tiptapJson: editor.getJSON() as Record<string, unknown>,
       subject,
+      previewText: previewText || undefined,
       to,
+      includeIdCard: personalize,
       broadcast: { senderMode, customFromLocalPart: customFromLocalPart || undefined, replyTo: replyTo || undefined },
     });
     setToast(`Test sent to ${to}`);
