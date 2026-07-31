@@ -190,6 +190,14 @@ export const formFieldRouter = createTRPCRouter({
     .input(z.object({ organizationId: z.string(), audience: audienceEnum, orderedIds: z.array(z.string()) }))
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
+      // orderedIds were never validated against the asserted org — a campus
+      // rep of org A could reorder org B's form fields by passing their ids.
+      const validCount = await ctx.prisma.formField.count({
+        where: { id: { in: input.orderedIds }, organizationId: input.organizationId },
+      });
+      if (validCount !== input.orderedIds.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "One or more fields do not belong to this organization" });
+      }
       await ctx.prisma.$transaction(
         input.orderedIds.map((id, index) =>
           ctx.prisma.formField.update({ where: { id }, data: { sortOrder: (index + 1) * 10 } })

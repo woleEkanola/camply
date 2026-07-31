@@ -5,6 +5,14 @@ export interface EmailVariable {
   label: string;
   category: "camper" | "parent" | "camp" | "registration" | "staff" | "organization" | "other";
   sampleValue: string;
+  /**
+   * Expands to an HTML block rather than an escaped string, so it is handled
+   * by its own pre-pass in renderer.ts instead of plain interpolation. Listed
+   * here purely so validateTemplate() recognises the token; deliberately
+   * excluded from getSampleData(), because putting it in the variables map
+   * would let interpolation consume the token before the pre-pass sees it.
+   */
+  htmlBlock?: boolean;
 }
 
 export const EMAIL_VARIABLES: EmailVariable[] = [
@@ -37,6 +45,16 @@ export const EMAIL_VARIABLES: EmailVariable[] = [
   { key: "tribe_name", label: "Tribe Name", category: "camp", sampleValue: "Tribe of Judah" },
   { key: "tribe_color", label: "Tribe Color", category: "camp", sampleValue: "#E53935" },
 
+  // Accommodation (Camp Invitation email — omitted from the certificate when unassigned)
+  { key: "hostel_name", label: "Hostel Name", category: "camp", sampleValue: "Grace Hostel" },
+  { key: "room_name", label: "Room Name", category: "camp", sampleValue: "Room 12" },
+  { key: "bed_label", label: "Bed Label", category: "camp", sampleValue: "Bed A" },
+
+  // Check-in (Camp Invitation email)
+  { key: "checkin_date", label: "Check-in Date", category: "camp", sampleValue: "Wednesday, August 19, 2026" },
+  { key: "checkin_location", label: "Check-in Location", category: "camp", sampleValue: "Lekki Centre Pick-up Point" },
+  { key: "arrive_before", label: "Arrive Before", category: "camp", sampleValue: "8:00 AM" },
+
   // Organization
   { key: "organization_name", label: "Organization Name", category: "organization", sampleValue: "Grace Community Church" },
 
@@ -52,12 +70,19 @@ export const EMAIL_VARIABLES: EmailVariable[] = [
   // Generic
   { key: "support_email", label: "Support Email", category: "organization", sampleValue: "help@gracechurch.org" },
   { key: "support_phone", label: "Support Phone", category: "organization", sampleValue: "+234 800 000 0000" },
+
+  // HTML block — always appended as its own page at the end of the email,
+  // wherever the token sits in the template. See renderer.ts.
+  { key: "camp_id_card", label: "Camp ID Card", category: "registration", sampleValue: "", htmlBlock: true },
 ];
 
 /** Returns sample data for every variable — used for preview rendering */
 export function getSampleData(): Record<string, string> {
   const data: Record<string, string> = {};
   for (const v of EMAIL_VARIABLES) {
+    // htmlBlock tokens must survive interpolation untouched — the renderer's
+    // pre-pass expands them after variable substitution has run.
+    if (v.htmlBlock) continue;
     data[v.key] = v.sampleValue;
   }
   return data;

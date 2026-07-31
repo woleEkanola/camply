@@ -14,7 +14,7 @@ export type { RuleConfig } from "./allocator/types";
 
 export const TRIBE_ALLOCATION_ENGINE_VERSION = "2.0.0";
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
 export class TribeAllocationError extends Error {
   code: string;

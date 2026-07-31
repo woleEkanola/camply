@@ -19,7 +19,7 @@ async function isTwoStepOrg(tx: TxClient, organizationId: string): Promise<boole
   return org?.approvalWorkflow === "TWO_STEP";
 }
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
 export class RegistrationEngineError extends Error {
   code: string;
@@ -87,6 +87,11 @@ export async function createDraft(params: {
   actorId: string;
 }) {
   return prisma.$transaction(async (tx) => {
+    // The gap between this read and the create() below is a real race (two
+    // concurrent calls can both see no `existing` row and both proceed to
+    // create); Registration_camperId_campId_key (prisma/migrations/20260728000000_partial_unique_indexes)
+    // is the actual backstop — the loser gets a P2002 unique-constraint
+    // error instead of a silent duplicate row.
     const existing = await tx.registration.findFirst({
       where: { camperId: params.camperId, campId: params.campId, deletedAt: null },
     });
@@ -276,8 +281,13 @@ async function approveRegistrationInTx(
   // Re-check capacity under lock to prevent overbooking on concurrent approvals.
   if (registration.venue && registration.venue.quota > 0) {
     await tx.$queryRaw`SELECT id FROM "Venue" WHERE id = ${registration.venue.id} FOR UPDATE`;
+    // Must count CHECKED_IN too — the lock is correct but this predicate
+    // wasn't: as campers check in and move off APPROVED, the count *drops*,
+    // so late approvals sailed straight past a venue that's actually full.
+    // Also missing deletedAt: null, so a soft-deleted registration still
+    // consumed a slot.
     const approvedCount = await tx.registration.count({
-      where: { venueId: registration.venue.id, status: "APPROVED" },
+      where: { venueId: registration.venue.id, status: { in: ["APPROVED", "CHECKED_IN"] }, deletedAt: null },
     });
     if (approvedCount >= registration.venue.quota) {
       if (registration.venue.fullBehavior === "PENDING_OK") {
@@ -309,8 +319,9 @@ async function approveRegistrationInTx(
   });
   if (signupLink && signupLink.quota > 0) {
     await tx.$queryRaw`SELECT id FROM "SignupLink" WHERE id = ${signupLink.id} FOR UPDATE`;
+    // Same predicate fix as the Venue quota check above.
     const approvedCampusCount = await tx.registration.count({
-      where: { campusId: registration.campusId, campId: registration.campId, status: "APPROVED" },
+      where: { campusId: registration.campusId, campId: registration.campId, status: { in: ["APPROVED", "CHECKED_IN"] }, deletedAt: null },
     });
     if (approvedCampusCount >= signupLink.quota) {
       const waitlisted = await tx.registration.update({
@@ -671,54 +682,70 @@ export async function flagDocumentRequiresAction(params: {
   });
 }
 
+/**
+ * Shared tail end of every "leave REQUIRES_ACTION" path: flips the
+ * registration back to PENDING, clears the correction message, and resets a
+ * stale endorsed RegistrationReview back to NOT_STARTED (a correction/
+ * resubmission means the data changed since any prior vetting, so a stale
+ * endorsement can't be trusted — keep the assigned verifier so the same
+ * person is re-prompted rather than needing re-assignment).
+ */
+async function clearRequiresAction(
+  tx: Prisma.TransactionClient,
+  params: { registrationId: string; actorId: string; action: string }
+) {
+  const registration = await tx.registration.findUniqueOrThrow({
+    where: { id: params.registrationId },
+    include: { camper: true },
+  });
+
+  assertTransition(registration.status, "PENDING");
+
+  const updated = await tx.registration.update({
+    where: { id: registration.id },
+    data: { status: "PENDING", correctionRequest: null },
+  });
+
+  const existingReview = await tx.registrationReview.findUnique({ where: { registrationId: registration.id } });
+  let reviewReset = false;
+  if (existingReview && isEndorsed(existingReview)) {
+    await tx.registrationReview.update({
+      where: { registrationId: registration.id },
+      data: { verificationStatus: "NOT_STARTED", recommendation: null, verifiedById: null, verifiedAt: null },
+    });
+    reviewReset = true;
+  }
+
+  await logEvent(tx, {
+    organizationId: registration.camper.organizationId,
+    registrationId: registration.id,
+    actorId: params.actorId,
+    action: params.action,
+    previousValue: { status: registration.status },
+    newValue: { status: "PENDING", reviewReset },
+  });
+
+  return updated;
+}
+
 /** Parent resubmits after a correction request or a rejection (if allowed). */
 export async function resubmitRegistration(params: { registrationId: string; actorId: string }) {
   const result = await prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camper: true, camp: true },
+      include: { camp: true },
     });
 
     if (registration.status === "REJECTED" && !registration.camp.allowResubmission) {
       throw new RegistrationEngineError("RESUBMISSION_NOT_ALLOWED", "This camp does not allow resubmission after rejection.");
     }
 
-    assertTransition(registration.status, "PENDING");
-
     const failures = await validateSubmission(tx, { registrationId: registration.id, parentUserId: params.actorId });
     if (failures.length > 0) {
       throw new RegistrationValidationError(failures);
     }
 
-    const updated = await tx.registration.update({
-      where: { id: registration.id },
-      data: { status: "PENDING", correctionRequest: null, rejectionReason: null },
-    });
-
-    // A correction/resubmission means the data changed since any prior
-    // vetting, so a stale endorsement can't be trusted — reset it back to
-    // NOT_STARTED (keep the assigned verifier so the same person is
-    // re-prompted rather than needing re-assignment).
-    const existingReview = await tx.registrationReview.findUnique({ where: { registrationId: registration.id } });
-    let reviewReset = false;
-    if (existingReview && isEndorsed(existingReview)) {
-      await tx.registrationReview.update({
-        where: { registrationId: registration.id },
-        data: { verificationStatus: "NOT_STARTED", recommendation: null, verifiedById: null, verifiedAt: null },
-      });
-      reviewReset = true;
-    }
-
-    await logEvent(tx, {
-      organizationId: registration.camper.organizationId,
-      registrationId: registration.id,
-      actorId: params.actorId,
-      action: "REGISTRATION_RESUBMITTED",
-      previousValue: { status: registration.status },
-      newValue: { status: "PENDING", reviewReset },
-    });
-
-    return updated;
+    return clearRequiresAction(tx, { registrationId: params.registrationId, actorId: params.actorId, action: "REGISTRATION_RESUBMITTED" });
   });
 
   await runSideEffectsNow(result.id, "REGISTRATION_SUBMITTED");
@@ -731,30 +758,40 @@ export async function resubmitRegistration(params: { registrationId: string; act
  * use resubmitRegistration instead.
  */
 export async function advanceFromRequiresAction(params: { registrationId: string; actorId: string }) {
-  return prisma.$transaction(async (tx) => {
-    const registration = await tx.registration.findUniqueOrThrow({
-      where: { id: params.registrationId },
-      include: { camper: true },
-    });
+  return prisma.$transaction((tx) =>
+    clearRequiresAction(tx, { registrationId: params.registrationId, actorId: params.actorId, action: "REGISTRATION_ADVANCED_FROM_REQUIRES_ACTION" })
+  );
+}
 
-    assertTransition(registration.status, "PENDING");
+/**
+ * Auto-heals a registration out of REQUIRES_ACTION once every flagged
+ * DocumentAction tied to it (registration-scoped or camper-scoped) has been
+ * resolved. Called from the document-replace flow so parents/staff don't
+ * have to separately click "Submit"/"Advance to Review" just to un-stick a
+ * registration whose only outstanding issue was the flagged document. A
+ * no-op if the registration isn't in REQUIRES_ACTION, or if other flagged
+ * documents are still unresolved.
+ */
+export async function advanceIfDocumentActionsResolved(
+  tx: Prisma.TransactionClient,
+  params: { registrationId: string; actorId: string }
+) {
+  const registration = await tx.registration.findUniqueOrThrow({ where: { id: params.registrationId } });
+  if (registration.status !== "REQUIRES_ACTION") {
+    return registration;
+  }
 
-    const updated = await tx.registration.update({
-      where: { id: registration.id },
-      data: { status: "PENDING", correctionRequest: null },
-    });
-
-    await logEvent(tx, {
-      organizationId: registration.camper.organizationId,
-      registrationId: registration.id,
-      actorId: params.actorId,
-      action: "REGISTRATION_ADVANCED_FROM_REQUIRES_ACTION",
-      previousValue: { status: registration.status },
-      newValue: { status: "PENDING" },
-    });
-
-    return updated;
+  const remaining = await tx.documentAction.count({
+    where: {
+      status: "REQUIRES_ACTION",
+      document: { deletedAt: null, OR: [{ registrationId: params.registrationId }, { camperId: registration.camperId }] },
+    },
   });
+  if (remaining > 0) {
+    return registration;
+  }
+
+  return clearRequiresAction(tx, { registrationId: params.registrationId, actorId: params.actorId, action: "REGISTRATION_ADVANCED_FROM_REQUIRES_ACTION" });
 }
 
 export async function cancelRegistration(params: { registrationId: string; actorId: string; reason?: string }) {
@@ -920,8 +957,15 @@ export async function transferVenue(params: { registrationId: string; actorId: s
     });
 
     const newVenue = await tx.venue.findUniqueOrThrow({ where: { id: params.newVenueId } });
-    if (newVenue.quota > 0 && registration.status === "APPROVED") {
-      const approvedCount = await tx.registration.count({ where: { venueId: newVenue.id, status: "APPROVED" } });
+    if (newVenue.quota > 0 && (registration.status === "APPROVED" || registration.status === "CHECKED_IN")) {
+      // Previously had no lock at all — two concurrent transfers into the
+      // last slot could both read approvedCount = quota-1 and both commit.
+      // Mirrors the FOR UPDATE + recount pattern in approveRegistrationInTx
+      // above (and staff/departmentCapacity.ts's assertDepartmentHasCapacity).
+      await tx.$queryRaw`SELECT id FROM "Venue" WHERE id = ${newVenue.id} FOR UPDATE`;
+      const approvedCount = await tx.registration.count({
+        where: { venueId: newVenue.id, status: { in: ["APPROVED", "CHECKED_IN"] }, deletedAt: null },
+      });
       if (approvedCount >= newVenue.quota) {
         throw new RegistrationEngineError("VENUE_FULL", "The destination venue is at capacity.");
       }

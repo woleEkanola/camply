@@ -19,8 +19,17 @@ export function Divider(): string {
 
 // ─── EmailLayout (full document shell) ──────────────────────────────────────
 
-export function EmailLayout(params: { content: string; branding: Branding | null; previewText?: string }): string {
+/**
+ * Marker rendered at the very end of the content column. Blocks that must
+ * come after everything else regardless of where their token sits in the
+ * template — currently only the Camp ID card page — are swapped in here by
+ * the renderer. Left in place (and stripped) when nothing is appended.
+ */
+export const APPEND_SLOT = "<!--CAMPLY_APPEND_SLOT-->";
+
+export function EmailLayout(params: { content: string; branding: Branding | null; previewText?: string; width?: number }): string {
   const b = params.branding;
+  const width = params.width ?? 600;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -33,15 +42,29 @@ export function EmailLayout(params: { content: string; branding: Branding | null
       --brand-accent: ${b?.accentColor ?? "#E67E22"};
       --brand-button: ${b?.buttonColor ?? "#E67E22"};
     }
+    @media print {
+      body { background:#FFFFFF !important; }
+      .camply-email-outer-td { padding:0 !important; }
+      .camply-email-content { width:100% !important; max-width:${width}px !important; }
+      table { page-break-inside: avoid; }
+    }
   </style>
 </head>
 <body style="margin:0;padding:0;background:${theme.color.background};font-family:${theme.font.family};-webkit-font-smoothing:antialiased;">
+  <!--[if mso]>
+  <table width="${width}" cellpadding="0" cellspacing="0" align="center"><tr><td>
+  <![endif]-->
   <table width="100%" cellpadding="0" cellspacing="0" style="background:${theme.color.background};">
-    <tr><td align="center" style="padding:${theme.spacing.lg} ${theme.spacing.md} ${theme.spacing.xxl};">
-      ${params.content}
+    <tr><td align="center" class="camply-email-outer-td" style="padding:${theme.spacing.lg} ${theme.spacing.md} ${theme.spacing.xxl};">
+      <div class="camply-email-content" style="width:100%;max-width:${width}px;margin:0 auto;">
+        ${params.content}
+        ${APPEND_SLOT}
+      </div>
     </td></tr>
   </table>
-  <!--[if mso]><table width="480" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
+  <!--[if mso]>
+  </td></tr></table>
+  <![endif]-->
 </body>
 </html>`;
 }

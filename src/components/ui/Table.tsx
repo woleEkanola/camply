@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/cn";
 import { SearchBar } from "./SearchBar";
@@ -185,9 +185,28 @@ export function Table<T>(props: TableProps<T>) {
   }, [data, searchTerm, sortConfig, activeColumns, isControlled]);
 
   const totalPages = Math.max(1, Math.ceil(processed.length / itemsPerPage));
+
+  // currentPage was previously only reset from SearchBar's onChange/onClear
+  // and the page-size <select> — never when `data` itself shrinks (e.g.
+  // deleting the last page's rows in local mode). The pagination bar is
+  // also gated on totalPages > 1, so once totalPages drops to 1 the bar
+  // disappears while currentPage is still stuck on, say, 3 — pageData
+  // becomes an empty slice and the table renders its empty state even
+  // though rows still exist. Confirmed on admin/trash: select-all-on-page-3
+  // -> Delete Selected Forever -> "Trash is empty".
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
   const pageData = isControlled ? processed : processed.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const primaryCol = activeColumns.find((c) => c.primary) ?? activeColumns[0];
+  // The fallback (no column marked `primary`) previously took activeColumns[0]
+  // unconditionally, even if that column was `mobileHidden` — the doc
+  // comment on this component recommends `mobileHidden` for exactly "a raw
+  // checkbox/icon column", so that column would become the mobile card's
+  // headline instead of being hidden. Fall back to the first non-hidden
+  // column instead.
+  const primaryCol = activeColumns.find((c) => c.primary) ?? activeColumns.find((c) => !c.mobileHidden) ?? activeColumns[0];
   const secondaryCol = activeColumns.find((c) => c.secondary);
   const bodyCols = activeColumns.filter((c) => c !== primaryCol && c !== secondaryCol && !c.mobileHidden);
   const filterableCols = activeColumns.filter((c) => c.filter);
@@ -303,7 +322,7 @@ export function Table<T>(props: TableProps<T>) {
         <>
           {/* Desktop: unchanged table, gated to md+. */}
           <div className="hidden overflow-x-auto md:block">
-            <table className="min-w-full divide-y divide-border-default">
+            <table className="w-full table-fixed divide-y divide-border-default">
               <thead className="bg-surface-raised">
                 <tr>
                   {selectable && (
@@ -321,7 +340,13 @@ export function Table<T>(props: TableProps<T>) {
                     <th
                       key={i}
                       scope="col"
-                      style={columnWidths[i] ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` } : undefined}
+                      style={
+                        columnWidths[i]
+                          ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` }
+                          : column.primary
+                          ? { width: "26%", minWidth: "180px" }
+                          : undefined
+                      }
                       className={cn(
                         "relative px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-txt-secondary group select-none overflow-hidden",
                         column.sortable && "cursor-pointer hover:bg-surface-hover",

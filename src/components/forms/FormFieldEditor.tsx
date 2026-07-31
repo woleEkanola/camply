@@ -53,18 +53,27 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
   const invalidate = () => utils.formField.list.invalidate({ organizationId, audience });
 
   const [error, setError] = useState("");
+  // Separate from `error` — a successful bulk delete was previously reported
+  // via setError(...), rendering a genuine success message inside the same
+  // bg-danger-50/text-danger-700 box as real errors, so it looked like the
+  // delete had failed.
+  const [notice, setNotice] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const create = api.formField.create.useMutation({ onSuccess: () => { setEdit(null); invalidate(); }, onError: (e) => setError(e.message) });
   const remove = api.formField.remove.useMutation({ onSuccess: () => { setSelectedIds(new Set()); invalidate(); }, onError: (e) => setError(e.message) });
   const removeMany = api.formField.removeMany.useMutation({
     onSuccess: (result) => {
-      setError(`Deleted ${result.deleted} field(s).${result.skipped > 0 ? ` Skipped ${result.skipped} (system or in-use).` : ""}`);
+      setNotice(`Deleted ${result.deleted} field(s).${result.skipped > 0 ? ` Skipped ${result.skipped} (system or in-use).` : ""}`);
       setSelectedIds(new Set());
       invalidate();
     },
     onError: (e) => setError(e.message),
   });
-  const reorder = api.formField.reorder.useMutation({ onSuccess: invalidate });
+  // Previously had no error path — on failure, DraggableFieldList's local
+  // drag state would eventually snap back to the server order (unchanged,
+  // since invalidate() never ran) with no message, so the admin believed
+  // the reorder saved when it silently didn't.
+  const reorder = api.formField.reorder.useMutation({ onSuccess: invalidate, onError: (e) => setError(e.message) });
 
   const [optimisticVisible, setOptimisticVisible] = useState<Record<string, boolean>>({});
   const [optimisticRequired, setOptimisticRequired] = useState<Record<string, boolean>>({});
@@ -73,10 +82,17 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
   const updateRequired = api.formField.update.useMutation({ onSuccess: invalidate });
   const update = api.formField.update.useMutation({ onSuccess: () => { setEdit(null); invalidate(); }, onError: (e) => setError(e.message) });
 
+  // Previously only cleared on error, never on success — so the optimistic
+  // value permanently took precedence over the refetched server value
+  // (optimisticVisible[field.id] ?? field.visible) even after the mutation
+  // completed, meaning a server-side coercion or another admin's concurrent
+  // edit could never show up in this checkbox again for the rest of the
+  // session. Clear on both outcomes; on error the checkbox reverts to
+  // whatever the last real fetch said.
   const toggleVisible = useCallback((id: string, checked: boolean) => {
     setOptimisticVisible((prev) => ({ ...prev, [id]: checked }));
     updateVisible.mutate({ id, visible: checked }, {
-      onError: () => setOptimisticVisible((prev) => {
+      onSettled: () => setOptimisticVisible((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -87,7 +103,7 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
   const toggleRequired = useCallback((id: string, checked: boolean) => {
     setOptimisticRequired((prev) => ({ ...prev, [id]: checked }));
     updateRequired.mutate({ id, required: checked }, {
-      onError: () => setOptimisticRequired((prev) => {
+      onSettled: () => setOptimisticRequired((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -193,6 +209,7 @@ export function FormFieldEditor({ organizationId, audience }: FormFieldEditorPro
       </div>
 
       {error && !edit && <div className="mb-4 rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
+      {notice && !edit && <div className="mb-4 rounded-md bg-success-50 p-3 text-sm text-success-700">{notice}</div>}
 
       {/* Bulk actions bar */}
       {selectedIds.size > 0 && (

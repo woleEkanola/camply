@@ -26,8 +26,17 @@ export const mealRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await assertKitchenStaffOrAdmin(ctx, input.organizationId);
-      const registration = await ctx.prisma.registration.findUnique({ where: { id: input.registrationId }, include: { camper: true } });
-      if (!registration) throw new TRPCError({ code: "NOT_FOUND" });
+      // registrationId was never checked against the asserted org — a
+      // kitchen volunteer could pass their own org id (satisfying the
+      // assert above) alongside another tenant's registrationId and serve/
+      // read a meal record for a camper in a different organization.
+      const registration = await ctx.prisma.registration.findUnique({
+        where: { id: input.registrationId, deletedAt: null },
+        include: { camper: true, campus: { select: { organizationId: true } } },
+      });
+      if (!registration || registration.campus.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
 
       const record = await ctx.prisma.mealDistribution.upsert({
         where: { registrationId_meal_date: { registrationId: input.registrationId, meal: input.meal, date: input.date } },
@@ -47,6 +56,13 @@ export const mealRouter = createTRPCRouter({
     .input(z.object({ organizationId: z.string(), campId: z.string(), date: z.date().optional() }))
     .query(async ({ ctx, input }) => {
       await assertKitchenStaffOrAdmin(ctx, input.organizationId);
+      // campId was never checked against the asserted org — a kitchen
+      // volunteer could pass their own org id alongside a foreign campId and
+      // read that org's meal history (with camper data).
+      const camp = await ctx.prisma.camp.findUnique({ where: { id: input.campId }, select: { organizationId: true } });
+      if (!camp || camp.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found in this organization" });
+      }
       return ctx.prisma.mealDistribution.findMany({
         where: { campId: input.campId, ...(input.date && { date: input.date }) },
         include: { registration: { include: { camper: true } } },
@@ -63,6 +79,7 @@ export const mealRouter = createTRPCRouter({
         where: {
           campId: input.campId,
           status: "APPROVED",
+          deletedAt: null,
           camper: { organizationId: input.organizationId, OR: [{ allergies: { not: null } }, { dietaryRestrictions: { not: null } }] },
         },
         include: { camper: true },

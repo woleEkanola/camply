@@ -126,6 +126,7 @@ export function useOfflineScanner(organizationId: string) {
           qrToken: q.qrToken,
           query: q.query,
           station: q.station,
+          stationId: q.stationId,
           timestamp: q.timestamp,
           device: q.device,
           location: q.location,
@@ -156,6 +157,7 @@ export function useOfflineScanner(organizationId: string) {
     qrToken?: string;
     query?: string;
     station: string;
+    stationId?: string;
     device?: string;
     location?: string;
     acknowledgedMedical?: boolean;
@@ -255,6 +257,7 @@ export function useOfflineScanner(organizationId: string) {
       qrToken: camper.qrToken,
       query: params.query,
       station: params.station,
+      stationId: params.stationId,
       timestamp: timestamp.toISOString(),
       device: params.device,
       location: params.location,

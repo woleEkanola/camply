@@ -28,13 +28,15 @@ export interface StatCardProps {
   onClick?: () => void;
   selected?: boolean;
   className?: string;
+  "data-testid"?: string;
 }
 
-export function StatCard({ label, value, insight, tone = "neutral", icon, onClick, selected, className }: StatCardProps) {
+export function StatCard({ label, value, insight, tone = "neutral", icon, onClick, selected, className, "data-testid": dataTestId }: StatCardProps) {
   const Comp = onClick ? "button" : "div";
   return (
     <Comp
       onClick={onClick}
+      data-testid={dataTestId}
       className={cn(
         "flex flex-col justify-between rounded-xl border bg-surface p-4 text-left transition-all duration-150 shadow-xs min-h-[96px] group",
         selected

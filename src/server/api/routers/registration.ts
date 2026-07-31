@@ -32,6 +32,83 @@ function toTRPCError(error: unknown): TRPCError {
   return new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Unknown error" });
 }
 
+type DuplicateScanRow = {
+  id: string;
+  camperId: string;
+  status: string;
+  camper: { id: string; name: string | null; firstName: string | null; lastName: string | null; dateOfBirth: Date | null } | null;
+};
+
+/**
+ * A registration is flagged a "possible duplicate" if another registration in
+ * the same scope shares its camperId, or (fallback, for distinct Camper rows
+ * that are themselves duplicates) the same lowercased full name + DOB. Used
+ * by both `getAdminListStats` (count only) and `adminList` (count + grouped
+ * ordering + sibling info) — kept as one function so the two never drift.
+ *
+ * The camperId-based branch can now only ever match rows that predate
+ * Registration_camperId_campId_key (prisma/migrations/20260728000000_partial_unique_indexes),
+ * which makes two live (non-soft-deleted) registrations for the same
+ * camper+camp impossible to create going forward, regardless of status. It's
+ * kept for exactly that historical-cleanup case, not because new rows of
+ * this kind are still expected. The name+DOB branch is unaffected — it
+ * catches a parent creating two separate Camper records for what's actually
+ * the same child, which no camperId-scoped constraint can prevent.
+ */
+function computeDuplicateGroups(regs: DuplicateScanRow[]) {
+  const camperIdCounts = new Map<string, number>();
+  const nameDobMap = new Map<string, string[]>();
+  for (const r of regs) {
+    camperIdCounts.set(r.camperId, (camperIdCounts.get(r.camperId) || 0) + 1);
+    const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
+    const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
+    if (name) {
+      const key = `${name}|${dob}`;
+      const list = nameDobMap.get(key) || [];
+      list.push(r.id);
+      nameDobMap.set(key, list);
+    }
+  }
+
+  const duplicateRegIds = new Set<string>();
+  const groupKeyByRegId = new Map<string, string>();
+  for (const r of regs) {
+    const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
+    const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
+    const nameDobKey = `${name}|${dob}`;
+    if ((camperIdCounts.get(r.camperId) || 0) > 1) {
+      duplicateRegIds.add(r.id);
+      groupKeyByRegId.set(r.id, `camper:${r.camperId}`);
+    } else if ((nameDobMap.get(nameDobKey)?.length || 0) > 1) {
+      duplicateRegIds.add(r.id);
+      groupKeyByRegId.set(r.id, `namedob:${nameDobKey}`);
+    }
+  }
+
+  const siblingsByRegId = new Map<string, { id: string; status: string }[]>();
+  for (const r of regs) {
+    const groupKey = groupKeyByRegId.get(r.id);
+    if (!groupKey) continue;
+    const siblings = regs.filter((other) => other.id !== r.id && groupKeyByRegId.get(other.id) === groupKey);
+    siblingsByRegId.set(r.id, siblings.map((s) => ({ id: s.id, status: s.status })));
+  }
+
+  return { duplicateRegIds, groupKeyByRegId, siblingsByRegId };
+}
+
+/** Best-to-worst-for-keeping status ordering, used to sort duplicate siblings
+ * together with the "likely keep" registration first and the "likely safe to
+ * delete" ones last. */
+const DUPLICATE_STATUS_PRIORITY = [
+  "APPROVED", "CHECKED_IN", "COMPLETED",
+  "PENDING", "WAITLISTED", "REQUIRES_ACTION", "SUBMITTED", "DRAFT",
+  "REJECTED", "CANCELLED", "ARCHIVED",
+];
+function duplicateStatusRank(status: string): number {
+  const idx = DUPLICATE_STATUS_PRIORITY.indexOf(status);
+  return idx === -1 ? DUPLICATE_STATUS_PRIORITY.length : idx;
+}
+
 // In a TWO_STEP org, only an org admin may give final approval — a campus
 // rep's role there is limited to endorsing (see the `endorse` mutation).
 // SINGLE_STEP orgs keep the existing rep-or-admin approve authorization.
@@ -658,11 +735,23 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
-      // Delete the registration (soft delete — recoverable from Trash for 60 days)
-      return await ctx.prisma.registration.update({
-        where: { id: input.id },
-        data: { deletedAt: new Date() },
-      });
+      // Delete the registration (soft delete — recoverable from Trash for 60
+      // days). Previously left the Bed row pointing at this registration
+      // with status OCCUPIED forever — permanently unallocatable, since
+      // suggestBed only considers AVAILABLE beds and deleteBed/deleteRoom
+      // refuse to remove an occupied one. Release it in the same
+      // transaction, matching unassignCamperFromBed's clear-both pattern.
+      const [, updated] = await ctx.prisma.$transaction([
+        ctx.prisma.bed.updateMany({
+          where: { registrationId: input.id },
+          data: { registrationId: null, status: "AVAILABLE" },
+        }),
+        ctx.prisma.registration.update({
+          where: { id: input.id },
+          data: { deletedAt: new Date(), roomId: null },
+        }),
+      ]);
+      return updated;
     }),
 
   // ── Registration Engine procedures (PRD Part 4) ──────────────────────────
@@ -1051,7 +1140,14 @@ export const registrationRouter = createTRPCRouter({
         }
 
         try {
-          await ctx.prisma.registration.update({ where: { id }, data: { deletedAt: new Date() } });
+          // Same bed-release fix as the single-delete procedure above.
+          await ctx.prisma.$transaction([
+            ctx.prisma.bed.updateMany({
+              where: { registrationId: id },
+              data: { registrationId: null, status: "AVAILABLE" },
+            }),
+            ctx.prisma.registration.update({ where: { id }, data: { deletedAt: new Date(), roomId: null } }),
+          ]);
           details.push({ id, status: "success" });
           succeeded++;
         } catch (error) {
@@ -1748,37 +1844,11 @@ export const registrationRouter = createTRPCRouter({
         select: {
           id: true,
           camperId: true,
+          status: true,
           camper: { select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true } },
         },
       });
-
-      const camperIdCounts = new Map<string, number>();
-      const nameDobMap = new Map<string, string[]>();
-      for (const r of allRegsInScope) {
-        camperIdCounts.set(r.camperId, (camperIdCounts.get(r.camperId) || 0) + 1);
-        const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
-        const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
-        if (name) {
-          const key = `${name}|${dob}`;
-          const list = nameDobMap.get(key) || [];
-          list.push(r.id);
-          nameDobMap.set(key, list);
-        }
-      }
-
-      const duplicateRegIds = new Set<string>();
-      for (const r of allRegsInScope) {
-        if ((camperIdCounts.get(r.camperId) || 0) > 1) {
-          duplicateRegIds.add(r.id);
-        } else {
-          const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
-          const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
-          const key = `${name}|${dob}`;
-          if ((nameDobMap.get(key)?.length || 0) > 1) {
-            duplicateRegIds.add(r.id);
-          }
-        }
-      }
+      const { duplicateRegIds } = computeDuplicateGroups(allRegsInScope);
 
       return {
         countsByStatus,
@@ -1833,37 +1903,11 @@ export const registrationRouter = createTRPCRouter({
         select: {
           id: true,
           camperId: true,
+          status: true,
           camper: { select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true } },
         },
       });
-
-      const camperIdCounts = new Map<string, number>();
-      const nameDobMap = new Map<string, string[]>();
-      for (const r of allRegsInScope) {
-        camperIdCounts.set(r.camperId, (camperIdCounts.get(r.camperId) || 0) + 1);
-        const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
-        const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
-        if (name) {
-          const key = `${name}|${dob}`;
-          const list = nameDobMap.get(key) || [];
-          list.push(r.id);
-          nameDobMap.set(key, list);
-        }
-      }
-
-      const duplicateRegIds = new Set<string>();
-      for (const r of allRegsInScope) {
-        if ((camperIdCounts.get(r.camperId) || 0) > 1) {
-          duplicateRegIds.add(r.id);
-        } else {
-          const name = (r.camper?.name || `${r.camper?.firstName || ""} ${r.camper?.lastName || ""}`).trim().toLowerCase();
-          const dob = r.camper?.dateOfBirth ? new Date(r.camper.dateOfBirth).toISOString().slice(0, 10) : "no-dob";
-          const key = `${name}|${dob}`;
-          if ((nameDobMap.get(key)?.length || 0) > 1) {
-            duplicateRegIds.add(r.id);
-          }
-        }
-      }
+      const { duplicateRegIds, groupKeyByRegId, siblingsByRegId } = computeDuplicateGroups(allRegsInScope);
 
       const endorsedFilter = { review: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } };
       const notEndorsedFilter = { OR: [{ review: null }, { review: { NOT: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } } }] };
@@ -1889,38 +1933,62 @@ export const registrationRouter = createTRPCRouter({
         }),
       };
 
-      const rawItems = await ctx.prisma.registration.findMany({
-        where,
-        include: {
-          camper: { include: { user: true } },
-          campus: true,
-          camp: {
-            include: {
-              documentRequirements: {
-                where: { deletedAt: null },
-              },
+      const includeShape = {
+        camper: { include: { user: true } },
+        campus: true,
+        camp: {
+          include: {
+            documentRequirements: {
+              where: { deletedAt: null },
             },
           },
-          documents: {
-            where: { deletedAt: null },
-            select: { id: true, status: true, fileName: true, requirementId: true },
-          },
-          review: { select: { verificationStatus: true, recommendation: true, verifiedById: true, verifiedAt: true, assignedToId: true } },
         },
-        orderBy: { createdAt: "desc" },
-        take: input.limit + 1,
-        ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
-      });
+        documents: {
+          where: { deletedAt: null },
+          select: { id: true, status: true, fileName: true, requirementId: true },
+        },
+        review: { select: { verificationStatus: true, recommendation: true, verifiedById: true, verifiedAt: true, assignedToId: true } },
+      } as const;
 
+      let rawItems: Awaited<ReturnType<typeof ctx.prisma.registration.findMany>>;
       let nextCursor: string | undefined;
-      if (rawItems.length > input.limit) {
-        const next = rawItems.pop();
-        nextCursor = next?.id;
+
+      if (input.duplicatesOnly) {
+        // Grouping breaks simple orderBy/cursor pagination, and duplicate sets
+        // are inherently small — fetch everything in scope (bounded) and sort
+        // in JS so siblings always render adjacently, "likely to keep" first.
+        rawItems = await ctx.prisma.registration.findMany({
+          where,
+          include: includeShape,
+          take: 300,
+        });
+        rawItems.sort((a: any, b: any) => {
+          const groupA = groupKeyByRegId.get(a.id) ?? "";
+          const groupB = groupKeyByRegId.get(b.id) ?? "";
+          if (groupA !== groupB) return groupA < groupB ? -1 : 1;
+          const rankDiff = duplicateStatusRank(a.status) - duplicateStatusRank(b.status);
+          if (rankDiff !== 0) return rankDiff;
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        });
+        nextCursor = undefined;
+      } else {
+        rawItems = await ctx.prisma.registration.findMany({
+          where,
+          include: includeShape,
+          orderBy: { createdAt: "desc" },
+          take: input.limit + 1,
+          ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+        });
+        if (rawItems.length > input.limit) {
+          const next = rawItems.pop();
+          nextCursor = next?.id;
+        }
       }
 
-      const items = rawItems.map((item) => ({
+      const items = rawItems.map((item: any) => ({
         ...item,
         isDuplicate: duplicateRegIds.has(item.id),
+        duplicateSiblings: siblingsByRegId.get(item.id) ?? [],
       }));
 
       const totalCount = await ctx.prisma.registration.count({ where });
@@ -1944,22 +2012,37 @@ export const registrationRouter = createTRPCRouter({
 
       await assertOrgAdmin(ctx, registration.campus.organizationId);
 
-      const updated = await ctx.prisma.registration.update({
-        where: { id: input.registrationId },
-        data: { campusId: input.newCampusId },
-      });
+      // newCampusId was never validated — an org admin could reassign a
+      // registration to a campus belonging to a different organization.
+      const newCampus = await ctx.prisma.campus.findUnique({ where: { id: input.newCampusId }, select: { organizationId: true } });
+      if (!newCampus || newCampus.organizationId !== registration.campus.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Destination campus not found in this organization" });
+      }
 
-      // Log audit event
-      await ctx.prisma.auditLog.create({
-        data: {
-          organizationId: registration.campus.organizationId,
-          registrationId: registration.id,
-          actorId: currentUser.id,
-          action: "REGISTRATION_TRANSFERRED_CAMPUS",
-          previousValue: { campusId: registration.campusId } as any,
-          newValue: { campusId: input.newCampusId } as any,
-        },
-      });
+      // Update + audit log as one transaction, not two separate writes.
+      // Note (not fixed here): registrationNumber embeds the old campus's
+      // code (ORG-CAMP-CAMPUS-SEQ) and isn't regenerated on transfer, so a
+      // printed badge/ID card disagrees with the camper's actual campus
+      // after this runs — and it doesn't decrement the old campus's
+      // RegistrationCounter either. Regenerating a number that may already
+      // be on a physical badge is a product decision, not something to
+      // change unilaterally in a security/concurrency-focused pass.
+      const [updated] = await ctx.prisma.$transaction([
+        ctx.prisma.registration.update({
+          where: { id: input.registrationId },
+          data: { campusId: input.newCampusId },
+        }),
+        ctx.prisma.auditLog.create({
+          data: {
+            organizationId: registration.campus.organizationId,
+            registrationId: registration.id,
+            actorId: currentUser.id,
+            action: "REGISTRATION_TRANSFERRED_CAMPUS",
+            previousValue: { campusId: registration.campusId } as any,
+            newValue: { campusId: input.newCampusId } as any,
+          },
+        }),
+      ]);
 
       return updated;
     }),
@@ -1973,35 +2056,51 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      // Fetch first registration to check organizational authorization
-      const registration = await ctx.prisma.registration.findUniqueOrThrow({
-        where: { id: input.ids[0] },
+      // Previously authorized on ids[0] only, then updated every id in the
+      // batch — an org admin could smuggle registrations from any other
+      // tenant into their own campus by including a foreign id alongside
+      // their own. Load every registration and require them ALL to already
+      // be in one org (the caller's), not just the first.
+      const registrations = await ctx.prisma.registration.findMany({
+        where: { id: { in: input.ids } },
         include: { campus: true },
       });
+      if (registrations.length !== input.ids.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "One or more registrations not found" });
+      }
+      const orgIds = new Set(registrations.map((r) => r.campus.organizationId));
+      if (orgIds.size !== 1) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "All registrations must belong to the same organization" });
+      }
+      const organizationId = [...orgIds][0];
+      await assertOrgAdmin(ctx, organizationId);
 
-      await assertOrgAdmin(ctx, registration.campus.organizationId);
+      // newCampusId was also never validated against that org.
+      const newCampus = await ctx.prisma.campus.findUnique({ where: { id: input.newCampusId }, select: { organizationId: true } });
+      if (!newCampus || newCampus.organizationId !== organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Destination campus not found in this organization" });
+      }
 
-      // Perform update inside transaction
-      await ctx.prisma.$transaction(
-        input.ids.map((id) =>
+      // Perform update + audit logs in one transaction — wholesale reject
+      // rather than partially applying if anything above already threw.
+      await ctx.prisma.$transaction([
+        ...input.ids.map((id) =>
           ctx.prisma.registration.update({
             where: { id },
             data: { campusId: input.newCampusId },
           })
-        )
-      );
-
-      // Create audit logs in bulk
-      await ctx.prisma.auditLog.createMany({
-        data: input.ids.map((id) => ({
-          organizationId: registration.campus.organizationId,
-          registrationId: id,
-          actorId: currentUser.id,
-          action: "REGISTRATION_TRANSFERRED_CAMPUS",
-          previousValue: { campusId: "bulk_transfer" } as any,
-          newValue: { campusId: input.newCampusId } as any,
-        })),
-      });
+        ),
+        ctx.prisma.auditLog.createMany({
+          data: registrations.map((r) => ({
+            organizationId,
+            registrationId: r.id,
+            actorId: currentUser.id,
+            action: "REGISTRATION_TRANSFERRED_CAMPUS",
+            previousValue: { campusId: r.campusId } as any,
+            newValue: { campusId: input.newCampusId } as any,
+          })),
+        }),
+      ]);
 
       return { success: true, count: input.ids.length };
     }),

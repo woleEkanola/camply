@@ -2,8 +2,47 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { normalizeScannedQRToken } from "../../../lib/qr";
+import { classifyMedical } from "../../../lib/medical";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
+
+/**
+ * Typed station-id classification, additive to the legacy substring
+ * matching below. The client (src/lib/stations.ts) sends a free-text
+ * display `station` label AND, when known, a typed `stationId` — when
+ * present the id is authoritative, so a user-editable custom checkpoint
+ * name (e.g. "Lunch Gate") can no longer accidentally substring-match into
+ * meal/checkout behavior. Absent `stationId` (older offline-queued scans,
+ * or callers that predate this field) falls back to the original label
+ * matching unchanged.
+ */
+const STATION_ID_CLASSIFICATION: Record<string, "CHECKIN" | "CHECKOUT" | "MEAL" | "LOOKUP" | "COLLECTIBLE" | "OTHER"> = {
+  CAMP_ARRIVAL: "CHECKIN",
+  PICKUP_POINT: "CHECKIN",
+  HOSTEL_ARRIVAL: "CHECKIN",
+  BREAKFAST: "MEAL",
+  LUNCH: "MEAL",
+  DINNER: "MEAL",
+  COLLECTIBLES: "COLLECTIBLE",
+  CHECKOUT: "CHECKOUT",
+  IDENTITY_LOOKUP: "LOOKUP",
+  EMERGENCY_LOOKUP: "LOOKUP",
+  CUSTOM: "OTHER",
+};
+
+/** Station ids whose ScanEvent rows get tagged with { stationId } in
+ * metadata, purely additive, so admin reports can group reliably by
+ * station *type* via a JSON filter instead of string-matching the
+ * free-text `station` label (which, for Pickup Point, IS the campus/
+ * custom location name — still the report's row label, just not the
+ * type discriminator). */
+const REPORTABLE_STATION_IDS = new Set(["CAMP_ARRIVAL", "HOSTEL_ARRIVAL", "PICKUP_POINT"]);
+
+const STATION_ID_MEAL: Record<string, "BREAKFAST" | "LUNCH" | "DINNER"> = {
+  BREAKFAST: "BREAKFAST",
+  LUNCH: "LUNCH",
+  DINNER: "DINNER",
+};
 
 // Helper to determine if the user has access to check-in/scan
 async function assertCanScan(
@@ -15,12 +54,73 @@ async function assertCanScan(
   if (ADMIN_ROLES.includes(currentUser.role) && currentUser.organizationId === organizationId) return;
 
   if (["TEACHER", "VOLUNTEER"].includes(currentUser.role)) {
+    // Scoped to organizationId — previously any approved staff profile in
+    // *any* org satisfied this check, letting a volunteer pass a foreign
+    // org's id and scan/check-in/check-out that org's campers.
     const profile = await ctx.prisma.staffProfile.findFirst({
-      where: { userId: ctx.userId, status: "APPROVED", deletedAt: null },
+      where: { userId: ctx.userId, organizationId, status: "APPROVED", deletedAt: null },
     });
     if (profile) return;
   }
   throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to scan camper badges." });
+}
+
+/** Reports are org-wide (not campus-scoped), matching the confirmed
+ * "SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE" access decision — org
+ * admins pass outright; a CAMPUS_REPRESENTATIVE only passes if they
+ * actually manage at least one campus in the org (DB-verified, never
+ * trusted from the JWT role claim alone, matching this file's existing
+ * assertOrgAdminOrCampusRep convention in src/server/api/trpc/scoping.ts). */
+async function assertReportsAccess(ctx: { prisma: any; session: any }, organizationId: string) {
+  const user = ctx.session?.user;
+  if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+  if (user.organizationId !== organizationId) throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to view reports." });
+  if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(user.role)) return;
+  if (user.role === "CAMPUS_REPRESENTATIVE") {
+    const managesAny = await ctx.prisma.campus.findFirst({
+      where: { organizationId, reps: { some: { id: user.id } } },
+    });
+    if (managesAny) return;
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to view reports." });
+}
+
+/** Reports default to the organization's active camp when no campId is
+ * given, matching processScan's own "no active camp" handling. */
+async function resolveReportCampId(ctx: { prisma: any }, organizationId: string, campId?: string): Promise<string | null> {
+  if (campId) return campId;
+  const org = await ctx.prisma.organization.findUnique({ where: { id: organizationId }, select: { activeCampId: true } });
+  return org?.activeCampId ?? null;
+}
+
+/** Reports default to "today" server time — confirmed with the user that
+ * meal/collectible/arrival recording never lets a volunteer backdate a
+ * scan, so a report's day picker is the only place history is browsed.
+ * Correct for ScanEvent.timestamp (a real DateTime) but NOT for
+ * MealDistribution.date (@db.Date, always UTC-truncated by Prisma on
+ * write) — use utcDayRange() below for that one. */
+function dayRange(date?: Date): { start: Date; end: Date } {
+  const base = date ?? new Date();
+  const start = new Date(base);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(base);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+/** UTC day boundaries, for querying @db.Date columns (MealDistribution.date)
+ * whose stored value is always the UTC calendar date of the JS Date that was
+ * written, regardless of server timezone. dayRange() above uses server-local
+ * boundaries via setHours, which — on any non-UTC deployment — don't line up
+ * with what's actually in that column: a dinner served at 00:30 local can
+ * land under the *previous* UTC date, so a local-boundary range either lets
+ * the same meal be "found" twice across that hour (dedupe-adjacent reads) or
+ * excludes/duplicates rows at the report's day edges. */
+function utcDayRange(date?: Date): { start: Date; end: Date } {
+  const base = date ?? new Date();
+  const start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 0, 0, 0, 0));
+  const end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 23, 59, 59, 999));
+  return { start, end };
 }
 
 export const scanRouter = createTRPCRouter({
@@ -31,6 +131,7 @@ export const scanRouter = createTRPCRouter({
         qrToken: z.string().optional(),
         query: z.string().optional(), // search fallback
         station: z.string(),
+        stationId: z.string().optional(),
         device: z.string().optional(),
         location: z.string().optional(),
         timestamp: z.date().optional(),
@@ -88,7 +189,11 @@ export const scanRouter = createTRPCRouter({
             user: true,
           },
         },
-        campus: true,
+        campus: {
+          include: {
+            reps: { select: { id: true, firstName: true, lastName: true, phone: true } },
+          },
+        },
         camp: true,
         venue: true,
         tribe: true,
@@ -101,7 +206,12 @@ export const scanRouter = createTRPCRouter({
       const normalizedToken = normalizeScannedQRToken(rawToken);
 
       if (normalizedToken) {
-        // A. Primary lookup: search qrToken, registrationNumber, registration ID, or camper ID under active camp
+        // A. Primary lookup: search qrToken, registrationNumber, registration ID, or camper ID under active camp.
+        // qrToken/id/registrationNumber are all @unique so those three can
+        // only ever match one row; camperId is NOT unique (a camper can have
+        // a registration per camp across years), so the orderBy makes which
+        // one wins deterministic rather than "whichever Postgres returns
+        // first" if that clause is ever what matches.
         registration = await ctx.prisma.registration.findFirst({
           where: {
             campId,
@@ -113,10 +223,17 @@ export const scanRouter = createTRPCRouter({
               { camperId: normalizedToken },
             ],
           },
+          orderBy: { createdAt: "desc" },
           include,
         });
 
-        // B. Secondary lookup: search across any camp in the organization if active camp didn't yield a match
+        // B. Secondary lookup: search across any camp in the organization if active camp didn't yield a match.
+        // The `contains` substring clause this used to have here is gone —
+        // combined with findFirst and no orderBy, a partially-read/smudged
+        // badge (lib/qr.ts's normalizer returns unparseable input verbatim)
+        // could match several registrations and resolve to whichever one
+        // Postgres happened to return first. On the checkout station that
+        // meant a real risk of releasing a child to the wrong adult.
         if (!registration) {
           registration = await ctx.prisma.registration.findFirst({
             where: {
@@ -127,9 +244,9 @@ export const scanRouter = createTRPCRouter({
                 { id: normalizedToken },
                 { registrationNumber: { equals: normalizedToken, mode: "insensitive" } },
                 { camperId: normalizedToken },
-                { registrationNumber: { contains: normalizedToken, mode: "insensitive" } },
               ],
             },
+            orderBy: { createdAt: "desc" },
             include,
           });
         }
@@ -209,14 +326,31 @@ export const scanRouter = createTRPCRouter({
         return null;
       };
 
-      const classification = classifyStation(input.station);
+      const classification =
+        (input.stationId && STATION_ID_CLASSIFICATION[input.stationId]) || classifyStation(input.station);
 
-      // Pre-check for medical warnings/alerts on the server side
-      const hasMedical = !!(registration.camper.allergies || registration.camper.medicalConditions || registration.camper.dietaryRestrictions);
-      if (!input.skipMedicalAlerts && classification !== "LOOKUP" && classification !== "CHECKOUT" && hasMedical && !input.acknowledgedMedical) {
+      // Medical severity triage (src/lib/medical.ts): only genuinely
+      // life-safety CRITICAL conditions (anaphylaxis, "do not release",
+      // isolation, medical hold, epilepsy, insulin-dependence, ...) block
+      // scanning with a full-screen interrupt. Routine allergy/dietary
+      // notes (INFO) are surfaced as a banner inside the normal result
+      // instead — the previous all-or-nothing gate fired on ANY non-empty
+      // medical field, which was frequent enough that volunteers disabled
+      // it entirely via a "skip medical alerts" toggle, silencing the
+      // critical cases along with the routine ones.
+      const medicalClassification = classifyMedical(registration.camper);
+      if (
+        !input.skipMedicalAlerts &&
+        classification !== "LOOKUP" &&
+        classification !== "CHECKOUT" &&
+        medicalClassification.severity === "CRITICAL" &&
+        !input.acknowledgedMedical
+      ) {
         return {
           result: "REQUIRES_MEDICAL_ACKNOWLEDGEMENT" as const,
           registration,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
         };
       }
 
@@ -259,7 +393,7 @@ export const scanRouter = createTRPCRouter({
       // 2. Classify station & determine duplicates
 
       // A. MEAL STATION ("breakfast", "lunch", "dinner")
-      const mealType = getMealType(input.station);
+      const mealType = (input.stationId && STATION_ID_MEAL[input.stationId]) || getMealType(input.station);
       const isMeal = classification === "MEAL" && mealType !== null;
       if (isMeal && mealType) {
         // Check if meal already collected today
@@ -299,42 +433,46 @@ export const scanRouter = createTRPCRouter({
           };
         }
 
-        // Record meal distribution
-        const mealRecord = await ctx.prisma.mealDistribution.create({
-          data: {
-            campId,
-            registrationId,
-            meal: mealType,
-            date: activeTime,
-            servedById: ctx.userId,
-            servedAt: activeTime,
-          },
-        });
-
-        // Log SUCCESS scan event
-        await ctx.prisma.scanEvent.create({
-          data: {
-            registrationId,
-            campId,
-            station: input.station,
-            timestamp: activeTime,
-            volunteerId: ctx.userId,
-            device: input.device,
-            location: input.location,
-            result: "SUCCESS",
-          },
-        });
+        // Record meal distribution + SUCCESS scan event as one transaction,
+        // matching the check-in path's fix — otherwise a failure between the
+        // two leaves a served meal with no audit trail (or vice versa).
+        const [mealRecord] = await ctx.prisma.$transaction([
+          ctx.prisma.mealDistribution.create({
+            data: {
+              campId,
+              registrationId,
+              meal: mealType,
+              date: activeTime,
+              servedById: ctx.userId,
+              servedAt: activeTime,
+            },
+          }),
+          ctx.prisma.scanEvent.create({
+            data: {
+              registrationId,
+              campId,
+              station: input.station,
+              timestamp: activeTime,
+              volunteerId: ctx.userId,
+              device: input.device,
+              location: input.location,
+              result: "SUCCESS",
+            },
+          }),
+        ]);
 
         return {
           result: "SUCCESS" as const,
           actionPerformed: `Served ${mealType.toLowerCase()}`,
           registration,
           mealRecord,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
         };
       }
 
       // B. CHECKOUT STATION
-      const isCheckout = stationLower === "checkout";
+      const isCheckout = input.stationId ? input.stationId === "CHECKOUT" : stationLower === "checkout";
       if (isCheckout) {
         // If already checked out
         if (registration.checkedOutAt) {
@@ -377,61 +515,65 @@ export const scanRouter = createTRPCRouter({
           };
         }
 
-        // Perform checkout
-        const updatedReg = await ctx.prisma.registration.update({
-          where: { id: registrationId },
-          data: {
-            checkedOutAt: activeTime,
-            checkedOutById: ctx.userId,
-            checkoutCollectorName: input.checkoutDetails.collectorName,
-            checkoutCollectorRelationship: input.checkoutDetails.collectorRelationship,
-            checkoutDetails: input.checkoutDetails.details || null,
-          },
-          include,
-        });
-
-        // Log SUCCESS scan event
-        await ctx.prisma.scanEvent.create({
-          data: {
-            registrationId,
-            campId,
-            station: input.station,
-            timestamp: activeTime,
-            volunteerId: ctx.userId,
-            device: input.device,
-            location: input.location,
-            result: "SUCCESS",
-            metadata: {
-              collectorName: input.checkoutDetails.collectorName,
-              relationship: input.checkoutDetails.collectorRelationship,
-            },
-          },
-        });
-
-        // Add to main audit log as well
-        await ctx.prisma.auditLog.create({
-          data: {
-            organizationId: input.organizationId,
-            registrationId,
-            actorId: ctx.userId,
-            action: "CHECK_OUT_COMPLETED",
-            newValue: {
+        // Perform checkout + scan event + audit log as one transaction —
+        // previously unwrapped, so a failure partway through could leave
+        // checkedOutAt set with no matching ScanEvent/AuditLog trail.
+        const [updatedReg] = await ctx.prisma.$transaction([
+          ctx.prisma.registration.update({
+            where: { id: registrationId },
+            data: {
               checkedOutAt: activeTime,
-              collectorName: input.checkoutDetails.collectorName,
-              collectorRelationship: input.checkoutDetails.collectorRelationship,
+              checkedOutById: ctx.userId,
+              checkoutCollectorName: input.checkoutDetails.collectorName,
+              checkoutCollectorRelationship: input.checkoutDetails.collectorRelationship,
+              checkoutDetails: input.checkoutDetails.details || null,
             },
-          },
-        });
+            include,
+          }),
+          ctx.prisma.scanEvent.create({
+            data: {
+              registrationId,
+              campId,
+              station: input.station,
+              timestamp: activeTime,
+              volunteerId: ctx.userId,
+              device: input.device,
+              location: input.location,
+              result: "SUCCESS",
+              metadata: {
+                collectorName: input.checkoutDetails.collectorName,
+                relationship: input.checkoutDetails.collectorRelationship,
+              },
+            },
+          }),
+          ctx.prisma.auditLog.create({
+            data: {
+              organizationId: input.organizationId,
+              registrationId,
+              actorId: ctx.userId,
+              action: "CHECK_OUT_COMPLETED",
+              newValue: {
+                checkedOutAt: activeTime,
+                collectorName: input.checkoutDetails.collectorName,
+                collectorRelationship: input.checkoutDetails.collectorRelationship,
+              },
+            },
+          }),
+        ]);
 
         return {
           result: "SUCCESS" as const,
           actionPerformed: "Checked Out",
           registration: updatedReg,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
         };
       }
 
       // C. LOOKUP STATIONS
-      const isLookup = ["identity lookup", "emergency lookup"].includes(stationLower);
+      const isLookup = input.stationId
+        ? STATION_ID_CLASSIFICATION[input.stationId] === "LOOKUP"
+        : ["identity lookup", "emergency lookup"].includes(stationLower);
       if (isLookup) {
         // Just record audit event, no modifications
         await ctx.prisma.scanEvent.create({
@@ -451,10 +593,80 @@ export const scanRouter = createTRPCRouter({
           result: "SUCCESS" as const,
           actionPerformed: "Identity Resolved",
           registration,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
         };
       }
 
-      // D. ARRIVAL CHECK-IN STATIONS (e.g. "Pickup Point", "Camp Arrival", "Hostel Arrival" or custom)
+      // D. COLLECTIBLE STATIONS (gifts, stationery, water, snacks, etc.) —
+      // same per-day dedupe-then-write shape as arrival check-ins below,
+      // but deliberately does NOT mutate registration.status or write a
+      // CHECK_IN_COMPLETED audit entry. A camper collecting a gift bag must
+      // not be silently marked as checked in.
+      const isCollectible = input.stationId
+        ? STATION_ID_CLASSIFICATION[input.stationId] === "COLLECTIBLE"
+        : false;
+      if (isCollectible) {
+        const existingCollection = await ctx.prisma.scanEvent.findFirst({
+          where: {
+            registrationId,
+            station: input.station,
+            result: "SUCCESS",
+            timestamp: { gte: startOfToday, lte: endOfToday },
+          },
+        });
+
+        if (existingCollection) {
+          const checkerName = await getVolunteerName(existingCollection.volunteerId);
+
+          await ctx.prisma.scanEvent.create({
+            data: {
+              registrationId,
+              campId,
+              station: input.station,
+              timestamp: activeTime,
+              volunteerId: ctx.userId,
+              device: input.device,
+              location: input.location,
+              result: "DUPLICATE",
+              metadata: { originalTime: existingCollection.timestamp, processedBy: checkerName, stationId: "COLLECTIBLE" },
+            },
+          });
+
+          return {
+            result: "DUPLICATE" as const,
+            message: `${input.station} already collected.`,
+            originalTime: existingCollection.timestamp,
+            originalVolunteerName: checkerName,
+            originalStation: input.station,
+            registration,
+          };
+        }
+
+        await ctx.prisma.scanEvent.create({
+          data: {
+            registrationId,
+            campId,
+            station: input.station,
+            timestamp: activeTime,
+            volunteerId: ctx.userId,
+            device: input.device,
+            location: input.location,
+            result: "SUCCESS",
+            metadata: { stationId: "COLLECTIBLE" },
+          },
+        });
+
+        return {
+          result: "SUCCESS" as const,
+          actionPerformed: `Collected ${input.station}`,
+          registration,
+          medicalSeverity: medicalClassification.severity,
+          medicalFlags: medicalClassification.flags,
+        };
+      }
+
+      // E. ARRIVAL CHECK-IN STATIONS (e.g. "Pickup Point", "Camp Arrival", "Hostel Arrival" or custom)
       // Check if already checked in at this specific station today
       const existingCheckIn = await ctx.prisma.scanEvent.findFirst({
         where: {
@@ -468,9 +680,12 @@ export const scanRouter = createTRPCRouter({
         },
       });
 
+      const arrivalStationIdTag =
+        input.stationId && REPORTABLE_STATION_IDS.has(input.stationId) ? { stationId: input.stationId } : undefined;
+
       if (existingCheckIn) {
         const checkerName = await getVolunteerName(existingCheckIn.volunteerId);
-        
+
         await ctx.prisma.scanEvent.create({
           data: {
             registrationId,
@@ -481,7 +696,7 @@ export const scanRouter = createTRPCRouter({
             device: input.device,
             location: input.location,
             result: "DUPLICATE",
-            metadata: { originalTime: existingCheckIn.timestamp, processedBy: checkerName },
+            metadata: { originalTime: existingCheckIn.timestamp, processedBy: checkerName, ...arrivalStationIdTag },
           },
         });
 
@@ -495,41 +710,63 @@ export const scanRouter = createTRPCRouter({
         };
       }
 
-      // Record SUCCESS check-in scan event
-      await ctx.prisma.scanEvent.create({
-        data: {
-          registrationId,
-          campId,
-          station: input.station,
-          timestamp: activeTime,
-          volunteerId: ctx.userId,
-          device: input.device,
-          location: input.location,
-          result: "SUCCESS",
-        },
-      });
-
-      // Update main registration status to CHECKED_IN (if not already)
+      // Record SUCCESS check-in scan event + status update + audit log as
+      // one transaction. Previously the SUCCESS ScanEvent was written first,
+      // outside any transaction — if the registration.update below then
+      // failed (connection blip, timeout), the ScanEvent was already
+      // committed, so the dedupe guard above (`existingCheckIn`) would
+      // reject every retry with "already checked in", leaving the camper
+      // permanently un-check-in-able at this station for the rest of the
+      // day even though status never actually advanced.
       let updatedReg = registration;
       if (registration.status !== "CHECKED_IN") {
-        updatedReg = await ctx.prisma.registration.update({
-          where: { id: registrationId },
+        const [, newReg] = await ctx.prisma.$transaction([
+          ctx.prisma.scanEvent.create({
+            data: {
+              registrationId,
+              campId,
+              station: input.station,
+              timestamp: activeTime,
+              volunteerId: ctx.userId,
+              device: input.device,
+              location: input.location,
+              result: "SUCCESS",
+              metadata: arrivalStationIdTag,
+            },
+          }),
+          ctx.prisma.registration.update({
+            where: { id: registrationId },
+            data: {
+              status: "CHECKED_IN",
+              checkedInAt: registration.checkedInAt ?? activeTime,
+              checkedInById: registration.checkedInById ?? ctx.userId,
+            },
+            include,
+          }),
+          ctx.prisma.auditLog.create({
+            data: {
+              organizationId: input.organizationId,
+              registrationId,
+              actorId: ctx.userId,
+              action: "CHECK_IN_COMPLETED",
+              previousValue: { status: registration.status },
+              newValue: { status: "CHECKED_IN" },
+            },
+          }),
+        ]);
+        updatedReg = newReg;
+      } else {
+        await ctx.prisma.scanEvent.create({
           data: {
-            status: "CHECKED_IN",
-            checkedInAt: registration.checkedInAt ?? activeTime,
-            checkedInById: registration.checkedInById ?? ctx.userId,
-          },
-          include,
-        });
-
-        await ctx.prisma.auditLog.create({
-          data: {
-            organizationId: input.organizationId,
             registrationId,
-            actorId: ctx.userId,
-            action: "CHECK_IN_COMPLETED",
-            previousValue: { status: registration.status },
-            newValue: { status: "CHECKED_IN" },
+            campId,
+            station: input.station,
+            timestamp: activeTime,
+            volunteerId: ctx.userId,
+            device: input.device,
+            location: input.location,
+            result: "SUCCESS",
+            metadata: arrivalStationIdTag,
           },
         });
       }
@@ -538,6 +775,8 @@ export const scanRouter = createTRPCRouter({
         result: "SUCCESS" as const,
         actionPerformed: `Checked In at ${input.station}`,
         registration: updatedReg,
+        medicalSeverity: medicalClassification.severity,
+        medicalFlags: medicalClassification.flags,
       };
     }),
 
@@ -550,6 +789,7 @@ export const scanRouter = createTRPCRouter({
             qrToken: z.string().optional(),
             query: z.string().optional(),
             station: z.string(),
+            stationId: z.string().optional(),
             timestamp: z.string(), // ISO string from offline device
             device: z.string().optional(),
             location: z.string().optional(),
@@ -618,10 +858,13 @@ export const scanRouter = createTRPCRouter({
 
           // We simulate standard scanning rules
           const stationLower = scan.station.toLowerCase();
+          const idMeal = scan.stationId ? STATION_ID_MEAL[scan.stationId] : undefined;
+          const idIsCheckout = scan.stationId ? scan.stationId === "CHECKOUT" : undefined;
+          const idIsCollectible = scan.stationId ? STATION_ID_CLASSIFICATION[scan.stationId] === "COLLECTIBLE" : false;
 
           // A. MEALS
-          if (["breakfast", "lunch", "dinner"].includes(stationLower)) {
-            const mealType = scan.station.toUpperCase() as "BREAKFAST" | "LUNCH" | "DINNER";
+          if (idMeal || (idIsCheckout === undefined && ["breakfast", "lunch", "dinner"].includes(stationLower))) {
+            const mealType = idMeal || (scan.station.toUpperCase() as "BREAKFAST" | "LUNCH" | "DINNER");
             const existingMeal = await ctx.prisma.mealDistribution.findFirst({
               where: { registrationId: reg.id, meal: mealType, date: parsedTimestamp },
             });
@@ -672,7 +915,7 @@ export const scanRouter = createTRPCRouter({
             syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "SUCCESS" });
           }
           // B. CHECKOUT
-          else if (stationLower === "checkout") {
+          else if (idIsCheckout ?? stationLower === "checkout") {
             if (reg.checkedOutAt) {
               await ctx.prisma.scanEvent.create({
                 data: {
@@ -732,7 +975,62 @@ export const scanRouter = createTRPCRouter({
 
             syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "SUCCESS" });
           }
-          // C. CHECK-IN
+          // C. COLLECTIBLES — mirrors the online path's dedicated branch
+          // (which deliberately never touches registration.status). This
+          // branch didn't exist here at all, so a queued offline collectible
+          // scan (merch table, gift bag, etc.) fell through to the generic
+          // check-in branch below and got recorded as the camper having
+          // arrived at camp.
+          else if (idIsCollectible) {
+            const startOfToday = new Date(parsedTimestamp);
+            startOfToday.setHours(0, 0, 0, 0);
+            const endOfToday = new Date(parsedTimestamp);
+            endOfToday.setHours(23, 59, 59, 999);
+
+            const existingCollection = await ctx.prisma.scanEvent.findFirst({
+              where: {
+                registrationId: reg.id,
+                station: scan.station,
+                result: "SUCCESS",
+                timestamp: { gte: startOfToday, lte: endOfToday },
+              },
+            });
+
+            if (existingCollection) {
+              await ctx.prisma.scanEvent.create({
+                data: {
+                  registrationId: reg.id,
+                  campId,
+                  station: scan.station,
+                  timestamp: parsedTimestamp,
+                  volunteerId: ctx.userId,
+                  device: scan.device,
+                  location: scan.location,
+                  result: "DUPLICATE",
+                  metadata: { offlineSync: true, stationId: "COLLECTIBLE" },
+                },
+              });
+              syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "DUPLICATE" });
+              continue;
+            }
+
+            await ctx.prisma.scanEvent.create({
+              data: {
+                registrationId: reg.id,
+                campId,
+                station: scan.station,
+                timestamp: parsedTimestamp,
+                volunteerId: ctx.userId,
+                device: scan.device,
+                location: scan.location,
+                result: "SUCCESS",
+                metadata: { offlineSync: true, stationId: "COLLECTIBLE" },
+              },
+            });
+
+            syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "SUCCESS" });
+          }
+          // D. CHECK-IN
           else {
             const startOfToday = new Date(parsedTimestamp);
             startOfToday.setHours(0, 0, 0, 0);
@@ -809,6 +1107,17 @@ export const scanRouter = createTRPCRouter({
   getCamperScanHistory: protectedProcedure
     .input(z.object({ registrationId: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Previously had no authorization check at all — any authenticated
+      // user could read any camper's full movement history (check-in/out,
+      // meals, station, device, plus the scanning volunteers' names/emails)
+      // by registration id alone.
+      const registration = await ctx.prisma.registration.findUnique({
+        where: { id: input.registrationId },
+        select: { campus: { select: { organizationId: true } } },
+      });
+      if (!registration) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertReportsAccess(ctx, registration.campus.organizationId);
+
       const scans = await ctx.prisma.scanEvent.findMany({
         where: { registrationId: input.registrationId },
         orderBy: { timestamp: "desc" },
@@ -839,8 +1148,10 @@ export const scanRouter = createTRPCRouter({
   getOperationalStats: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session?.user;
-      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      // Previously took organizationId with no comparison to the caller's
+      // own org — any authenticated user could pass a foreign org's id and
+      // read its operational (meal/checkin/checkout) stats.
+      await assertReportsAccess(ctx, input.organizationId);
 
       let campId = input.campId;
       if (!campId) {
@@ -869,8 +1180,12 @@ export const scanRouter = createTRPCRouter({
         campus: { organizationId: input.organizationId },
       };
 
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
+      // Previously filtered meals by servedAt (a real DateTime) using a
+      // server-local "today" boundary, while getMealReport filtered the
+      // same data by `date` (@db.Date, always UTC-truncated) — the two
+      // dashboards disagreed on any non-UTC deployment. Both now query
+      // `date` with the same UTC boundary.
+      const { start: startOfToday, end: endOfToday } = utcDayRange();
 
       const [registered, checkedIn, breakfastCount, lunchCount, dinnerCount, checkedOutCount] =
         await Promise.all([
@@ -884,15 +1199,15 @@ export const scanRouter = createTRPCRouter({
           }),
           // Breakfast today
           ctx.prisma.mealDistribution.count({
-            where: { campId, meal: "BREAKFAST", servedAt: { gte: startOfToday } },
+            where: { campId, meal: "BREAKFAST", date: { gte: startOfToday, lte: endOfToday } },
           }),
           // Lunch today
           ctx.prisma.mealDistribution.count({
-            where: { campId, meal: "LUNCH", servedAt: { gte: startOfToday } },
+            where: { campId, meal: "LUNCH", date: { gte: startOfToday, lte: endOfToday } },
           }),
           // Dinner today
           ctx.prisma.mealDistribution.count({
-            where: { campId, meal: "DINNER", servedAt: { gte: startOfToday } },
+            where: { campId, meal: "DINNER", date: { gte: startOfToday, lte: endOfToday } },
           }),
           // Checked out
           ctx.prisma.registration.count({
@@ -911,5 +1226,157 @@ export const scanRouter = createTRPCRouter({
         dinnerCount,
         checkedOutCount,
       };
+    }),
+
+  // ─── Pickup Point picker + campus contact lookup ───
+
+  listCampuses: protectedProcedure
+    .input(z.object({ organizationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+      return ctx.prisma.campus.findMany({
+        where: { organizationId: input.organizationId, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { displayOrder: "asc" },
+      });
+    }),
+
+  getCampusContacts: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campusId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+
+      const [campus, teacherCount] = await Promise.all([
+        ctx.prisma.campus.findFirst({
+          where: { id: input.campusId, organizationId: input.organizationId },
+          select: { reps: { select: { id: true, firstName: true, lastName: true, phone: true } } },
+        }),
+        ctx.prisma.staffProfile.count({
+          where: { organizationId: input.organizationId, preferredCampusId: input.campusId, type: "TEACHER", status: "APPROVED", deletedAt: null },
+        }),
+      ]);
+
+      const reps = (campus?.reps ?? []).map((r: any) => ({
+        id: r.id,
+        name: [r.firstName, r.lastName].filter(Boolean).join(" ") || "Campus Rep",
+        phone: r.phone ?? null,
+      }));
+
+      return { reps, teacherCount };
+    }),
+
+  getCampusTeachers: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campusId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+
+      const teachers = await ctx.prisma.staffProfile.findMany({
+        where: {
+          organizationId: input.organizationId,
+          preferredCampusId: input.campusId,
+          type: "TEACHER",
+          status: "APPROVED",
+          deletedAt: null,
+        },
+        select: { id: true, firstName: true, lastName: true, phone: true },
+        orderBy: { firstName: "asc" },
+      });
+
+      return teachers.map((t: any) => ({
+        id: t.id,
+        name: [t.firstName, t.lastName].filter(Boolean).join(" ") || "Teacher",
+        phone: t.phone ?? null,
+      }));
+    }),
+
+  // ─── Reports ───
+
+  getMealReport: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional(), date: z.date().optional() }))
+    .query(async ({ ctx, input }) => {
+      await assertReportsAccess(ctx, input.organizationId);
+      const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
+      // Queries the @db.Date `date` column — must use UTC boundaries, not
+      // server-local ones, or this disagrees with getOperationalStats and
+      // with what the meal dedupe check itself considers "today".
+      const { start, end } = utcDayRange(input.date);
+      if (!campId) return { breakfast: 0, lunch: 0, dinner: 0 };
+
+      const [breakfast, lunch, dinner] = await Promise.all([
+        ctx.prisma.mealDistribution.count({ where: { campId, meal: "BREAKFAST", date: { gte: start, lte: end } } }),
+        ctx.prisma.mealDistribution.count({ where: { campId, meal: "LUNCH", date: { gte: start, lte: end } } }),
+        ctx.prisma.mealDistribution.count({ where: { campId, meal: "DINNER", date: { gte: start, lte: end } } }),
+      ]);
+
+      return { breakfast, lunch, dinner };
+    }),
+
+  getArrivalsReport: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        campId: z.string().optional(),
+        date: z.date().optional(),
+        stationId: z.enum(["CAMP_ARRIVAL", "HOSTEL_ARRIVAL", "PICKUP_POINT"]).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertReportsAccess(ctx, input.organizationId);
+      const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
+      const { start, end } = dayRange(input.date);
+      const stationIds = input.stationId
+        ? [input.stationId]
+        : (["CAMP_ARRIVAL", "HOSTEL_ARRIVAL", "PICKUP_POINT"] as const);
+
+      if (!campId) return { total: 0, byType: {}, rows: [] };
+
+      const groups = await Promise.all(
+        stationIds.map((id) =>
+          ctx.prisma.scanEvent
+            .groupBy({
+              by: ["station"],
+              where: {
+                campId,
+                result: "SUCCESS",
+                timestamp: { gte: start, lte: end },
+                metadata: { path: ["stationId"], equals: id },
+              },
+              _count: { _all: true },
+            })
+            .then((rows: any[]) => rows.map((r) => ({ station: r.station, stationId: id, count: r._count._all })))
+        )
+      );
+
+      const rows = groups.flat();
+      const byType: Record<string, number> = {};
+      for (const id of stationIds) byType[id] = rows.filter((r) => r.stationId === id).reduce((sum, r) => sum + r.count, 0);
+      const total = rows.reduce((sum, r) => sum + r.count, 0);
+
+      return { total, byType, rows };
+    }),
+
+  getCollectiblesReport: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional(), date: z.date().optional() }))
+    .query(async ({ ctx, input }) => {
+      await assertReportsAccess(ctx, input.organizationId);
+      const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
+      const { start, end } = dayRange(input.date);
+      if (!campId) return { total: 0, rows: [] };
+
+      const rows = await ctx.prisma.scanEvent.groupBy({
+        by: ["station"],
+        where: {
+          campId,
+          result: "SUCCESS",
+          timestamp: { gte: start, lte: end },
+          metadata: { path: ["stationId"], equals: "COLLECTIBLE" },
+        },
+        _count: { _all: true },
+      });
+
+      const mapped = rows.map((r: any) => ({ station: r.station, count: r._count._all }));
+      const total = mapped.reduce((sum, r) => sum + r.count, 0);
+
+      return { total, rows: mapped };
     }),
 });

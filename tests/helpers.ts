@@ -1,11 +1,43 @@
 import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "crypto";
-import type { Locator, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { ensureSystemFields, SYSTEM_FIELD_REGISTRY } from "../src/server/registration/systemFieldRegistry";
 
 // Shared across specs — Playwright runs each test file in its own worker
 // process, so this is one connection per worker, not per test.
 export const prisma = new PrismaClient();
+
+/**
+ * `Registration_camperId_campId_key` (prisma/migrations/20260728000000_partial_unique_indexes)
+ * makes two live (non-soft-deleted) registrations for the same camper+camp
+ * impossible to create going forward. A handful of specs simulate legacy
+ * data that predates that constraint (e.g. testing the admin
+ * "duplicatesOnly" cleanup view, which exists precisely to surface rows
+ * from before this migration) — since a real Postgres unique index is
+ * enforced on every write path regardless of ORM vs raw SQL, the only way
+ * to create that state in a test is to drop the index for the duration of
+ * the inserts.
+ *
+ * Two separate functions, not one wrap-and-restore helper: the duplicate
+ * fixture rows created while suspended typically need to stay live through
+ * an entire `test()` body (e.g. beforeAll creates them, the test asserts
+ * against them, afterAll deletes them) — restoreDuplicateConstraint() would
+ * fail if called before those rows are gone, since they'd violate the index
+ * being recreated. Call suspendDuplicateConstraint() in beforeAll right
+ * before creating the duplicate rows, and restoreDuplicateConstraint() in
+ * afterAll right after deleting them. Safe in this suite because Playwright
+ * runs each spec file in its own worker/DB connection and every spec using
+ * this builds its own isolated org/camp/camper fixtures.
+ */
+export async function suspendDuplicateConstraint(): Promise<void> {
+  await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "Registration_camperId_campId_key"`);
+}
+
+export async function restoreDuplicateConstraint(): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "Registration_camperId_campId_key" ON "Registration"("camperId", "campId") WHERE "deletedAt" IS NULL`
+  );
+}
 
 /**
  * `formField.list` lazily seeds an org's SYSTEM fields on first read — a
@@ -159,7 +191,10 @@ export async function deleteCamperByEmail(email: string) {
 export async function waitForOtp(email: string, timeoutMs = 10000): Promise<string> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const otp = await prisma.oTP.findUnique({ where: { email } });
+    // `email` is no longer the sole key (OTP.purpose splits login/staff-signup/
+    // password-reset codes) — tests don't care which purpose, just the most
+    // recently issued code for this email.
+    const otp = await prisma.oTP.findFirst({ where: { email }, orderBy: { expiresAt: "desc" } });
     if (otp) return otp.code;
     await new Promise((r) => setTimeout(r, 250));
   }
@@ -194,6 +229,60 @@ export function onlyVisible(locator: Locator): Locator {
 /** `onlyVisible(page.getByText(text))` — see `onlyVisible` for why this is needed. */
 export function visibleText(page: Page, text: string | RegExp) {
   return onlyVisible(page.getByText(text));
+}
+
+/**
+ * The open Drawer's panel (src/components/ui/Drawer.tsx).
+ *
+ * Use this instead of asserting `toBeVisible()` on `getByRole("dialog")`:
+ * HeadlessUI's dialog root is a zero-size `relative` wrapper whose panel is a
+ * `fixed` child, so the root has no bounding box and Playwright correctly
+ * reports it hidden — even while the drawer is fully open on screen. The
+ * failure looks like "Received: hidden", which reads as "the drawer didn't
+ * open" and sends you hunting the wrong bug.
+ *
+ * `getByRole("dialog")` is still fine for *scoping* to children
+ * (`page.getByRole("dialog").getByRole("button", …)`); it's only visibility
+ * assertions on the root that break. Same applies to Dialog.tsx, which
+ * exposes `data-testid="dialog-panel"` for the same reason.
+ */
+export function drawerPanel(page: Page): Locator {
+  return page.getByTestId("drawer-panel");
+}
+
+/**
+ * Ticks every consent declaration on the registration wizard's Review step,
+ * then leaves the page ready to submit.
+ *
+ * Declarations are fetched asynchronously (`registrationConfig.listDeclarations`
+ * in `src/app/register/[token]/steps/Review.tsx`) and mount *after* the
+ * "Review Your Registration" heading renders. Counting checkboxes as soon as
+ * that heading appears therefore misses whichever haven't arrived yet, leaving
+ * a required declaration unticked — submit is then rejected client-side with
+ * "Please accept all required declarations." and the spec fails waiting for a
+ * success message that will never come.
+ *
+ * That race was the single biggest source of wizard-spec flakiness (roughly
+ * one run in three). Waiting for the network to settle and then re-checking
+ * until every box is ticked removes it.
+ */
+export async function acceptAllDeclarations(page: Page) {
+  await page.waitForLoadState("networkidle");
+  const checkboxes = page.locator('input[type="checkbox"]');
+  await expect(checkboxes.first()).toBeVisible({ timeout: 15000 });
+  await expect
+    .poll(
+      async () => {
+        const boxes = await checkboxes.all();
+        for (const box of boxes) {
+          if (!(await box.isChecked())) await box.check();
+        }
+        const states = await Promise.all(boxes.map((b) => b.isChecked()));
+        return boxes.length > 0 && states.every(Boolean);
+      },
+      { timeout: 15000 }
+    )
+    .toBe(true);
 }
 
 export function emailInput(page: Page) {

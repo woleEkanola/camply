@@ -269,6 +269,128 @@ describe("scanRouter - processScan", () => {
     expect(distributionsPostDup).toHaveLength(1); // Should still be 1
   });
 
+  it("routine allergy notes (INFO severity) do not block scanning and are attached to the SUCCESS response", async () => {
+    await prisma.camper.update({
+      where: { id: (await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } })).camperId! },
+      data: { allergies: "Peanuts" },
+    });
+
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const result = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Pickup Point",
+    });
+
+    expect(result.result).toBe("SUCCESS");
+    if (result.result === "SUCCESS") {
+      expect(result.medicalSeverity).toBe("INFO");
+      expect(result.medicalFlags).toContain("allergies");
+    }
+  });
+
+  it("critical medical conditions (anaphylaxis) block scanning with REQUIRES_MEDICAL_ACKNOWLEDGEMENT, acknowledging proceeds", async () => {
+    await prisma.camper.update({
+      where: { id: (await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } })).camperId! },
+      data: { allergies: "Severe peanut anaphylaxis" },
+    });
+
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const blocked = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Pickup Point",
+    });
+    expect(blocked.result).toBe("REQUIRES_MEDICAL_ACKNOWLEDGEMENT");
+    if (blocked.result === "REQUIRES_MEDICAL_ACKNOWLEDGEMENT") {
+      expect(blocked.medicalSeverity).toBe("CRITICAL");
+    }
+
+    const acknowledged = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Pickup Point",
+      acknowledgedMedical: true,
+    });
+    expect(acknowledged.result).toBe("SUCCESS");
+  });
+
+  it("stationId overrides label substring-matching: a custom checkpoint named 'Lunch Gate' does not record a meal", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const result = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Lunch Gate", // label alone would substring-match "lunch" -> MEAL under legacy classification
+      stationId: "CAMP_ARRIVAL", // but the typed id says this is really an arrival checkpoint
+    });
+
+    expect(result.result).toBe("SUCCESS");
+    expect(result.actionPerformed).toBe("Checked In at Lunch Gate");
+
+    const distributions = await prisma.mealDistribution.findMany({ where: { registrationId } });
+    expect(distributions).toHaveLength(0); // no meal record should have been created
+
+    const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(reg?.status).toBe("CHECKED_IN");
+  });
+
+  it("stationId correctly classifies checkout even when the label doesn't say 'checkout'", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: { status: "CHECKED_IN", checkedInAt: new Date(), checkedInById: adminId },
+    });
+
+    const promptResult = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Front Desk",
+      stationId: "CHECKOUT",
+    });
+
+    expect(promptResult.result).toBe("REQUIRES_CHECKOUT_DETAILS");
+
+    const checkoutResult = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Front Desk",
+      stationId: "CHECKOUT",
+      checkoutDetails: { collectorName: "Bob Smith", collectorRelationship: "Father" },
+    });
+
+    expect(checkoutResult.result).toBe("SUCCESS");
+    const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(reg?.checkedOutAt).toBeTruthy();
+  });
+
   it("bulkSyncOfflineScans processes a batch of chronologically sorted offline scans", async () => {
     const caller = appRouter.createCaller({
       prisma,
@@ -312,5 +434,156 @@ describe("scanRouter - processScan", () => {
 
     const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
     expect(reg?.status).toBe("CHECKED_IN");
+  });
+
+  it("bulkSyncOfflineScans uses stationId when present, overriding label-based classification", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const response = await caller.scan.bulkSyncOfflineScans({
+      organizationId: orgId,
+      scans: [
+        {
+          qrToken,
+          station: "Lunch Gate",
+          stationId: "CAMP_ARRIVAL",
+          timestamp: new Date(2026, 6, 19, 8, 0, 0).toISOString(),
+        },
+      ],
+    });
+
+    expect(response.syncResults[0]?.status).toBe("SUCCESS");
+    const distributions = await prisma.mealDistribution.findMany({ where: { registrationId } });
+    expect(distributions).toHaveLength(0);
+  });
+
+  it("COLLECTIBLE stations record a scan without mutating registration status or writing a check-in audit entry", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const result = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Gift Bags",
+      stationId: "COLLECTIBLES",
+    });
+
+    expect(result.result).toBe("SUCCESS");
+    if (result.result === "SUCCESS") {
+      expect(result.actionPerformed).toBe("Collected Gift Bags");
+    }
+
+    // Registration must stay APPROVED — collecting a gift is not a check-in.
+    const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(reg?.status).toBe("APPROVED");
+    expect(reg?.checkedInAt).toBeNull();
+
+    const auditLogs = await prisma.auditLog.findMany({ where: { registrationId, action: "CHECK_IN_COMPLETED" } });
+    expect(auditLogs).toHaveLength(0);
+
+    const event = await prisma.scanEvent.findFirst({ where: { registrationId, station: "Gift Bags" } });
+    expect((event?.metadata as any)?.stationId).toBe("COLLECTIBLE");
+  });
+
+  it("COLLECTIBLE duplicate at the same checkpoint the same day is informational, not an error", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    await caller.scan.processScan({ organizationId: orgId, qrToken, station: "Water Station", stationId: "COLLECTIBLES" });
+    const dup = await caller.scan.processScan({ organizationId: orgId, qrToken, station: "Water Station", stationId: "COLLECTIBLES" });
+
+    expect(dup.result).toBe("DUPLICATE");
+    if (dup.result === "DUPLICATE") {
+      expect(dup.message).toBe("Water Station already collected.");
+    }
+  });
+
+  it("a different checkpoint name for the same camper on the same day is tracked separately, not a duplicate", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const first = await caller.scan.processScan({ organizationId: orgId, qrToken, station: "Gift Bags", stationId: "COLLECTIBLES" });
+    const second = await caller.scan.processScan({ organizationId: orgId, qrToken, station: "Stationery Kit", stationId: "COLLECTIBLES" });
+
+    expect(first.result).toBe("SUCCESS");
+    expect(second.result).toBe("SUCCESS");
+  });
+});
+
+describe("scanRouter - reports", () => {
+  it("getMealReport, getArrivalsReport, and getCollectiblesReport aggregate correctly for a seeded day", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    // Meals
+    await caller.scan.processScan({ organizationId: orgId, qrToken, station: "Breakfast", stationId: "BREAKFAST" });
+
+    // Arrivals — Pickup Point (a campus name) + Camp Arrival auto-triggered by the meal scan above
+    await caller.scan.processScan({ organizationId: orgId, qrToken, station: "Maryland Campus", stationId: "PICKUP_POINT" });
+
+    // Collectibles
+    await caller.scan.processScan({ organizationId: orgId, qrToken, station: "Gift Bags", stationId: "COLLECTIBLES" });
+
+    const mealReport = await caller.scan.getMealReport({ organizationId: orgId, campId });
+    expect(mealReport.breakfast).toBe(1);
+    expect(mealReport.lunch).toBe(0);
+
+    const arrivalsAll = await caller.scan.getArrivalsReport({ organizationId: orgId, campId });
+    expect(arrivalsAll.byType.PICKUP_POINT).toBe(1);
+    expect(arrivalsAll.rows.some((r) => r.station === "Maryland Campus")).toBe(true);
+    expect(arrivalsAll.total).toBeGreaterThanOrEqual(1);
+
+    const arrivalsFiltered = await caller.scan.getArrivalsReport({ organizationId: orgId, campId, stationId: "PICKUP_POINT" });
+    expect(arrivalsFiltered.total).toBe(1);
+    expect(arrivalsFiltered.rows).toHaveLength(1);
+
+    const collectiblesReport = await caller.scan.getCollectiblesReport({ organizationId: orgId, campId });
+    expect(collectiblesReport.total).toBe(1);
+    expect(collectiblesReport.rows[0]).toMatchObject({ station: "Gift Bags", count: 1 });
+  });
+
+  it("rejects a caller from another organization", async () => {
+    const otherOrg = await prisma.organization.create({ data: { name: `Other Org ${Date.now()}` } });
+    const otherAdmin = await prisma.user.create({
+      data: { email: `other-admin-${Date.now()}@test.com`, password: "x", role: "ADMIN", organizationId: otherOrg.id, firstName: "Other", lastName: "Admin" },
+    });
+
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: otherAdmin.id, email: otherAdmin.email, role: "ADMIN", organizationId: otherOrg.id },
+        expires: "",
+      },
+    });
+
+    await expect(caller.scan.getMealReport({ organizationId: orgId })).rejects.toThrow();
+
+    await prisma.user.delete({ where: { id: otherAdmin.id } });
+    await prisma.organization.delete({ where: { id: otherOrg.id } });
   });
 });

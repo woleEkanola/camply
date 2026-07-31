@@ -57,7 +57,13 @@ test.describe("Admin: edit an existing Required Document (size limit, formats)",
     await page.goto("/admin/profile-fields");
     await page.getByRole("tab", { name: "Required Documents" }).click();
 
-    const row = page.locator("div.rounded-md.border-neutral-200", { hasText: reqName });
+    // Anchored on the row's Edit button rather than its utility classes —
+    // the old `div.rounded-md.border-neutral-200` selector silently stopped
+    // matching when the border token was renamed to `border-border-default`.
+    const row = page
+      .locator("div", { hasText: reqName })
+      .filter({ has: page.getByRole("button", { name: "Edit" }) })
+      .last();
     await expect(row).toBeVisible({ timeout: 10000 });
     await expect(row.getByText("jpg,png · Up to 2 MB", { exact: false })).toBeVisible();
 

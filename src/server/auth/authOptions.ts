@@ -1,5 +1,6 @@
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import type { PrismaClient } from "@prisma/client";
 import { prisma } from "../db";
 import { verifyPassword } from "../../lib/auth";
 import { normalizeEmail } from "../../lib/email";
@@ -11,7 +12,11 @@ import { type NextAuthOptions } from "next-auth";
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT" | "TEACHER" | "VOLUNTEER";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  // Cast: PrismaAdapter's declared type predates the `omit` feature and
+  // expects a bare PrismaClient generic. It only touches Session/Account/
+  // VerificationToken/User CRUD for NextAuth's own bookkeeping — never
+  // User.password — so this doesn't bypass the global omit in practice.
+  adapter: PrismaAdapter(prisma as PrismaClient),
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -41,6 +46,7 @@ export const authOptions: NextAuthOptions = {
 
         const user = await prisma.user.findUnique({
           where: { email: normalizedEmail },
+          omit: { password: false },
         });
 
         // Reject soft-deleted AND deactivated accounts. The admin Users page
@@ -51,24 +57,30 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // OTP-based login (for parents, no password supplied)
+        // OTP-based login (for parents, no password supplied). Shared by the
+        // login and staff-signup OTP flows (same reasoning as
+        // verify-otp/route.ts) — PASSWORD_RESET codes are deliberately never
+        // checked here.
         if (credentials.otp) {
-          // Check OTP in the OTP table
-          const otpRecord = await prisma.oTP.findUnique({ where: { email: normalizedEmail } });
+          const otpRecord = await prisma.oTP.findFirst({
+            where: { email: normalizedEmail, purpose: { in: ["LOGIN", "STAFF_SIGNUP"] } },
+            orderBy: { expiresAt: "desc" },
+          });
           if (!otpRecord) return null;
+          const otpKey = { email_purpose: { email: normalizedEmail, purpose: otpRecord.purpose } };
           if (otpRecord.expiresAt.getTime() < Date.now() || otpRecord.attempts >= MAX_OTP_ATTEMPTS) {
             return null;
           }
           if (!otpEqual(otpRecord.code, normalizeOtp(credentials.otp))) {
             // Count the failed attempt so the code can't be brute-forced
             await prisma.oTP.update({
-              where: { email: normalizedEmail },
+              where: otpKey,
               data: { attempts: { increment: 1 } },
             });
             return null;
           }
           // OTP is valid, delete it (one-time use)
-          await prisma.oTP.delete({ where: { email: normalizedEmail } });
+          await prisma.oTP.delete({ where: otpKey });
           // Successful auth — reset the failed-attempt counter for this email.
           clearRateLimit(loginKey);
           // Only allow login for valid roles (including PARENT, TEACHER, VOLUNTEER)

@@ -3,9 +3,9 @@ import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
 import { sendStaffApprovedEmail, sendStaffRejectedEmail } from "../../email/sendStaffEmails";
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { normalizeEmail } from "../../../lib/email";
+import { hashPassword } from "../../../lib/auth";
 import { isCompleteNigerianPhone } from "../../../lib/phone";
 
 
@@ -108,11 +108,13 @@ export const staffRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
       const where = { organizationId: input.organizationId, campId: input.campId, type: input.type, deletedAt: null };
-      const [total, pending, approved, assigned] = await Promise.all([
+      const [total, pending, approved, assigned, male, female] = await Promise.all([
         ctx.prisma.staffProfile.count({ where }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "PENDING" } }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED" } }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED", assignedVenueId: { not: null } } }),
+        ctx.prisma.staffProfile.count({ where: { ...where, gender: "Male" } }),
+        ctx.prisma.staffProfile.count({ where: { ...where, gender: "Female" } }),
       ]);
 
       const result: Record<string, any> = {
@@ -120,6 +122,8 @@ export const staffRouter = createTRPCRouter({
         pending,
         approved,
         assigned,
+        male,
+        female,
         unassigned: Math.max(approved - assigned, 0),
       };
 
@@ -677,7 +681,7 @@ export const staffRouter = createTRPCRouter({
         }
       }
 
-      const placeholderPassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+      const placeholderPassword = await hashPassword(crypto.randomBytes(32).toString("hex"));
       const firstName = systemValues.firstName || "";
       const lastName = systemValues.lastName || "";
       const phone = systemValues.phone || "";

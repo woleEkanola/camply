@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import { TRPCError } from "@trpc/server";
+import { Prisma } from "@prisma/client";
 import { assertOrgAdmin, assertOrgAdminOrCampusRep } from "../trpc/scoping";
 
 // Schema for campus data validation
@@ -24,13 +25,80 @@ const campusSchema = z.object({
   organizationId: z.string(),
 });
 
+function isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+function formatUniqueErrorMessage(meta: Record<string, unknown> | undefined): string {
+  const target = meta?.target;
+  const fields = Array.isArray(target) ? target : [];
+  if (fields.includes("slug")) {
+    return "This campus name/URL is already in use by another organization. Please use a different name.";
+  }
+  if (fields.includes("name") || fields.includes("Campus_organizationId_name_key")) {
+    return "A campus with this name already exists in your organization.";
+  }
+  return "A campus with this name or URL already exists.";
+}
+
+async function assertCampusNameAvailable(
+  organizationId: string,
+  name: string,
+  excludeId?: string
+): Promise<void> {
+  const existing = await prisma.campus.findFirst({
+    where: {
+      organizationId,
+      name,
+      deletedAt: null,
+      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+    },
+  });
+  if (existing) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "A campus with this name already exists in your organization.",
+    });
+  }
+}
+
+async function assertCampusSlugAvailable(slug: string, excludeId?: string): Promise<void> {
+  const existing = await prisma.campus.findFirst({
+    where: {
+      slug,
+      deletedAt: null,
+      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+    },
+  });
+  if (existing) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "This campus name/URL is already in use by another organization. Please use a different name.",
+    });
+  }
+}
+
 export const campusRouter = createTRPCRouter({
   // Create a new campus
   create: protectedProcedure
     .input(campusSchema)
     .mutation(async ({ input, ctx }) => {
       await assertOrgAdmin(ctx, input.organizationId);
-      return prisma.campus.create({ data: input });
+
+      await assertCampusNameAvailable(input.organizationId, input.name);
+      await assertCampusSlugAvailable(input.slug);
+
+      try {
+        return await prisma.campus.create({ data: input });
+      } catch (err) {
+        if (isUniqueConstraintError(err)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: formatUniqueErrorMessage(err.meta),
+          });
+        }
+        throw err;
+      }
     }),
 
   // Get all campuses for an organization
@@ -97,7 +165,25 @@ export const campusRouter = createTRPCRouter({
       await assertOrgAdmin(ctx, campus.organizationId);
 
       const { organizationId, ...rest } = input.data;
-      return prisma.campus.update({ where: { id: input.id }, data: rest });
+
+      if (rest.name && rest.name !== campus.name) {
+        await assertCampusNameAvailable(campus.organizationId, rest.name, campus.id);
+      }
+      if (rest.slug && rest.slug !== campus.slug) {
+        await assertCampusSlugAvailable(rest.slug, campus.id);
+      }
+
+      try {
+        return await prisma.campus.update({ where: { id: input.id }, data: rest });
+      } catch (err) {
+        if (isUniqueConstraintError(err)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: formatUniqueErrorMessage(err.meta),
+          });
+        }
+        throw err;
+      }
     }),
 
   // Delete a campus (soft delete — recoverable from Trash for 60 days; cascades

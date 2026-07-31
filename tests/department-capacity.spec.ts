@@ -114,7 +114,9 @@ test.describe("Department capacity ('quota') for camp-role signup", () => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/volunteers");
 
-    await page.getByRole("button", { name: "+ Add Volunteer" }).click();
+    // The leading "+" is a PlusIcon now, not text, so it isn't part of the
+    // button's accessible name (StaffListPage.tsx:318).
+    await page.getByRole("button", { name: "Add Volunteer" }).click();
 
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Email Address").fill(emailAdmin);

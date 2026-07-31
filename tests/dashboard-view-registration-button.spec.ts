@@ -1,6 +1,13 @@
 import { test, expect } from "@playwright/test";
 import bcrypt from "bcryptjs";
-import { prisma, getFixtureOrgContext, loginWithPassword, resetSystemFieldDefaults } from "./helpers";
+import {
+  prisma,
+  getFixtureOrgContext,
+  loginWithPassword,
+  resetSystemFieldDefaults,
+  relaxRequiredCustomFields,
+  restoreRequiredCustomFields,
+} from "./helpers";
 
 /**
  * Covers the reported bug: clicking "View Registration" on a dashboard
@@ -21,10 +28,17 @@ test.describe("Dashboard: View Registration button actually navigates", () => {
   const parentPassword = "password123";
   let camperId: string;
   let registrationId: string;
+  let relaxedFields: { id: string; required: boolean }[] = [];
 
   test.beforeAll(async () => {
     const { organizationId, campId, campusId } = await getFixtureOrgContext();
     await resetSystemFieldDefaults("CAMPER");
+    // isCamperComplete() (dashboard/page.tsx:101) counts *every* visible+required
+    // field, CUSTOM ones included. Admin-defined custom fields accumulate on the
+    // shared fixture org, and any one of them left required makes this camper
+    // "incomplete" — which swaps the card's action to "Complete Profile" and
+    // makes "View Registration" genuinely absent.
+    relaxedFields = await relaxRequiredCustomFields("CAMPER");
     const hashed = await bcrypt.hash(parentPassword, 10);
     const parent = await prisma.user.create({
       data: { email: parentEmail, password: hashed, role: "PARENT", organizationId, active: true, firstName: "E2E", lastName: "ViewBtn" },
@@ -56,6 +70,7 @@ test.describe("Dashboard: View Registration button actually navigates", () => {
     await prisma.registration.deleteMany({ where: { id: registrationId } });
     await prisma.camper.deleteMany({ where: { id: camperId } });
     await prisma.user.deleteMany({ where: { email: parentEmail } });
+    await restoreRequiredCustomFields(relaxedFields);
   });
 
   test("clicking the dashboard card's View Registration button navigates to the registration detail page", async ({ page }) => {

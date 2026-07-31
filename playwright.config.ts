@@ -5,7 +5,12 @@ const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./tests",
-  fullyParallel: true,
+  // fullyParallel makes tests inside a single file run concurrently. With the
+  // shared fixture org and long-running browser sessions, that produces state
+  // collisions and, on Windows, native-module heap corruption (e.g., canvas/
+  // qrcode used by ID-card routes) when many tests run back-to-back. Run every
+  // test serially; workers:1 already keeps the file level sequential.
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   // One local retry (CI gets two) absorbs the connection-pool-exhaustion /
   // cold-compile login-timeout flakes that surface deep into a long
@@ -37,7 +42,12 @@ export default defineConfig({
       use: {
         ...devices["Pixel 5"],
         launchOptions: {
-          args: ["--window-size=390,844"],
+          args: [
+            "--window-size=390,844",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--no-sandbox",
+          ],
         },
       },
     },

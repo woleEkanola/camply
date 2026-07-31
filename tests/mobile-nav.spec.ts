@@ -19,7 +19,7 @@ test.describe("Bottom tab nav — mobile", () => {
     // Curated 4 destinations + trailing "More" (getBottomNavItems("admin")).
     await expect(nav.getByRole("link", { name: "Dashboard" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Registrations" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Check-in" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "QR Scan" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Campers" })).toBeVisible();
     const moreButton = nav.getByRole("button", { name: "More" });
     await expect(moreButton).toBeVisible();

@@ -4,7 +4,18 @@ import { calculateAge } from "./age";
 
 export { calculateAge };
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
+
+const NIGERIA_OFFSET_HOURS = 1; // WAT, no DST
+
+/** Returns end-of-day (23:59:59.999) in WAT for the given UTC date so
+ *  registration closes at 11:59 PM Nigerian time on the configured day
+ *  rather than midnight UTC (which is 1:00 AM WAT). */
+function endOfDayLocal(closeDate: Date): Date {
+  const d = new Date(closeDate);
+  d.setUTCHours(24 - NIGERIA_OFFSET_HOURS - 1, 59, 59, 999);
+  return d;
+}
 
 export interface ValidationFailure {
   step: string;
@@ -58,7 +69,7 @@ export async function validateSubmission(
     if (camp.registrationOpensAt && now < camp.registrationOpensAt) {
       failures.push({ step: "camp", code: "REGISTRATION_NOT_OPEN_YET", message: "Registration has not opened yet." });
     }
-    if (camp.registrationClosesAt && now > camp.registrationClosesAt) {
+    if (camp.registrationClosesAt && now > endOfDayLocal(camp.registrationClosesAt)) {
       failures.push({ step: "camp", code: "REGISTRATION_CLOSED", message: "Registration has closed." });
     }
   }
@@ -124,7 +135,14 @@ export async function validateSubmission(
     }
   }
 
-  // Step 6: Duplicate detection (also enforced by a DB unique constraint)
+  // Step 6: Duplicate detection. Also enforced by a DB partial unique index
+  // (Registration_camperId_campId_key, prisma/migrations/20260728000000_partial_unique_indexes)
+  // as the real backstop against the race this check alone can't close —
+  // createDraft's findFirst-then-reuse below has the same gap between check
+  // and write. That index has no status exclusion (unlike this check), but
+  // createDraft/resubmitRegistration always operate on the same existing row
+  // rather than creating a second one, so the two never actually disagree in
+  // the normal flow.
   const duplicate = await tx.registration.findFirst({
     where: {
       camperId: camper.id,

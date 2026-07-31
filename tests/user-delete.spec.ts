@@ -43,7 +43,7 @@ test.describe("Admin: User soft-delete blocks login and lands in Trash", () => {
     await loginButton(page).click();
 
     await expect(
-      page.locator("div.bg-red-100:visible", { hasText: /invalid|incorrect|failed/i })
+      page.locator("div.status-danger:visible", { hasText: /invalid|incorrect|failed/i })
     ).toBeVisible({ timeout: 10000 });
     await expect(page).not.toHaveURL(/\/(admin|campus-rep-dashboard)/);
 

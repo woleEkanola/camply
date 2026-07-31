@@ -12,11 +12,20 @@ export async function POST(req: NextRequest) {
 
     const normalizedEmail = normalizeEmail(email);
 
-    // Find OTP record for this email
-    const otpRecord = await prisma.oTP.findUnique({ where: { email: normalizedEmail } });
+    // This endpoint is shared by the parent/teacher/volunteer login flow
+    // (send-otp, create-and-send-otp) and the staff-signup flow
+    // (staff/send-otp) — neither passes which purpose it's verifying, so
+    // check both. PASSWORD_RESET is deliberately excluded: that flow is
+    // handled entirely by forgot-password/reset-password and a login
+    // verification must never be satisfiable by a password-reset code.
+    const otpRecord = await prisma.oTP.findFirst({
+      where: { email: normalizedEmail, purpose: { in: ["LOGIN", "STAFF_SIGNUP"] } },
+      orderBy: { expiresAt: "desc" },
+    });
     if (!otpRecord) {
       return NextResponse.json({ message: "Invalid or expired OTP." }, { status: 401 });
     }
+    const otpKey = { email_purpose: { email: normalizedEmail, purpose: otpRecord.purpose } };
 
     // Check expiry and attempt limit
     if (
@@ -29,7 +38,7 @@ export async function POST(req: NextRequest) {
     // Constant-time comparison; count failed attempts to block brute force
     if (!otpEqual(otpRecord.code, normalizeOtp(otp))) {
       await prisma.oTP.update({
-        where: { email: normalizedEmail },
+        where: otpKey,
         data: { attempts: { increment: 1 } },
       });
       return NextResponse.json({ message: "Invalid or expired OTP." }, { status: 401 });

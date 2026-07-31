@@ -19,6 +19,18 @@ enum UserRole {
   VOLUNTEER
 }
 
+// LOGIN covers both the parent self-signup/login OTP flow and the staff
+// signup OTP flow — both are "authenticate with a mailed code" and neither
+// can escalate by sharing a bucket, since the OTP model was already a single
+// row per email (no purpose distinction at all) before this enum existed.
+// PASSWORD_RESET is kept strictly isolated: a code issued to reset a
+// password must never double as a login code, and vice versa.
+enum OtpPurpose {
+  LOGIN
+  PASSWORD_RESET
+  STAFF_SIGNUP
+}
+
 enum PermissionType {
   CREATE_CAMPUS
   READ_CAMPUS
@@ -163,8 +175,9 @@ model Campus {
   updatedAt DateTime  @updatedAt
 
   // Uniqueness on (organizationId, name) is enforced by a partial unique index
-  // (WHERE "deletedAt" IS NULL) added by hand in the migration SQL, not by
-  // Prisma's schema-level @@unique — see the soft-delete migration notes.
+  // (WHERE "deletedAt" IS NULL) — Campus_organizationId_name_key, added by
+  // prisma/migrations/20260728000000_partial_unique_indexes, not by Prisma's
+  // schema-level @@unique — see the soft-delete migration notes.
   @@index([organizationId, name])
   @@index([deletedAt])
 }
@@ -203,7 +216,8 @@ model Venue {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  // Partial unique index (WHERE "deletedAt" IS NULL) — Venue_campId_name_key,
+  // added by prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([campId, name])
   @@index([deletedAt])
 }
@@ -244,7 +258,9 @@ model FormField {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
-  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  // Partial unique index (WHERE "deletedAt" IS NULL) —
+  // FormField_organizationId_audience_name_key, added by
+  // prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([organizationId, audience, name])
   @@index([organizationId, audience, sortOrder])
   @@index([deletedAt])
@@ -390,7 +406,9 @@ model Camp {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  // Partial unique indexes (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  // Partial unique indexes (WHERE "deletedAt" IS NULL) —
+  // Camp_organizationId_name_key and Camp_organizationId_slug_key, added by
+  // prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([organizationId, name])
   @@index([organizationId, slug])
   @@index([deletedAt])
@@ -428,11 +446,20 @@ model TeacherCampusQuota {
   @@index([campId])
 }
 
+// Composite PK (email, purpose) — added by
+// prisma/migrations/20260729000100_otp_purpose (enum in
+// 20260729000000_otp_purpose_enum first, split per CLAUDE.md's migration
+// rules since the enum is used in the same change). One email can hold up
+// to 3 concurrent OTPs (one per purpose) rather than a single row that
+// login/staff-signup/password-reset all silently clobber.
 model OTP {
-  email     String   @id
+  email     String
+  purpose   OtpPurpose @default(LOGIN)
   code      String
   expiresAt DateTime
-  attempts  Int      @default(0)
+  attempts  Int        @default(0)
+
+  @@id([email, purpose])
 }
 
 model Registration {
@@ -512,8 +539,13 @@ model Registration {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration —
+  // Partial unique index (WHERE "deletedAt" IS NULL) — Registration_camperId_campId_key,
+  // added by prisma/migrations/20260728000000_partial_unique_indexes —
   // lets a camper re-register for the same camp after a prior registration was soft-deleted.
+  // Note: this makes two simultaneously-live registrations for the same
+  // camper+camp impossible going forward, regardless of status. The
+  // camperId-based branch of computeDuplicateGroups (src/server/api/routers/registration.ts)
+  // can therefore only ever match rows that predate this migration.
   @@index([camperId, campId])
   @@index([campusId, status])
   @@index([venueId, status])
@@ -673,7 +705,10 @@ model Tribe {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  // Partial unique indexes (WHERE "deletedAt" IS NULL) — Tribe_campId_name_key
+  // and Tribe_campId_code_key (the latter also requires "code" IS NOT NULL,
+  // since it's optional), added by
+  // prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([campId, name])
   @@index([campId, code])
   @@index([deletedAt])
@@ -849,7 +884,8 @@ model StaffProfile {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  // Partial unique index (WHERE "deletedAt" IS NULL) — StaffProfile_userId_campId_key,
+  // added by prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([userId, campId])
   @@index([organizationId, type, status])
   @@index([deletedAt])
@@ -961,7 +997,9 @@ model Department {
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
-  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  // Partial unique index (WHERE "deletedAt" IS NULL) —
+  // Department_organizationId_campId_name_key, added by
+  // prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([organizationId, campId, name])
   @@index([deletedAt])
 }
@@ -979,7 +1017,8 @@ model Hostel {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  // Partial unique index (WHERE "deletedAt" IS NULL) — Hostel_venueId_name_key,
+  // added by prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([venueId, name])
   @@index([deletedAt])
 }
@@ -997,7 +1036,8 @@ model Room {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  // Partial unique index (WHERE "deletedAt" IS NULL) — Room_hostelId_name_key,
+  // added by prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([hostelId, name])
   @@index([deletedAt])
 }
@@ -1018,7 +1058,8 @@ model Bed {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  // Partial unique index (WHERE "deletedAt" IS NULL) added by hand in the migration.
+  // Partial unique index (WHERE "deletedAt" IS NULL) — Bed_roomId_label_key,
+  // added by prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([roomId, label])
   @@index([deletedAt])
 }
@@ -1189,6 +1230,7 @@ model EmailTemplate {
   content        Json               // TipTap JSON
   isDefault      Boolean            @default(false)
   active         Boolean            @default(true)
+  includeIdCard  Boolean            @default(false) // opts this template into {{camp_id_card}} substitution
   eventConfigs   EmailEventConfig[] // Events using this template
   campaigns      EmailCampaign[]
   deletedAt      DateTime?
@@ -1216,6 +1258,17 @@ model OrganizationBranding {
   facebookUrl    String?
   instagramUrl   String?
   address        String?
+  // Camp Invitation certificate email fields (Phase 2 email redesign)
+  tagline             String?      // shown under the org name in the certificate header
+  supportTitle        String?      // e.g. "Need Help?" — falls back to a hardcoded default if unset
+  supportDescription  String?      // e.g. "We're here to help."
+  footerCopyright     String?      // e.g. "© 2026 The Covenant Nation. All rights reserved."
+  phone               String?      // general org phone, distinct from supportPhone
+  xUrl                String?
+  linkedinUrl         String?
+  nextSteps           Json?        // [{ icon, title, description }] — admin-editable "What's Next" list
+  // Camp ID Card feature — org-level master switch (per-template opt-in lives on EmailTemplate.includeIdCard)
+  idCardEnabled  Boolean      @default(false)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 }
@@ -1296,6 +1349,14 @@ model EmailCampaign {
   updatedAt        DateTime        @updatedAt
   recipients       EmailRecipient[]
   sideEffects      SideEffect[]
+  // Personalized certificate-style campaigns (Phase 2 email redesign). When
+  // set, the sender resolves one recipient per APPROVED registration in
+  // personalizeCampId (not resolveAudience()'s flat user list) and renders
+  // via renderEmailWithEvent's event-assembler pipeline instead of the
+  // legacy renderEmail() TipTap-only path. Unset = today's unchanged
+  // broadcast behavior, fully backward compatible.
+  personalizeEvent String?
+  personalizeCampId String?
 
   @@index([organizationId, status])
   @@index([organizationId, createdAt])

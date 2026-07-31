@@ -52,6 +52,22 @@ export function formatRelativeTime(dateInput: Date | string | number | null | un
   return `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
+/** e.g. "1 Approved, 1 Pending" from a duplicate registration's siblings — lets
+ * an admin see at a glance what else exists for this camper without opening
+ * every row, so they know what's likely safe to delete. Null when there's
+ * nothing to show. */
+export function formatDuplicateSiblingsHint(siblings: { status: string }[] | null | undefined): string | null {
+  if (!siblings || siblings.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const s of siblings) {
+    counts.set(s.status, (counts.get(s.status) ?? 0) + 1);
+  }
+  const label = (status: string) => status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, " ");
+  return Array.from(counts.entries())
+    .map(([status, count]) => `${count} ${label(status)}`)
+    .join(", ");
+}
+
 export function shortenRegistrationNumber(regNum: string | null | undefined): string {
   if (!regNum) return "—";
   const parts = regNum.split("-");
@@ -221,8 +237,11 @@ export function MobileRegistrationCard({
                 {camperName}
               </h3>
               {registration.isDuplicate && (
-                <span className="shrink-0 inline-flex items-center rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">
-                  Duplicate
+                <span
+                  title={formatDuplicateSiblingsHint(registration.duplicateSiblings) ?? undefined}
+                  className="shrink-0 inline-flex items-center rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-600"
+                >
+                  Duplicate{formatDuplicateSiblingsHint(registration.duplicateSiblings) ? ` · ${formatDuplicateSiblingsHint(registration.duplicateSiblings)}` : ""}
                 </span>
               )}
             </div>
@@ -350,6 +369,17 @@ export function MobileRegistrationCard({
           </button>
         )}
 
+        {onQuickAction && (
+          <button
+            type="button"
+            onClick={() => onQuickAction(registration, "DELETE")}
+            className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 font-bold text-xs transition-all active:scale-98 px-2.5 border border-rose-500/30"
+            aria-label="Delete"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => onClick(registration)}
@@ -454,18 +484,6 @@ export function MobileRegistrationCard({
                   <EnvelopeIcon className="h-4 w-4 text-neutral-500" />
                   Send Email
                 </button>
-                <div className="my-1 border-t border-border-subtle" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onQuickAction?.(registration, "DELETE");
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
-                >
-                  <TrashIcon className="h-4 w-4 text-rose-500" />
-                  Delete
-                </button>
               </div>
             </>
           )}
@@ -478,13 +496,22 @@ export function MobileRegistrationCard({
 interface MobileRegistrationsViewProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  onOpenFilters: () => void;
+  /** Optional side-effect hook fired alongside opening the sheet (e.g. analytics) —
+   * the sheet itself is now self-contained and doesn't need a parent-owned open state. */
+  onOpenFilters?: () => void;
   /** The currently active filter, encoded the same way desktop encodes it:
    * a plain status ("PENDING"), a "REVIEW_*" review-state key, "FILTER_DUPLICATES", or "". */
   activeFilterKey: string;
   isTwoStep?: boolean;
   isReviewer?: boolean;
   onSelectStatusFilter: (key: string) => void;
+  /** Campus filter for the sheet's Campus <select> — omit entirely for consumers
+   * with no campus-filter concept (e.g. a single-campus rep/teacher dashboard). */
+  campusFilter?: {
+    value: string;
+    options: { value: string; label: string }[];
+    onChange: (value: string) => void;
+  };
   stats: {
     totalCount: number;
     pendingCount: number;
@@ -526,6 +553,7 @@ export function MobileRegistrationsView({
   isTwoStep = false,
   isReviewer = false,
   onSelectStatusFilter,
+  campusFilter,
   stats,
   registrations,
   selectedIds,
@@ -549,6 +577,7 @@ export function MobileRegistrationsView({
   onLoadMore,
 }: MobileRegistrationsViewProps) {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<any>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [correctionTarget, setCorrectionTarget] = useState<any>(null);
@@ -608,6 +637,8 @@ export function MobileRegistrationsView({
     { label: "Requires Action", key: "REQUIRES_ACTION", dotColor: "bg-amber-600" },
   ];
 
+  const activeFilterCount = (campusFilter?.value ? 1 : 0) + (activeFilterKey ? 1 : 0);
+
   return (
     <div className="space-y-4 pb-24">
       {/* 1. SEARCH SECTION & VIEW TOGGLE */}
@@ -636,13 +667,79 @@ export function MobileRegistrationsView({
 
         <button
           type="button"
-          onClick={onOpenFilters}
-          className="inline-flex min-h-[46px] min-w-[46px] items-center justify-center rounded-2xl border border-border-default bg-surface text-neutral-700 hover:bg-surface-hover transition-colors shadow-2xs"
-          aria-label="Filter"
+          onClick={() => {
+            setFiltersSheetOpen(true);
+            onOpenFilters?.();
+          }}
+          className="relative inline-flex min-h-[46px] min-w-[46px] items-center justify-center rounded-2xl border border-border-default bg-surface text-neutral-700 hover:bg-surface-hover transition-colors shadow-2xs"
+          aria-label="Filters"
         >
           <FunnelIcon className="h-5 w-5" />
+          {activeFilterCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-purple-600 text-[10px] font-bold text-white">
+              {activeFilterCount}
+            </span>
+          )}
         </button>
       </div>
+
+      <Dialog open={filtersSheetOpen} onClose={() => setFiltersSheetOpen(false)} title="Filters" size="sm">
+        <div className="space-y-4 p-5">
+          {campusFilter && (
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-txt-muted">Campus</label>
+              <select
+                value={campusFilter.value}
+                onChange={(e) => campusFilter.onChange(e.target.value)}
+                className="w-full min-h-[44px] rounded-lg border border-input-border bg-input-bg px-3 text-sm text-txt-primary focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+              >
+                <option value="">All Campuses</option>
+                {campusFilter.options.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-txt-muted">Status</label>
+            <select
+              data-testid="registration-status-filter"
+              value={activeFilterKey}
+              onChange={(e) => onSelectStatusFilter(e.target.value)}
+              className="w-full min-h-[44px] rounded-lg border border-input-border bg-input-bg px-3 text-sm text-txt-primary focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+            >
+              <option value="">All Statuses</option>
+              <option value="FILTER_DUPLICATES">Duplicates Only ({stats.duplicateCount ?? 0})</option>
+              {isTwoStep ? (
+                <>
+                  <option value="REVIEW_AWAITING_VETTING">Awaiting Vetting</option>
+                  <option value="REVIEW_AWAITING_FINAL">Awaiting Final Approval</option>
+                </>
+              ) : (
+                <option value="PENDING">Pending</option>
+              )}
+              {["REQUIRES_ACTION", "APPROVED", "REJECTED", "WAITLISTED", "CHECKED_IN", "COMPLETED", "CANCELLED", "ARCHIVED"].map((s) => (
+                <option key={s} value={s}>{s === "REQUIRES_ACTION" ? "Corrections Needed" : s.replace(/_/g, " ")}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                onSelectStatusFilter("");
+                campusFilter?.onChange("");
+              }}
+              className="text-sm font-medium text-accent-600 hover:underline"
+            >
+              Clear filters
+            </button>
+            <Button type="button" onClick={() => setFiltersSheetOpen(false)}>
+              Show results
+            </Button>
+          </div>
+        </div>
+      </Dialog>
 
       {/* 2. STATISTICS SUMMARY CARDS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 pt-0.5">
@@ -742,7 +839,10 @@ export function MobileRegistrationsView({
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="font-bold text-sm text-txt-primary truncate">{camperName}</span>
                     {reg.isDuplicate && (
-                      <span className="shrink-0 inline-flex items-center rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">
+                      <span
+                        title={formatDuplicateSiblingsHint(reg.duplicateSiblings) ?? undefined}
+                        className="shrink-0 inline-flex items-center rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-600"
+                      >
                         Dup
                       </span>
                     )}

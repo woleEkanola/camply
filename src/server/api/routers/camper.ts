@@ -75,8 +75,15 @@ export const camperRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
 
-      // Check if user has permission to view profiles in this organization
-      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      // Check if user has permission to view profiles in this organization.
+      // isOrgAdmin previously granted access (and "sees all, not just
+      // managed campuses" downstream) with no comparison to
+      // input.organizationId — an OWNER/ADMIN of org A could dump org B's
+      // full camper list. Only SUPER_ADMIN (org-less by design) bypasses
+      // the org check; OWNER/ADMIN still need it to match their own org.
+      const isOrgAdmin =
+        currentUser.role === "SUPER_ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === input.organizationId);
       const hasPermission =
         isOrgAdmin ||
         ((currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId);
@@ -157,9 +164,15 @@ export const camperRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
 
-      // Check if user has permission to view profiles in this organization
-      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
-      const isCampusRep = (currentUser.managedCampuses?.length ?? 0) > 0;
+      // Check if user has permission to view profiles in this organization.
+      // Both isOrgAdmin and the bare isCampusRep disjunct previously passed
+      // for ANY input.organizationId with no comparison to the caller's own
+      // org — an ADMIN/OWNER, or any user holding any managedCampuses entry
+      // at all, could list org B's campers by passing its id.
+      const isOrgAdmin =
+        currentUser.role === "SUPER_ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === input.organizationId);
+      const isCampusRep = (currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId;
       const isStaffOperational = ["TEACHER", "VOLUNTEER"].includes(currentUser.role);
       const hasPermission =
         isOrgAdmin ||
@@ -257,6 +270,49 @@ export const camperRouter = createTRPCRouter({
       }));
 
       return { items: mappedItems, nextCursor };
+    }),
+
+  // Org-wide (or campus-rep-scoped) counts for the admin campers page's stat
+  // cards — independent of whatever toolbar filters (campus/status/gender/
+  // tribe/search) are currently applied, same pattern as
+  // registration.getAdminListStats. `adminList` alone only reports however
+  // many rows are loaded client-side, not the true total.
+  getAdminListStats: protectedProcedure
+    .input(z.object({
+      organizationId: z.string(),
+      campId: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      const isCampusRep = (currentUser.managedCampuses?.length ?? 0) > 0;
+      const isStaffOperational = ["TEACHER", "VOLUNTEER"].includes(currentUser.role);
+      const hasPermission = isOrgAdmin || isCampusRep || (isStaffOperational && currentUser.organizationId === input.organizationId);
+      if (!hasPermission) throw new TRPCError({ code: "FORBIDDEN" });
+
+      const where: Record<string, any> = {
+        organizationId: input.organizationId,
+        deletedAt: null,
+        ...(!isOrgAdmin && !isStaffOperational && isCampusRep && {
+          homeCampus: { reps: { some: { id: currentUser.id } } },
+        }),
+      };
+
+      const registrationScope = { deletedAt: null, ...(input.campId && { campId: input.campId }) };
+
+      const [totalCount, maleCount, femaleCount, otherCount, inCampCount, exitedCampCount, assignedTribeCount] = await Promise.all([
+        ctx.prisma.camper.count({ where }),
+        ctx.prisma.camper.count({ where: { ...where, gender: "Male" } }),
+        ctx.prisma.camper.count({ where: { ...where, gender: "Female" } }),
+        ctx.prisma.camper.count({ where: { ...where, gender: { notIn: ["Male", "Female"] } } }),
+        ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "CHECKED_IN" } } } }),
+        ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "COMPLETED" } } } }),
+        ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, tribeId: { not: null } } } } }),
+      ]);
+
+      return { totalCount, maleCount, femaleCount, otherCount, inCampCount, exitedCampCount, assignedTribeCount };
     }),
 
   // Get campers for a specific user

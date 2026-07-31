@@ -38,6 +38,7 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
     });
   }, []);
   const isUploading = uploadingKeys.size > 0;
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const updateCamper = api.camper.update.useMutation();
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -62,6 +63,12 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [fields]);
 
+  // Guards the persist-on-change effect below from firing immediately after
+  // the load effect populates `values` from the server — without it, every
+  // teen switch would trigger an unnecessary save-back of data that was
+  // just loaded, before the user has touched anything.
+  const skipNextPersistRef = useRef(false);
+
   useEffect(() => {
     if (camperData && !loaded) {
       const initial: Record<string, unknown> = {
@@ -76,12 +83,20 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
           if (fv.value) initial[key] = fv.value;
         }
       }
+      skipNextPersistRef.current = true;
       setValues(initial);
       setLoaded(true);
     }
   }, [camperData, loaded, activeTeen]);
 
   useEffect(() => {
+    // Also clear `values`, not just `loaded` — otherwise, in the window
+    // between switching teens and the new teen's camperData query
+    // resolving, DynamicFieldGroup renders the *previous* teen's values
+    // with inputs fully enabled (only the Next button is gated on
+    // `loaded`), so a keystroke there calls handleChange -> persistToBackend
+    // and writes the previous teen's field values onto the new camper.
+    setValues({});
     setLoaded(false);
     setUploadingKeys(new Set());
   }, [activeTeen?.camperId]);
@@ -96,15 +111,24 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
         const profile: Record<string, unknown> = {};
         const fieldValues: { fieldId: string; value: string }[] = [];
 
+        // Send every field the component actually loaded or the user
+        // touched — including ones now explicitly empty — so clearing a
+        // wrong allergy or phone number really clears it in the DB rather
+        // than leaving the old value live for staff/medical to see. But
+        // skip a key that was never loaded into `newValues` at all
+        // (`undefined`, not `""`): that means this field's backend value
+        // is unknown to this render (e.g. updated out-of-band since the
+        // load effect populated `values`), and sending "" for it would
+        // silently wipe data this component never saw, not clear anything
+        // the user actually edited.
         for (const f of visibleFields) {
           const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
-          const val = newValues[key];
-          if (val !== undefined && val !== null && String(val) !== "") {
-            if (f.source === "SYSTEM" && f.systemKey) {
-              profile[f.systemKey] = val;
-            }
-            fieldValues.push({ fieldId: f.id, value: String(val) });
+          if (!(key in newValues)) continue;
+          const val = newValues[key] ?? "";
+          if (f.source === "SYSTEM" && f.systemKey) {
+            profile[f.systemKey] = val;
           }
+          fieldValues.push({ fieldId: f.id, value: String(val) });
         }
 
         await updateCamper.mutateAsync({
@@ -130,14 +154,28 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
         }
         return prev;
       });
-      setValues((prev) => {
-        const next = { ...prev, [key]: value };
-        persistToBackend(next);
-        return next;
-      });
+      setSaveError(null);
+      // persistToBackend is a side effect (schedules a debounced network
+      // call) and must not run inside the setValues updater — React can
+      // invoke an updater more than once (StrictMode, replays), which would
+      // schedule duplicate debounce timers and duplicate mutations.
+      setValues((prev) => ({ ...prev, [key]: value }));
     },
-    [activeTeen, visibleFields]
+    []
   );
+
+  // Fires the persist once per actual value change, outside the updater
+  // above. Skips the render right after the load effect populates `values`
+  // from the server (see skipNextPersistRef above).
+  useEffect(() => {
+    if (!loaded) return;
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
+    persistToBackend(values);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values, loaded]);
 
   async function handleNext() {
     if (!activeTeen) return;
@@ -181,24 +219,35 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
       return;
     }
 
-    // Final save before navigating
+    // Final save before navigating — same "send loaded/touched fields,
+    // including explicit empties, but skip never-loaded keys" fix as
+    // persistToBackend above.
     const profile: Record<string, unknown> = {};
     const fieldValues: { fieldId: string; value: string }[] = [];
 
     for (const f of visibleFields) {
       const key = f.source === "SYSTEM" ? f.systemKey! : f.id;
-      const val = values[key];
-      if (val !== undefined && val !== null && String(val) !== "") {
-        if (f.source === "SYSTEM" && f.systemKey) {
-          profile[f.systemKey] = val;
-        }
-        fieldValues.push({ fieldId: f.id, value: String(val) });
+      if (!(key in values)) continue;
+      const val = values[key] ?? "";
+      if (f.source === "SYSTEM" && f.systemKey) {
+        profile[f.systemKey] = val;
       }
+      fieldValues.push({ fieldId: f.id, value: String(val) });
     }
 
     try {
       await updateCamper.mutateAsync({ id: activeTeen.camperId, profile, fieldValues });
-    } catch {}
+      setSaveError(null);
+    } catch {
+      // Previously swallowed: the wizard advanced to Documents and marked
+      // this step complete even though the save failed, so the submitted
+      // registration could carry stale profile data the parent believed
+      // they'd already corrected.
+      setSaveStatus("error");
+      setSaveError("Could not save your changes. Please check your connection and try again.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
     dispatch({
       type: "SET_TEEN_COMPLETE",
@@ -226,6 +275,12 @@ export function StepDetails({ state, dispatch }: StepDetailsProps) {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-txt-primary">{activeTeen.firstName} {activeTeen.lastName}</h1>
       </div>
+
+      {saveError && (
+        <div className="mb-4 rounded-lg bg-danger-50 px-4 py-3">
+          <p className="text-sm text-danger-700">{saveError}</p>
+        </div>
+      )}
 
       <div className="rounded-2xl bg-surface p-6 shadow-sm">
         {!fields ? (

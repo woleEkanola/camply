@@ -10,8 +10,10 @@ Sentry.init({
   // Add optional integrations for additional features
   integrations: [Sentry.replayIntegration()],
 
-  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
+  // Was 1 (100%) with the scaffold's "adjust this value in production" note
+  // never actioned — this app handles minors' medical/contact data, so a
+  // realistic sample rate rather than tracing every single request.
+  tracesSampleRate: 0.1,
   // Enable logs to be sent to Sentry
   enableLogs: true,
 
@@ -23,11 +25,13 @@ Sentry.init({
   // Define how likely Replay events are sampled when an error occurs.
   replaysOnErrorSampleRate: 1.0,
 
+  // Was left at the scaffold's commented-out default, which transmits user
+  // identifiers and full HTTP request/response bodies to Sentry — including
+  // camper DOB, allergies, medical conditions, and parent emails, for an app
+  // handling minors' medical data.
   dataCollection: {
-    // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
-    // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#dataCollection
-    // userInfo: false,
-    // httpBodies: [],
+    userInfo: false,
+    httpBodies: [],
   },
 });
 

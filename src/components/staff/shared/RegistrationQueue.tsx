@@ -19,7 +19,7 @@ import { RegistrationDocumentPanel } from "@/components/staff/shared/Registratio
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { MobileRegistrationsView, MobileRegistrationCard } from "./MobileRegistrationsView";
+import { MobileRegistrationsView, MobileRegistrationCard, formatDuplicateSiblingsHint } from "./MobileRegistrationsView";
 import { RegistrationDetailsDrawer } from "./RegistrationDetailsDrawer";
 import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
 
@@ -225,7 +225,11 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         <div className="min-w-0">
           <div className="flex items-center gap-2 font-medium text-neutral-900">
             <span className="truncate">{row.camper?.name}</span>
-            {row.isDuplicate && <Badge tone="warning">Duplicate</Badge>}
+            {row.isDuplicate && (
+              <Badge tone="warning" title={formatDuplicateSiblingsHint(row.duplicateSiblings) ?? undefined}>
+                Duplicate{formatDuplicateSiblingsHint(row.duplicateSiblings) ? ` · ${formatDuplicateSiblingsHint(row.duplicateSiblings)}` : ""}
+              </Badge>
+            )}
           </div>
           <div className="truncate text-xs text-neutral-500">{row.camper?.user?.email}</div>
         </div>
@@ -287,7 +291,6 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         <MobileRegistrationsView
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onOpenFilters={() => {}}
           isTwoStep={isTwoStep}
           isReviewer={isReviewer}
           activeFilterKey={
@@ -668,42 +671,51 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                   </div>
                 ) : null
               }
-              actions={(row: any) =>
-                row.status === "PENDING" ? (
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {isTwoStep ? (
-                      isReviewer && isEndorsed(row.review) ? (
-                        <Button size="sm" variant="secondary" disabled>
-                          Awaiting Approval
-                        </Button>
+              actions={(row: any) => (
+                <div className="flex flex-wrap justify-end gap-2">
+                  {row.status === "PENDING" && (
+                    <>
+                      {isTwoStep ? (
+                        isReviewer && isEndorsed(row.review) ? (
+                          <Button size="sm" variant="secondary" disabled>
+                            Awaiting Approval
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            loading={endorseMutation.isPending}
+                            onClick={() => endorseMutation.mutate({ registrationId: row.id })}
+                          >
+                            Recommend
+                          </Button>
+                        )
                       ) : (
                         <Button
                           size="sm"
-                          loading={endorseMutation.isPending}
-                          onClick={() => endorseMutation.mutate({ registrationId: row.id })}
+                          loading={approveMutation.isPending}
+                          onClick={() => approveMutation.mutate({ registrationId: row.id })}
                         >
-                          Recommend
+                          Approve
                         </Button>
-                      )
-                    ) : (
+                      )}
                       <Button
                         size="sm"
-                        loading={approveMutation.isPending}
-                        onClick={() => approveMutation.mutate({ registrationId: row.id })}
+                        variant="secondary"
+                        onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
                       >
-                        Approve
+                        Reject
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                ) : null
-              }
+                    </>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => { setSelectedIds([row.id]); setBulkAction("DELETE"); }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              )}
             />
           )}
         </div>

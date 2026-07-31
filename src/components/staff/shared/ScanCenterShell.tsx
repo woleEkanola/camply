@@ -4,38 +4,34 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/utils/trpc";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { Dialog } from "@/components/ui/Dialog";
-import { Fab } from "@/components/ui/Fab";
 import { useToast } from "@/components/ui/Toast";
-import { useIsMobile } from "@/hooks/useMediaQuery";
-import { CameraScanner } from "./CameraScanner";
+import { ScannerViewport } from "@/components/scan/ScannerViewport";
+import { StationHeader } from "@/components/scan/StationHeader";
+import { StationSheet } from "@/components/scan/StationSheet";
+import { MedicalBanner } from "@/components/scan/MedicalBanner";
+import { SearchSheet } from "@/components/scan/SearchSheet";
+import { OfflineSheet } from "@/components/scan/OfflineSheet";
+import { HistorySheet } from "@/components/scan/HistorySheet";
+import { ScanTabBar } from "@/components/scan/ScanTabBar";
+import { CampusTeachersSheet } from "@/components/scan/CampusTeachersSheet";
 import { CheckoutSignaturePad } from "./CheckoutSignaturePad";
 import { useOfflineScanner } from "@/hooks/useOfflineScanner";
+import { STATIONS, resolveInitialStation, getStationLabel, type StationId } from "@/lib/stations";
+import { computeStationStats, computeStationProgress, EMPTY_SESSION_STATS, type SessionScanStats } from "@/lib/stationStats";
+import { classifyMedical } from "@/lib/medical";
+import { playScanCue, vibrateForCue } from "@/lib/scanCues";
 import {
-  QrCodeIcon,
   MagnifyingGlassIcon,
-  ArrowPathIcon,
-  CpuChipIcon,
-  MapPinIcon,
-  UserIcon,
-  HeartIcon,
-  CakeIcon,
-  ArrowLeftOnRectangleIcon,
-  XMarkIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
-  ChevronRightIcon,
-  BookOpenIcon,
-  IdentificationIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
-
-type ExtendedUser = { id: string; role: string; organizationId?: string };
+import { PhoneIcon } from "@heroicons/react/24/solid";
 
 interface RecentScan {
   registrationId: string;
@@ -45,44 +41,48 @@ interface RecentScan {
   timestamp: number;
 }
 
-const STATION_PRESETS = [
-  { id: "CAMP_ARRIVAL", name: "Camp Arrival", icon: MapPinIcon, color: "bg-emerald-500" },
-  { id: "PICKUP_POINT", name: "Pickup Point Check-in", icon: MapPinIcon, color: "bg-teal-500", customSubName: true },
-  { id: "HOSTEL_ARRIVAL", name: "Hostel Arrival", icon: MapPinIcon, color: "bg-indigo-500" },
-  { id: "BREAKFAST", name: "Breakfast Station", icon: CakeIcon, color: "bg-amber-500" },
-  { id: "LUNCH", name: "Lunch Station", icon: CakeIcon, color: "bg-orange-500" },
-  { id: "DINNER", name: "Dinner Station", icon: CakeIcon, color: "bg-rose-500" },
-  { id: "CHECKOUT", name: "Checkout Desk", icon: ArrowLeftOnRectangleIcon, color: "bg-blue-500" },
-  { id: "IDENTITY_LOOKUP", name: "Identity Lookup", icon: IdentificationIcon, color: "bg-purple-500" },
-  { id: "EMERGENCY_LOOKUP", name: "Emergency Lookup", icon: HeartIcon, color: "bg-red-500" },
-] as const;
-
 export function ScanCenterShell({
   organizationId,
   defaultStationId,
+  homeCampusId,
 }: {
   organizationId: string;
   defaultStationId?: string;
+  /** Signed-in staff member's own campus (TEACHER/VOLUNTEER only, via
+   * StaffProfile.preferredCampusId) — pre-highlighted in the Pickup Point
+   * campus picker. Admins have no personal campus and omit this. */
+  homeCampusId?: string;
 }) {
   const router = useRouter();
-  const { data: session } = useSession({ required: true, onUnauthenticated: () => router.push("/login") });
-  const currentUserRole = (session?.user as ExtendedUser)?.role || "";
-  const isVolunteer = currentUserRole === "VOLUNTEER";
+  useSession({ required: true, onUnauthenticated: () => router.push("/login") });
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
-  const isMobile = useIsMobile();
 
-  // Active Station Configuration State
-  const [activeStation, setActiveStation] = useState<string | null>(null);
+  // Active Station Configuration State. Resolution order: in-session pick >
+  // route's defaultStationId > Identity Lookup (the only read-only mode) —
+  // see resolveInitialStation in src/lib/stations.ts. There is no longer a
+  // "no station selected" landing screen; the scanner is always live.
+  const [activeStation, setActiveStation] = useState<StationId>(() =>
+    resolveInitialStation({ routeDefault: (defaultStationId as StationId) ?? null, sessionPick: null })
+  );
+  const [stationSheetOpen, setStationSheetOpen] = useState(false);
+  const [searchSheetOpen, setSearchSheetOpen] = useState(false);
+  const [offlineSheetOpen, setOfflineSheetOpen] = useState(false);
+  const [historySheetOpen, setHistorySheetOpen] = useState(false);
+  const [campusTeachersSheetOpen, setCampusTeachersSheetOpen] = useState(false);
   const [stationLocation, setStationLocation] = useState("");
   const [deviceIdentifier, setDeviceIdentifier] = useState("");
   const [customStationName, setCustomStationName] = useState("");
+  const [sessionStats, setSessionStats] = useState<SessionScanStats>(EMPTY_SESSION_STATS);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [scannerActive, setScannerActive] = useState(false);
+  const [scannerActive, setScannerActive] = useState(true);
   const [lastCacheSyncTime, setLastCacheSyncTime] = useState<string>("Never");
-  const [skipMedicalAlerts, setSkipMedicalAlerts] = useState(false);
+  // Duplicate-token guard: ignore the same decoded token within 3s even
+  // after the scanner resumes, so a badge left lingering in frame doesn't
+  // re-fire the same scan repeatedly.
+  const lastDecodedRef = useRef<{ token: string; at: number } | null>(null);
 
   // Hook for Offline capabilities
   const offlineScanner = useOfflineScanner(organizationId);
@@ -108,10 +108,12 @@ export function ScanCenterShell({
   const [timeTick, setTimeTick] = useState(Date.now());
   const [isRefreshingCache, setIsRefreshingCache] = useState(false);
 
-  // Stats query
+  // Stats query — feeds the always-visible per-station header tiles, so it
+  // stays enabled regardless of which station is active (unlike the old
+  // station-picker-only fetch).
   const { data: operationalStats, refetch: refetchStats } = api.scan.getOperationalStats.useQuery(
     { organizationId },
-    { enabled: !!organizationId && activeStation === null }
+    { enabled: !!organizationId }
   );
 
   const undoCheckInMutation = api.registration.undoCheckIn.useMutation({
@@ -125,32 +127,26 @@ export function ScanCenterShell({
     },
   });
 
-  // Load defaults from localStorage if available
+  // Device/desk settings persist across launches (they describe the
+  // hardware, not the shift) via localStorage. The active station itself
+  // is session-scoped (sessionStorage) — see resolveInitialStation above —
+  // so a fresh launch/reload never silently carries yesterday's station
+  // forward; it re-derives from the route or falls back to Identity Lookup.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const savedStation = localStorage.getItem("camply-scan-station");
     const savedLocation = localStorage.getItem("camply-scan-location");
     const savedDevice = localStorage.getItem("camply-scan-device");
-    const savedCustom = localStorage.getItem("camply-scan-custom-name");
     const savedSync = localStorage.getItem("camply-scan-last-sync");
 
-    if (defaultStationId) {
-      const preset = STATION_PRESETS.find((p) => p.id === defaultStationId);
-      if (preset) {
-        setActiveStation(preset.id);
-        if (preset.id === "PICKUP_POINT" && savedCustom) setCustomStationName(savedCustom);
-      }
-    } else if (savedStation) {
-      setActiveStation(savedStation);
-      if (savedCustom) setCustomStationName(savedCustom);
-    }
+    const sessionPick = sessionStorage.getItem("camply-scan-station") as StationId | null;
+    const savedCustom = sessionStorage.getItem("camply-scan-custom-name");
+    const resolved = resolveInitialStation({ routeDefault: (defaultStationId as StationId) ?? null, sessionPick });
+    setActiveStation(resolved);
+    if (STATIONS[resolved].customSubName && savedCustom) setCustomStationName(savedCustom);
 
     if (savedLocation) setStationLocation(savedLocation);
     if (savedDevice) setDeviceIdentifier(savedDevice);
     if (savedSync) setLastCacheSyncTime(savedSync);
-
-    const savedSkipMedical = localStorage.getItem("camply-scan-skip-medical");
-    if (savedSkipMedical) setSkipMedicalAlerts(savedSkipMedical === "true");
   }, [defaultStationId]);
 
   // Keep timers running to refresh "Undo" buttons
@@ -158,6 +154,28 @@ export function ScanCenterShell({
     const timer = setInterval(() => setTimeTick(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Auto-dismiss success/duplicate overlays so the volunteer never needs to
+  // tap through — the camera stays live underneath and resumes the instant
+  // the overlay clears. Success: 1.5s. Duplicate: 2.5s (a touch longer,
+  // since it's read for context rather than just confirmed at a glance).
+  useEffect(() => {
+    if (!successData) return;
+    const timer = setTimeout(() => {
+      setSuccessData(null);
+      setScannerActive(true);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [successData]);
+
+  useEffect(() => {
+    if (!duplicateData) return;
+    const timer = setTimeout(() => {
+      setDuplicateData(null);
+      setScannerActive(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [duplicateData]);
 
   // Keyboard shortcut: slash key focuses search, Escape closes overlays
   useEffect(() => {
@@ -173,45 +191,31 @@ export function ScanCenterShell({
         setLookupData(null);
         setEmergencyLookupData(null);
         setCheckoutTargetReg(null);
+        // Dismissing any overlay by any means must resume scanning — this
+        // was previously missed for Escape specifically, leaving the
+        // camera visible but silently paused with nothing on screen to
+        // explain why.
+        setScannerActive(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Format active station text
-  const getStationLabel = () => {
-    if (!activeStation) return "Scan Center";
-    if (activeStation === "PICKUP_POINT") return customStationName || "Pickup Point";
-    if (activeStation === "CUSTOM") return customStationName || "Custom Station";
-    const preset = STATION_PRESETS.find((p) => p.id === activeStation);
-    return preset ? preset.name : "Scanner";
-  };
+  // Active station's display label — reuses the shared station registry so
+  // the wire format sent to the scan router is unchanged.
+  const activeStationDef = STATIONS[activeStation];
+  const activeStationLabel = getStationLabel(activeStation, customStationName);
 
-  const handleStationSelect = (stationId: string) => {
+  const handleStationSelect = (stationId: StationId, subName?: string) => {
     setActiveStation(stationId);
-    localStorage.setItem("camply-scan-station", stationId);
-    if (stationId === "PICKUP_POINT" && !customStationName) {
-      setCustomStationName("Lekki Pickup Point");
-      localStorage.setItem("camply-scan-custom-name", "Lekki Pickup Point");
+    sessionStorage.setItem("camply-scan-station", stationId);
+    if (subName !== undefined) {
+      setCustomStationName(subName);
+      sessionStorage.setItem("camply-scan-custom-name", subName);
     }
-    // Launch scanner on station activation on mobile
-    if (isMobile) {
-      setScannerActive(true);
-    }
-  };
-
-  const handleChangeStation = () => {
-    setActiveStation(null);
-    setScannerActive(false);
-    localStorage.removeItem("camply-scan-station");
-  };
-
-  const handleCustomStationSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (customStationName.trim()) {
-      localStorage.setItem("camply-scan-custom-name", customStationName.trim());
-    }
+    // Camera is always live once a station is active — no launch button.
+    setScannerActive(true);
   };
 
   const handleLocationChange = (val: string) => {
@@ -222,11 +226,6 @@ export function ScanCenterShell({
   const handleDeviceChange = (val: string) => {
     setDeviceIdentifier(val);
     localStorage.setItem("camply-scan-device", val);
-  };
-
-  const handleSkipMedicalChange = (val: boolean) => {
-    setSkipMedicalAlerts(val);
-    localStorage.setItem("camply-scan-skip-medical", String(val));
   };
 
   const handleOfflineCacheRefresh = async () => {
@@ -246,22 +245,23 @@ export function ScanCenterShell({
 
   // Perform the core scan operation
   const handleScanSubmit = async (payload: { qrToken?: string; query?: string; acknowledgedMedical?: boolean; checkoutDetails?: any }) => {
-    if (!activeStation) return;
     setScannerActive(false); // pause scanner while processing
 
-    const targetStationName = getStationLabel();
+    const targetStationName = activeStationLabel;
 
     try {
       const response = await offlineScanner.executeScan({
         qrToken: payload.qrToken,
         query: payload.query,
         station: targetStationName,
+        stationId: activeStation,
         device: deviceIdentifier || undefined,
         location: stationLocation || undefined,
         acknowledgedMedical: payload.acknowledgedMedical,
-        skipMedicalAlerts,
         checkoutDetails: payload.checkoutDetails,
       });
+
+      setSessionStats((prev) => ({ ...prev, scansToday: prev.scansToday + 1 }));
 
       // A. REQUIRES CHECKOUT FORM
       if (response.result === "REQUIRES_CHECKOUT_DETAILS") {
@@ -279,8 +279,10 @@ export function ScanCenterShell({
         return;
       }
  
-      // B. REQUIRES MEDICAL ACKNOWLEDGEMENT (SERVER INTERCEPT)
+      // B. REQUIRES MEDICAL ACKNOWLEDGEMENT (SERVER INTERCEPT) — always CRITICAL severity
       if (response.result === "REQUIRES_MEDICAL_ACKNOWLEDGEMENT") {
+        playScanCue("critical");
+        vibrateForCue("critical");
         setMedicalData({
           registration: response.registration,
           qrToken: payload.qrToken,
@@ -291,6 +293,9 @@ export function ScanCenterShell({
 
       // C. DUPLICATE SCAN
       if (response.result === "DUPLICATE") {
+        playScanCue("duplicate");
+        vibrateForCue("duplicate");
+        setSessionStats((prev) => ({ ...prev, duplicates: prev.duplicates + 1 }));
         setDuplicateData({
           camperName: response.registration.camper.name,
           photoUrl: response.registration.camper.photoUrl,
@@ -316,6 +321,13 @@ export function ScanCenterShell({
           history = await utils.client.scan.getCamperScanHistory.query({ registrationId: reg.id });
         } catch {}
 
+        const medical = classifyMedical(camper);
+        setSessionStats((prev) => ({
+          ...prev,
+          lookups: prev.lookups + 1,
+          medicalViewed: prev.medicalViewed + (medical.severity !== "NONE" ? 1 : 0),
+        }));
+
         setLookupData({
           registration: reg,
           history,
@@ -324,13 +336,24 @@ export function ScanCenterShell({
       }
 
       if (activeStation === "EMERGENCY_LOOKUP") {
+        const medical = classifyMedical(camper);
+        setSessionStats((prev) => ({
+          ...prev,
+          emergencyScans: prev.emergencyScans + 1,
+          criticalAlerts: prev.criticalAlerts + (medical.severity === "CRITICAL" ? 1 : 0),
+        }));
         setEmergencyLookupData(camper);
         return;
       }
 
-      // Pre-check for Medical Alert on regular Check-ins (only if not already acknowledged - client fallback for offline)
-      const hasMedical = camper.allergies || camper.medicalConditions || camper.dietaryRestrictions;
-      if (!skipMedicalAlerts && activeStation !== "CHECKOUT" && activeStation !== "IDENTITY_LOOKUP" && activeStation !== "EMERGENCY_LOOKUP" && hasMedical && !payload.acknowledgedMedical) {
+      // Client-side medical severity fallback — only relevant offline,
+      // where useOfflineScanner's mocked response never runs the server's
+      // classification. Only CRITICAL blocks; INFO renders as an inline
+      // banner in the success overlay below, never a separate interrupt.
+      const medical = "medicalSeverity" in response && response.medicalSeverity
+        ? { severity: response.medicalSeverity, flags: response.medicalFlags ?? [] }
+        : classifyMedical(camper);
+      if (activeStation !== "CHECKOUT" && medical.severity === "CRITICAL" && !payload.acknowledgedMedical) {
         setMedicalData({
           registration: reg,
           qrToken: payload.qrToken,
@@ -351,7 +374,10 @@ export function ScanCenterShell({
         ...prev.slice(0, 9),
       ]);
 
-      // Show large success overlay
+      // Show success overlay — auto-dismisses; a non-critical medical note
+      // (if any) renders inline via MedicalBanner rather than interrupting.
+      playScanCue("success");
+      vibrateForCue("success");
       setSuccessData({
         camperName: camper.name,
         photoUrl: camper.photoUrl,
@@ -362,6 +388,8 @@ export function ScanCenterShell({
         room: reg.room?.name,
         bed: reg.bed?.label,
         teacherName: reg.teacher?.name,
+        medicalFlags: medical.severity === "INFO" ? medical.flags : [],
+        camper,
       });
 
     } catch (err: any) {
@@ -371,6 +399,10 @@ export function ScanCenterShell({
   };
 
   const handleScanSuccess = (decodedText: string) => {
+    const now = Date.now();
+    const last = lastDecodedRef.current;
+    if (last && last.token === decodedText && now - last.at < 3000) return;
+    lastDecodedRef.current = { token: decodedText, at: now };
     handleScanSubmit({ qrToken: decodedText });
   };
 
@@ -421,248 +453,97 @@ export function ScanCenterShell({
     }
   };
 
+  const stationStats = computeStationStats(activeStation, activeStationDef.stats, operationalStats, sessionStats);
+  const stationProgress = computeStationProgress(activeStation, operationalStats);
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      
-      {/* ═══ TOP STATUS HEADERS ═══ */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border-subtle pb-4">
-        <div>
-          <PageHeader title={getStationLabel()} />
-        </div>
-        
-        {/* Offline & Cache Indicators */}
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge tone={offlineScanner.isOnline ? "success" : "warning"}>
-            <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
-            {offlineScanner.isOnline ? "Online" : "Offline Mode"}
-          </Badge>
-          
-          {offlineScanner.offlineQueueCount > 0 && (
-            <Badge tone="info" className="animate-pulse">
-              {offlineScanner.offlineQueueCount} unsynced scans
-            </Badge>
-          )}
-
-          {!offlineScanner.isOnline && offlineScanner.offlineQueueCount > 0 && (
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={<ArrowPathIcon className="h-3 w-3" />}
-              loading={offlineScanner.isSyncing}
-              onClick={() => offlineScanner.syncOfflineQueue()}
-            >
-              Sync Queue
-            </Button>
-          )}
-
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<CpuChipIcon className="h-3 w-3" />}
-            loading={isRefreshingCache}
-            onClick={handleOfflineCacheRefresh}
-          >
-            Cache offline ({lastCacheSyncTime})
-          </Button>
-        </div>
+    <div data-scan-root className="mx-auto max-w-4xl space-y-6">
+      {/* ═══ STATION DASHBOARD — the most obvious element on screen; always
+          visible, color-coded per station, so a volunteer knows exactly
+          which operational mode the device is in without reading anything. ═══ */}
+      <div className="-mx-4 -mt-4 sm:mx-0 sm:mt-0 sm:rounded-xl overflow-hidden">
+        <StationHeader
+          station={activeStationDef}
+          label={activeStationLabel}
+          stats={stationStats}
+          progress={stationProgress}
+          onOpenSheet={() => setStationSheetOpen(true)}
+        />
       </div>
 
-      {/* ═══ VIEW 1: STATION SELECTOR ═══ */}
-      {activeStation === null && (
-        <div className="space-y-6 animate-fade-in">
-          
-          {/* Operations Live Metrics Widget */}
-          {operationalStats && !isVolunteer && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="bg-surface border-border-default">
-                <CardBody className="p-4 text-center">
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Total Registered</span>
-                  <span className="text-2xl font-black text-neutral-900">{operationalStats.registered}</span>
-                </CardBody>
-              </Card>
-              <Card className="bg-surface border-border-default">
-                <CardBody className="p-4 text-center">
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">In Camp (Arrived)</span>
-                  <span className="text-2xl font-black text-emerald-600">{operationalStats.checkedIn}</span>
-                </CardBody>
-              </Card>
-              <Card className="bg-surface border-border-default">
-                <CardBody className="p-4 text-center">
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Pending Arrival</span>
-                  <span className="text-2xl font-black text-neutral-500">{operationalStats.pendingArrival}</span>
-                </CardBody>
-              </Card>
-              <Card className="bg-surface border-border-default">
-                <CardBody className="p-4 text-center">
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-txt-muted">Departed (Checked-out)</span>
-                  <span className="text-2xl font-black text-blue-600">{operationalStats.checkedOutCount}</span>
-                </CardBody>
-              </Card>
-            </div>
-          )}
+      <StationSheet
+        open={stationSheetOpen}
+        onClose={() => setStationSheetOpen(false)}
+        currentStationId={activeStation}
+        onSelect={handleStationSelect}
+        organizationId={organizationId}
+        homeCampusId={homeCampusId}
+        stationLocation={stationLocation}
+        onLocationChange={handleLocationChange}
+        deviceIdentifier={deviceIdentifier}
+        onDeviceChange={handleDeviceChange}
+      />
 
-          {/* Meals Stats Summary */}
-          {operationalStats && !isVolunteer && (
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-amber-50 rounded-xl p-3 border border-amber-100 text-center">
-                <span className="block text-[10px] uppercase font-bold text-amber-600">Breakfast Served</span>
-                <span className="text-lg font-black text-amber-800">{operationalStats.breakfastCount}</span>
-              </div>
-              <div className="bg-orange-50 rounded-xl p-3 border border-orange-100 text-center">
-                <span className="block text-[10px] uppercase font-bold text-orange-600">Lunch Served</span>
-                <span className="text-lg font-black text-orange-800">{operationalStats.lunchCount}</span>
-              </div>
-              <div className="bg-rose-50 rounded-xl p-3 border border-rose-100 text-center">
-                <span className="block text-[10px] uppercase font-bold text-rose-600">Dinner Served</span>
-                <span className="text-lg font-black text-rose-800">{operationalStats.dinnerCount}</span>
-              </div>
-            </div>
-          )}
+      {/* Offline status — collapsed to a single tappable chip; sync/cache
+          are maintenance actions handled in the OfflineSheet, not
+          permanent header controls. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => setOfflineSheetOpen(true)}>
+          <Badge tone={offlineScanner.isOnline ? "success" : "warning"}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
+            {offlineScanner.isOnline ? "Online" : `Offline · ${offlineScanner.offlineQueueCount} waiting`}
+          </Badge>
+        </button>
+      </div>
 
-          {/* Configuration Form */}
-          <Card className="border-border-default bg-neutral-50/50">
-            <CardBody className="p-6 space-y-4">
-              <h3 className="text-sm font-bold text-neutral-700 uppercase tracking-wider">Device & Desk Config</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="Station Location / Gate"
-                  placeholder="e.g. Lekki Bus, Gate A, Desk 3"
-                  value={stationLocation}
-                  onChange={(e) => handleLocationChange(e.target.value)}
-                />
-                <Input
-                  label="Device Identifier"
-                  placeholder="e.g. Volunteer iPhone 14, Kitchen iPad 1"
-                  value={deviceIdentifier}
-                  onChange={(e) => handleDeviceChange(e.target.value)}
-                />
-              </div>
+      <OfflineSheet
+        open={offlineSheetOpen}
+        onClose={() => setOfflineSheetOpen(false)}
+        isOnline={offlineScanner.isOnline}
+        offlineQueueCount={offlineScanner.offlineQueueCount}
+        isSyncing={offlineScanner.isSyncing}
+        onSyncNow={() => offlineScanner.syncOfflineQueue()}
+        isRefreshingCache={isRefreshingCache}
+        onRefreshCache={handleOfflineCacheRefresh}
+        lastCacheSyncTime={lastCacheSyncTime}
+      />
 
-              <div className="flex items-center gap-3 bg-surface p-3 rounded-lg border border-border-default shadow-sm mt-2">
-                <input
-                  type="checkbox"
-                  id="skipMedicalAlerts"
-                  checked={skipMedicalAlerts}
-                  onChange={(e) => handleSkipMedicalChange(e.target.checked)}
-                  className="h-4.5 w-4.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
-                />
-                <div className="leading-tight">
-                  <label htmlFor="skipMedicalAlerts" className="text-sm font-bold text-neutral-700 select-none cursor-pointer block">
-                    Disable Medical Alerts Warning Screen
-                  </label>
-                  <span className="text-xs text-txt-muted">Ignore warnings and automatically proceed with scans.</span>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
+      <SearchSheet
+        open={searchSheetOpen}
+        onClose={() => setSearchSheetOpen(false)}
+        onSearch={(query) => handleScanSubmit({ query })}
+      />
 
-          {/* Station Preset Grid */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold text-neutral-700 uppercase tracking-wider">Select Active Station</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {STATION_PRESETS.map((preset) => {
-                const Icon = preset.icon;
-                return (
-                  <button
-                    key={preset.id}
-                    onClick={() => handleStationSelect(preset.id)}
-                    className="flex items-center gap-4 p-4 bg-surface border border-border-default hover:border-accent-500 hover:shadow-md rounded-xl transition text-left group"
-                  >
-                    <div className={`p-3 rounded-lg text-white ${preset.color} transition-transform group-hover:scale-105`}>
-                      <Icon className="h-6 w-6" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="block font-bold text-neutral-900 truncate">{preset.name}</span>
-                      <span className="block text-xs text-txt-muted">Tap to start scans</span>
-                    </div>
-                    <ChevronRightIcon className="h-4 w-4 text-neutral-300 group-hover:text-accent-500 transition-colors" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      <HistorySheet
+        open={historySheetOpen}
+        onClose={() => setHistorySheetOpen(false)}
+        scans={recentScans}
+        timeTick={timeTick}
+        activeStation={activeStation}
+        allowsUndo={activeStationDef.allowsUndo}
+        isUndoing={undoCheckInMutation.isPending}
+        onUndo={(registrationId) =>
+          undoCheckInMutation.mutate({ registrationId, reason: "Volunteer operator error / duplicate sync correction" })
+        }
+      />
 
-          {/* Custom Station Configuration Option */}
-          <Card className="border-border-default">
-            <CardBody className="p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="flex items-center gap-3">
-                <BookOpenIcon className="h-6 w-6 text-txt-muted" />
-                <div>
-                  <span className="block font-bold text-neutral-900">Custom Attendance / Event Checkpoint</span>
-                  <span className="block text-xs text-txt-muted">e.g. Bible Study, Swimming, Bus Boarding</span>
-                </div>
-              </div>
-              <form onSubmit={handleCustomStationSave} className="flex gap-2 w-full sm:w-auto">
-                <Input
-                  placeholder="Enter checkpoint name..."
-                  value={customStationName}
-                  onChange={(e) => setCustomStationName(e.target.value)}
-                  containerClassName="flex-1 sm:w-60"
-                  className="h-10"
-                />
-                <Button type="button" onClick={() => handleStationSelect("CUSTOM")}>
-                  Select
-                </Button>
-              </form>
-            </CardBody>
-          </Card>
+      <div className="space-y-6 animate-fade-in pb-20 md:pb-0">
+        {/* Scanner Viewport — always live once a station is active, never
+            gated behind a launch button; stays mounted through result
+            overlays (paused, not stopped) so resuming is instant. */}
+        <div className="max-w-md mx-auto w-full">
+          <ScannerViewport
+            enabled
+            paused={!scannerActive}
+            onDecode={handleScanSuccess}
+            className="aspect-video md:aspect-square w-full rounded-xl border border-neutral-800 shadow-2xl"
+          />
         </div>
-      )}
 
-      {/* ═══ VIEW 2: ACTIVE SCANNING PLATFORM ═══ */}
-      {activeStation !== null && (
-        <div className="space-y-6 animate-fade-in">
-          
-          {/* Station Panel Header */}
-          <div className="flex items-center justify-between p-4 bg-neutral-900 text-white rounded-xl shadow-md border border-neutral-800">
-            <div className="flex items-center gap-3">
-              <span className="h-3.5 w-3.5 rounded-full bg-accent-500 animate-pulse" />
-              <div>
-                <span className="block font-black text-lg">{getStationLabel()}</span>
-                {stationLocation && (
-                  <span className="block text-xs text-txt-muted">Location: {stationLocation}</span>
-                )}
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="bg-surface/10 hover:bg-surface/20 text-white border-none font-bold"
-              onClick={handleChangeStation}
-            >
-              Change Station
-            </Button>
-          </div>
-
-          {/* Scanner Card Viewport */}
-          <Card className="overflow-hidden border-border-default">
-            <CardBody className="p-6 text-center space-y-4">
-              <div className="max-w-md mx-auto">
-                <Button
-                  size="lg"
-                  className="w-full flex items-center justify-center gap-2 h-14 text-lg font-bold shadow-md bg-accent-600 hover:bg-accent-700 text-white border-none"
-                  onClick={() => setScannerActive((prev) => !prev)}
-                >
-                  <QrCodeIcon className="h-6 w-6" />
-                  {scannerActive ? "Close Camera Scanner" : "Launch Camera Scanner"}
-                </Button>
-                <p className="mt-1.5 text-xs text-txt-muted">Allows instant hands-free camper lookup/check-in</p>
-              </div>
-
-              {scannerActive && (
-                <div className="pt-2">
-                  <CameraScanner
-                    active={scannerActive}
-                    onScanSuccess={handleScanSuccess}
-                    onScanFailure={(err) => console.log("Scanner loop:", err)}
-                  />
-                </div>
-              )}
-            </CardBody>
-          </Card>
-
-          {/* Fallback Manual Query Search */}
-          <Card className="border-border-default">
+        {/* Search is the exception path — a floating icon + sheet on
+            mobile (see ScanTabBar), a persistent field on desktop where
+            there's room and a keyboard ([/] shortcut retained). */}
+        <Card className="hidden md:block border-border-default">
             <CardBody className="p-4">
               <form onSubmit={handleSearchSubmit} className="flex gap-3">
                 <div className="relative flex-1">
@@ -684,53 +565,38 @@ export function ScanCenterShell({
             </CardBody>
           </Card>
 
-          {/* Recent Scans Activity Logs & Quick Undo Timer (30s) */}
+          {/* Compact recent-activity strip — last 4, auto-updates after
+              every scan. Full session history + undo lives in HistorySheet
+              via the "View all" trigger / History tab. */}
           {recentScans.length > 0 && (
             <Card className="border-border-default">
               <CardBody className="p-6 space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-wider text-txt-muted">
-                  Recent Station Activity
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-txt-muted">Recent Activity</h3>
+                  <button
+                    type="button"
+                    onClick={() => setHistorySheetOpen(true)}
+                    className="text-xs font-bold text-accent-600 hover:underline"
+                  >
+                    View all
+                  </button>
+                </div>
                 <div className="divide-y divide-neutral-100">
-                  {recentScans.map((scan) => {
-                    const elapsedSeconds = Math.floor((timeTick - scan.timestamp) / 1000);
-                    const isUndoable = elapsedSeconds < 30 && activeStation !== "CHECKOUT" && !activeStation.includes("LOOKUP");
-                    const remainingSeconds = 30 - elapsedSeconds;
-
-                    return (
-                      <div key={scan.registrationId} className="py-3 flex items-center justify-between text-sm">
-                        <div>
-                          <span className="font-bold text-neutral-900 block">{scan.name}</span>
-                          <span className="text-xs text-neutral-500">
-                            {scan.registrationNumber} · {scan.station} at{" "}
-                            {new Date(scan.timestamp).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        {isUndoable && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold border-none"
-                            loading={undoCheckInMutation.isPending}
-                            onClick={() =>
-                              undoCheckInMutation.mutate({
-                                registrationId: scan.registrationId,
-                                reason: "Volunteer operator error / duplicate sync correction",
-                              })
-                            }
-                          >
-                            Undo ({remainingSeconds}s)
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {recentScans.slice(0, 4).map((scan) => (
+                    <div key={`${scan.registrationId}-${scan.timestamp}`} className="py-2.5 flex items-center justify-between text-sm">
+                      <span className="font-bold text-neutral-900">{scan.name}</span>
+                      <span className="text-xs text-neutral-500">
+                        {scan.station} · {new Date(scan.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </CardBody>
             </Card>
           )}
         </div>
-      )}
+
+      <ScanTabBar onHistory={() => setHistorySheetOpen(true)} onSearch={() => setSearchSheetOpen(true)} />
 
       {/* ═══ OVERLAY 1: SUCCESS FEEDBACK OVERLAY ═══ */}
       {successData && (
@@ -754,7 +620,7 @@ export function ScanCenterShell({
               <img
                 src={successData.photoUrl}
                 alt={successData.camperName}
-                className="h-32 w-32 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
               />
             )}
 
@@ -785,7 +651,11 @@ export function ScanCenterShell({
               )}
             </div>
 
-            <p className="text-xs opacity-60">Tapping anywhere will skip and return to scanning</p>
+            {successData.medicalFlags?.length > 0 && (
+              <MedicalBanner flags={successData.medicalFlags} camper={successData.camper} />
+            )}
+
+            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
           </div>
         </div>
       )}
@@ -803,7 +673,7 @@ export function ScanCenterShell({
             <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
             
             <div className="space-y-2">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight">Already Recorded</h1>
+              <h1 className="text-4xl md:text-5xl font-black tracking-tight">{STATIONS[activeStation].duplicateVerb}</h1>
               <p className="text-2xl md:text-3xl font-bold opacity-90">{duplicateData.camperName}</p>
               <p className="text-sm font-semibold tracking-wider opacity-75 uppercase">{duplicateData.regNumber}</p>
             </div>
@@ -812,7 +682,7 @@ export function ScanCenterShell({
               <img
                 src={duplicateData.photoUrl}
                 alt={duplicateData.camperName}
-                className="h-32 w-32 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
               />
             )}
 
@@ -847,7 +717,7 @@ export function ScanCenterShell({
               )}
             </div>
 
-            <p className="text-xs opacity-60">Tapping anywhere will return to scanning</p>
+            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
           </div>
         </div>
       )}
@@ -873,7 +743,7 @@ export function ScanCenterShell({
                 <img
                   src={emergencyLookupData.photoUrl}
                   alt={emergencyLookupData.name}
-                  className="h-32 w-32 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                  className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
                 />
               </div>
             )}
@@ -922,23 +792,29 @@ export function ScanCenterShell({
 
       {/* ═══ OVERLAY 4: CAMPER DETAILS LOOKUP OVERLAY ═══ */}
       {lookupData && (
-        <div
-          onClick={() => {
-            setLookupData(null);
-            setScannerActive(true);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-purple-900 p-6 text-white cursor-pointer overflow-y-auto"
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-purple-900 p-6 text-white overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => {
+              setLookupData(null);
+              setScannerActive(true);
+            }}
+            aria-label="Close"
+            className="fixed right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
+          >
+            <XMarkIcon className="h-6 w-6" />
+          </button>
+
           <div className="flex flex-col max-w-xl w-full space-y-6 py-6 text-left">
             <div className="flex items-center gap-4 border-b border-white/10 pb-4">
               {lookupData.registration.camper.photoUrl ? (
                 <img
                   src={lookupData.registration.camper.photoUrl}
                   alt={lookupData.registration.camper.name}
-                  className="h-20 w-20 rounded-2xl object-cover border-2 border-white/20 shadow-md"
+                  className="h-32 w-32 rounded-2xl object-cover border-2 border-white/20 shadow-md shrink-0"
                 />
               ) : (
-                <div className="h-20 w-20 rounded-2xl bg-surface/15 flex items-center justify-center text-3xl font-black">
+                <div className="h-32 w-32 rounded-2xl bg-surface/15 flex items-center justify-center text-4xl font-black shrink-0">
                   {lookupData.registration.camper.name.charAt(0)}
                 </div>
               )}
@@ -1021,18 +897,72 @@ export function ScanCenterShell({
               </div>
             </div>
 
-            <p className="text-xs text-center opacity-40">Tapping anywhere will return to scanning</p>
+            {/* Campus rep contact + full teacher list — reach anyone from
+                this camper's campus quickly in an emergency. */}
+            {lookupData.registration.campus?.id && (
+              <div className="border-t border-white/10 pt-4 space-y-3">
+                <span className="block text-xs uppercase opacity-65 font-bold">Campus Contacts</span>
+                {(lookupData.registration.campus.reps ?? []).length === 0 && (
+                  <p className="text-xs opacity-50">No campus rep on file.</p>
+                )}
+                {(lookupData.registration.campus.reps ?? []).map((rep: any) => {
+                  const repName = [rep.firstName, rep.lastName].filter(Boolean).join(" ") || "Campus Rep";
+                  return (
+                    <div key={rep.id} className="flex items-center justify-between gap-3 bg-surface/5 border border-white/5 rounded-lg p-3">
+                      <div className="min-w-0">
+                        <span className="block text-xs uppercase opacity-60 font-semibold">Campus Rep</span>
+                        <span className="block font-bold truncate">{repName}</span>
+                      </div>
+                      {rep.phone ? (
+                        <a
+                          href={`tel:${rep.phone}`}
+                          className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white min-h-[44px] shrink-0"
+                        >
+                          <PhoneIcon className="h-4 w-4" />
+                          Call
+                        </a>
+                      ) : (
+                        <span className="text-xs opacity-50 shrink-0">No phone on file</span>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <Button
+                  variant="secondary"
+                  className="w-full bg-transparent hover:bg-surface/10 text-white border border-white/20"
+                  onClick={() => setCampusTeachersSheetOpen(true)}
+                >
+                  More — View campus teachers
+                </Button>
+              </div>
+            )}
+
+            <p className="text-xs text-center opacity-40">Tap the X to return to scanning</p>
           </div>
         </div>
       )}
 
-      {/* ═══ OVERLAY 5: MEDICAL PRE-VERIFICATION OVERLAY ═══ */}
+      {lookupData?.registration.campus?.id && (
+        <CampusTeachersSheet
+          open={campusTeachersSheetOpen}
+          onClose={() => setCampusTeachersSheetOpen(false)}
+          organizationId={organizationId}
+          campusId={lookupData.registration.campus.id}
+          campusName={lookupData.registration.campus.name}
+        />
+      )}
+
+      {/* ═══ OVERLAY 5: CRITICAL MEDICAL INTERRUPT — only genuinely
+          life-safety CRITICAL conditions reach this overlay (see
+          src/lib/medical.ts classifyMedical); everything else renders as
+          an inline MedicalBanner in the success overlay instead. ═══ */}
       {medicalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-amber-600 p-6 text-white overflow-y-auto">
+        <div role="alertdialog" aria-live="assertive" className="fixed inset-0 z-50 flex items-center justify-center bg-red-700 p-6 text-white overflow-y-auto">
           <div className="flex flex-col max-w-xl w-full text-center space-y-6 py-6">
             <div className="flex flex-col items-center space-y-3">
-              <ExclamationTriangleIcon className="h-20 w-20 text-amber-100 animate-bounce" />
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight">⚠ Medical & safety alert</h1>
+              <ExclamationTriangleIcon className="h-20 w-20 text-red-100 animate-bounce" />
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight">⚠ Critical Medical Alert</h1>
               <p className="text-xl md:text-2xl font-bold opacity-95">{medicalData.registration.camper.name}</p>
             </div>
 
@@ -1040,13 +970,13 @@ export function ScanCenterShell({
               {medicalData.registration.camper.allergies && (
                 <div>
                   <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Allergies</span>
-                  <span className="font-bold text-lg text-amber-50">{medicalData.registration.camper.allergies}</span>
+                  <span className="font-bold text-lg text-red-50">{medicalData.registration.camper.allergies}</span>
                 </div>
               )}
               {medicalData.registration.camper.medicalConditions && (
                 <div>
                   <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Medical Conditions</span>
-                  <span className="font-bold text-lg text-amber-50">{medicalData.registration.camper.medicalConditions}</span>
+                  <span className="font-bold text-lg text-red-50">{medicalData.registration.camper.medicalConditions}</span>
                 </div>
               )}
               {medicalData.registration.camper.dietaryRestrictions && (
@@ -1060,7 +990,7 @@ export function ScanCenterShell({
             <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full">
               <Button
                 size="lg"
-                className="flex-1 bg-surface text-amber-700 hover:bg-surface-raised font-bold py-4 text-base border-none shadow-lg"
+                className="flex-1 bg-surface text-red-700 hover:bg-surface-raised font-bold py-4 text-base border-none shadow-lg"
                 onClick={() => {
                   const payload = {
                     qrToken: medicalData.qrToken,
@@ -1195,10 +1125,6 @@ export function ScanCenterShell({
         </div>
       )}
 
-      {/* Floating Action Button to launch scanner without scrolling */}
-      {!scannerActive && activeStation !== null && !successData && !duplicateData && !checkoutTargetReg && !medicalData && !lookupData && !emergencyLookupData && (
-        <Fab icon={<QrCodeIcon className="h-6 w-6" />} label="Scan camper" onClick={() => setScannerActive(true)} />
-      )}
     </div>
   );
 }

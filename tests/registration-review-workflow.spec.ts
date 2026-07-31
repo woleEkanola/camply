@@ -50,7 +50,9 @@ test.describe("Registration Review Workflow", () => {
     await page.locator("table tbody tr").first().click();
     await expect(page.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 5000 });
 
-    await expect(page.getByRole("dialog").getByRole("button", { name: "More Actions" })).toBeVisible();
+    // The drawer's overflow trigger is aria-labelled "More options" (see
+    // RegistrationDetailsDrawer.tsx) — "More Actions" was never a real label.
+    await expect(page.getByRole("dialog").getByLabel("More options")).toBeVisible();
   });
 
   test("P4: Clicking More Actions opens the StatusDialog", async ({ page }) => {
@@ -60,9 +62,9 @@ test.describe("Registration Review Workflow", () => {
     await page.locator("table tbody tr").first().click();
     await expect(page.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 5000 });
 
-    await page.getByRole("dialog").getByRole("button", { name: "More Actions" }).click();
+    await page.getByRole("dialog").getByLabel("More options").click();
 
-    await expect(page.getByRole("heading", { name: "Change Status" })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("dialog").getByText("Change Status")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Approve").first()).toBeVisible();
   });
 

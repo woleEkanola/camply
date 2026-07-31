@@ -31,6 +31,7 @@ test.describe("Wizard upload gating and retry-safe submit", () => {
   let campId: string;
   let organizationId: string;
   let relaxedCustomFields: { id: string; required: boolean }[] = [];
+  let requirementId: string;
 
   test.beforeAll(async () => {
     const ctx = await getFixtureOrgContext();
@@ -38,6 +39,21 @@ test.describe("Wizard upload gating and retry-safe submit", () => {
     campId = ctx.campId;
     await resetSystemFieldDefaults("CAMPER");
     relaxedCustomFields = await relaxRequiredCustomFields("CAMPER");
+
+    // This spec's whole point is verifying the Documents step gates Next on
+    // an uploaded required doc — it can't rely on the shared fixture camp
+    // already having a required DocumentRequirement (the org's active camp
+    // rotates across sessions, and a freshly-activated camp starts with
+    // none), so seed one of our own.
+    const requirement = await prisma.documentRequirement.create({
+      data: {
+        campId,
+        name: `E2E Upload Gating Requirement ${Date.now()}`,
+        required: true,
+        scope: "CAMPER",
+      },
+    });
+    requirementId = requirement.id;
 
     // The photoUrl SYSTEM field ships hidden by default — make it visible so
     // the Details step actually renders the "Photo Of Teen" upload field.
@@ -73,6 +89,10 @@ test.describe("Wizard upload gating and retry-safe submit", () => {
     if (campusId) {
       await prisma.signupLink.deleteMany({ where: { campusId } });
       await prisma.campus.deleteMany({ where: { id: campusId } });
+    }
+    if (requirementId) {
+      await prisma.document.deleteMany({ where: { requirementId } });
+      await prisma.documentRequirement.deleteMany({ where: { id: requirementId } });
     }
   });
 
@@ -128,7 +148,10 @@ test.describe("Wizard upload gating and retry-safe submit", () => {
     await signUpAndAddTeen(page, "Photo", "Teen");
 
     // Empty-state avatar placeholder box next to the photo upload button.
-    const photoLabel = page.getByText("Photo", { exact: true });
+    // The label is admin-editable and this fixture org renamed it to "Photo Of
+    // Teen"; resetSystemFieldDefaults() deliberately doesn't reset labels, so
+    // match the prefix rather than pinning the exact string.
+    const photoLabel = page.getByText(/^Photo\b/).first();
     await expect(photoLabel).toBeVisible({ timeout: 10000 });
     const uploadButton = page.getByRole("button", { name: "Upload File" });
     await expect(uploadButton).toBeVisible();

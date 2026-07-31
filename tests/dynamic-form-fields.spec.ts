@@ -74,18 +74,20 @@ test.describe("Dynamic admin-driven registration fields + document validation", 
   test("document upload mutation rejects oversized files server-side", async () => {
     const { campId } = await getFixtureOrgContext();
 
-    // Ensure a document requirement exists for this camp
-    let req = await prisma.documentRequirement.findFirst({
-      where: { campId, deletedAt: null },
+    // Create a dedicated requirement rather than reading whichever one
+    // happens to be first: the fixture camp holds real admin-created
+    // requirements whose limits have legitimately been edited away from the
+    // defaults, so findFirst made this assert on arbitrary data.
+    const req = await prisma.documentRequirement.create({
+      data: { campId, name: `e2e-size-check-${Date.now()}`, acceptedFormats: "jpg,png", maxSizeMb: 2 },
     });
-    if (!req) {
-      req = await prisma.documentRequirement.create({
-        data: { campId, name: "Test Doc", acceptedFormats: "jpg,png", maxSizeMb: 2 },
-      });
-    }
 
-    expect(req.maxSizeMb).toBe(2);
-    expect(req.acceptedFormats).toBe("jpg,png");
+    try {
+      expect(req.maxSizeMb).toBe(2);
+      expect(req.acceptedFormats).toBe("jpg,png");
+    } finally {
+      await prisma.documentRequirement.deleteMany({ where: { id: req.id } });
+    }
   });
 
   test("dashboard create camper shows all admin-configured custom fields", async ({ page }) => {

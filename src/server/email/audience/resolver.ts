@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { AudienceFilter } from "./filters";
 
-type TxClient = PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+type TxClient = PrismaClient<any> | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
 
 export interface ResolvedUser {
   id: string;

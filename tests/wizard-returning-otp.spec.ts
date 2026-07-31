@@ -82,9 +82,9 @@ test.describe("Wizard returning-user OTP sign-in", () => {
     // Resend must also actually hit send-otp and rotate the code.
     await page.getByRole("button", { name: "Resend" }).click();
     await expect
-      .poll(async () => (await prisma.oTP.findUnique({ where: { email: parentEmail } }))?.code, { timeout: 10000 })
+      .poll(async () => (await prisma.oTP.findUnique({ where: { email_purpose: { email: parentEmail, purpose: "LOGIN" } } }))?.code, { timeout: 10000 })
       .not.toBe(firstCode);
-    const secondCode = (await prisma.oTP.findUniqueOrThrow({ where: { email: parentEmail } })).code;
+    const secondCode = (await prisma.oTP.findUniqueOrThrow({ where: { email_purpose: { email: parentEmail, purpose: "LOGIN" } } })).code;
 
     for (let i = 0; i < 6; i++) {
       await page.getByLabel(`Digit ${i + 1} of 6`).fill(secondCode[i]);
@@ -104,7 +104,7 @@ test.describe("Wizard returning-user OTP sign-in", () => {
 async function waitForOtpWithRetryHint(email: string): Promise<string> {
   const start = Date.now();
   while (Date.now() - start < 15000) {
-    const otp = await prisma.oTP.findUnique({ where: { email } });
+    const otp = await prisma.oTP.findUnique({ where: { email_purpose: { email, purpose: "LOGIN" } } });
     if (otp) return otp.code;
     await new Promise((r) => setTimeout(r, 250));
   }

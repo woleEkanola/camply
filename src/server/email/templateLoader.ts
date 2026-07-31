@@ -27,33 +27,53 @@ export async function loadTemplateForEvent(
     include: { template: true },
   });
 
-  if (!config || !config.enabled) return null;
+  // If an admin explicitly disabled this event, don't send.
+  if (config && !config.enabled) return null;
 
   const branding = await prisma.organizationBranding.findUnique({
     where: { organizationId },
   });
 
+  const brandingData = branding
+    ? {
+        senderName: branding.senderName,
+        logoUrl: branding.logoUrl,
+        primaryColor: branding.primaryColor,
+        accentColor: branding.accentColor,
+        buttonColor: branding.buttonColor,
+        headerImageUrl: branding.headerImageUrl,
+        footerText: branding.footerText,
+        supportEmail: branding.supportEmail,
+        supportPhone: branding.supportPhone,
+        websiteUrl: branding.websiteUrl,
+        facebookUrl: branding.facebookUrl,
+        instagramUrl: branding.instagramUrl,
+        address: branding.address,
+      }
+    : null;
+
+  // No config yet — use the built-in defaults so emails work out of the box.
+  if (!config) {
+    const defaultTemplate = DEFAULT_TEMPLATES[event];
+    if (!defaultTemplate) return null;
+    return {
+      subject: defaultTemplate.subject,
+      previewText: defaultTemplate.previewText,
+      tiptapJson: defaultTemplate.content as Record<string, unknown>,
+      branding: brandingData,
+      enabled: true,
+      channels: ["EMAIL", "IN_APP"],
+      senderMode: "ORG_SLUG",
+      customFromLocalPart: null,
+      replyTo: null,
+    };
+  }
+
   return {
     subject: config.template?.subject ?? getDefaultSubject(event),
     previewText: config.template?.previewText ?? DEFAULT_TEMPLATES[event]?.previewText ?? null,
     tiptapJson: (config.template?.content as Record<string, unknown>) ?? getDefaultContent(event),
-    branding: branding
-      ? {
-          senderName: branding.senderName,
-          logoUrl: branding.logoUrl,
-          primaryColor: branding.primaryColor,
-          accentColor: branding.accentColor,
-          buttonColor: branding.buttonColor,
-          headerImageUrl: branding.headerImageUrl,
-          footerText: branding.footerText,
-          supportEmail: branding.supportEmail,
-          supportPhone: branding.supportPhone,
-          websiteUrl: branding.websiteUrl,
-          facebookUrl: branding.facebookUrl,
-          instagramUrl: branding.instagramUrl,
-          address: branding.address,
-        }
-      : null,
+    branding: brandingData,
     enabled: config.enabled,
     channels: config.channels as string[],
     senderMode: config.senderMode,

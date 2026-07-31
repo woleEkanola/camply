@@ -29,8 +29,17 @@ export function ImportPanel({ organizationId }: { organizationId: string }) {
   const [validated, setValidated] = useState<ValidatedBundle | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
+  const utils = api.useUtils();
   const importMutation = api.importExport.import.useMutation({
-    onSuccess: (data) => setImportResult(data),
+    // Previously never invalidated anything — newly imported campuses/
+    // tribes/departments didn't show up in /admin/campuses, /admin/*/tribes,
+    // or any dropdown until a hard reload.
+    onSuccess: (data) => {
+      setImportResult(data);
+      void utils.campus.getByOrganization.invalidate();
+      void utils.tribe.listByCamp.invalidate();
+      void utils.department.list.invalidate();
+    },
   });
 
   const totals = validated

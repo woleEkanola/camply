@@ -703,4 +703,75 @@ describe("document action workflow", () => {
     expect(actions[1]?.status).toBe("REQUIRES_ACTION");
     expect(actions[1]?.reason).toBe("Second issue");
   });
+
+  it("advanceFromRequiresAction resets a stale endorsement so a subsequent endorse isn't a silent no-op", async () => {
+    await prisma.organization.update({ where: { id: orgId }, data: { approvalWorkflow: "TWO_STEP" } });
+    const pending = await makePending();
+    await engine.endorseRegistration({ registrationId: pending.id, actorId: parentId });
+
+    const requirement = await makeRequirement();
+    const document = await makeDocument(pending.id, requirement.id);
+    await engine.flagDocumentRequiresAction({
+      documentId: document.id,
+      registrationId: pending.id,
+      actorId: adminId,
+      reason: "Need clearer copy",
+    });
+
+    const advanced = await engine.advanceFromRequiresAction({ registrationId: pending.id, actorId: adminId });
+    expect(advanced.status).toBe("PENDING");
+
+    const review = await prisma.registrationReview.findUnique({ where: { registrationId: pending.id } });
+    expect(review?.verificationStatus).toBe("NOT_STARTED");
+    expect(review?.recommendation).toBeNull();
+  });
+
+  it("advanceIfDocumentActionsResolved moves a registration back to PENDING once its only flagged document is resolved", async () => {
+    const pending = await makePending();
+    const requirement = await makeRequirement();
+    const document = await makeDocument(pending.id, requirement.id);
+    await engine.flagDocumentRequiresAction({
+      documentId: document.id,
+      registrationId: pending.id,
+      actorId: adminId,
+      reason: "Blurry photo",
+    });
+
+    await prisma.documentAction.updateMany({
+      where: { documentId: document.id, status: "REQUIRES_ACTION" },
+      data: { status: "RESOLVED", resolvedAt: new Date(), resolvedById: adminId, resolutionType: "PARENT_UPLOAD" },
+    });
+
+    const result = await prisma.$transaction((tx) =>
+      engine.advanceIfDocumentActionsResolved(tx, { registrationId: pending.id, actorId: parentId })
+    );
+    expect(result.status).toBe("PENDING");
+    expect((result as any).correctionRequest).toBeNull();
+
+    // The now-resolved registration is a legal PENDING once more — approve doesn't reject it.
+    const approved = await engine.approveRegistration({ registrationId: pending.id, actorId: adminId });
+    expect(approved.status).toBe("APPROVED");
+  });
+
+  it("advanceIfDocumentActionsResolved leaves the registration at REQUIRES_ACTION while another flagged document is still unresolved", async () => {
+    const pending = await makePending();
+    const requirement = await makeRequirement();
+    const docA = await makeDocument(pending.id, requirement.id);
+    const requirement2 = await makeRequirement();
+    const docB = await makeDocument(pending.id, requirement2.id);
+
+    await engine.flagDocumentRequiresAction({ documentId: docA.id, registrationId: pending.id, actorId: adminId, reason: "Issue A" });
+    await engine.flagDocumentRequiresAction({ documentId: docB.id, registrationId: pending.id, actorId: adminId, reason: "Issue B" });
+
+    // Resolve only docA's action.
+    await prisma.documentAction.updateMany({
+      where: { documentId: docA.id, status: "REQUIRES_ACTION" },
+      data: { status: "RESOLVED", resolvedAt: new Date(), resolvedById: adminId, resolutionType: "PARENT_UPLOAD" },
+    });
+
+    const result = await prisma.$transaction((tx) =>
+      engine.advanceIfDocumentActionsResolved(tx, { registrationId: pending.id, actorId: parentId })
+    );
+    expect(result.status).toBe("REQUIRES_ACTION");
+  });
 });

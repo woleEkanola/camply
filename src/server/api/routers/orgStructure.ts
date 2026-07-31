@@ -232,7 +232,10 @@ export const orgStructureRouter = createTRPCRouter({
   getPersonProfile: protectedProcedure
     .input(z.object({ staffProfileId: z.string() }))
     .query(async ({ ctx, input }) => {
-      assertStaffModuleAccess(ctx);
+      const currentUser = assertStaffModuleAccess(ctx);
+      // The one procedure in this file missing assertOrgAccess (every
+      // sibling has it) — any staff-module user could read any other org's
+      // staff profile by id, including full camper assignment details.
       const profile = await ctx.prisma.staffProfile.findUnique({
         where: { id: input.staffProfileId },
         include: {
@@ -249,6 +252,7 @@ export const orgStructureRouter = createTRPCRouter({
         },
       });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+      assertOrgAccess(currentUser, profile.organizationId);
       return profile;
     }),
 

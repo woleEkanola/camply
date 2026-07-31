@@ -184,7 +184,12 @@ test.describe("Two-step registration approval", () => {
     await row.click();
 
     await expect(page.getByRole("heading", { name: "Registration Details" })).toBeVisible({ timeout: 5000 });
-    await page.getByRole("dialog").getByRole("button", { name: "More Actions" }).click();
+    // Drawer overflow trigger is aria-labelled "More options" (see
+    // RegistrationDetailsDrawer.tsx) — "More Actions" was never a real label.
+    await page.getByRole("dialog").getByLabel("More options").click();
+    // The override warning lives inside StatusDialog, which the menu's
+    // "Change Status" item opens — the menu itself doesn't render it.
+    await page.getByRole("dialog").getByText("Change Status").click();
     await expect(page.getByText("This registration has not been recommended by a campus rep")).toBeVisible({ timeout: 5000 });
     await page.getByRole("button", { name: "Approve Registration" }).click();
 

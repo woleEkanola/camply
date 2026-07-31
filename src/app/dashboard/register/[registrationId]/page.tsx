@@ -417,6 +417,17 @@ export default function RegistrationWizardPage() {
                 </svg>
                 Download Acceptance Letter
               </a>
+              <a
+                href={`/api/registrations/${registration.id}/camp-id-card.pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-white border border-accent-600 px-6 text-sm font-semibold text-accent-700 shadow hover:bg-accent-50 transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.32 0h1.125c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-3 0c-4.257.715-7.5 4.416-7.5 8.876v5.625c0 .621.504 1.125 1.125 1.125H6.34" />
+                </svg>
+                Generate Printable Camp ID Cards
+              </a>
             </div>
           )}
 

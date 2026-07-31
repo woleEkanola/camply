@@ -3,7 +3,7 @@ import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { logEvent } from "../../audit";
 import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
-import { flagDocumentRequiresAction } from "../../registration/engine";
+import { flagDocumentRequiresAction, advanceIfDocumentActionsResolved } from "../../registration/engine";
 
 export const documentRouter = createTRPCRouter({
   listForRegistration: protectedProcedure
@@ -277,45 +277,55 @@ export const documentRouter = createTRPCRouter({
         });
       }
 
-      const oldDocument = await ctx.prisma.document.findUniqueOrThrow({
-        where: { id: input.replacingDocumentId },
-        include: { documentActions: { where: { status: "REQUIRES_ACTION" } } },
-      });
-      if (oldDocument.registrationId !== registration.id || oldDocument.requirementId !== requirement.id) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Document to replace does not match this registration/requirement." });
-      }
-
-      const newDocument = await ctx.prisma.document.create({
-        data: {
-          requirementId: requirement.id,
-          camperId: requirement.scope === "CAMPER" ? registration.camperId : null,
-          registrationId: requirement.scope === "REGISTRATION" ? registration.id : null,
-          url: input.url,
-          fileName: input.fileName,
-          fileType: input.fileType,
-          fileSize: input.fileSize,
-          uploadedById: currentUser.id,
-        },
-      });
-
-      await ctx.prisma.document.update({ where: { id: oldDocument.id }, data: { deletedAt: new Date() } });
-
-      const activeAction = oldDocument.documentActions[0];
-      if (activeAction) {
-        const resolutionType = isOwner ? "PARENT_UPLOAD" : "REP_UPLOAD";
-        await ctx.prisma.documentAction.update({
-          where: { id: activeAction.id },
-          data: { status: "RESOLVED", resolvedAt: new Date(), resolvedById: currentUser.id, resolutionType },
+      const newDocument = await ctx.prisma.$transaction(async (tx) => {
+        const oldDocument = await tx.document.findUniqueOrThrow({
+          where: { id: input.replacingDocumentId },
+          include: { documentActions: { where: { status: "REQUIRES_ACTION" } } },
         });
-      }
+        if (oldDocument.registrationId !== registration.id || oldDocument.requirementId !== requirement.id) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Document to replace does not match this registration/requirement." });
+        }
 
-      await logEvent(ctx.prisma, {
-        organizationId: registration.camper.organizationId,
-        registrationId: registration.id,
-        actorId: currentUser.id,
-        action: "DOCUMENT_REPLACED",
-        previousValue: { documentId: oldDocument.id },
-        newValue: { documentId: newDocument.id, requirement: requirement.name, replacementForId: oldDocument.id },
+        const created = await tx.document.create({
+          data: {
+            requirementId: requirement.id,
+            camperId: requirement.scope === "CAMPER" ? registration.camperId : null,
+            registrationId: requirement.scope === "REGISTRATION" ? registration.id : null,
+            url: input.url,
+            fileName: input.fileName,
+            fileType: input.fileType,
+            fileSize: input.fileSize,
+            uploadedById: currentUser.id,
+          },
+        });
+
+        await tx.document.update({ where: { id: oldDocument.id }, data: { deletedAt: new Date() } });
+
+        const activeAction = oldDocument.documentActions[0];
+        if (activeAction) {
+          const resolutionType = isOwner ? "PARENT_UPLOAD" : "REP_UPLOAD";
+          await tx.documentAction.update({
+            where: { id: activeAction.id },
+            data: { status: "RESOLVED", resolvedAt: new Date(), resolvedById: currentUser.id, resolutionType },
+          });
+        }
+
+        // The flagged document is now fixed — if no other document on this
+        // registration is still awaiting action, un-stick the registration
+        // from REQUIRES_ACTION rather than leaving it stranded until someone
+        // separately clicks "Submit"/"Advance to Review".
+        await advanceIfDocumentActionsResolved(tx, { registrationId: registration.id, actorId: currentUser.id });
+
+        await logEvent(tx, {
+          organizationId: registration.camper.organizationId,
+          registrationId: registration.id,
+          actorId: currentUser.id,
+          action: "DOCUMENT_REPLACED",
+          previousValue: { documentId: oldDocument.id },
+          newValue: { documentId: created.id, requirement: requirement.name, replacementForId: oldDocument.id },
+        });
+
+        return created;
       });
 
       return newDocument;

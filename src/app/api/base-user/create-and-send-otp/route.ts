@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/server/db";
 import { sendOtpEmail } from "@/server/email/sendOtpEmail";
 import { rateLimit } from "@/server/rateLimit";
 import { normalizeEmail } from "@/lib/email";
+import { hashPassword } from "@/lib/auth";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -27,10 +27,26 @@ export async function POST(req: NextRequest) {
 
   // Create PARENT if not exists
   let user = await prisma.user.findUnique({ where: { email } });
+
+  // For an existing account, only mint a login OTP for the roles that are
+  // actually meant to authenticate via OTP — matching the restriction
+  // send-otp/route.ts enforces. Without this, requesting an OTP for an
+  // existing SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE email here would
+  // hand out a passwordless login code for an admin account, defeating that
+  // restriction. Responds identically to the success path (no OTP sent, no
+  // error) so this can't be used to distinguish admin accounts from
+  // nonexistent ones.
+  if (user && !["PARENT", "TEACHER", "VOLUNTEER"].includes(user.role)) {
+    return NextResponse.json({ success: true });
+  }
+
   if (!user) {
-    // Placeholder password: random and hashed so it can never be used to log in
-    const placeholderPassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
-    // Lookup signup link by token if provided (to get campus and organization)
+    // Row creation requires a token that resolves to a real campus — this
+    // is an unauthenticated endpoint, so without this gate any
+    // attacker-supplied email creates a real User row regardless of whether
+    // they were ever on a genuine signup link (the existing per-email rate
+    // limit above throttles repeat calls but doesn't stop a single call
+    // from creating one).
     let organizationId = null;
     let homeCampusId = null
     if (token) {
@@ -43,6 +59,12 @@ export async function POST(req: NextRequest) {
         homeCampusId = campus.id;
       }
     }
+    if (!organizationId || !homeCampusId) {
+      return NextResponse.json({ message: "Invalid or expired registration link" }, { status: 400 });
+    }
+
+    // Placeholder password: random and hashed so it can never be used to log in
+    const placeholderPassword = await hashPassword(crypto.randomBytes(32).toString("hex"));
     user = await prisma.user.create({
       data: {
         email,
@@ -60,9 +82,9 @@ export async function POST(req: NextRequest) {
 
   // Save OTP to database (associate with user/email)
   await prisma.oTP.upsert({
-    where: { email },
+    where: { email_purpose: { email, purpose: "LOGIN" } },
     update: { code: otp, expiresAt, attempts: 0 },
-    create: { email, code: otp, expiresAt },
+    create: { email, purpose: "LOGIN", code: otp, expiresAt },
   });
 
   // Resolve org slug for the from address

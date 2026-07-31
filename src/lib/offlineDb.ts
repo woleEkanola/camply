@@ -40,6 +40,10 @@ export interface QueuedScan {
   qrToken?: string;
   query?: string;
   station: string;
+  /** Typed station identity (see src/lib/stations.ts), passed alongside the
+   * display-label `station` so the server can classify by id instead of
+   * substring-matching a free-text label. Optional/additive. */
+  stationId?: string;
   timestamp: string; // ISO string
   device?: string;
   location?: string;

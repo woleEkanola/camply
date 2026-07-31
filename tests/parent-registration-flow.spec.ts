@@ -7,6 +7,7 @@ import {
   resetSystemFieldDefaults,
   relaxRequiredCustomFields,
   restoreRequiredCustomFields,
+  acceptAllDeclarations,
 } from "./helpers";
 
 function byLabel(page: Page, labelText: string) {
@@ -185,12 +186,7 @@ test.describe("Parent Teen Registration", () => {
       timeout: 5000,
     });
 
-    const checkboxes = page.locator('input[type="checkbox"]');
-    const cbCount = await checkboxes.count();
-    for (let i = 0; i < cbCount; i++) {
-      await checkboxes.nth(i).check();
-    }
-
+    await acceptAllDeclarations(page);
     await page.getByRole("button", { name: "Submit Registration" }).click();
 
     // ── Confirmation ──

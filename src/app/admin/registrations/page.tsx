@@ -31,7 +31,7 @@ import { downloadBlob, exportUserDataToXlsx } from "@/lib/import-export/serializ
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
-import { MobileRegistrationCard, MobileRegistrationsView } from "@/components/staff/shared/MobileRegistrationsView";
+import { MobileRegistrationCard, MobileRegistrationsView, formatDuplicateSiblingsHint } from "@/components/staff/shared/MobileRegistrationsView";
 import { RegistrationDetailsDrawer } from "@/components/staff/shared/RegistrationDetailsDrawer";
 
 type ExtendedUser = {
@@ -72,7 +72,6 @@ function RegistrationsPage() {
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedRegistration, setSelectedRegistration] = useState<string | null>(null);
   const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -427,8 +426,8 @@ function RegistrationsPage() {
             <div className="flex items-center gap-2 font-medium text-neutral-900">
               <span>{row.camper?.name}</span>
               {row.isDuplicate && (
-                <Badge tone="warning">
-                  Duplicate
+                <Badge tone="warning" title={formatDuplicateSiblingsHint(row.duplicateSiblings) ?? undefined}>
+                  Duplicate{formatDuplicateSiblingsHint(row.duplicateSiblings) ? ` · ${formatDuplicateSiblingsHint(row.duplicateSiblings)}` : ""}
                 </Badge>
               )}
             </div>
@@ -567,7 +566,11 @@ function RegistrationsPage() {
         <MobileRegistrationsView
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onOpenFilters={() => setFiltersOpen(true)}
+          campusFilter={{
+            value: filterCampus,
+            onChange: setFilterCampus,
+            options: (campuses as any[]).map((c) => ({ value: c.id, label: c.name })),
+          }}
           activeFilterKey={
             duplicatesOnly
               ? "FILTER_DUPLICATES"
@@ -1023,26 +1026,35 @@ function RegistrationsPage() {
                   </div>
                 ) : null
               }
-              actions={(row) =>
-                row.status === "PENDING" ? (
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <Button
-                      size="sm"
-                      loading={bulkTransition.isPending && bulkTransition.variables?.ids?.length === 1 && bulkTransition.variables.ids[0] === row.id && bulkTransition.variables.action === "APPROVE"}
-                      onClick={() => bulkTransition.mutate({ ids: [row.id], action: "APPROVE" })}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                ) : null
-              }
+              actions={(row) => (
+                <div className="flex flex-wrap justify-end gap-2">
+                  {row.status === "PENDING" && (
+                    <>
+                      <Button
+                        size="sm"
+                        loading={bulkTransition.isPending && bulkTransition.variables?.ids?.length === 1 && bulkTransition.variables.ids[0] === row.id && bulkTransition.variables.action === "APPROVE"}
+                        onClick={() => bulkTransition.mutate({ ids: [row.id], action: "APPROVE" })}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
+                      >
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => { setSelectedIds([row.id]); setBulkAction("DELETE"); }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              )}
             />
           )}
         </div>

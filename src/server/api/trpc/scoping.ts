@@ -2,6 +2,25 @@ import { TRPCError } from "@trpc/server";
 
 const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
+/**
+ * Throws unless `organizationId` is the caller's own org — the baseline check
+ * for any procedure that takes `organizationId` as input but doesn't need
+ * admin/campus-rep escalation (e.g. a plain authenticated read). No role
+ * restriction beyond "logged in and in this org" — use `assertOrgAdmin` or
+ * `assertOrgAdminOrCampusRep` instead when the procedure is admin-only.
+ *
+ * `User.organizationId` is nullable — SUPER_ADMINs sit outside any single
+ * org by design (schema + authOptions.ts) — so a SUPER_ADMIN passes for any
+ * `organizationId` rather than being permanently locked out of every one.
+ */
+export function assertSameOrg(ctx: { session: any }, organizationId: string) {
+  const user = ctx.session?.user;
+  if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+  if (user.role === "SUPER_ADMIN") return user;
+  if (user.organizationId === organizationId) return user;
+  throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized for this organization" });
+}
+
 /** Throws unless the caller is an org admin (SUPER_ADMIN/OWNER/ADMIN) for `organizationId`. */
 export async function assertOrgAdmin(ctx: { session: any }, organizationId?: string) {
   const user = ctx.session?.user;

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { Prisma } from "@prisma/client";
 import { DEFAULT_TEMPLATES, ALL_EVENT_KEYS } from "../../email/defaults";
 import { renderEmail, renderEmailWithEvent, type Branding } from "../../email/renderer";
 import { getSampleData } from "../../email/variables";
@@ -55,6 +56,179 @@ export function resolveApprovedQrSrc(params: { qrCode?: string; isRealSend: bool
     : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 }
 
+const ID_CARD_TOKEN = "{{camp_id_card}}";
+
+function contentHasIdCardToken(node: any): boolean {
+  if (!node || typeof node !== "object") return false;
+  if (node.type === "text" && typeof node.text === "string" && node.text.includes(ID_CARD_TOKEN)) return true;
+  if (Array.isArray(node.content)) return node.content.some(contentHasIdCardToken);
+  return false;
+}
+
+function stripIdCardToken(node: any): any {
+  if (!node || typeof node !== "object") return node;
+  if (node.type === "text" && typeof node.text === "string") {
+    return { ...node, text: node.text.split(ID_CARD_TOKEN).join("") };
+  }
+  if (Array.isArray(node.content)) {
+    const content = node.content
+      .map(stripIdCardToken)
+      .filter((n: any) => !(n.type === "text" && n.text === ""));
+    return { ...node, content };
+  }
+  return node;
+}
+
+/** Appends or removes the {{camp_id_card}} token paragraph from a TipTap doc. */
+function toggleIdCardTokenInContent(doc: any, include: boolean): any {
+  const safeDoc = doc && typeof doc === "object" ? doc : { type: "doc", content: [] };
+  if (!include) {
+    return stripIdCardToken(safeDoc);
+  }
+  if (contentHasIdCardToken(safeDoc)) return safeDoc;
+  const content = Array.isArray(safeDoc.content) ? safeDoc.content : [];
+  return {
+    ...safeDoc,
+    content: [...content, { type: "paragraph", content: [{ type: "text", text: ID_CARD_TOKEN }] }],
+  };
+}
+
+/**
+ * Detects Prisma errors caused by the database schema lagging behind the
+ * Prisma client (e.g. a migration has not been applied yet). This lets us
+ * fail open on read paths so the admin UI remains usable while the missing
+ * columns are being migrated.
+ */
+function isPrismaMissingColumnError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as any).code;
+  const message = String((err as Error).message ?? "").toLowerCase();
+  return (
+    code === "P2022" ||
+    (message.includes("column") && message.includes("does not exist")) ||
+    (message.includes("field") && message.includes("does not exist"))
+  );
+}
+
+/**
+ * Builds a safe OrganizationBranding-shaped object for use when the real
+ * branding table cannot be queried because the schema migration has not run
+ * yet. This keeps the admin pages renderable.
+ */
+function defaultOrganizationBranding(organizationId: string) {
+  const now = new Date();
+  return {
+    id: "",
+    organizationId,
+    logoUrl: null,
+    primaryColor: "#E67E22",
+    accentColor: "#E67E22",
+    buttonColor: "#E67E22",
+    headerImageUrl: null,
+    senderName: null,
+    footerText: null,
+    supportEmail: null,
+    supportPhone: null,
+    websiteUrl: null,
+    facebookUrl: null,
+    instagramUrl: null,
+    address: null,
+    tagline: null,
+    supportTitle: null,
+    supportDescription: null,
+    footerCopyright: null,
+    phone: null,
+    xUrl: null,
+    linkedinUrl: null,
+    nextSteps: null,
+    idCardEnabled: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Ensure every organization has an EmailTemplate and EmailEventConfig for each
+ * event key in ALL_EVENT_KEYS. This is idempotent and race-safe: parallel
+ * callers will reuse existing rows or recover from unique-constraint errors.
+ *
+ * If the database schema is still missing columns required by EmailTemplate
+ * (e.g. `includeIdCard`), the helper logs the issue and returns `false` so the
+ * calling query can still return whatever data is available, instead of
+ * crashing the page.
+ */
+async function ensureDefaultEmailTemplates(prisma: any, organizationId: string) {
+  try {
+    const existingConfigs = await prisma.emailEventConfig.findMany({
+      where: { organizationId },
+      select: { event: true },
+    });
+    const existingEvents = new Set(existingConfigs.map((c: { event: string }) => c.event));
+    const missingEvents = ALL_EVENT_KEYS.filter((e) => !existingEvents.has(e));
+
+    for (const event of missingEvents) {
+      const def = DEFAULT_TEMPLATES[event];
+      if (!def) continue;
+
+      let template = await prisma.emailTemplate.findUnique({
+        where: { organizationId_name: { organizationId, name: def.name } },
+      });
+
+      if (!template) {
+        try {
+          template = await prisma.emailTemplate.create({
+            data: {
+              organizationId,
+              name: def.name,
+              description: def.description,
+              subject: def.subject,
+              previewText: def.previewText,
+              content: def.content as any,
+              isDefault: true,
+            },
+          } as any);
+        } catch (err) {
+          // Another concurrent call created it between findUnique and create.
+          if ((err as any)?.code !== "P2002") throw err;
+          template = await prisma.emailTemplate.findUnique({
+            where: { organizationId_name: { organizationId, name: def.name } },
+          });
+        }
+      }
+
+      if (!template) continue;
+
+      try {
+        await prisma.emailEventConfig.create({
+          data: {
+            organizationId,
+            event,
+            templateId: template.id,
+          },
+        });
+      } catch (err) {
+        // Another concurrent call created the config already.
+        if ((err as any)?.code !== "P2002") throw err;
+      }
+    }
+
+    return missingEvents.length > 0;
+  } catch (err) {
+    if (isPrismaMissingColumnError(err)) {
+      console.warn(
+        `[ensureDefaultEmailTemplates] Skipping default-template backfill for org ${organizationId} because required columns are not migrated yet.`
+      );
+      return false;
+    }
+    throw err;
+  }
+}
+
+// ═══ Migration-pending signal ════════════════════════════════════════════════
+
+// Returned on fallback paths so the UI can show a "migration pending" banner.
+const MIGRATION_PENDING = "migration_pending" as const;
+
 // ─── Router ─────────────────────────────────────────────────────────────────
 
 export const communicationRouter = createTRPCRouter({
@@ -65,61 +239,43 @@ export const communicationRouter = createTRPCRouter({
     if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
     const oid = orgId(ctx);
 
-    let configs = await ctx.prisma.emailEventConfig.findMany({
+    // Backfill missing default templates/configs before returning, so the
+    // response is complete even when a new event key (e.g. CAMP_INVITATION)
+    // was added after the organization was first created.
+    await ensureDefaultEmailTemplates(ctx.prisma, oid);
+
+    const configs = await ctx.prisma.emailEventConfig.findMany({
       where: { organizationId: oid },
       include: { template: { select: { id: true, name: true } } },
       orderBy: { event: "asc" },
     });
 
-    // Auto-seed: if no configs exist yet, create defaults for all 9 events
-    if (configs.length === 0) {
-      const templates = await Promise.all(
-        ALL_EVENT_KEYS.map((event) => {
-          const def = DEFAULT_TEMPLATES[event];
-          return ctx.prisma.emailTemplate.create({
-            data: {
-              organizationId: oid,
-              name: def.name,
-              description: def.description,
-              subject: def.subject,
-              previewText: def.previewText,
-              content: def.content as any,
-              isDefault: true,
-            },
-          } as any);
-        })
-      );
-
-      await Promise.all(
-        ALL_EVENT_KEYS.map((event, i) =>
-          ctx.prisma.emailEventConfig.create({
-            data: {
-              organizationId: oid,
-              event,
-              templateId: templates[i].id,
-            },
-          })
-        )
-      );
-
-      configs = await ctx.prisma.emailEventConfig.findMany({
-        where: { organizationId: oid },
-        include: { template: { select: { id: true, name: true } } },
-        orderBy: { event: "asc" },
+    let branding: Awaited<ReturnType<typeof ctx.prisma.organizationBranding.findUnique>> | null = null;
+    let migrationStatus: typeof MIGRATION_PENDING | undefined = undefined;
+    try {
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: oid },
+        include: { branding: true },
       });
+      branding = org?.branding ?? null;
+    } catch (err) {
+      if (isPrismaMissingColumnError(err)) {
+        console.warn(
+          `[eventList] Unable to load branding for org ${oid} because required columns are not migrated yet.`
+        );
+        migrationStatus = MIGRATION_PENDING;
+        branding = defaultOrganizationBranding(oid);
+      } else {
+        throw err;
+      }
     }
-
-    const org = await ctx.prisma.organization.findUnique({
-      where: { id: oid },
-      include: { branding: true },
-    });
 
     const configsWithResolved = await Promise.all(
       configs.map(async (c) => {
         const { from } = await resolveFromAddress({
           organizationId: oid,
           event: c.event,
-          senderName: org?.branding?.senderName,
+          senderName: branding?.senderName,
           senderMode: c.senderMode,
           customFromLocalPart: c.customFromLocalPart,
           replyTo: c.replyTo,
@@ -131,7 +287,7 @@ export const communicationRouter = createTRPCRouter({
       })
     );
 
-    return configsWithResolved;
+    return { configs: configsWithResolved, migrationStatus };
   }),
 
   eventUpdate: protectedProcedure
@@ -173,15 +329,31 @@ export const communicationRouter = createTRPCRouter({
   // ═══ Templates ══════════════════════════════════════════════════════════════
 
   templateList: protectedProcedure.query(async ({ ctx }) => {
-    const currentUser = ctx.session?.user;
-    if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+    // Org-scoped but not role-scoped — any authenticated user in the org
+    // (including a PARENT) could otherwise browse email templates.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
 
-    return ctx.prisma.emailTemplate.findMany({
-      where: { organizationId: oid, deletedAt: null },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, description: true, subject: true, isDefault: true, active: true, updatedAt: true },
-    });
+    // Backfill missing default templates/configs before listing, so new event
+    // keys (e.g. CAMP_INVITATION) appear immediately without a manual migration.
+    await ensureDefaultEmailTemplates(ctx.prisma, oid);
+
+    try {
+      const templates = await ctx.prisma.emailTemplate.findMany({
+        where: { organizationId: oid, deletedAt: null },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, description: true, subject: true, isDefault: true, active: true, updatedAt: true },
+      });
+      return { templates, migrationStatus: undefined as undefined };
+    } catch (err) {
+      if (isPrismaMissingColumnError(err)) {
+        console.warn(
+          `[templateList] Returning empty template list for org ${oid} because required columns are not migrated yet.`
+        );
+        return { templates: [], migrationStatus: MIGRATION_PENDING };
+      }
+      throw err;
+    }
   }),
 
   templateGetById: protectedProcedure
@@ -271,6 +443,33 @@ export const communicationRouter = createTRPCRouter({
       });
     }),
 
+  /**
+   * Opts a template into (or out of) the {{camp_id_card}} block. Toggling
+   * also inserts/strips the literal token text in the template's TipTap
+   * content so admins can see it in the editor like any other variable —
+   * `includeIdCard` is the actual render-time gate (see renderIdCardPage in
+   * renderer.ts), so a stray typed token in a template that isn't opted in
+   * never renders an image.
+   *
+   * Note the token's *position* is ignored: the card is always appended as
+   * its own page at the end of the email, never rendered inline.
+   */
+  templateSetIncludeIdCard: protectedProcedure
+    .input(z.object({ id: z.string(), include: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const existing = await ctx.prisma.emailTemplate.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const content = toggleIdCardTokenInContent(existing.content as any, input.include);
+
+      return ctx.prisma.emailTemplate.update({
+        where: { id: input.id },
+        data: { includeIdCard: input.include, content: content as any },
+      });
+    }),
+
   // ═══ Branding ═══════════════════════════════════════════════════════════════
 
   brandingGet: protectedProcedure.query(async ({ ctx }) => {
@@ -278,11 +477,19 @@ export const communicationRouter = createTRPCRouter({
     if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
     const oid = orgId(ctx);
 
-    let branding = await ctx.prisma.organizationBranding.findUnique({ where: { organizationId: oid } });
-    if (!branding) {
-      branding = await ctx.prisma.organizationBranding.create({ data: { organizationId: oid } });
+    try {
+      let branding = await ctx.prisma.organizationBranding.findUnique({ where: { organizationId: oid } });
+      if (!branding) {
+        branding = await ctx.prisma.organizationBranding.create({ data: { organizationId: oid } });
+      }
+      return { ...branding, migrationStatus: undefined as undefined };
+    } catch (err) {
+      if (isPrismaMissingColumnError(err)) {
+        console.warn(`[brandingGet] Returning default branding for org ${oid} because required columns are not migrated yet.`);
+        return { ...defaultOrganizationBranding(oid), migrationStatus: MIGRATION_PENDING };
+      }
+      throw err;
     }
-    return branding;
   }),
 
   brandingUpdate: protectedProcedure
@@ -301,15 +508,89 @@ export const communicationRouter = createTRPCRouter({
         facebookUrl: z.string().nullable().optional(),
         instagramUrl: z.string().nullable().optional(),
         address: z.string().nullable().optional(),
+        // Camp Invitation certificate email fields (Phase 2 email redesign)
+        tagline: z.string().nullable().optional(),
+        supportTitle: z.string().nullable().optional(),
+        supportDescription: z.string().nullable().optional(),
+        footerCopyright: z.string().nullable().optional(),
+        phone: z.string().nullable().optional(),
+        xUrl: z.string().nullable().optional(),
+        linkedinUrl: z.string().nullable().optional(),
+        nextSteps: z
+          .array(z.object({ icon: z.string(), title: z.string(), description: z.string() }))
+          .nullable()
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
       const oid = orgId(ctx);
+      const { nextSteps, ...rest } = input;
+      const nextStepsValue =
+        nextSteps === null ? Prisma.JsonNull : nextSteps === undefined ? undefined : nextSteps;
       return ctx.prisma.organizationBranding.upsert({
         where: { organizationId: oid },
-        update: input,
-        create: { organizationId: oid, ...input },
+        update: { ...rest, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
+        create: { organizationId: oid, ...rest, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
+      });
+    }),
+
+  // ═══ Camp ID Card ═══════════════════════════════════════════════════════════
+
+  idCardSettingsGet: protectedProcedure.query(async ({ ctx }) => {
+    const currentUser = ctx.session?.user;
+    if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+    const oid = orgId(ctx);
+
+    const organization = await ctx.prisma.organization.findUnique({ where: { id: oid } });
+    if (!organization) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Your organization was not found. Please sign out and sign back in.",
+      });
+    }
+
+    try {
+      let branding = await ctx.prisma.organizationBranding.findUnique({ where: { organizationId: oid } });
+      if (!branding) {
+        branding = await ctx.prisma.organizationBranding.create({ data: { organizationId: oid } });
+      }
+      const templates = await ctx.prisma.emailTemplate.findMany({
+        where: { organizationId: oid, deletedAt: null },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, includeIdCard: true },
+      });
+      return { idCardEnabled: branding.idCardEnabled, templates, migrationStatus: undefined as undefined };
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+
+      // If the idCardEnabled / includeIdCard columns have not been migrated
+      // yet, fail open so the admin page still renders. The feature stays
+      // disabled until the migration is applied.
+      if (isPrismaMissingColumnError(err)) {
+        console.warn(
+          `[idCardSettingsGet] Returning default ID card settings for org ${oid} because required columns are not migrated yet.`
+        );
+        return { idCardEnabled: false, templates: [], migrationStatus: MIGRATION_PENDING };
+      }
+
+      console.error("[idCardSettingsGet] Failed to load ID card settings:", err);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Unable to load ID card settings. Please try again later.",
+      });
+    }
+  }),
+
+  idCardSettingsSetEnabled: protectedProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      return ctx.prisma.organizationBranding.upsert({
+        where: { organizationId: oid },
+        update: { idCardEnabled: input.enabled },
+        create: { organizationId: oid, idCardEnabled: input.enabled },
       });
     }),
 
@@ -318,8 +599,8 @@ export const communicationRouter = createTRPCRouter({
   broadcastList: protectedProcedure
     .input(z.object({ cursor: z.string().optional(), limit: z.number().min(1).max(50).default(10) }).optional())
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session?.user;
-      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const limit = input?.limit ?? 10;
 
@@ -602,6 +883,13 @@ export const communicationRouter = createTRPCRouter({
             facebookUrl: z.string().nullable().optional(),
             instagramUrl: z.string().nullable().optional(),
             address: z.string().nullable().optional(),
+            tagline: z.string().nullable().optional(),
+            supportTitle: z.string().nullable().optional(),
+            supportDescription: z.string().nullable().optional(),
+            footerCopyright: z.string().nullable().optional(),
+            phone: z.string().nullable().optional(),
+            xUrl: z.string().nullable().optional(),
+            linkedinUrl: z.string().nullable().optional(),
           })
           .optional(),
       })
@@ -624,6 +912,13 @@ export const communicationRouter = createTRPCRouter({
         facebookUrl: input.branding?.facebookUrl ?? null,
         instagramUrl: input.branding?.instagramUrl ?? null,
         address: input.branding?.address ?? null,
+        tagline: input.branding?.tagline ?? null,
+        supportTitle: input.branding?.supportTitle ?? null,
+        supportDescription: input.branding?.supportDescription ?? null,
+        footerCopyright: input.branding?.footerCopyright ?? null,
+        phone: input.branding?.phone ?? null,
+        xUrl: input.branding?.xUrl ?? null,
+        linkedinUrl: input.branding?.linkedinUrl ?? null,
       };
       return (await renderEmail({ tiptapJson: input.tiptapJson, variables, branding })).html;
     }),
@@ -637,6 +932,7 @@ export const communicationRouter = createTRPCRouter({
         previewText: z.string().nullable().optional(),
         variables: z.record(z.string()).optional(),
         to: z.string().email().optional(),
+        includeIdCard: z.boolean().optional(),
         broadcast: z
           .object({
             senderMode: z.string(),
@@ -676,6 +972,11 @@ export const communicationRouter = createTRPCRouter({
       const { text: interpolatedSubject } = interpolateSubject(input.subject, variables);
       const { text: interpolatedPreviewText } = interpolateSubject(input.previewText ?? "", variables);
 
+      const idCard = {
+        enabled: !!(branding?.idCardEnabled && input.includeIdCard),
+        imageUrl: `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/api/id-card/sample-sheet.png`,
+      };
+
       let html = "";
       const brandingParams = branding ? {
         logoUrl: branding.logoUrl,
@@ -691,13 +992,21 @@ export const communicationRouter = createTRPCRouter({
         facebookUrl: branding.facebookUrl,
         instagramUrl: branding.instagramUrl,
         address: branding.address,
+        tagline: branding.tagline,
+        supportTitle: branding.supportTitle,
+        supportDescription: branding.supportDescription,
+        footerCopyright: branding.footerCopyright,
+        phone: branding.phone,
+        xUrl: branding.xUrl,
+        linkedinUrl: branding.linkedinUrl,
+        nextSteps: branding.nextSteps as any,
       } : null;
 
       const isEventKey = ALL_EVENT_KEYS.includes(input.event as any);
 
       if (isEventKey) {
         let qrDataUrl: string | undefined;
-        if (input.event === "REGISTRATION_APPROVED") {
+        if (input.event === "REGISTRATION_APPROVED" || input.event === "CAMP_INVITATION") {
           qrDataUrl = resolveApprovedQrSrc({
             qrCode: variables.qr_code,
             isRealSend: !!input.to,
@@ -712,6 +1021,7 @@ export const communicationRouter = createTRPCRouter({
           branding: brandingParams,
           qrDataUrl,
           previewText: interpolatedPreviewText,
+          idCard,
         });
         html = renderResult.html;
       } else {
@@ -719,6 +1029,7 @@ export const communicationRouter = createTRPCRouter({
           tiptapJson: input.tiptapJson,
           variables,
           branding: brandingParams,
+          idCard,
         });
         html = renderResult.html;
       }
@@ -823,8 +1134,8 @@ export const communicationRouter = createTRPCRouter({
   // ═══ Dashboard ═══════════════════════════════════════════════════════════════
 
   dashboardStats: protectedProcedure.query(async ({ ctx }) => {
-    const currentUser = ctx.session?.user;
-    if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+    // Org-scoped but not role-scoped.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -879,6 +1190,8 @@ export const communicationRouter = createTRPCRouter({
   // ═══ Audiences ═══════════════════════════════════════════════════════════════
 
   audienceList: protectedProcedure.query(async ({ ctx }) => {
+    // Org-scoped but not role-scoped.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
     return ctx.prisma.savedAudience.findMany({
       where: { organizationId: oid },
@@ -909,6 +1222,12 @@ export const communicationRouter = createTRPCRouter({
     .input(z.object({ id: z.string(), name: z.string().min(1).optional(), description: z.string().nullable().optional(), filterDefinition: audienceFilterSchema.optional() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
+      // Previously updated by id alone with no ownership lookup — an admin
+      // of org A could rewrite org B's saved audience. Match the ownership
+      // check every template mutation in this file already does.
+      const oid = orgId(ctx);
+      const existing = await ctx.prisma.savedAudience.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       const { id, ...data } = input;
       return ctx.prisma.savedAudience.update({ where: { id }, data: data as any });
     }),
@@ -917,6 +1236,9 @@ export const communicationRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const existing = await ctx.prisma.savedAudience.findFirst({ where: { id: input.id, organizationId: oid } });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       return ctx.prisma.savedAudience.delete({ where: { id: input.id } });
     }),
 
@@ -926,7 +1248,10 @@ export const communicationRouter = createTRPCRouter({
       const oid = orgId(ctx);
       let filterDefinition = input.filterDefinition;
       if (input.savedAudienceId) {
-        const saved = await ctx.prisma.savedAudience.findUniqueOrThrow({ where: { id: input.savedAudienceId } });
+        // Previously looked up by id alone with no org check — cross-tenant
+        // read of another org's saved audience filter definition.
+        const saved = await ctx.prisma.savedAudience.findFirst({ where: { id: input.savedAudienceId, organizationId: oid } });
+        if (!saved) throw new TRPCError({ code: "NOT_FOUND" });
         filterDefinition = saved.filterDefinition as any;
       }
       if (!filterDefinition) throw new TRPCError({ code: "BAD_REQUEST", message: "No filter definition provided" });
@@ -938,6 +1263,8 @@ export const communicationRouter = createTRPCRouter({
   campaignList: protectedProcedure
     .input(z.object({ cursor: z.string().optional(), limit: z.number().min(1).max(50).default(10), status: z.string().optional(), search: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const limit = input?.limit ?? 10;
       const where: Record<string, unknown> = { organizationId: oid, deletedAt: null };
@@ -968,6 +1295,8 @@ export const communicationRouter = createTRPCRouter({
   campaignGet: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const campaign = await ctx.prisma.emailCampaign.findFirst({
         where: { id: input.id, organizationId: oid },
@@ -1008,6 +1337,8 @@ export const communicationRouter = createTRPCRouter({
       customFromLocalPart: z.string().nullable().optional(),
       replyTo: z.string().nullable().optional(),
       attachments: z.array(z.object({ url: z.string(), fileName: z.string(), fileType: z.string(), fileSize: z.number() })).optional(),
+      personalizeEvent: z.string().nullable().optional(),
+      personalizeCampId: z.string().nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const oid = orgId(ctx);
@@ -1036,6 +1367,8 @@ export const communicationRouter = createTRPCRouter({
       customFromLocalPart: z.string().nullable().optional(),
       replyTo: z.string().nullable().optional(),
       attachments: z.array(z.object({ url: z.string(), fileName: z.string(), fileType: z.string(), fileSize: z.number() })).optional(),
+      personalizeEvent: z.string().nullable().optional(),
+      personalizeCampId: z.string().nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
@@ -1052,7 +1385,7 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   campaignSend: protectedProcedure
-    .input(z.object({ id: z.string() }))
+    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional() }))
     .mutation(async ({ ctx, input }) => {
       const oid = orgId(ctx);
       await assertCampaignSender(ctx, oid);
@@ -1064,7 +1397,7 @@ export const communicationRouter = createTRPCRouter({
         data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "CAMPAIGN_SENT", targetType: "CAMPAIGN", targetId: input.id, metadata: { name: campaign.name } },
       });
 
-      return sendCampaign(ctx.prisma, input.id);
+      return sendCampaign(ctx.prisma, input.id, { manualEmails: input.manualEmails });
     }),
 
   campaignSchedule: protectedProcedure
@@ -1131,6 +1464,8 @@ export const communicationRouter = createTRPCRouter({
   campaignGetStats: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const campaign = await ctx.prisma.emailCampaign.findFirst({
         where: { id: input.id, organizationId: oid },
@@ -1203,6 +1538,49 @@ export const communicationRouter = createTRPCRouter({
       return { isDuplicate: !!recent, lastCampaign: recent };
     }),
 
+  /** Pre-send check: given manual emails, returns how many match APPROVED
+   * registrations (personalized) or org users (regular) so the admin can
+   * confirm before firing. No schema change — the manual emails are a
+   * mutation parameter, not stored on the campaign. */
+  campaignCheckManualRecipients: protectedProcedure
+    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()) }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+      const campaign = await ctx.prisma.emailCampaign.findFirst({
+        where: { id: input.id, organizationId: oid },
+        select: { personalizeEvent: true, personalizeCampId: true },
+      });
+      if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
+
+      if (campaign.personalizeEvent && campaign.personalizeCampId) {
+        const registrations = await (ctx.prisma as any).registration.findMany({
+          where: {
+            campId: campaign.personalizeCampId,
+            status: "APPROVED",
+            deletedAt: null,
+            camper: { user: { email: { in: input.manualEmails } } },
+          },
+          include: { camper: { select: { user: { select: { email: true } } } } },
+        });
+        const matchedEmails = new Set(registrations.map((r: any) => r.camper?.user?.email).filter(Boolean));
+        return {
+          matched: matchedEmails.size,
+          unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e)),
+        };
+      }
+
+      const users = await ctx.prisma.user.findMany({
+        where: { email: { in: input.manualEmails }, organizationId: oid },
+        select: { email: true },
+      });
+      const matchedEmails = new Set(users.map((u) => u.email));
+      return {
+        matched: matchedEmails.size,
+        unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e)),
+      };
+    }),
+
   campaignSendToNonOpeners: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -1253,6 +1631,8 @@ export const communicationRouter = createTRPCRouter({
       search: z.string().optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const limit = input?.limit ?? 20;
       // Org attribution lives on SideEffect.organizationId (backfilled for legacy
@@ -1287,6 +1667,8 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   queueStats: protectedProcedure.query(async ({ ctx }) => {
+    // Org-scoped but not role-scoped.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
     const items = await ctx.prisma.sideEffect.findMany({
       where: {
@@ -1407,6 +1789,10 @@ export const communicationRouter = createTRPCRouter({
       dateTo: z.string().optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
+      // Org-scoped but not role-scoped — any PARENT in the org could
+      // otherwise enumerate every other member's email address and message
+      // subjects via this endpoint.
+      requireAdmin(ctx);
       const oid = orgId(ctx);
       const limit = input?.limit ?? 20;
 
@@ -1443,6 +1829,8 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   deliveryLogStats: protectedProcedure.query(async ({ ctx }) => {
+    // Org-scoped but not role-scoped.
+    requireAdmin(ctx);
     const oid = orgId(ctx);
     const items = await ctx.prisma.emailRecipient.findMany({
       where: { organizationId: oid },

@@ -2,6 +2,7 @@
 // Each assembler receives variables (from template interpolation) + branding + optional extra params.
 
 import type { Branding } from "../renderer";
+import type { CertificateInfoRow } from "../components/certificate";
 import {
   EmailLayout,
   EmailHero,
@@ -14,6 +15,12 @@ import {
   SupportCard,
   EmailFooter,
   Section,
+  OrganizationHeader,
+  VerificationCard,
+  SplitInfoCard,
+  NextStepsCard,
+  ContactCard,
+  CertificateFooter,
 } from "../components";
 import type { StatusType } from "../components/cards";
 
@@ -43,18 +50,54 @@ function regInfoRows(v: Record<string, string>) {
 
 // ─── REGISTRATION_APPROVED ──────────────────────────────────────────────────
 
+/**
+ * Sent automatically the moment a registration is approved
+ * (engine.ts's runSideEffectsNow → effects.ts).
+ *
+ * Shares the Camp Invitation's certificate look so the two approval-adjacent
+ * emails don't diverge, but deliberately stays shorter: no journey timeline
+ * and no "What's Next?" block. Those belong on the invitation, which is sent
+ * later as a deliberate campaign once check-in details are settled — at
+ * approval time the reporting date and pickup point often aren't known yet.
+ */
 export function buildApprovedEmail(p: AssemblerParams): string {
   const v = p.variables;
+  const orgName = p.branding?.senderName || v.organization_name || "Camp";
+  const checkInRows = checkInInfoRows(v);
+
   const content = [
-    EmailHero({ illustration: "🎉" }),
-    StatusBanner({ type: "success", title: "Registration Approved", subtitle: `${v.camper_name || "Camper"} has been approved for ${v.camp_name || "camp"}.` }),
-    InfoCard({ rows: regInfoRows(v) }),
-    p.qrSrc ? QRCodeCard({ qrSrc: p.qrSrc, registrationNumber: v.registration_number || "" }) : "",
-    p.bodyContent ? Section({ children: p.bodyContent }) : "",
-    SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
-    EmailFooter({ branding: p.branding }),
+    OrganizationHeader({
+      branding: p.branding,
+      orgName,
+      rightLabel: `Date: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`,
+    }),
+    VerificationCard({
+      title: "Registration Approved!",
+      description: `<strong>${v.camper_name || "Camper"}</strong> has been approved for <strong>${v.camp_name || "camp"}</strong>.<br/><br/>We can't wait to have you with us!`,
+      qrSrc: p.qrSrc,
+      registrationNumber: v.registration_number || "",
+    }),
+    // Check-in details are frequently unset at approval time; SplitInfoCard
+    // drops an empty column on its own, so only the left card renders then.
+    SplitInfoCard({
+      leftTitle: "Registration Details",
+      leftRows: registrationDetailRows(v),
+      leftIcon: "identification",
+      rightTitle: "Important Check-in Info",
+      rightRows: checkInRows,
+      rightIcon: "calendar-days",
+    }),
+    p.bodyContent ? Section({ children: p.bodyContent, padding: `0 0 12px` }) : "",
+    ContactCard({ branding: p.branding }),
+    CertificateFooter({ branding: p.branding, orgName }),
   ].filter(Boolean).join("\n");
-  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Approved for ${v.camp_name || "camp"}` });
+
+  return EmailLayout({
+    content,
+    branding: p.branding,
+    width: 800,
+    previewText: p.previewText || `Approved for ${v.camp_name || "camp"}`,
+  });
 }
 
 // ─── REGISTRATION_SUBMITTED ─────────────────────────────────────────────────
@@ -158,6 +201,75 @@ export function buildWelcomeEmail(p: AssemblerParams): string {
     EmailFooter({ branding: p.branding }),
   ].filter(Boolean).join("\n");
   return EmailLayout({ content, branding: p.branding, previewText: p.previewText || "Welcome to Camply — verify your email" });
+}
+
+// ─── CAMP_INVITATION ─────────────────────────────────────────────────────────
+// New, separate from REGISTRATION_APPROVED — admin-triggered (via a campaign,
+// not the registration engine) once an org is ready to invite approved
+// campers, typically after room/hostel assignment. Treated as an A4
+// admission certificate rather than a marketing email — see
+// src/server/email/components/certificate.ts.
+
+function registrationDetailRows(v: Record<string, string>): CertificateInfoRow[] {
+  const rows: CertificateInfoRow[] = [];
+  if (v.camper_name) rows.push({ label: "Camper", value: v.camper_name, icon: "user" });
+  if (v.camp_name) rows.push({ label: "Camp", value: v.camp_name, icon: "tent" });
+  if (v.centre_name) rows.push({ label: "Campus / Centre", value: v.centre_name, icon: "map-pin" });
+  if (v.reporting_date) rows.push({ label: "Reporting Date", value: v.reporting_date, icon: "calendar-days" });
+  if (v.registration_number) rows.push({ label: "Registration Number", value: v.registration_number, icon: "identification" });
+  if (v.tribe_name) rows.push({ label: "Tribe / House", value: v.tribe_name, icon: "user-group" });
+  // Confirmed decision: omit entirely (not a placeholder) until a room is
+  // actually assigned — accommodation is a separate, later admin step.
+  if (v.hostel_name && v.room_name) {
+    const bed = v.bed_label ? ` (${v.bed_label})` : "";
+    rows.push({ label: "Hostel & Room", value: `${v.hostel_name} — ${v.room_name}${bed}`, icon: "map-pin" });
+  }
+  return rows;
+}
+
+// Check-in rows deliberately carry no icons — the reference stacks them as
+// label-over-value, unlike the iconified single-line registration rows.
+function checkInInfoRows(v: Record<string, string>): CertificateInfoRow[] {
+  const rows: CertificateInfoRow[] = [];
+  if (v.checkin_date) rows.push({ label: "Check-in Date", value: v.checkin_date });
+  if (v.checkin_location) rows.push({ label: "Check-in Location", value: v.checkin_location });
+  if (v.arrive_before) rows.push({ label: "Arrive Before", value: v.arrive_before });
+  return rows;
+}
+
+export function buildCampInvitationEmail(p: AssemblerParams): string {
+  const v = p.variables;
+  const orgName = p.branding?.senderName || v.organization_name || "Camp";
+  const notice = p.branding?.supportEmail
+    ? `If you are unable to attend after approval, please email <a href="mailto:${p.branding.supportEmail}" style="color:inherit;">${p.branding.supportEmail}</a> with your name and centre.`
+    : undefined;
+
+  const content = [
+    OrganizationHeader({ branding: p.branding, orgName, rightLabel: `Date: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` }),
+    VerificationCard({
+      title: "Registration Approved!",
+      description: `<strong>${v.camper_name || "Camper"}</strong> has been approved for <strong>${v.camp_name || "camp"}</strong>.<br/><br/>We can't wait to have you with us!`,
+      qrSrc: p.qrSrc,
+      registrationNumber: v.registration_number || "",
+    }),
+    SplitInfoCard({
+      leftTitle: "Registration Details",
+      leftRows: registrationDetailRows(v),
+      leftIcon: "identification",
+      rightTitle: "Important Check-in Info",
+      rightRows: checkInInfoRows(v),
+      rightIcon: "calendar-days",
+      notice,
+    }),
+    // Section's default 24/32px padding is tuned for 600px marketing emails;
+    // on the A4 certificate the surrounding cards already supply the gutter.
+    p.bodyContent ? Section({ children: p.bodyContent, padding: `0 0 12px` }) : "",
+    NextStepsCard({ steps: p.branding?.nextSteps }),
+    ContactCard({ branding: p.branding }),
+    CertificateFooter({ branding: p.branding, orgName }),
+  ].filter(Boolean).join("\n");
+
+  return EmailLayout({ content, branding: p.branding, width: 800, previewText: p.previewText || `You're invited to ${v.camp_name || "camp"}!` });
 }
 
 // ─── OTP_EMAIL ──────────────────────────────────────────────────────────────

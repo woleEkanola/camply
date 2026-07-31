@@ -39,6 +39,13 @@ import {
 
 type ExtendedUser = { id: string; role: string; organizationId?: string };
 
+/**
+ * Usable height of one A4 page at 96dpi: 1123px total (297mm) minus 10mm
+ * top/bottom print margins. The Camp Invitation certificate is meant to print
+ * on a single sheet, so the editor warns once a render exceeds this.
+ */
+const A4_USABLE_PX = 1047;
+
 interface TemplateListItem {
   id: string;
   name: string;
@@ -331,26 +338,78 @@ export default function TemplatesPage() {
   const [dirty, setDirty] = useState(false);
 
   // Preview / Validation states
-  const [previewWidth, setPreviewWidth] = useState<"desktop" | "mobile">("desktop");
+  const [previewWidth, setPreviewWidth] = useState<"desktop" | "mobile" | "certificate">("desktop");
   const [previewHtml, setPreviewHtml] = useState("");
   const [resolvedSender, setResolvedSender] = useState("");
   const [resolvedReplyTo, setResolvedReplyTo] = useState("");
   const [unknownTokens, setUnknownTokens] = useState<string[]>([]);
   const [previewEvent, setPreviewEvent] = useState<string>("REGISTRATION_APPROVED");
+  /** Pixels the Camp Invitation certificate overflows one A4 page by, or null. */
+  const [a4OverflowPx, setA4OverflowPx] = useState<number | null>(null);
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [testSendToast, setTestSendToast] = useState<string | null>(null);
+
+  // ─── Resizable panel widths ──────────────────────────────────────────────────
+  const [leftPanelWidth, setLeftPanelWidth] = useState(320);
+  const [rightPanelWidth, setRightPanelWidth] = useState(400);
+  const [resizingEdge, setResizingEdge] = useState<"left" | "right" | null>(null);
+
+  function handleResizeStart(edge: "left" | "right", e: React.PointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = edge === "left" ? leftPanelWidth : rightPanelWidth;
+    const setWidth = edge === "left" ? setLeftPanelWidth : setRightPanelWidth;
+    const minW = edge === "left" ? 160 : 200;
+    const maxW = 800;
+    setResizingEdge(edge);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    const onMove = (ev: PointerEvent) => {
+      const delta = ev.clientX - startX;
+      const clamped = edge === "left"
+        ? Math.max(minW, Math.min(maxW, startWidth + delta))
+        : Math.max(minW, Math.min(maxW, startWidth - delta));
+      setWidth(clamped);
+    };
+    const onUp = () => {
+      setResizingEdge(null);
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
 
   // Responsive panel controls (for mobile views)
   const [mobileTab, setMobileTab] = useState<"editor" | "preview" | "list">("editor");
 
   // Queries & Mutations
-  const { data: templates = [], refetch: refetchList } = api.communication.templateList.useQuery();
-  const { data: configs } = api.communication.eventList.useQuery();
+  const {
+    data: templateListData,
+    error: templateListError,
+    isLoading: isTemplatesLoading,
+    refetch: refetchList,
+  } = api.communication.templateList.useQuery();
+  const templates = templateListData?.templates ?? [];
+  const templateListMigrationStatus = templateListData?.migrationStatus;
+
+  const {
+    data: eventListData,
+    error: eventListError,
+    isLoading: isEventsLoading,
+    refetch: refetchEvents,
+  } = api.communication.eventList.useQuery();
+  const configs = eventListData?.configs;
+  const eventListMigrationStatus = eventListData?.migrationStatus;
 
   const { data: selectedTemplate, refetch: refetchSelected } = api.communication.templateGetById.useQuery(
     { id: selectedId ?? "" },
     { enabled: !!selectedId }
   );
+
+  const showMigrationPending =
+    templateListMigrationStatus === "migration_pending" || eventListMigrationStatus === "migration_pending";
 
   const createMutation = api.communication.templateCreate.useMutation({
     onSuccess: (newTemplate) => {
@@ -427,6 +486,7 @@ export default function TemplatesPage() {
         subject,
         previewText: previewText || null,
         variables: {}, // defaults to backend sample values
+        includeIdCard: selectedTemplate?.includeIdCard ?? false,
       },
       {
         onSuccess: (data) => {
@@ -437,7 +497,7 @@ export default function TemplatesPage() {
         },
       }
     );
-  }, [editor, subject, previewText, previewEvent, previewEmailMutation]);
+  }, [editor, subject, previewText, previewEvent, previewEmailMutation, selectedTemplate?.includeIdCard]);
 
   useEffect(() => {
     if (selectedId && editor) {
@@ -447,6 +507,50 @@ export default function TemplatesPage() {
       return () => clearTimeout(timer);
     }
   }, [editorCounter, subject, previewText, previewEvent, selectedId, editor]);
+
+  // ─── A4 one-page check (Camp Invitation only) ─────────────────────────────
+  // The Camp Invitation is a printable A4 certificate. Its own chrome leaves
+  // only ~70px of slack, which admin body copy eats quickly — and character
+  // count is a poor proxy, because paragraph margins cost far more height than
+  // the text itself. So measure the real render: mount the preview HTML
+  // offscreen at true A4 width and compare against the usable page height.
+  useEffect(() => {
+    if (previewEvent !== "CAMP_INVITATION" || !previewHtml) {
+      setA4OverflowPx(null);
+      return;
+    }
+
+    let cancelled = false;
+    const host = document.createElement("div");
+    // Offscreen rather than display:none — a hidden element has no layout.
+    host.style.cssText = "position:fixed;left:-99999px;top:0;width:794px;visibility:hidden;pointer-events:none;";
+    host.innerHTML = previewHtml;
+    document.body.appendChild(host);
+
+    // Mirror the @media print rule in components/layout.ts, which zeroes this
+    // padding — otherwise we'd measure ~72px of screen-only chrome.
+    host.querySelector<HTMLElement>(".camply-email-outer-td")?.style.setProperty("padding", "0", "important");
+
+    const measure = () => {
+      if (cancelled) return;
+      const height = host.getBoundingClientRect().height;
+      setA4OverflowPx(Math.round(height - A4_USABLE_PX));
+    };
+
+    const images = Array.from(host.querySelectorAll("img"));
+    const loaded = Promise.all(
+      images.map((img) =>
+        img.complete ? null : new Promise((res) => { img.onload = res; img.onerror = res; })
+      )
+    );
+    // Don't block on a slow/broken image — measure anyway after a beat.
+    Promise.race([loaded, new Promise((res) => setTimeout(res, 1500))]).then(measure);
+
+    return () => {
+      cancelled = true;
+      host.remove();
+    };
+  }, [previewHtml, previewEvent]);
 
   // Handler methods
   const handleNew = () => {
@@ -486,6 +590,7 @@ export default function TemplatesPage() {
         previewText: previewText || null,
         variables: {},
         to: testTo,
+        includeIdCard: selectedTemplate?.includeIdCard ?? false,
       },
       {
         onSuccess: () => {
@@ -510,6 +615,37 @@ export default function TemplatesPage() {
     <AppShell area="admin">
       <h1 className="sr-only">Email Templates</h1>
       <div className="flex flex-col h-[calc(100vh-100px)] -m-6 overflow-hidden">
+        {(templateListError || eventListError || showMigrationPending) && (
+          <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-4 py-3">
+            <div className="flex items-start gap-2 text-amber-800">
+              <ExclamationTriangleIcon className="h-5 w-5 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                {showMigrationPending && (
+                  <p className="font-medium">
+                    Communication setup is incomplete — a required database migration is pending.
+                    Some features (branding, certificate emails, Camp ID cards) will be unavailable until the migration runs.
+                  </p>
+                )}
+                {(templateListError || eventListError) && (
+                  <p>
+                    Could not load templates/events: {templateListError?.message || eventListError?.message}
+                    .{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (templateListError) void refetchList();
+                        if (eventListError) void refetchEvents();
+                      }}
+                      className="underline hover:text-amber-900"
+                    >
+                      Retry
+                    </button>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {/* Responsive Mobile Tabs Header */}
         <div className="md:hidden flex border-b border-border-default bg-surface">
           <button
@@ -537,9 +673,10 @@ export default function TemplatesPage() {
           {/* ═══ COLUMN 1: TEMPLATE LIST SIDEBAR ═══ */}
           <div
             className={cn(
-              "w-80 shrink-0 border-r border-border-default bg-surface flex flex-col h-full overflow-hidden",
+              "shrink-0 border-r border-border-default bg-surface flex flex-col h-full overflow-hidden",
               mobileTab !== "list" && "hidden md:flex"
             )}
+            style={{ width: leftPanelWidth }}
           >
             {/* Search and New Template Header */}
             <div className="p-3 border-b border-border-subtle space-y-2">
@@ -589,10 +726,25 @@ export default function TemplatesPage() {
                 </button>
               ))}
               {filteredTemplates.length === 0 && (
-                <p className="px-4 py-6 text-center text-xs text-txt-muted">No templates found.</p>
+                <p className="px-4 py-6 text-center text-xs text-txt-muted">
+                  {isTemplatesLoading
+                    ? "Loading templates..."
+                    : templateListError
+                    ? "Unable to load templates."
+                    : "No templates found."}
+                </p>
               )}
             </div>
           </div>
+
+          {/* ─── Resize handle (list ↔ editor) ─── */}
+          <div
+            className={cn(
+              "hidden md:block shrink-0 w-2 cursor-col-resize hover:bg-accent-400/50 transition-colors",
+              resizingEdge === "left" && "bg-accent-500"
+            )}
+            onPointerDown={(e) => handleResizeStart("left", e)}
+          />
 
           {/* ═══ COLUMN 2: WORKSPACE EDITOR PANEL ═══ */}
           <div
@@ -693,12 +845,22 @@ export default function TemplatesPage() {
             )}
           </div>
 
+          {/* ─── Resize handle (editor ↔ preview) ─── */}
+          <div
+            className={cn(
+              "hidden md:block shrink-0 w-2 cursor-col-resize hover:bg-accent-400/50 transition-colors",
+              resizingEdge === "right" && "bg-accent-500"
+            )}
+            onPointerDown={(e) => handleResizeStart("right", e)}
+          />
+
           {/* ═══ COLUMN 3: PREVIEW / INSPECT PANEL ═══ */}
           <div
             className={cn(
-              "w-[400px] shrink-0 bg-surface-raised flex flex-col h-full overflow-y-auto p-4 border-l border-border-default space-y-5",
+              "shrink-0 bg-surface-raised flex flex-col h-full overflow-y-auto p-4 border-l border-border-default space-y-5",
               mobileTab !== "preview" && "hidden md:flex"
             )}
+            style={{ width: rightPanelWidth }}
           >
             {/* Context / Preview Configuration */}
             {selectedId && (
@@ -724,7 +886,11 @@ export default function TemplatesPage() {
                   <Select
                     label="Preview Event Context"
                     value={previewEvent}
-                    onChange={(e) => setPreviewEvent(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setPreviewEvent(next);
+                      setPreviewWidth(next === "CAMP_INVITATION" ? "certificate" : "desktop");
+                    }}
                     helpText="Preview template dynamically using this email event's variables and sender policies."
                   >
                     {ALL_EVENT_KEYS.map((key) => (
@@ -767,6 +933,25 @@ export default function TemplatesPage() {
                   </div>
                 )}
 
+                {/* A4 one-page warning — Camp Invitation certificate only */}
+                {a4OverflowPx !== null && a4OverflowPx > 0 && (
+                  <div className="rounded-lg border border-warning-200 bg-warning-50/50 p-3 space-y-1">
+                    <span className="flex items-center gap-1 text-xs font-semibold text-warning-800">
+                      <ExclamationTriangleIcon className="h-4 w-4" /> Won&apos;t fit on one A4 page
+                    </span>
+                    <p className="text-[11px] text-warning-700">
+                      This certificate is {a4OverflowPx}px taller than a single A4 page allows, so printing it
+                      will spill onto a second sheet. Shortening the body copy — especially removing whole
+                      paragraphs, which cost more height than long sentences — is the quickest fix.
+                    </p>
+                  </div>
+                )}
+                {a4OverflowPx !== null && a4OverflowPx <= 0 && (
+                  <p className="text-[11px] text-txt-muted">
+                    Fits one A4 page, with {Math.abs(a4OverflowPx)}px to spare.
+                  </p>
+                )}
+
                 {/* Desktop/Mobile Size Selector */}
                 <div className="flex items-center justify-between border-t border-border-default pt-4">
                   <span className="text-xs font-medium text-txt-secondary">Layout Size</span>
@@ -791,6 +976,16 @@ export default function TemplatesPage() {
                     >
                       <DevicePhoneMobileIcon className="h-4 w-4" />
                     </button>
+                    <button
+                      onClick={() => setPreviewWidth("certificate")}
+                      className={cn(
+                        "px-1.5 rounded-md transition-colors text-[10px] font-semibold",
+                        previewWidth === "certificate" ? "bg-accent-100 text-accent-700" : "text-txt-muted hover:text-txt-secondary"
+                      )}
+                      title="Certificate Layout (800px, e.g. Camp Invitation)"
+                    >
+                      A4
+                    </button>
                   </div>
                 </div>
 
@@ -799,7 +994,7 @@ export default function TemplatesPage() {
                   <div
                     className={cn(
                       "rounded-xl border border-border-default bg-surface shadow-lg overflow-hidden transition-all duration-300",
-                      previewWidth === "desktop" ? "w-[480px]" : "w-[320px]"
+                      previewWidth === "desktop" ? "w-[480px]" : previewWidth === "mobile" ? "w-[320px]" : "w-[800px] max-w-full"
                     )}
                   >
                     {previewHtml ? (

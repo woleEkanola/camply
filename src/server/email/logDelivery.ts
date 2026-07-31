@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-type TxClient = PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+type TxClient = PrismaClient<any> | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
 
 interface LogDeliveryParams {
   prisma: TxClient;

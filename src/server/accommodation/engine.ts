@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { logEvent } from "../audit";
 import { calculateAge } from "../registration/validation";
 
-type TxClient = PrismaClient | Prisma.TransactionClient;
+type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
 export class BedAllocationError extends Error {
   code: string;
@@ -187,6 +187,16 @@ export async function assignBedInTx(
   const bed = await tx.bed.findUniqueOrThrow({ where: { id: params.bedId }, include: { room: { include: { hostel: true } } } });
   const { occupant } = params;
 
+  // Neither this function nor its former router-side duplicate checked
+  // deletedAt or MAINTENANCE — a camper could be assigned onto a
+  // soft-deleted or under-maintenance bed.
+  if (bed.deletedAt) {
+    throw new BedAllocationError("BED_OCCUPIED", "This bed no longer exists.");
+  }
+  if (bed.status === "MAINTENANCE") {
+    throw new BedAllocationError("BED_OCCUPIED", "This bed is under maintenance.");
+  }
+
   if (occupant.kind === "CAMPER") {
     if (bed.staffProfileId) {
       throw new BedAllocationError("BED_OCCUPIED", "This bed is occupied by a staff member.");
@@ -199,7 +209,27 @@ export async function assignBedInTx(
       where: { registrationId: occupant.registrationId, id: { not: bed.id } },
       data: { registrationId: null, status: "AVAILABLE" },
     });
-    await tx.bed.update({ where: { id: bed.id }, data: { registrationId: occupant.registrationId, status: "OCCUPIED" } });
+    // Guarded write, not a plain update: the reads above are stale by the
+    // time we get here, so two concurrent assignments could both pass them
+    // and both write — the second silently overwrites the first with no
+    // error, leaving the loser's registration.roomId pointing at a room
+    // they have no bed in. Re-asserting the bed's expected state in the
+    // WHERE clause makes only one of two racing transactions actually
+    // update a row; the other gets count 0 and throws instead of a silent
+    // loss.
+    const result = await tx.bed.updateMany({
+      where: {
+        id: bed.id,
+        staffProfileId: null,
+        deletedAt: null,
+        status: { not: "MAINTENANCE" },
+        OR: [{ registrationId: null }, { registrationId: occupant.registrationId }],
+      },
+      data: { registrationId: occupant.registrationId, status: "OCCUPIED" },
+    });
+    if (result.count === 0) {
+      throw new BedAllocationError("BED_OCCUPIED", "This bed is already occupied.");
+    }
     await tx.registration.update({ where: { id: occupant.registrationId }, data: { roomId: bed.roomId } });
 
     await logEvent(tx, {
@@ -221,7 +251,20 @@ export async function assignBedInTx(
       where: { staffProfileId: occupant.staffProfileId, id: { not: bed.id } },
       data: { staffProfileId: null, status: "AVAILABLE" },
     });
-    await tx.bed.update({ where: { id: bed.id }, data: { staffProfileId: occupant.staffProfileId, status: "OCCUPIED" } });
+    // Same guarded-write fix as the CAMPER branch above.
+    const result = await tx.bed.updateMany({
+      where: {
+        id: bed.id,
+        registrationId: null,
+        deletedAt: null,
+        status: { not: "MAINTENANCE" },
+        OR: [{ staffProfileId: null }, { staffProfileId: occupant.staffProfileId }],
+      },
+      data: { staffProfileId: occupant.staffProfileId, status: "OCCUPIED" },
+    });
+    if (result.count === 0) {
+      throw new BedAllocationError("BED_OCCUPIED", "This bed is already occupied.");
+    }
     await tx.staffProfile.update({
       where: { id: occupant.staffProfileId },
       data: { assignedRoomId: bed.roomId, assignedHostelId: bed.room.hostelId },
@@ -279,13 +322,21 @@ export interface BedAssignmentResult {
 export async function bulkAutoAssignBeds(params: { venueId: string; actorId: string }): Promise<BedAssignmentResult[]> {
   const venue = await prisma.venue.findUniqueOrThrow({ where: { id: params.venueId } });
 
+  // Postgres gives no row-order guarantee for a findMany with no orderBy —
+  // when capacity runs out mid-batch, which occupant wins the last bed vs.
+  // gets a "no bed available" failure would otherwise be nondeterministic.
+  // Deterministic FIFO (createdAt, then id as a tiebreaker for same-instant
+  // rows) so bulk assignment is reproducible and earlier-registered/approved
+  // occupants are prioritized when beds are scarce.
   const [unassignedRegistrations, unassignedStaff] = await Promise.all([
     prisma.registration.findMany({
       where: { campId: venue.campId, venueId: params.venueId, status: "APPROVED", roomId: null, deletedAt: null },
       include: { camper: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
     prisma.staffProfile.findMany({
       where: { campId: venue.campId, assignedVenueId: params.venueId, status: "APPROVED", assignedRoomId: null, deletedAt: null },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
   ]);
 
@@ -298,13 +349,24 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
   for (const occupant of occupants) {
     const key = occupantKey(occupant);
     try {
-      const suggestion = await suggestBed(prisma, params.venueId, occupant);
-      if (!suggestion) {
+      // suggestBed and assignBedInTx now share one transaction — previously
+      // suggestBed ran against the raw client outside any transaction, so a
+      // bed it suggested could be taken by a concurrent assignment before
+      // this occupant's own (separate) transaction got to it. The guarded
+      // write in assignBedInTx already makes that safe rather than
+      // corrupting data, but running both under one lock avoids the wasted
+      // suggestion and the resulting spurious "bed occupied" failure.
+      const bedId = await prisma.$transaction(async (tx) => {
+        const suggestion = await suggestBed(tx, params.venueId, occupant);
+        if (!suggestion) return null;
+        await assignBedInTx(tx, { bedId: suggestion.bedId, occupant, actorId: params.actorId });
+        return suggestion.bedId;
+      });
+      if (!bedId) {
         results.push({ occupantKey: key, error: "No matching-gender bed available" });
         continue;
       }
-      await prisma.$transaction((tx) => assignBedInTx(tx, { bedId: suggestion.bedId, occupant, actorId: params.actorId }));
-      results.push({ occupantKey: key, bedId: suggestion.bedId });
+      results.push({ occupantKey: key, bedId });
     } catch (error) {
       results.push({ occupantKey: key, error: error instanceof Error ? error.message : String(error) });
     }

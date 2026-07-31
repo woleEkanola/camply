@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/server/db";
 import { sendOtpEmail } from "@/server/email/sendOtpEmail";
 import { rateLimit } from "@/server/rateLimit";
 import { normalizeEmail } from "@/lib/email";
+import { hashPassword } from "@/lib/auth";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     );
   }
   if (!user) {
-    const placeholderPassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+    const placeholderPassword = await hashPassword(crypto.randomBytes(32).toString("hex"));
     user = await prisma.user.create({
       data: {
         email,
@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
 
   const otp = crypto.randomInt(100000, 1000000).toString();
   await prisma.oTP.upsert({
-    where: { email },
+    where: { email_purpose: { email, purpose: "STAFF_SIGNUP" } },
     update: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), attempts: 0 },
-    create: { email, code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+    create: { email, purpose: "STAFF_SIGNUP", code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
   });
 
   // Best-effort delivery — the OTP is already persisted, so a transient email

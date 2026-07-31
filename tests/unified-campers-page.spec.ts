@@ -91,7 +91,14 @@ test.describe("Unified teacher campers page", () => {
     // Camper name appears in the list.
     await expect(visibleText(page, "Unified Camper Alpha")).toBeVisible();
     // Medical alert chip.
-    await expect(page.getByText("Alert").first()).toBeVisible();
+    // The medical alert chip only exists in the Thumbnail/Card views — the
+    // default List view has no column for it (CampersList.tsx:382, :427), so
+    // switch views before asserting rather than expecting it in the table.
+    await page.getByRole("button", { name: "Card", exact: true }).click();
+    await expect(
+      page.locator('[title="Medical Alert"]').or(page.getByText(/Medical Alert/i)).first()
+    ).toBeVisible({ timeout: 10000 });
+    await page.getByRole("button", { name: "List", exact: true }).click();
 
     // Search filters to the camper.
     await page.locator('input[placeholder*="Search name, email, or registration #"]').fill("Alpha");

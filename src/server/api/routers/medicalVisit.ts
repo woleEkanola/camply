@@ -33,6 +33,17 @@ export const medicalVisitRouter = createTRPCRouter({
   listForRegistration: protectedProcedure
     .input(z.object({ registrationId: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Previously missing the assertMedicalStaffOrAdmin gate that `create`
+      // and `recent` both have — any logged-in user (including a PARENT of
+      // a different camper) could read any child's medical complaints and
+      // treatment notes by registration id alone.
+      const registration = await ctx.prisma.registration.findUnique({
+        where: { id: input.registrationId },
+        select: { campus: { select: { organizationId: true } } },
+      });
+      if (!registration) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertMedicalStaffOrAdmin(ctx, registration.campus.organizationId);
+
       return ctx.prisma.medicalVisit.findMany({ where: { registrationId: input.registrationId }, orderBy: { visitedAt: "desc" } });
     }),
 

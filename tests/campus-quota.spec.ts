@@ -9,6 +9,7 @@ import {
   relaxRequiredCustomFields,
   restoreRequiredCustomFields,
   loginWithPassword,
+  acceptAllDeclarations,
 } from "./helpers";
 
 /**
@@ -123,11 +124,7 @@ async function driveTeenToSubmit(page: Page, opts: {
   await reviewBtn.click();
 
   await expect(page.getByRole("heading", { name: "Review Your Registration" })).toBeVisible({ timeout: 5000 });
-  const checkboxes = page.locator('input[type="checkbox"]');
-  const cbCount = await checkboxes.count();
-  for (let i = 0; i < cbCount; i++) {
-    await checkboxes.nth(i).check();
-  }
+  await acceptAllDeclarations(page);
   await page.getByRole("button", { name: "Submit Registration" }).click();
 }
 

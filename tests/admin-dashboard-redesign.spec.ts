@@ -14,9 +14,15 @@ test.describe("Admin Dashboard Redesign", () => {
       main.getByRole("heading", { name: /Good (morning|afternoon|evening)/ })
     ).toBeVisible();
 
-    await expect(page.getByTestId("stat-card-parents")).toBeVisible();
-    await expect(page.getByTestId("stat-card-admins")).toBeVisible();
     await expect(page.getByTestId("stat-card-campers")).toBeVisible();
+    await expect(page.getByTestId("stat-card-checked-in")).toBeVisible();
+    await expect(page.getByTestId("stat-card-campers-male")).toBeVisible();
+    await expect(page.getByTestId("stat-card-campers-female")).toBeVisible();
+    await expect(page.getByTestId("stat-card-checked-out")).toBeVisible();
+    await expect(page.getByTestId("stat-card-teachers")).toBeVisible();
+    await expect(page.getByTestId("stat-card-teachers-male")).toBeVisible();
+    await expect(page.getByTestId("stat-card-teachers-female")).toBeVisible();
+    await expect(page.getByTestId("stat-card-tribes")).toBeVisible();
     await expect(page.getByTestId("stat-card-campuses")).toBeVisible();
 
     await expect(main.getByRole("heading", { name: "Quick Actions" })).toBeVisible();
@@ -42,7 +48,7 @@ test.describe("Admin Dashboard Redesign", () => {
     );
     await expect(page.getByTestId("quick-action-checkin")).toHaveAttribute(
       "href",
-      /\/admin\/check-in/
+      /\/admin\/qr-scan/
     );
     await expect(page.getByTestId("quick-action-add-camper")).toHaveAttribute(
       "href",
@@ -62,9 +68,10 @@ test.describe("Admin Dashboard Redesign", () => {
     await loginWithPassword(page, "admin@camply.com", "password123");
     await expect(page).toHaveURL(/\/admin$/);
 
-    await expect(page.getByTestId("stat-card-parents")).toHaveAttribute("href", "/admin/users");
-    await expect(page.getByTestId("stat-card-admins")).toHaveAttribute("href", "/admin/access-control");
     await expect(page.getByTestId("stat-card-campers")).toHaveAttribute("href", "/admin/campers");
+    await expect(page.getByTestId("stat-card-checked-in")).toHaveAttribute("href", "/admin/campers");
+    await expect(page.getByTestId("stat-card-teachers")).toHaveAttribute("href", "/admin/teachers");
+    await expect(page.getByTestId("stat-card-tribes")).toHaveAttribute("href", "/admin/tribes");
     await expect(page.getByTestId("stat-card-campuses")).toHaveAttribute("href", "/admin/campuses");
   });
 

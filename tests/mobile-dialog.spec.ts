@@ -13,7 +13,15 @@ async function openAddCampusDialog(page: import("@playwright/test").Page) {
   // doesn't have; OWNER bypasses that check unconditionally.
   await loginWithPassword(page, "owner@camply.com", "password123");
   await page.goto("/admin/campuses");
-  await page.getByRole("button", { name: "Add Campus" }).click();
+  // Two "Add Campus" controls are always mounted — the desktop button
+  // (`hidden md:inline-flex`) and the mobile FAB (`md:hidden`, which carries
+  // the aria-label). Both can report as :visible, so pick by viewport
+  // instead of relying on CSS visibility.
+  const isMobile = (page.viewportSize()?.width ?? 1280) < 768;
+  const trigger = isMobile
+    ? page.locator('button[aria-label="Add Campus"]')
+    : page.getByRole("button", { name: "Add Campus" }).first();
+  await trigger.click();
   const panel = page.getByTestId("dialog-panel");
   await expect(panel).toBeVisible();
   return panel;

@@ -12,8 +12,11 @@ test.describe("Mobile Registration Cards", () => {
   });
 
   test("card displays camper name, campus, and registration number", async ({ page }) => {
-    // Find cards that have a "View Review" button — unique to registration cards
-    const cards = page.locator("button:has-text('View Review')").locator("..").locator("..");
+    // Find cards via their "View" action button (MobileRegistrationsView.tsx)
+    // — the primary always-rendered per-card action, two levels up from the
+    // actions row to the card root. Must be exact: the overflow menu (hidden
+    // until opened) also has a "View Details" button, a substring superset.
+    const cards = page.getByRole("button", { name: "View", exact: true }).locator("..").locator("..");
     const cardCount = await cards.count();
 
     if (cardCount === 0) {
@@ -32,7 +35,7 @@ test.describe("Mobile Registration Cards", () => {
   });
 
   test("card has checkbox for bulk selection", async ({ page }) => {
-    const cards = page.locator("button:has-text('View Review')").locator("..").locator("..");
+    const cards = page.getByRole("button", { name: "View", exact: true }).locator("..").locator("..");
     const cardCount = await cards.count();
 
     if (cardCount === 0) {
@@ -52,8 +55,8 @@ test.describe("Mobile Registration Cards", () => {
     }
   });
 
-  test("card has View Review button that opens detail drawer", async ({ page }) => {
-    const cards = page.locator("button:has-text('View Review')").locator("..").locator("..");
+  test("card has View button that opens detail drawer", async ({ page }) => {
+    const cards = page.getByRole("button", { name: "View", exact: true }).locator("..").locator("..");
     const cardCount = await cards.count();
 
     if (cardCount === 0) {
@@ -61,17 +64,15 @@ test.describe("Mobile Registration Cards", () => {
       return;
     }
 
-    const viewBtn = cards.first().locator("button", { hasText: "View Review" });
-    if (await viewBtn.isVisible().catch(() => false)) {
-      await viewBtn.click();
-      await expect(
-        page.getByRole("heading", { name: "Registration Details" })
-      ).toBeVisible({ timeout: 5000 });
-    }
+    const viewBtn = cards.first().getByRole("button", { name: "View", exact: true });
+    await viewBtn.click();
+    await expect(
+      page.getByRole("heading", { name: "Registration Details" })
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test("document progress bar is visible on cards", async ({ page }) => {
-    const cards = page.locator("button:has-text('View Review')").locator("..").locator("..");
+    const cards = page.getByRole("button", { name: "View", exact: true }).locator("..").locator("..");
     const cardCount = await cards.count();
 
     if (cardCount === 0) {

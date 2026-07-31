@@ -20,7 +20,10 @@ export async function POST(req: NextRequest) {
     const { email: rawEmail, otp, newPassword } = parsed.data;
     const email = normalizeEmail(rawEmail);
 
-    const otpRecord = await prisma.oTP.findUnique({ where: { email } });
+    // Scoped to PASSWORD_RESET so a LOGIN or STAFF_SIGNUP code for the same
+    // email can never be used to authorize a password change.
+    const otpKey = { email_purpose: { email, purpose: "PASSWORD_RESET" as const } };
+    const otpRecord = await prisma.oTP.findUnique({ where: otpKey });
     if (!otpRecord) {
       return NextResponse.json({ message: "Invalid or expired code." }, { status: 401 });
     }
@@ -29,22 +32,22 @@ export async function POST(req: NextRequest) {
     }
     if (!otpEqual(otpRecord.code, normalizeOtp(otp))) {
       // Count the failed attempt so the code can't be brute-forced.
-      await prisma.oTP.update({ where: { email }, data: { attempts: { increment: 1 } } });
+      await prisma.oTP.update({ where: otpKey, data: { attempts: { increment: 1 } } });
       return NextResponse.json({ message: "Invalid or expired code." }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email }, omit: { password: false } });
     if (!user || user.deletedAt || !user.active || !user.password) {
       // Consume the OTP either way so it can't be retried against a
       // different outcome.
-      await prisma.oTP.delete({ where: { email } }).catch(() => {});
+      await prisma.oTP.delete({ where: otpKey }).catch(() => {});
       return NextResponse.json({ message: "Unable to reset password for this account." }, { status: 400 });
     }
 
     const hashed = await hashPassword(newPassword);
     await prisma.$transaction([
       prisma.user.update({ where: { id: user.id }, data: { password: hashed } }),
-      prisma.oTP.delete({ where: { email } }),
+      prisma.oTP.delete({ where: otpKey }),
     ]);
 
     return NextResponse.json({ message: "Password updated successfully." }, { status: 200 });

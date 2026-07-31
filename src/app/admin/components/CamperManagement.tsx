@@ -217,6 +217,13 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     }
   }, [responseData?.items, cursor]);
 
+  // Org-wide (or campus-rep-scoped) counts for the stat cards — independent of
+  // whatever page of results is currently loaded client-side into allCampers.
+  const { data: statsData } = api.camper.getAdminListStats.useQuery(
+    { organizationId, campId: campId || undefined },
+    { enabled: !!organizationId }
+  );
+
   // Get campuses for filtering
   const { data: campusesData, error: campusesError } = api.campus.getByOrganization.useQuery(
     { organizationId },
@@ -356,12 +363,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       {
         header: "Campus",
         accessor: (item) => item.homeCampus?.name ?? "—",
-        filter: {
-          value: campusFilter === "all" ? "" : campusFilter,
-          onChange: (v) => setCampusFilter(v || "all"),
-          options: (campusesData ?? []).map((c: { id: string; name: string }) => ({ value: c.id, label: c.name })),
-          placeholder: "All Campuses",
-        },
       },
       {
         header: "Registration",
@@ -374,12 +375,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
               {reg.registrationNumber && <div className="text-xs text-txt-secondary">{reg.registrationNumber}</div>}
             </div>
           );
-        },
-        filter: {
-          value: statusFilter,
-          onChange: setStatusFilter,
-          options: REGISTRATION_STATUSES,
-          placeholder: "All Statuses",
         },
       },
       {
@@ -395,31 +390,13 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             </div>
           );
         },
-        filter: tribesData?.length
-          ? {
-              value: tribeFilter,
-              onChange: setTribeFilter,
-              options: (tribesData ?? []).map((t: { id: string; name: string }) => ({ value: t.id, label: t.name })),
-              placeholder: "All Tribes",
-            }
-          : undefined,
       },
       {
         header: "Gender",
         accessor: (item) => item.gender ?? "—",
-        filter: {
-          value: genderFilter,
-          onChange: setGenderFilter,
-          options: [
-            { value: "Male", label: "Male" },
-            { value: "Female", label: "Female" },
-            { value: "Other", label: "Other" },
-          ],
-          placeholder: "All Genders",
-        },
       },
     ],
-    [campusFilter, campusesData, genderFilter, statusFilter, tribeFilter, tribesData]
+    []
   );
 
   const canManageCampers = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
@@ -451,6 +428,18 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           containerClassName="w-full sm:w-72"
         />
         <Select
+          aria-label="Filter by Campus"
+          value={campusFilter === "all" ? "" : campusFilter}
+          onChange={(e) => setCampusFilter(e.target.value || "all")}
+          className="w-40"
+        >
+          <option value="">All campuses</option>
+          {(campusesData ?? []).map((c: { id: string; name: string }) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </Select>
+        <Select
+          aria-label="Filter by Registration Status"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="w-40"
@@ -461,6 +450,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           ))}
         </Select>
         <Select
+          aria-label="Filter by Gender"
           value={genderFilter}
           onChange={(e) => setGenderFilter(e.target.value)}
           className="w-36"
@@ -470,7 +460,29 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           <option value="Female">Female</option>
           <option value="Other">Other</option>
         </Select>
-        
+        {(tribesData?.length ?? 0) > 0 && (
+          <Select
+            aria-label="Filter by Tribe"
+            value={tribeFilter}
+            onChange={(e) => setTribeFilter(e.target.value)}
+            className="w-40"
+          >
+            <option value="">All tribes</option>
+            {(tribesData ?? []).map((t: { id: string; name: string }) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </Select>
+        )}
+        {(campusFilter !== "all" || statusFilter || genderFilter || tribeFilter) && (
+          <button
+            type="button"
+            onClick={() => { setCampusFilter("all"); setStatusFilter(""); setGenderFilter(""); setTribeFilter(""); }}
+            className="text-xs font-medium text-accent-600 hover:underline shrink-0"
+          >
+            Clear all
+          </button>
+        )}
+
         {/* View Mode Toggle */}
         <div className="flex items-center rounded-lg bg-surface-raised p-0.5 border border-border-default shrink-0">
           <button
@@ -547,8 +559,13 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       </BulkActionBar>
 
       {/* Stats Cards */}
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-1">
-        <StatCard label="Total Campers" value={allCampers.length} />
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard data-testid="camper-stat-total" label="Total Campers" value={statsData?.totalCount ?? 0} />
+        <StatCard data-testid="camper-stat-male" label="Male" value={statsData?.maleCount ?? 0} />
+        <StatCard data-testid="camper-stat-female" label="Female" value={statsData?.femaleCount ?? 0} />
+        <StatCard data-testid="camper-stat-in-camp" label="In Camp" value={statsData?.inCampCount ?? 0} tone="success" />
+        <StatCard data-testid="camper-stat-exited-camp" label="Exited Camp" value={statsData?.exitedCampCount ?? 0} tone="neutral" />
+        <StatCard data-testid="camper-stat-tribe" label="Assigned to Tribe" value={statsData?.assignedTribeCount ?? 0} tone="info" />
       </div>
 
       {viewMode === "list" ? (

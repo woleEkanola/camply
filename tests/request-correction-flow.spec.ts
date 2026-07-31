@@ -1,7 +1,16 @@
 import { test, expect } from "@playwright/test";
 import bcrypt from "bcryptjs";
-import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
+import {
+  prisma,
+  getFixtureOrgContext,
+  loginWithPassword,
+  resetSystemFieldDefaults,
+  relaxRequiredCustomFields,
+  restoreRequiredCustomFields,
+} from "./helpers";
 import { submitRegistration } from "../src/server/registration/engine";
+
+test.describe.configure({ mode: "serial" });
 
 test.describe("Request correction & resubmission flow", () => {
   const stamp = Date.now();
@@ -13,12 +22,19 @@ test.describe("Request correction & resubmission flow", () => {
   let camperId: string;
   let registrationId: string;
   let parentUserId: string;
+  let relaxedFields: { id: string; required: boolean }[] = [];
 
   test.beforeAll(async () => {
     const ctx = await getFixtureOrgContext();
     organizationId = ctx.organizationId;
     campId = ctx.campId;
     campusId = ctx.campusId;
+
+    // The dashboard card only offers "Continue Registration" once the camper
+    // counts as complete, and isCamperComplete() (dashboard/page.tsx:101)
+    // includes required CUSTOM fields, which accumulate on the shared org.
+    await resetSystemFieldDefaults("CAMPER");
+    relaxedFields = await relaxRequiredCustomFields("CAMPER");
 
     const hashed = await bcrypt.hash(parentPassword, 10);
     const parent = await prisma.user.create({
@@ -79,6 +95,7 @@ test.describe("Request correction & resubmission flow", () => {
   });
 
   test.afterAll(async () => {
+    await restoreRequiredCustomFields(relaxedFields);
     await prisma.registration.deleteMany({ where: { id: registrationId } });
     await prisma.camper.deleteMany({ where: { id: camperId } });
     await prisma.user.deleteMany({ where: { email: parentEmail } });
@@ -95,6 +112,13 @@ test.describe("Request correction & resubmission flow", () => {
   });
 
   test("parent sees dashboard status and can navigate to resubmit", async ({ page }) => {
+    // The engine test above resubmitted the shared registration to PENDING.
+    // Reset it to REQUIRES_ACTION so the dashboard shows the "Continue Registration" CTA.
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: { status: "REQUIRES_ACTION", correctionRequest: "Please update profile details." },
+    });
+
     await loginWithPassword(page, parentEmail, parentPassword);
     await page.goto("/dashboard");
 

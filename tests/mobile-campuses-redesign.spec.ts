@@ -99,7 +99,11 @@ test.describe("Mobile Campus Redesign E2E", () => {
 
     // Check campus identity (Level 1 hierarchy title & badge)
     await expect(card.getByRole("heading", { name: campusName })).toBeVisible();
-    await expect(card.getByText("MOB")).toBeVisible();
+    // The campus code sits in a mixed text/element paragraph
+    // ("MOB" + <span>•</span> + "Order #N", CampusCard.tsx:199) and also
+    // appears in the heading, so assert containment on the card itself
+    // rather than trying to pin one text node.
+    await expect(card).toContainText("MOB");
     await expect(card.getByText("• Active").first()).toBeVisible();
 
     // Check Section 2 — Quick Info (reps count + address row + copy link)
@@ -125,7 +129,13 @@ test.describe("Mobile Campus Redesign E2E", () => {
     await card.getByText("Representatives").first().click();
     const repDialog = page.getByRole("dialog");
     await expect(repDialog.getByText(`Representatives — ${campusName}`)).toBeVisible({ timeout: 5000 });
-    await expect(repDialog.getByText("Grace Kemka")).toBeVisible();
+    // An already-assigned rep legitimately appears twice by design
+    // (CampusRepsSheet.tsx): once in the "Assigned Roster" list, and again
+    // in the "Add Representative" candidate list (pre-checked, with a
+    // "Selected" badge) — that list intentionally isn't filtered to exclude
+    // current reps. .first() scopes to the roster entry, which renders
+    // first in DOM order.
+    await expect(repDialog.getByText("Grace Kemka").first()).toBeVisible();
     await repDialog.getByRole("button", { name: "Cancel" }).click();
 
     // 5. Open Registration Analytics Modal

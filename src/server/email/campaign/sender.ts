@@ -2,11 +2,21 @@ import type { PrismaClient } from "@prisma/client";
 import { resolveAudience, type ResolvedUser } from "../audience/resolver";
 import type { AudienceFilter } from "../audience/filters";
 import { injectTracking } from "../tracking/injectTracking";
+import { CAMP_INVITATION_INCLUDE, buildCampInvitationVariables } from "./personalize";
 
-type TxClient = PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+type TxClient = PrismaClient<any> | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
 
 interface SendCampaignResult {
   recipientCount: number;
+}
+
+/** A resolved recipient for a personalized (certificate-style) campaign —
+ * same shape resolveAudience() returns, plus the registration it's tied
+ * to. A parent with two APPROVED registrations for the same camp gets two
+ * of these (one per camper), unlike ordinary broadcasts which are keyed
+ * one-per-user. */
+interface ResolvedPersonalizedUser extends ResolvedUser {
+  registrationId: string;
 }
 
 function recipientTypeForRole(role: string): string {
@@ -18,6 +28,50 @@ function recipientTypeForRole(role: string): string {
 }
 
 /**
+ * Resolves one recipient per APPROVED registration in the campaign's
+ * target camp (campaign.personalizeCampId), instead of resolveAudience()'s
+ * flat one-per-user list — required so a personalized certificate email
+ * (camper name, room, QR) can be sent per-camper. The existing audience
+ * filter still applies as an optional narrowing filter on top (currently:
+ * campusId, the most common narrowing case) rather than being ignored.
+ */
+async function resolvePersonalizedRecipients(
+  prisma: TxClient,
+  organizationId: string,
+  campId: string,
+  filter: AudienceFilter
+): Promise<ResolvedPersonalizedUser[]> {
+  const where: Record<string, unknown> = {
+    campId,
+    status: "APPROVED",
+    deletedAt: null,
+    campus: { organizationId },
+  };
+  const campusId = (filter.filters as { campusId?: string } | undefined)?.campusId;
+  if (campusId) where.campusId = campusId;
+
+  const registrations = await (prisma as any).registration.findMany({
+    where,
+    include: CAMP_INVITATION_INCLUDE,
+  });
+
+  const resolved: ResolvedPersonalizedUser[] = [];
+  for (const registration of registrations) {
+    const personalized = buildCampInvitationVariables(registration);
+    if (!personalized) continue;
+    resolved.push({
+      id: personalized.parentUserId,
+      email: personalized.email,
+      firstName: null,
+      lastName: null,
+      role: "PARENT",
+      registrationId: registration.id,
+    });
+  }
+  return resolved;
+}
+
+/**
  * Renders one campaign email for one recipient (branding + variables + tracking
  * pixel/link-rewriting) and sends it via Resend. Shared by the initial batch in
  * sendCampaign and by the sweep's processCampaignSideEffect so the two paths
@@ -25,20 +79,36 @@ function recipientTypeForRole(role: string): string {
  */
 async function renderAndSendCampaignEmail(
   campaign: any,
-  recipient: { id: string; email: string }
+  recipient: { id: string; email: string; registrationId?: string | null }
 ): Promise<{ providerMessageId: string | undefined }> {
   const org = campaign.organization;
   const branding = org?.branding;
 
-  const variables = {
-    organization_name: org?.name ?? "",
-    support_email: branding?.supportEmail ?? "",
-    support_phone: branding?.supportPhone ?? "",
-    sender_name: branding?.senderName ?? "",
-    dashboard_url: `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/dashboard`,
-  };
+  const brandingParams = branding
+    ? {
+        logoUrl: branding.logoUrl,
+        primaryColor: branding.primaryColor,
+        accentColor: branding.accentColor,
+        buttonColor: branding.buttonColor,
+        headerImageUrl: branding.headerImageUrl,
+        footerText: branding.footerText,
+        supportEmail: branding.supportEmail,
+        supportPhone: branding.supportPhone,
+        websiteUrl: branding.websiteUrl,
+        facebookUrl: branding.facebookUrl,
+        instagramUrl: branding.instagramUrl,
+        address: branding.address,
+        tagline: branding.tagline,
+        supportTitle: branding.supportTitle,
+        supportDescription: branding.supportDescription,
+        footerCopyright: branding.footerCopyright,
+        phone: branding.phone,
+        xUrl: branding.xUrl,
+        linkedinUrl: branding.linkedinUrl,
+        nextSteps: branding.nextSteps,
+      }
+    : null;
 
-  const { renderEmail } = await import("../renderer");
   const { interpolateSubject } = await import("../interpolate");
   const { resolveFromAddress } = await import("../resolveFromAddress");
 
@@ -48,28 +118,55 @@ async function renderAndSendCampaignEmail(
     senderName: branding?.senderName,
   });
 
-  const { text: interpolatedSubject } = interpolateSubject(campaign.subject, variables);
+  let rawHtml: string;
+  let interpolatedSubject: string;
 
-  const { html: rawHtml } = await renderEmail({
-    tiptapJson: campaign.body as Record<string, unknown>,
-    variables,
-    branding: branding
-      ? {
-          logoUrl: branding.logoUrl,
-          primaryColor: branding.primaryColor,
-          accentColor: branding.accentColor,
-          buttonColor: branding.buttonColor,
-          headerImageUrl: branding.headerImageUrl,
-          footerText: branding.footerText,
-          supportEmail: branding.supportEmail,
-          supportPhone: branding.supportPhone,
-          websiteUrl: branding.websiteUrl,
-          facebookUrl: branding.facebookUrl,
-          instagramUrl: branding.instagramUrl,
-          address: branding.address,
-        }
-      : null,
-  });
+  if (campaign.personalizeEvent && recipient.registrationId) {
+    // Personalized certificate-style send (e.g. Camp Invitation) — one
+    // recipient per registration, its own camper/room/QR variables,
+    // rendered through the event-assembler pipeline instead of the
+    // generic TipTap-only path.
+    const { renderEmailWithEvent } = await import("../renderer");
+    const prisma = (await import("../../db")).prisma;
+
+    const registration = await (prisma as any).registration.findUniqueOrThrow({
+      where: { id: recipient.registrationId },
+      include: CAMP_INVITATION_INCLUDE,
+    });
+    const personalized = buildCampInvitationVariables(registration);
+    const variables = { ...(personalized?.variables ?? {}), support_email: branding?.supportEmail ?? "" };
+
+    ({ text: interpolatedSubject } = interpolateSubject(campaign.subject, variables));
+    ({ html: rawHtml } = await renderEmailWithEvent({
+      eventKey: campaign.personalizeEvent,
+      variables,
+      branding: brandingParams,
+      tiptapJson: campaign.body as Record<string, unknown>,
+      qrDataUrl: personalized?.qrSrc,
+      previewText: campaign.previewText,
+      idCard: {
+        enabled: !!branding?.idCardEnabled,
+        imageUrl: registration.qrToken
+          ? `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/api/id-card/${registration.qrToken}/sheet`
+          : null,
+      },
+    }));
+  } else {
+    const { renderEmail } = await import("../renderer");
+    const variables = {
+      organization_name: org?.name ?? "",
+      support_email: branding?.supportEmail ?? "",
+      support_phone: branding?.supportPhone ?? "",
+      sender_name: branding?.senderName ?? "",
+      dashboard_url: `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/dashboard`,
+    };
+    ({ text: interpolatedSubject } = interpolateSubject(campaign.subject, variables));
+    ({ html: rawHtml } = await renderEmail({
+      tiptapJson: campaign.body as Record<string, unknown>,
+      variables,
+      branding: brandingParams,
+    }));
+  }
 
   const html = injectTracking(rawHtml, { recipientId: recipient.id, campaignId: campaign.id });
 
@@ -103,7 +200,8 @@ async function renderAndSendCampaignEmail(
  */
 export async function sendCampaign(
   prisma: TxClient,
-  campaignId: string
+  campaignId: string,
+  opts?: { manualEmails?: string[] }
 ): Promise<SendCampaignResult> {
   const campaign = await (prisma as any).emailCampaign.findUnique({
     where: { id: campaignId },
@@ -122,15 +220,68 @@ export async function sendCampaign(
     filter = (campaign.audienceFilter || { recipientType: "ALL" }) as AudienceFilter;
   }
 
-  const { users } = await resolveAudience(prisma, campaign.organizationId, filter);
+  // Manual email override — when specific parent emails are provided, resolve
+  // only registrations (personalized) or users (regular) matching those emails,
+  // bypassing the normal audience filter entirely. No DB schema change needed:
+  // manual emails are passed as a mutation parameter, not stored on the campaign.
+  const manualEmails = opts?.manualEmails?.filter(Boolean) ?? [];
 
-  // Resume-safe dedupe: recipients already created for THIS campaign, keyed by userId
+  let users: (ResolvedUser | ResolvedPersonalizedUser)[];
+  if (manualEmails.length > 0) {
+    if (campaign.personalizeEvent && campaign.personalizeCampId) {
+      const registrations = await (prisma as any).registration.findMany({
+        where: {
+          campId: campaign.personalizeCampId,
+          status: "APPROVED",
+          deletedAt: null,
+          camper: { user: { email: { in: manualEmails } } },
+        },
+        include: CAMP_INVITATION_INCLUDE,
+      });
+      const resolved: ResolvedPersonalizedUser[] = [];
+      for (const r of registrations) {
+        const personalized = buildCampInvitationVariables(r);
+        if (!personalized) continue;
+        resolved.push({
+          id: personalized.parentUserId,
+          email: personalized.email,
+          firstName: null,
+          lastName: null,
+          role: "PARENT",
+          registrationId: r.id,
+        });
+      }
+      users = resolved;
+    } else {
+      const matchedUsers = await (prisma as any).user.findMany({
+        where: { email: { in: manualEmails }, organizationId: campaign.organizationId },
+      });
+      users = matchedUsers.map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        firstName: u.firstName ?? null,
+        lastName: u.lastName ?? null,
+        role: u.role,
+      }));
+    }
+  } else {
+    // Standard audience resolution
+    users = campaign.personalizeEvent && campaign.personalizeCampId
+      ? await resolvePersonalizedRecipients(prisma, campaign.organizationId, campaign.personalizeCampId, filter)
+      : (await resolveAudience(prisma, campaign.organizationId, filter)).users;
+  }
+
+  // Resume-safe dedupe: recipients already created for THIS campaign. Keyed
+  // by registrationId when personalized (a parent with two approved
+  // registrations for the same camp must get two separate invitations, not
+  // be deduped down to one by a shared userId), by userId otherwise.
   const existingRecipients = await (prisma as any).emailRecipient.findMany({
     where: { campaignId },
-    select: { userId: true },
+    select: { userId: true, registrationId: true },
   });
-  const existingUserIds = new Set<string>(existingRecipients.map((r: any) => r.userId));
-  const newUsers = users.filter((u) => !existingUserIds.has(u.id));
+  const dedupeKey = (u: { id: string; registrationId?: string }) => u.registrationId ?? u.id;
+  const existingKeys = new Set<string>(existingRecipients.map((r: any) => r.registrationId ?? r.userId));
+  const newUsers = users.filter((u) => !existingKeys.has(dedupeKey(u as ResolvedPersonalizedUser)));
 
   if (existingRecipients.length === 0 && newUsers.length === 0) {
     await (prisma as any).emailCampaign.update({
@@ -153,12 +304,13 @@ export async function sendCampaign(
   if (newUsers.length > 0) {
     // Batch create recipients
     const recipients = await (prisma as any).$transaction(
-      newUsers.map((user: ResolvedUser) =>
+      newUsers.map((user: ResolvedUser | ResolvedPersonalizedUser) =>
         (prisma as any).emailRecipient.create({
           data: {
             campaignId,
             organizationId: campaign.organizationId,
             userId: user.id,
+            registrationId: (user as ResolvedPersonalizedUser).registrationId ?? null,
             email: user.email,
             recipientType: recipientTypeForRole(user.role),
             deliveryStatus: "QUEUED",

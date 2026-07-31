@@ -3,7 +3,7 @@ import { generateSlug } from "../../utils/slugs";
 import type { CampusRowInput, DepartmentRowInput, TribeRowInput } from "../../lib/import-export/schemas";
 import type { EntityImportResult } from "../../lib/import-export/types";
 
-type Db = PrismaClient | Omit<PrismaClient, "$transaction" | "$connect" | "$disconnect" | "$on" | "$use" | "$extends">;
+type Db = PrismaClient<any> | Omit<PrismaClient, "$transaction" | "$connect" | "$disconnect" | "$on" | "$use" | "$extends">;
 
 function emptyResult(): EntityImportResult {
   return { created: 0, updated: 0, errors: [], warnings: [] };

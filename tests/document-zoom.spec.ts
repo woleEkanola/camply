@@ -11,6 +11,7 @@ test.describe("Document Zoom Lightbox Modal E2E", () => {
   let camperId: string;
   let registrationId: string;
   let documentId: string;
+  let requirementId: string;
 
   test.beforeAll(async () => {
     const ctx = await getFixtureOrgContext();
@@ -87,6 +88,7 @@ test.describe("Document Zoom Lightbox Modal E2E", () => {
         required: true,
       },
     });
+    requirementId = req.id;
 
     const doc = await prisma.document.create({
       data: {
@@ -106,6 +108,10 @@ test.describe("Document Zoom Lightbox Modal E2E", () => {
   test.afterAll(async () => {
     if (documentId) await prisma.document.deleteMany({ where: { id: documentId } });
     if (registrationId) await prisma.registration.deleteMany({ where: { id: registrationId } });
+    // Must outlive the document that references it, and must not be left
+    // behind: orphaned copies accumulate in the shared fixture camp and break
+    // other specs that read "the first requirement" (see dynamic-form-fields).
+    if (requirementId) await prisma.documentRequirement.deleteMany({ where: { id: requirementId } });
     if (camperId) await prisma.camper.deleteMany({ where: { id: camperId } });
     await prisma.user.deleteMany({ where: { email: { in: [adminEmail, `doczoomparent-${stamp}@test.com`] } } });
   });
@@ -163,7 +169,11 @@ test.describe("Document Zoom Lightbox Modal E2E", () => {
     await expect(closeBtn).toBeVisible();
     await closeBtn.click();
 
-    // Verify modal is closed
-    await expect(page.getByText("100%").first()).not.toBeVisible();
+    // Verify modal is closed. Note: a bare "100%" text assertion is too
+    // broad here — the registration list row behind the drawer shows its own
+    // "Documents: 1 of 1 uploaded 100%" progress badge, which stays visible
+    // and gives a false "not closed" reading. Assert on the zoom control
+    // itself instead.
+    await expect(closeBtn).not.toBeVisible();
   });
 });
