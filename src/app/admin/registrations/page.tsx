@@ -1028,7 +1028,11 @@ function RegistrationsPage() {
               }
               actions={(row) => (
                 <div className="flex flex-wrap justify-end gap-2">
-                  {row.status === "PENDING" && (
+                  {row.status === "PENDING" && isTwoStep && !isEndorsed(row.review) ? (
+                    <Button size="sm" variant="secondary" disabled>
+                      Awaiting Vetting
+                    </Button>
+                  ) : row.status === "PENDING" ? (
                     <>
                       <Button
                         size="sm"
@@ -1045,7 +1049,11 @@ function RegistrationsPage() {
                         Reject
                       </Button>
                     </>
-                  )}
+                  ) : row.status === "APPROVED" ? (
+                    <Button size="sm" variant="primary" disabled>
+                      Approved
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     variant="danger"

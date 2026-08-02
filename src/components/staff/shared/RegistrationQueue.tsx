@@ -107,10 +107,12 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
 
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [accumulatedItems, setAccumulatedItems] = useState<any[]>([]);
+  const [endorsedIds, setEndorsedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setCursor(undefined);
     setAccumulatedItems([]);
+    setEndorsedIds(new Set());
   }, [filterStatus, reviewStateFilter, duplicatesOnly, debouncedSearchQuery]);
 
   const { data, isLoading, error, refetch } = api.registration.adminList.useQuery(
@@ -191,7 +193,23 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const onMutationError = (err: { message?: string }) => setActionError(err?.message || "Action failed");
 
   const approveMutation = api.registration.approve.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
-  const endorseMutation = api.registration.endorse.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
+  const endorseMutation = api.registration.endorse.useMutation({
+    onSuccess: (_, variables) => {
+      setActionError("");
+      // Update the local review field so the button transitions to
+      // "Awaiting Approval" without a server refetch (which would filter
+      // the just-endorsed item out of the AWAITING_VETTING view).
+      setAccumulatedItems((prev) =>
+        prev.map((item) =>
+          item.id === variables.registrationId
+            ? { ...item, review: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } }
+            : item,
+        ),
+      );
+      setEndorsedIds((prev) => new Set([...prev, variables.registrationId]));
+    },
+    onError: onMutationError,
+  });
 
   const registrations: Registration[] = accumulatedItems.map((reg: any) => ({
     ...reg,
@@ -676,7 +694,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                   {row.status === "PENDING" && (
                     <>
                       {isTwoStep ? (
-                        isReviewer && isEndorsed(row.review) ? (
+                        isReviewer && (isEndorsed(row.review) || endorsedIds.has(row.id)) ? (
                           <Button size="sm" variant="secondary" disabled>
                             Awaiting Approval
                           </Button>
@@ -706,6 +724,11 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                         Reject
                       </Button>
                     </>
+                  )}
+                  {row.status === "APPROVED" && (
+                    <Button size="sm" variant="primary" disabled>
+                      Approved
+                    </Button>
                   )}
                   <Button
                     size="sm"
