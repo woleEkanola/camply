@@ -279,7 +279,7 @@ export default function EditCamperModal({
         if (reg && tribeId !== (reg.tribe?.id || "")) {
           await assignTribeMutation.mutateAsync({
             registrationId: reg.id,
-            tribeId: tribeId || null,
+            tribeId: tribeId,
           });
         }
       } else {
