@@ -115,6 +115,17 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
     setEndorsedIds(new Set());
   }, [filterStatus, reviewStateFilter, duplicatesOnly, debouncedSearchQuery]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        setEndorsedIds(new Set());
+        invalidateRef.current();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
   const { data, isLoading, error, refetch } = api.registration.adminList.useQuery(
     {
       organizationId,
@@ -163,6 +174,9 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
     setAccumulatedItems([]);
     void refetch();
   };
+
+  const invalidateRef = useRef(invalidateRegistrations);
+  invalidateRef.current = invalidateRegistrations;
 
   const bulkTransition = api.registration.bulkTransition.useMutation({
     onSuccess: (res) => {

@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import AppShell from "@/components/layout/AppShell";
@@ -175,6 +175,9 @@ function RegistrationsPage() {
     void utils.registration.getAdminListStats.invalidate();
   };
 
+  const invalidateRef = useRef(invalidateRegistrations);
+  invalidateRef.current = invalidateRegistrations;
+
   const bulkTransition = api.registration.bulkTransition.useMutation({
     onSuccess: (res) => {
       const msg = `Bulk action complete: ${res.succeeded} succeeded${res.skipped > 0 ? `, ${res.skipped} skipped` : ""}${res.failed > 0 ? `, ${res.failed} failed` : ""}.`;
@@ -241,6 +244,16 @@ function RegistrationsPage() {
     setCursor(undefined);
     setAccumulatedItems([]);
   }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery, duplicatesOnly]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        invalidateRef.current();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
