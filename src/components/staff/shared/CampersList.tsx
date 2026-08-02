@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Select } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { StatCard } from "@/components/ui/StatCard";
 import { Card, CardBody } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
@@ -110,6 +111,11 @@ export function CampersList({
       limit: 50,
       cursor,
     },
+    { enabled: !!organizationId }
+  );
+
+  const { data: statsData } = api.camper.getAdminListStats.useQuery(
+    { organizationId, campId: campId || undefined },
     { enabled: !!organizationId }
   );
 
@@ -352,6 +358,13 @@ export function CampersList({
     <Card>
       <CardBody>
         {title && <h3 className="mb-4 text-lg font-medium text-neutral-900">{title}</h3>}
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <StatCard data-testid="camper-stat-approved" label="Approved" value={statsData?.approvedCount ?? 0} tone="success" />
+          <StatCard data-testid="camper-stat-in-camp" label="In Camp" value={statsData?.inCampCount ?? 0} tone="info" />
+          <StatCard data-testid="camper-stat-male" label="Male" value={statsData?.checkedInMaleCount ?? 0} />
+          <StatCard data-testid="camper-stat-female" label="Female" value={statsData?.checkedInFemaleCount ?? 0} />
+          <StatCard data-testid="camper-stat-exited-camp" label="Exited Camp" value={statsData?.exitedCampCount ?? 0} tone="neutral" />
+        </div>
         {viewMode === "list" ? (
           <Table
             mode="controlled"

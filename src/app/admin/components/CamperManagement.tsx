@@ -559,13 +559,12 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       </BulkActionBar>
 
       {/* Stats Cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard data-testid="camper-stat-total" label="Total Campers" value={statsData?.totalCount ?? 0} />
-        <StatCard data-testid="camper-stat-male" label="Male" value={statsData?.maleCount ?? 0} />
-        <StatCard data-testid="camper-stat-female" label="Female" value={statsData?.femaleCount ?? 0} />
-        <StatCard data-testid="camper-stat-in-camp" label="In Camp" value={statsData?.inCampCount ?? 0} tone="success" />
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard data-testid="camper-stat-approved" label="Approved" value={statsData?.approvedCount ?? 0} tone="success" />
+        <StatCard data-testid="camper-stat-in-camp" label="In Camp" value={statsData?.inCampCount ?? 0} tone="info" />
+        <StatCard data-testid="camper-stat-male" label="Male" value={statsData?.checkedInMaleCount ?? 0} />
+        <StatCard data-testid="camper-stat-female" label="Female" value={statsData?.checkedInFemaleCount ?? 0} />
         <StatCard data-testid="camper-stat-exited-camp" label="Exited Camp" value={statsData?.exitedCampCount ?? 0} tone="neutral" />
-        <StatCard data-testid="camper-stat-tribe" label="Assigned to Tribe" value={statsData?.assignedTribeCount ?? 0} tone="info" />
       </div>
 
       {viewMode === "list" ? (

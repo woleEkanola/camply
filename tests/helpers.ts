@@ -329,7 +329,7 @@ export async function loginWithPassword(page: Page, email: string, password: str
   await emailInput(page).fill(email);
   await passwordInput(page).fill(password);
   await loginButton(page).click();
-  await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard)/, { timeout: 45000 });
+  await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard|teacher|volunteer)/, { timeout: 45000 });
 }
 
 /**

@@ -302,7 +302,7 @@ export const camperRouter = createTRPCRouter({
 
       const registrationScope = { deletedAt: null, ...(input.campId && { campId: input.campId }) };
 
-      const [totalCount, maleCount, femaleCount, otherCount, inCampCount, exitedCampCount, assignedTribeCount] = await Promise.all([
+      const [totalCount, maleCount, femaleCount, otherCount, inCampCount, exitedCampCount, assignedTribeCount, approvedCount, checkedInMaleCount, checkedInFemaleCount] = await Promise.all([
         ctx.prisma.camper.count({ where }),
         ctx.prisma.camper.count({ where: { ...where, gender: "Male" } }),
         ctx.prisma.camper.count({ where: { ...where, gender: "Female" } }),
@@ -310,9 +310,12 @@ export const camperRouter = createTRPCRouter({
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "CHECKED_IN" } } } }),
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "COMPLETED" } } } }),
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, tribeId: { not: null } } } } }),
+        ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "APPROVED" } } } }),
+        ctx.prisma.camper.count({ where: { ...where, gender: "Male", registrations: { some: { ...registrationScope, status: "CHECKED_IN" } } } }),
+        ctx.prisma.camper.count({ where: { ...where, gender: "Female", registrations: { some: { ...registrationScope, status: "CHECKED_IN" } } } }),
       ]);
 
-      return { totalCount, maleCount, femaleCount, otherCount, inCampCount, exitedCampCount, assignedTribeCount };
+      return { totalCount, maleCount, femaleCount, otherCount, inCampCount, exitedCampCount, assignedTribeCount, approvedCount, checkedInMaleCount, checkedInFemaleCount };
     }),
 
   // Get campers for a specific user
