@@ -124,7 +124,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<"REJECT_REG" | "DELETE" | null>(null);
   const [bulkReason, setBulkReason] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "thumbnail" | "card">("list");
+  const [viewMode, setViewMode] = useState<"card" | "thumbnail" | "list">("card");
 
   const openCamperParam = searchParams.get("openCamper") || searchParams.get("camperId") || searchParams.get("open") || searchParams.get("id");
   const queryParam = searchParams.get("q");
@@ -411,9 +411,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         >
           Edit
         </Button>
-        <Button size="sm" variant="danger" onClick={() => openDeleteModal(profile.id)}>
-          Delete
-        </Button>
       </div>
     ) : null;
 
@@ -486,13 +483,13 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         {/* View Mode Toggle */}
         <div className="flex items-center rounded-lg bg-surface-raised p-0.5 border border-border-default shrink-0">
           <button
-            onClick={() => setViewMode("list")}
+            onClick={() => setViewMode("card")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "list" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
+              viewMode === "card" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
             )}
           >
-            List
+            Card
           </button>
           <button
             onClick={() => setViewMode("thumbnail")}
@@ -504,13 +501,13 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             Thumbnail
           </button>
           <button
-            onClick={() => setViewMode("card")}
+            onClick={() => setViewMode("list")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "card" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
+              viewMode === "list" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
             )}
           >
-            Card
+            List
           </button>
         </div>
       </div>
@@ -656,13 +653,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                         >
                           Edit
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => openDeleteModal(item.id)}
-                        >
-                          Delete
-                        </Button>
                       </div>
                     )}
                   </div>
@@ -751,13 +741,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                           onClick={() => { setSelectedProfile(item.id); setIsModalOpen(true); }}
                         >
                           Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => openDeleteModal(item.id)}
-                        >
-                          Delete
                         </Button>
                       </div>
                     )}

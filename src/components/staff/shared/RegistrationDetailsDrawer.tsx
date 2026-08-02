@@ -191,6 +191,7 @@ export function RegistrationDetailsDrawer({
   // endorse() leaves status at PENDING (only the two-step admin's own Approve moves it
   // forward), so this is the only way to tell a reviewer "you already recommended this".
   const endorsed = isTwoStep && registration.status === "PENDING" && isEndorsed(review);
+  const isApproved = ["APPROVED", "CHECKED_IN", "COMPLETED"].includes(registration?.status?.toUpperCase());
 
   return (
     <>
@@ -719,51 +720,81 @@ export function RegistrationDetailsDrawer({
           {/* 5. FIXED BOTTOM ACTION BAR */}
           <div className="fixed bottom-0 inset-x-0 z-30 border-t border-border-default bg-surface p-3.5 shadow-2xl">
             <div className="flex items-center gap-2 max-w-lg mx-auto">
-              <button
-                type="button"
-                className="flex-1 inline-flex items-center justify-center rounded-md font-bold transition-colors touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 text-xs bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 py-2.5"
-                onClick={() => setCorrectionDialogOpen(true)}
-              >
-                Request Correction
-              </button>
-
-              <button
-                type="button"
-                className="flex-1 inline-flex items-center justify-center rounded-md font-bold transition-colors touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 text-xs bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 py-2.5"
-                onClick={() => setRejectDialogOpen(true)}
-              >
-                <XMarkIcon className="mr-1 h-4 w-4 text-rose-600" />
-                Reject
-              </button>
-
-              {isTwoStep && !isOrgAdmin ? (
-                endorsed ? (
+              {isApproved ? (
+                <>
+                  <button
+                    type="button"
+                    disabled
+                    className="flex-1 inline-flex items-center justify-center rounded-md font-bold text-xs bg-surface-raised text-txt-muted border border-border-default cursor-not-allowed py-2.5 opacity-60"
+                  >
+                    Request Correction
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    className="flex-1 inline-flex items-center justify-center rounded-md font-bold text-xs bg-surface-raised text-txt-muted border border-border-default cursor-not-allowed py-2.5 opacity-60"
+                  >
+                    <XMarkIcon className="mr-1 h-4 w-4 text-txt-muted" />
+                    Reject
+                  </button>
                   <Button
                     disabled
                     variant="secondary"
-                    className="flex-1 justify-center text-xs font-bold py-2.5"
-                  >
-                    Awaiting Approval
-                  </Button>
-                ) : (
-                  <Button
-                    className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"
-                    loading={endorse.isPending}
-                    onClick={() => endorse.mutate({ registrationId })}
+                    className="flex-1 justify-center text-xs font-bold py-2.5 opacity-60 cursor-not-allowed"
                   >
                     <CheckIcon className="mr-1 h-4 w-4" />
-                    Recommend
+                    Approve
                   </Button>
-                )
+                </>
               ) : (
-                <Button
-                  className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"
-                  loading={approve.isPending}
-                  onClick={() => approve.mutate({ registrationId })}
-                >
-                  <CheckIcon className="mr-1 h-4 w-4" />
-                  Approve
-                </Button>
+                <>
+                  <button
+                    type="button"
+                    className="flex-1 inline-flex items-center justify-center rounded-md font-bold transition-colors touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 text-xs bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 py-2.5"
+                    onClick={() => setCorrectionDialogOpen(true)}
+                  >
+                    Request Correction
+                  </button>
+
+                  <button
+                    type="button"
+                    className="flex-1 inline-flex items-center justify-center rounded-md font-bold transition-colors touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 text-xs bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 py-2.5"
+                    onClick={() => setRejectDialogOpen(true)}
+                  >
+                    <XMarkIcon className="mr-1 h-4 w-4 text-rose-600" />
+                    Reject
+                  </button>
+
+                  {isTwoStep && !isOrgAdmin ? (
+                    endorsed ? (
+                      <Button
+                        disabled
+                        variant="secondary"
+                        className="flex-1 justify-center text-xs font-bold py-2.5"
+                      >
+                        Awaiting Approval
+                      </Button>
+                    ) : (
+                      <Button
+                        className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"
+                        loading={endorse.isPending}
+                        onClick={() => endorse.mutate({ registrationId })}
+                      >
+                        <CheckIcon className="mr-1 h-4 w-4" />
+                        Recommend
+                      </Button>
+                    )
+                  ) : (
+                    <Button
+                      className="flex-1 justify-center text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 shadow-xs"
+                      loading={approve.isPending}
+                      onClick={() => approve.mutate({ registrationId })}
+                    >
+                      <CheckIcon className="mr-1 h-4 w-4" />
+                      Approve
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>

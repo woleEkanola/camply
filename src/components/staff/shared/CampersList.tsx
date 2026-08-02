@@ -14,7 +14,8 @@ import { StatCard } from "@/components/ui/StatCard";
 import { Card, CardBody } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import EditCamperModal from "@/app/admin/components/EditCamperModal";
+import { ArrowDownTrayIcon, CameraIcon } from "@heroicons/react/24/outline";
 import { useSession } from "next-auth/react";
 
 function age(dob: string | Date | null | undefined) {
@@ -77,6 +78,7 @@ export function CampersList({
   const { data: session } = useSession();
   const user = session?.user;
   const isCampusRep = user?.role === "SUPER_ADMIN" || user?.role === "OWNER" || user?.role === "ADMIN" || user?.role === "CAMPUS_REPRESENTATIVE" || (user?.role === "TEACHER" && ((user as any)?.managedCampuses?.length ?? 0) > 0);
+  const isTeacherOrVolunteer = user?.role === "TEACHER" || user?.role === "VOLUNTEER";
 
   const [searchTerm, setSearchTerm] = useState("");
   const [campusFilter, setCampusFilter] = useState<string | "all">("all");
@@ -86,7 +88,9 @@ export function CampersList({
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allItems, setAllItems] = useState<StaffCamperItem[]>([]);
   const [profileCamperId, setProfileCamperId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "thumbnail" | "card">("list");
+  const [editCamperId, setEditCamperId] = useState<string | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"card" | "thumbnail" | "list">("card");
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
   const { data: campusesData } = api.campus.getByOrganization.useQuery(
@@ -313,13 +317,13 @@ export function CampersList({
         {/* View Mode Toggle */}
         <div className="flex items-center rounded-lg bg-surface-raised p-0.5 border border-border-default shrink-0">
           <button
-            onClick={() => setViewMode("list")}
+            onClick={() => setViewMode("card")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "list" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "card" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
             )}
           >
-            List
+            Card
           </button>
           <button
             onClick={() => setViewMode("thumbnail")}
@@ -331,13 +335,13 @@ export function CampersList({
             Thumbnail
           </button>
           <button
-            onClick={() => setViewMode("card")}
+            onClick={() => setViewMode("list")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "card" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "list" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
             )}
           >
-            Card
+            List
           </button>
         </div>
       </div>
@@ -420,6 +424,19 @@ export function CampersList({
                       <div className="text-[11px] text-neutral-500 truncate">
                         {[age(item.dateOfBirth) ? `${age(item.dateOfBirth)}y` : null, item.gender].filter(Boolean).join(" · ")}
                       </div>
+                      <div className="mt-2 flex justify-center" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setEditCamperId(item.id);
+                            setIsEditModalOpen(true);
+                          }}
+                        >
+                          <CameraIcon className="mr-1 h-3.5 w-3.5 text-accent-500" />
+                          {isTeacherOrVolunteer ? "Edit Photo" : "Edit"}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -481,6 +498,19 @@ export function CampersList({
                           <span className="font-medium text-neutral-700 truncate block">{reg?.registrationNumber ?? "—"}</span>
                         </div>
                       </div>
+                      <div className="mt-4 pt-3 border-t border-border-subtle flex justify-end" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setEditCamperId(item.id);
+                            setIsEditModalOpen(true);
+                          }}
+                        >
+                          <CameraIcon className="mr-1 h-3.5 w-3.5 text-accent-500" />
+                          {isTeacherOrVolunteer ? "Edit Photo" : "Edit"}
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
@@ -495,6 +525,18 @@ export function CampersList({
           </div>
         )}
         <CamperQuickProfileDrawer camperId={profileCamperId} open={!!profileCamperId} onClose={() => setProfileCamperId(null)} />
+        <EditCamperModal
+          profileId={editCamperId}
+          organizationId={organizationId}
+          isOpen={isEditModalOpen}
+          photoOnly={isTeacherOrVolunteer}
+          onClose={() => setIsEditModalOpen(false)}
+          onSuccess={() => {
+            setCursor(undefined);
+            setAllItems([]);
+            void refetch();
+          }}
+        />
       </CardBody>
     </Card>
   );

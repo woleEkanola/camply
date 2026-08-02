@@ -168,6 +168,7 @@ export function MobileRegistrationCard({
   const endorsed = isTwoStep && registration.status === "PENDING" && isEndorsed(registration.review);
   // A reviewer who has already recommended this camper has nothing left to do on
   // it — the primary action becomes a non-clickable "Awaiting Approval" marker.
+  const isApproved = ["APPROVED", "CHECKED_IN", "COMPLETED"].includes(registration.status?.toUpperCase());
   const awaitingApproval = isReviewer && endorsed;
 
   const camperName = registration.camper?.name || registration.user?.name || registration.name || "Camper";
@@ -336,7 +337,26 @@ export function MobileRegistrationCard({
 
       {/* SECTION 3 — ACTIONS ROW */}
       <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        {awaitingApproval ? (
+        {isApproved ? (
+          <>
+            <button
+              type="button"
+              disabled
+              className="flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl bg-surface-raised text-txt-muted border border-border-default font-bold text-xs cursor-not-allowed pointer-events-none px-2"
+            >
+              <span>{primaryLabel}</span>
+            </button>
+            {onSecondaryAction && (
+              <button
+                type="button"
+                disabled
+                className="flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl bg-surface-raised text-txt-muted border border-border-default font-bold text-xs cursor-not-allowed pointer-events-none px-2"
+              >
+                <span>{secondaryLabel}</span>
+              </button>
+            )}
+          </>
+        ) : awaitingApproval ? (
           <button
             type="button"
             disabled
@@ -354,7 +374,7 @@ export function MobileRegistrationCard({
           </button>
         ) : null}
 
-        {onSecondaryAction && (
+        {!isApproved && onSecondaryAction && (
           <button
             type="button"
             onClick={() => onSecondaryAction(registration)}

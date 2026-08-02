@@ -739,10 +739,15 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                       </Button>
                     </>
                   )}
-                  {row.status === "APPROVED" && (
-                    <Button size="sm" variant="primary" disabled>
-                      Approved
-                    </Button>
+                  {["APPROVED", "CHECKED_IN", "COMPLETED"].includes(row.status?.toUpperCase()) && (
+                    <>
+                      <Button size="sm" variant="secondary" disabled>
+                        Approve
+                      </Button>
+                      <Button size="sm" variant="secondary" disabled>
+                        Reject
+                      </Button>
+                    </>
                   )}
                   <Button
                     size="sm"
