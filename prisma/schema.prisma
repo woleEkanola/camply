@@ -108,6 +108,7 @@ model User {
   campers          Camper[] // User can have multiple camper profiles
   staffProfiles    StaffProfile[]
   reportsFromStaff StaffProfile[] @relation("StaffReportsToUser")
+  pushSubscriptions PushSubscription[]
   scanEvents       ScanEvent[]
   deletedAt        DateTime?
   createdAt        DateTime       @default(now())
@@ -1474,4 +1475,42 @@ model StaffSignupLinkClick {
 
   @@index([staffSignupLinkId])
   @@index([clickedAt])
+}
+
+// ─── Web Push Subscriptions & Audit Logs ──────────────────────────────────────
+
+model PushSubscription {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  endpoint       String   @unique
+  p256dh         String
+  auth           String
+  deviceId       String?
+  station        String?
+  browser        String?
+  lastSeenAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model WebPushLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  message        String
+  priority       String   @default("INFO") // INFO | SUCCESS | WARNING | CRITICAL
+  targetAudience String   // ALL | CAMPUS | STATION | ROLE
+  targetId       String?  // campusId | stationName | roleName
+  actionUrl      String?
+  sentById       String?
+  successCount   Int      @default(0)
+  failCount      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
 }

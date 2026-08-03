@@ -180,9 +180,9 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role;
         session.user.organizationId = token.organizationId as string;
         session.user.managedCampuses = token.managedCampuses || [];
-        session.user.staffProfileId = token.staffProfileId as string | undefined;
-        session.user.staffType = token.staffType as "TEACHER" | "VOLUNTEER" | undefined;
-        session.user.staffStatus = token.staffStatus as "APPROVED" | "PENDING" | "REJECTED" | undefined;
+        (session.user as any).staffProfileId = token.staffProfileId as string | undefined;
+        (session.user as any).staffType = token.staffType as "TEACHER" | "VOLUNTEER" | undefined;
+        (session.user as any).staffStatus = token.staffStatus as "APPROVED" | "PENDING" | "REJECTED" | undefined;
       }
       return session;
     },

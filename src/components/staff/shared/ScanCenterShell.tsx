@@ -17,6 +17,7 @@ import { SearchSheet } from "@/components/scan/SearchSheet";
 import { OfflineSheet } from "@/components/scan/OfflineSheet";
 import { OfflineDownloadModal } from "@/components/scan/OfflineDownloadModal";
 import { OfflineReadinessModal } from "@/components/pwa/OfflineReadinessModal";
+import { notificationEngine } from "@/lib/notificationEngine";
 import { HistorySheet } from "@/components/scan/HistorySheet";
 import { ScanTabBar } from "@/components/scan/ScanTabBar";
 import { CampusTeachersSheet } from "@/components/scan/CampusTeachersSheet";
@@ -287,6 +288,12 @@ export function ScanCenterShell({
       if (response.result === "REQUIRES_MEDICAL_ACKNOWLEDGEMENT") {
         playScanCue("critical");
         vibrateForCue("critical");
+        notificationEngine.notify({
+          title: "Medical Alert",
+          message: `Critical medical flags for ${response.registration.camper.name}`,
+          priority: "CRITICAL",
+          source: targetStationName,
+        });
         setMedicalData({
           registration: response.registration,
           qrToken: payload.qrToken,
@@ -299,6 +306,12 @@ export function ScanCenterShell({
       if (response.result === "DUPLICATE") {
         playScanCue("duplicate");
         vibrateForCue("duplicate");
+        notificationEngine.notify({
+          title: "Duplicate Scan",
+          message: `${response.registration.camper.name} already processed at ${response.originalStation}`,
+          priority: "INFO",
+          source: targetStationName,
+        });
         setSessionStats((prev) => ({ ...prev, duplicates: prev.duplicates + 1 }));
         setDuplicateData({
           camperName: response.registration.camper.name,
@@ -316,6 +329,13 @@ export function ScanCenterShell({
       // C. SUCCESS SCANS
       const reg = response.registration;
       const camper = reg.camper;
+
+      notificationEngine.notify({
+        title: camper.name,
+        message: `${response.actionPerformed || "Checked In"} at ${targetStationName}`,
+        priority: "SUCCESS",
+        source: targetStationName,
+      });
 
       // Handle Lookup Station Overlay
       if (activeStation === "IDENTITY_LOOKUP") {
