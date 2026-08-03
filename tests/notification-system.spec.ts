@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { loginWithPassword } from "./helpers";
 
 test.describe("Camply Unified Notification & Vibration System", () => {
   test.beforeEach(async ({ page, context }) => {
@@ -22,7 +23,8 @@ test.describe("Camply Unified Notification & Vibration System", () => {
   });
 
   test("Notification Center slide-over drawer opens, filters, and manages local notifications", async ({ page }) => {
-    await page.goto("/volunteer/qr-scan");
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/qr-scan");
 
     // Click Notification Bell button in header
     const bellButton = page.locator("button[aria-label='Open Notifications']");
@@ -56,7 +58,8 @@ test.describe("Camply Unified Notification & Vibration System", () => {
   });
 
   test("Triggers haptic vibration and notification dispatch on local scan events", async ({ page }) => {
-    await page.goto("/volunteer/qr-scan");
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/qr-scan");
 
     // Execute a local notification dispatch in browser context
     await page.evaluate(() => {
