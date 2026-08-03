@@ -159,7 +159,8 @@ export async function mergeDeltaCampers(
   const db = await initDb();
   if (!db) return 0;
 
-  return new Promise((resolve, reject) => {
+  // Transaction 1: write all updates and deletes
+  await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction("campers", "readwrite");
     const store = transaction.objectStore("campers");
 
@@ -183,12 +184,17 @@ export async function mergeDeltaCampers(
       }
     }
 
-    transaction.oncomplete = () => {
-      const countReq = store.count();
-      countReq.onsuccess = () => resolve(countReq.result || 0);
-      countReq.onerror = () => resolve(0);
-    };
+    transaction.oncomplete = () => resolve();
     transaction.onerror = (event: any) => reject(event.target.error);
+  });
+
+  // Transaction 2: count records in a fresh read-only transaction
+  return new Promise<number>((resolve) => {
+    const countTx = db.transaction("campers", "readonly");
+    const countStore = countTx.objectStore("campers");
+    const countReq = countStore.count();
+    countReq.onsuccess = () => resolve(countReq.result || 0);
+    countReq.onerror = () => resolve(0);
   });
 }
 
