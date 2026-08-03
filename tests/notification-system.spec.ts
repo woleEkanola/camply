@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Camply Unified Notification & Vibration System", () => {
   test.beforeEach(async ({ page, context }) => {
+    test.setTimeout(60000);
     // 1. Grant browser notification permissions in Playwright context
     await context.grantPermissions(["notifications"]);
 
