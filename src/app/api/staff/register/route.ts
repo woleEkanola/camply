@@ -71,8 +71,8 @@ export async function POST(request: Request) {
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.role !== link.type) {
-      return NextResponse.json({ message: "Please verify your email with OTP first" }, { status: 400 });
+    if (!user) {
+      return NextResponse.json({ message: "Please verify your email or log in first" }, { status: 400 });
     }
 
     const existing = await prisma.staffProfile.findFirst({

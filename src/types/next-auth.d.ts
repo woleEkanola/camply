@@ -11,12 +11,22 @@ declare module "next-auth" {
     user: {
       id: string;
       role: UserRole;
+      organizationId?: string;
+      managedCampuses?: string[];
+      staffProfileId?: string;
+      staffType?: "TEACHER" | "VOLUNTEER";
+      staffStatus?: "APPROVED" | "PENDING" | "REJECTED";
     } & DefaultSession["user"];
   }
 
   interface User {
     id: string;
     role: UserRole;
+    organizationId?: string;
+    managedCampuses?: string[];
+    staffProfileId?: string;
+    staffType?: "TEACHER" | "VOLUNTEER";
+    staffStatus?: "APPROVED" | "PENDING" | "REJECTED";
   }
 }
 
@@ -24,5 +34,10 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     role: UserRole;
+    organizationId?: string;
+    managedCampuses?: string[];
+    staffProfileId?: string;
+    staffType?: "TEACHER" | "VOLUNTEER";
+    staffStatus?: "APPROVED" | "PENDING" | "REJECTED";
   }
 }

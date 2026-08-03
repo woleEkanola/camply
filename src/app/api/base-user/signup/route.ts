@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
+      if (token && role !== "PARENT") {
+        return NextResponse.json({ existingUser: true, message: "An account with this email already exists. Please log in to continue." }, { status: 200 });
+      }
       return NextResponse.json({ message: "An account with this email already exists. Please log in instead." }, { status: 400 });
     }
 

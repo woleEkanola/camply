@@ -152,15 +152,25 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.role = user.role;
         token.organizationId = user.organizationId;
-        // Stamp managedCampuses for ANY role, not just CAMPUS_REPRESENTATIVE —
-        // a user's primary role no longer determines whether they can also
-        // hold Campus Rep capability (e.g. a TEACHER can be a rep for their
-        // own church branch while keeping their Teacher login/permissions).
+        // Stamp managedCampuses and staffProfile for ANY role
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          include: { managedCampuses: true },
+          include: {
+            managedCampuses: true,
+            staffProfiles: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: "desc" },
+            },
+          },
         });
         token.managedCampuses = dbUser?.managedCampuses?.map((c: { id: string }) => c.id) || [];
+
+        const staff = dbUser?.staffProfiles?.[0];
+        if (staff) {
+          token.staffProfileId = staff.id;
+          token.staffType = staff.type as "TEACHER" | "VOLUNTEER";
+          token.staffStatus = staff.status as "APPROVED" | "PENDING" | "REJECTED";
+        }
       }
       return token;
     },
@@ -170,6 +180,9 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role;
         session.user.organizationId = token.organizationId as string;
         session.user.managedCampuses = token.managedCampuses || [];
+        session.user.staffProfileId = token.staffProfileId as string | undefined;
+        session.user.staffType = token.staffType as "TEACHER" | "VOLUNTEER" | undefined;
+        session.user.staffStatus = token.staffStatus as "APPROVED" | "PENDING" | "REJECTED" | undefined;
       }
       return session;
     },

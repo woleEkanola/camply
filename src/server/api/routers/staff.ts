@@ -654,10 +654,7 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
       const normalizedEmail = normalizeEmail(input.email);
-      const existing = await ctx.prisma.user.findUnique({ where: { email: normalizedEmail } });
-      if (existing) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "A user with this email already exists" });
-      }
+      const existingUser = await ctx.prisma.user.findUnique({ where: { email: normalizedEmail } });
 
       const fields = await ctx.prisma.formField.findMany({
         where: { organizationId: input.organizationId, audience: input.type, deletedAt: null },
@@ -682,13 +679,13 @@ export const staffRouter = createTRPCRouter({
       }
 
       const placeholderPassword = await hashPassword(crypto.randomBytes(32).toString("hex"));
-      const firstName = systemValues.firstName || "";
-      const lastName = systemValues.lastName || "";
+      const firstName = systemValues.firstName || existingUser?.firstName || "";
+      const lastName = systemValues.lastName || existingUser?.lastName || "";
       const phone = systemValues.phone || "";
       const gender = systemValues.gender || "";
 
       return ctx.prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({
+        const user = existingUser ?? await tx.user.create({
           data: {
             email: normalizedEmail,
             password: placeholderPassword,
@@ -698,7 +695,7 @@ export const staffRouter = createTRPCRouter({
             organizationId: input.organizationId,
             homeCampusId: systemValues.preferredCampusId || undefined,
             active: true,
-          }
+          },
         });
 
         const profile = await tx.staffProfile.create({

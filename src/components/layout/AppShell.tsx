@@ -14,6 +14,7 @@ import { CommandPalette } from "./CommandPalette";
 import { BottomNav } from "./BottomNav";
 import { Menu, Transition } from "@headlessui/react";
 import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
+import { RoleSwitcher } from "./RoleSwitcher";
 
 export interface AppShellProps {
   area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer";
@@ -232,6 +233,7 @@ export default function AppShell({ area, children }: AppShellProps) {
             <kbd className="rounded border border-border-default bg-surface-raised px-1.5 py-0.5 text-xs text-txt-muted">⌘K</kbd>
           </button>
           <div className="flex items-center gap-2">
+            <RoleSwitcher />
             <InstallPwaButton variant="header" />
             <NotificationBell />
             <ThemeToggle />

@@ -30,12 +30,6 @@ export async function POST(req: NextRequest) {
   }
 
   let user = await prisma.user.findUnique({ where: { email } });
-  if (user && user.role !== link.type) {
-    return NextResponse.json(
-      { message: "This email is already registered with a different account type. Please use a different email or contact an admin." },
-      { status: 409 }
-    );
-  }
   if (!user) {
     const placeholderPassword = await hashPassword(crypto.randomBytes(32).toString("hex"));
     user = await prisma.user.create({
