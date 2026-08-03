@@ -11,7 +11,7 @@ export function RoleSwitcher() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const user = session?.user;
+  const user = session?.user as any;
   if (!user) return null;
 
   // Only render for users who have a primary PARENT role AND an APPROVED staff profile
