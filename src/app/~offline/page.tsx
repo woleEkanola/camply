@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { SignalSlashIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 
