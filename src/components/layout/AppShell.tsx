@@ -13,6 +13,7 @@ import { getNavGroups, getBottomNavItems, type Role } from "./navConfig";
 import { CommandPalette } from "./CommandPalette";
 import { BottomNav } from "./BottomNav";
 import { Menu, Transition } from "@headlessui/react";
+import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
 
 export interface AppShellProps {
   area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer";
@@ -181,7 +182,8 @@ export default function AppShell({ area, children }: AppShellProps) {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-2">
+      <div className="border-t border-sidebar-border p-2 space-y-1">
+        <InstallPwaButton variant="sidebar" />
         <button
           onClick={handleLogout}
           className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-fg hover:bg-surface-raised hover:text-txt-primary"
@@ -230,6 +232,7 @@ export default function AppShell({ area, children }: AppShellProps) {
             <kbd className="rounded border border-border-default bg-surface-raised px-1.5 py-0.5 text-xs text-txt-muted">⌘K</kbd>
           </button>
           <div className="flex items-center gap-2">
+            <InstallPwaButton variant="header" />
             <NotificationBell />
             <ThemeToggle />
             {session?.user?.email && (
@@ -279,6 +282,9 @@ export default function AppShell({ area, children }: AppShellProps) {
                           My Profile
                         </Link>
                       )}
+                    </Menu.Item>
+                    <Menu.Item>
+                      {() => <InstallPwaButton variant="menu" />}
                     </Menu.Item>
                     <Menu.Item>
                       {({ active }) => (
