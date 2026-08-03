@@ -118,6 +118,7 @@ export default function NotificationBell() {
                     onClick={() => setSettingsOpen(true)}
                     className="p-2 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-raised transition-colors"
                     title="Notification Settings"
+                    aria-label="Notification Settings"
                   >
                     <Cog6ToothIcon className="h-5 w-5" />
                   </button>

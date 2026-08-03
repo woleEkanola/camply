@@ -41,7 +41,7 @@ test.describe("Camply Unified Notification & Vibration System", () => {
     await allTab.click();
 
     // Open Notification Settings Modal from Drawer header
-    const settingsButton = page.locator("button[title='Notification Settings']");
+    const settingsButton = page.locator("button[aria-label='Notification Settings']");
     await expect(settingsButton).toBeVisible();
     await settingsButton.click();
 
