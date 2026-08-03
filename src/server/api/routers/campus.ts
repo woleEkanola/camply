@@ -113,20 +113,13 @@ export const campusRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not found" });
       }
 
-      if (user.role === "OWNER" && user.organizationId === input.organizationId) {
-        // pass
-      } else if (user.role === "CAMPUS_REPRESENTATIVE" && user.organizationId === input.organizationId) {
-        // pass - reps can list campuses in their org (scoped views handled client-side / via getById)
+      if (user.role === "SUPER_ADMIN" || user.organizationId === input.organizationId) {
+        // pass - all staff members in the organization can view campus lists
       } else {
-        const allowedPermissions = ["READ_CAMPUS", "UPDATE_CAMPUS"];
-        const userPermissions = user.permissions.map((p) => p.type);
-        const hasPermission = userPermissions.some((p) => allowedPermissions.includes(p));
-        if (!(user.role === "ADMIN" && user.organizationId === input.organizationId && hasPermission)) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "You don't have permission to view campuses for this organization",
-          });
-        }
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You don't have permission to view campuses for this organization",
+        });
       }
 
       return prisma.campus.findMany({

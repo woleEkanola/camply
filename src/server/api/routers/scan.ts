@@ -82,6 +82,12 @@ async function assertReportsAccess(ctx: { prisma: any; session: any }, organizat
     });
     if (managesAny) return;
   }
+  if (["TEACHER", "VOLUNTEER"].includes(user.role)) {
+    const profile = await ctx.prisma.staffProfile.findFirst({
+      where: { userId: user.id, organizationId, status: "APPROVED", deletedAt: null },
+    });
+    if (profile) return;
+  }
   throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to view reports." });
 }
 
@@ -1151,7 +1157,7 @@ export const scanRouter = createTRPCRouter({
       // Previously took organizationId with no comparison to the caller's
       // own org — any authenticated user could pass a foreign org's id and
       // read its operational (meal/checkin/checkout) stats.
-      await assertReportsAccess(ctx, input.organizationId);
+      await assertCanScan(ctx, input.organizationId);
 
       let campId = input.campId;
       if (!campId) {

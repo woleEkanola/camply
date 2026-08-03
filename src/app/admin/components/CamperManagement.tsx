@@ -557,11 +557,69 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
 
       {/* Stats Cards */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard data-testid="camper-stat-approved" label="Approved" value={statsData?.approvedCount ?? 0} tone="success" />
-        <StatCard data-testid="camper-stat-in-camp" label="In Camp" value={statsData?.inCampCount ?? 0} tone="info" />
-        <StatCard data-testid="camper-stat-male" label="Male" value={statsData?.checkedInMaleCount ?? 0} />
-        <StatCard data-testid="camper-stat-female" label="Female" value={statsData?.checkedInFemaleCount ?? 0} />
-        <StatCard data-testid="camper-stat-exited-camp" label="Exited Camp" value={statsData?.exitedCampCount ?? 0} tone="neutral" />
+        <StatCard
+          data-testid="camper-stat-approved"
+          label="Approved"
+          value={statsData?.approvedCount ?? 0}
+          tone="success"
+          selected={statusFilter === "APPROVED" && genderFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setGenderFilter("");
+            setStatusFilter((prev) => (prev === "APPROVED" ? "" : "APPROVED"));
+          }}
+        />
+        <StatCard
+          data-testid="camper-stat-in-camp"
+          label="In Camp"
+          value={statsData?.inCampCount ?? 0}
+          tone="info"
+          selected={statusFilter === "CHECKED_IN" && genderFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setGenderFilter("");
+            setStatusFilter((prev) => (prev === "CHECKED_IN" ? "" : "CHECKED_IN"));
+          }}
+        />
+        <StatCard
+          data-testid="camper-stat-male"
+          label="Male"
+          value={statsData?.checkedInMaleCount ?? 0}
+          selected={genderFilter === "Male" && statusFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setStatusFilter("");
+            setGenderFilter((prev) => (prev === "Male" ? "" : "Male"));
+          }}
+        />
+        <StatCard
+          data-testid="camper-stat-female"
+          label="Female"
+          value={statsData?.checkedInFemaleCount ?? 0}
+          selected={genderFilter === "Female" && statusFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setStatusFilter("");
+            setGenderFilter((prev) => (prev === "Female" ? "" : "Female"));
+          }}
+        />
+        <StatCard
+          data-testid="camper-stat-exited-camp"
+          label="Exited Camp"
+          value={statsData?.exitedCampCount ?? 0}
+          tone="neutral"
+          selected={statusFilter === "COMPLETED" && genderFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setGenderFilter("");
+            setStatusFilter((prev) => (prev === "COMPLETED" ? "" : "COMPLETED"));
+          }}
+        />
       </div>
 
       {viewMode === "list" ? (

@@ -42,6 +42,8 @@ export interface NavItem {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   /** Roles that can see this item. Omit to show to every role the shell renders for. */
   roles?: Role[];
+  /** Department category required for volunteers (e.g. Medical or Kitchen). */
+  volunteerCategory?: string;
 }
 
 export interface NavGroup {
@@ -292,16 +294,23 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     items: [
       { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
       { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
-      { name: "Medical", href: "/volunteer/medical", icon: HeartIcon },
-      { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
+      { name: "Medical", href: "/volunteer/medical", icon: HeartIcon, volunteerCategory: "Medical" },
+      { name: "Meals", href: "/volunteer/meals", icon: CakeIcon, volunteerCategory: "Kitchen" },
       { name: "Incidents", href: "/volunteer/incidents", icon: ExclamationTriangleIcon },
     ],
   },
 ];
 
-function filterGroups(groups: NavGroup[], role: Role): NavGroup[] {
+function filterGroups(groups: NavGroup[], role: Role, volunteerCategory?: string | null): NavGroup[] {
   return groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || item.roles.includes(role)) }))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (item.roles && !item.roles.includes(role)) return false;
+        if (role === "VOLUNTEER" && item.volunteerCategory && item.volunteerCategory !== volunteerCategory) return false;
+        return true;
+      }),
+    }))
     .filter((group) => group.items.length > 0);
 }
 
@@ -316,13 +325,14 @@ function filterGroups(groups: NavGroup[], role: Role): NavGroup[] {
 export function getNavGroups(
   role: Role | undefined,
   area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer",
-  hasCampusRepAccess = false
+  hasCampusRepAccess = false,
+  volunteerCategory?: string | null
 ): NavGroup[] {
   if (!role) return [];
   let groups: NavGroup[];
   switch (area) {
     case "admin":
-      groups = filterGroups(ADMIN_GROUPS, role);
+      groups = filterGroups(ADMIN_GROUPS, role, volunteerCategory);
       break;
     case "dashboard":
       groups = PARENT_GROUPS;
@@ -337,7 +347,7 @@ export function getNavGroups(
       groups = TEACHER_GROUPS;
       break;
     case "volunteer":
-      groups = VOLUNTEER_GROUPS;
+      groups = filterGroups(VOLUNTEER_GROUPS, role, volunteerCategory);
       break;
   }
   if (hasCampusRepAccess && (area === "teacher" || area === "volunteer")) {
@@ -372,7 +382,8 @@ export function getNavGroups(
 export function getBottomNavItems(
   role: Role | undefined,
   area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer",
-  hasCampusRepAccess = false
+  hasCampusRepAccess = false,
+  volunteerCategory?: string | null
 ): NavItem[] {
   if (!role) return [];
   switch (area) {
@@ -401,12 +412,19 @@ export function getBottomNavItems(
           { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
         ];
       }
-      return [
+      const volunteerBottom: NavItem[] = [
         { name: "Home", href: "/volunteer", icon: HomeIcon },
-        { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
         { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
-        { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
+        { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
       ];
+      if (volunteerCategory === "Kitchen") {
+        volunteerBottom.push({ name: "Meals", href: "/volunteer/meals", icon: CakeIcon });
+      } else if (volunteerCategory === "Medical") {
+        volunteerBottom.push({ name: "Medical", href: "/volunteer/medical", icon: HeartIcon });
+      } else {
+        volunteerBottom.push({ name: "Incidents", href: "/volunteer/incidents", icon: ExclamationTriangleIcon });
+      }
+      return volunteerBottom;
     case "campus-rep":
       return [
         { name: "Home", href: "/campus-rep-dashboard", icon: HomeIcon },

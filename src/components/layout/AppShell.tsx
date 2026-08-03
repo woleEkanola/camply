@@ -54,6 +54,10 @@ export default function AppShell({ area, children }: AppShellProps) {
     enabled: !!session?.user,
   });
 
+  const { data: staffProfile } = api.staff.getMyProfile.useQuery(undefined, {
+    enabled: !!session?.user && (session.user.role === "VOLUNTEER" || session.user.role === "TEACHER"),
+  });
+
   const organizationId = session?.user?.organizationId ?? "";
   const { data: organization } = api.organization.getById.useQuery(
     { id: organizationId },
@@ -62,8 +66,8 @@ export default function AppShell({ area, children }: AppShellProps) {
 
   const role = session?.user?.role as Role | undefined;
   const managedCampuses = (session?.user as { managedCampuses?: string[] } | undefined)?.managedCampuses ?? [];
-  const groups = getNavGroups(role, area, managedCampuses.length > 0);
-  const bottomNavItems = getBottomNavItems(role, area, managedCampuses.length > 0);
+  const groups = getNavGroups(role, area, managedCampuses.length > 0, staffProfile?.volunteerCategory);
+  const bottomNavItems = getBottomNavItems(role, area, managedCampuses.length > 0, staffProfile?.volunteerCategory);
 
   // Collapsible groups (Communication, Settings) start closed; auto-expand
   // whichever one contains the current route so the active link is never
