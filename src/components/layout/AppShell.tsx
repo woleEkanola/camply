@@ -234,7 +234,6 @@ export default function AppShell({ area, children }: AppShellProps) {
           </button>
           <div className="flex items-center gap-2">
             <RoleSwitcher />
-            <InstallPwaButton variant="header" />
             <NotificationBell />
             <ThemeToggle />
             {session?.user?.email && (
