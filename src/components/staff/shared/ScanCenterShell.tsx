@@ -15,6 +15,8 @@ import { StationSheet } from "@/components/scan/StationSheet";
 import { MedicalBanner } from "@/components/scan/MedicalBanner";
 import { SearchSheet } from "@/components/scan/SearchSheet";
 import { OfflineSheet } from "@/components/scan/OfflineSheet";
+import { OfflineDownloadModal } from "@/components/scan/OfflineDownloadModal";
+import { OfflineReadinessModal } from "@/components/pwa/OfflineReadinessModal";
 import { HistorySheet } from "@/components/scan/HistorySheet";
 import { ScanTabBar } from "@/components/scan/ScanTabBar";
 import { CampusTeachersSheet } from "@/components/scan/CampusTeachersSheet";
@@ -69,6 +71,8 @@ export function ScanCenterShell({
   const [stationSheetOpen, setStationSheetOpen] = useState(false);
   const [searchSheetOpen, setSearchSheetOpen] = useState(false);
   const [offlineSheetOpen, setOfflineSheetOpen] = useState(false);
+  const [offlineDownloadModalOpen, setOfflineDownloadModalOpen] = useState(false);
+  const [offlineReadinessModalOpen, setOfflineReadinessModalOpen] = useState(false);
   const [historySheetOpen, setHistorySheetOpen] = useState(false);
   const [campusTeachersSheetOpen, setCampusTeachersSheetOpen] = useState(false);
   const [stationLocation, setStationLocation] = useState("");
@@ -506,6 +510,35 @@ export function ScanCenterShell({
         isRefreshingCache={isRefreshingCache}
         onRefreshCache={handleOfflineCacheRefresh}
         lastCacheSyncTime={lastCacheSyncTime}
+        onOpenDownloadModal={() => {
+          setOfflineSheetOpen(false);
+          setOfflineDownloadModalOpen(true);
+        }}
+        onOpenReadiness={() => {
+          setOfflineSheetOpen(false);
+          setOfflineReadinessModalOpen(true);
+        }}
+      />
+
+      <OfflineDownloadModal
+        open={offlineDownloadModalOpen}
+        onClose={() => setOfflineDownloadModalOpen(false)}
+        organizationId={organizationId}
+        onSuccess={() => {
+          const timeStr = new Date().toLocaleTimeString();
+          setLastCacheSyncTime(timeStr);
+          localStorage.setItem("camply-scan-last-sync", timeStr);
+          toast.success("Offline camper database cached successfully!");
+        }}
+      />
+
+      <OfflineReadinessModal
+        open={offlineReadinessModalOpen}
+        onClose={() => setOfflineReadinessModalOpen(false)}
+        onOpenDownloadModal={() => {
+          setOfflineReadinessModalOpen(false);
+          setOfflineDownloadModalOpen(true);
+        }}
       />
 
       <SearchSheet

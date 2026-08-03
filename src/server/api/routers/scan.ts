@@ -794,6 +794,7 @@ export const scanRouter = createTRPCRouter({
         profile: z.enum(["FULL", "CHECK_IN", "FOOD", "HOSTEL", "TEACHER"]).optional().default("FULL"),
         scope: z.enum(["CURRENT_STATION", "ASSIGNED_CAMPUS", "SELECTED_CAMPUSES", "ENTIRE_CAMP"]).optional().default("ENTIRE_CAMP"),
         campusIds: z.array(z.string()).optional(),
+        includeThumbnails: z.boolean().optional().default(true),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -843,7 +844,7 @@ export const scanRouter = createTRPCRouter({
           registrationNumber: r.registrationNumber || "REG-NUM",
           qrToken: r.qrToken || "",
           name: c.name || `${c.firstName || ""} ${c.lastName || ""}`.trim(),
-          photoUrl: c.photoUrl,
+          photoUrl: input.includeThumbnails ? c.photoUrl : null,
           parentPhone: c.parentPhone,
           teenPhone: c.teenPhone,
           updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : null,
@@ -920,6 +921,7 @@ export const scanRouter = createTRPCRouter({
         profile: z.enum(["FULL", "CHECK_IN", "FOOD", "HOSTEL", "TEACHER"]).optional().default("FULL"),
         scope: z.enum(["CURRENT_STATION", "ASSIGNED_CAMPUS", "SELECTED_CAMPUSES", "ENTIRE_CAMP"]).optional().default("ENTIRE_CAMP"),
         campusIds: z.array(z.string()).optional(),
+        includeThumbnails: z.boolean().optional().default(true),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -929,7 +931,7 @@ export const scanRouter = createTRPCRouter({
         select: { activeCampId: true },
       });
       const campId = org?.activeCampId;
-      if (!campId) return { estimatedCamperCount: 0, estimatedSizeBytes: 0, profile: input.profile, scope: input.scope };
+      if (!campId) return { estimatedCamperCount: 0, estimatedSizeBytes: 0, profile: input.profile, scope: input.scope, includeThumbnails: input.includeThumbnails };
 
       const whereClause: any = {
         campId,
@@ -943,15 +945,24 @@ export const scanRouter = createTRPCRouter({
 
       const count = await ctx.prisma.registration.count({ where: whereClause });
 
-      const bytesPerCamperMap: Record<string, number> = {
-        CHECK_IN: 5 * 1024,
-        FOOD: 8 * 1024,
-        HOSTEL: 10 * 1024,
-        TEACHER: 6 * 1024,
+      const withThumbnailsMap: Record<string, number> = {
+        CHECK_IN: 6 * 1024,
+        FOOD: 9 * 1024,
+        HOSTEL: 12 * 1024,
+        TEACHER: 7 * 1024,
         FULL: 35 * 1024,
       };
 
-      const bytesPerCamper = bytesPerCamperMap[input.profile] || 35 * 1024;
+      const textOnlyMap: Record<string, number> = {
+        CHECK_IN: 3 * 1024,
+        FOOD: 4 * 1024,
+        HOSTEL: 5 * 1024,
+        TEACHER: 4 * 1024,
+        FULL: 6 * 1024,
+      };
+
+      const bytesMap = input.includeThumbnails ? withThumbnailsMap : textOnlyMap;
+      const bytesPerCamper = bytesMap[input.profile] || (input.includeThumbnails ? 35 * 1024 : 6 * 1024);
       const estimatedSizeBytes = count * bytesPerCamper;
 
       return {
@@ -959,6 +970,7 @@ export const scanRouter = createTRPCRouter({
         estimatedSizeBytes,
         profile: input.profile,
         scope: input.scope,
+        includeThumbnails: input.includeThumbnails,
       };
     }),
 

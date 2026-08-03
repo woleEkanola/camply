@@ -31,4 +31,14 @@ describe("OfflineEngine Central API", () => {
     expect(readiness.hasCameraPermission).toBe(true);
     expect(readiness.pendingQueueCount).toBe(0);
   });
+
+  it("calculates estimated download size accurately for text-only vs thumbnails", () => {
+    const count = 1000;
+    const withThumbnailsBytes = count * (35 * 1024);
+    const textOnlyBytes = count * (6 * 1024);
+
+    expect(withThumbnailsBytes).toBe(35840000); // ~35.8 MB
+    expect(textOnlyBytes).toBe(6144000); // ~6.1 MB
+    expect(textOnlyBytes).toBeLessThan(withThumbnailsBytes);
+  });
 });
