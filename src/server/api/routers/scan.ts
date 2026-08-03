@@ -786,12 +786,189 @@ export const scanRouter = createTRPCRouter({
       };
     }),
 
+  getDeltaSyncData: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        lastSyncedAt: z.string().optional(),
+        profile: z.enum(["FULL", "CHECK_IN", "FOOD", "HOSTEL", "TEACHER"]).optional().default("FULL"),
+        scope: z.enum(["CURRENT_STATION", "ASSIGNED_CAMPUS", "SELECTED_CAMPUSES", "ENTIRE_CAMP"]).optional().default("ENTIRE_CAMP"),
+        campusIds: z.array(z.string()).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+      const serverSyncTimestamp = new Date().toISOString();
+      const lastSyncDate = input.lastSyncedAt ? new Date(input.lastSyncedAt) : null;
+
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { activeCampId: true },
+      });
+      const campId = org?.activeCampId;
+      if (!campId) return { updatedCampers: [], deletedRegistrationIds: [], serverSyncTimestamp };
+
+      const whereClause: any = {
+        campId,
+        status: { in: ["APPROVED", "CHECKED_IN"] },
+      };
+
+      if (lastSyncDate && !isNaN(lastSyncDate.getTime())) {
+        whereClause.updatedAt = { gte: lastSyncDate };
+      }
+
+      if (input.campusIds && input.campusIds.length > 0 && input.scope === "SELECTED_CAMPUSES") {
+        whereClause.campusId = { in: input.campusIds };
+      }
+
+      const registrations = await ctx.prisma.registration.findMany({
+        where: whereClause,
+        include: {
+          camper: true,
+          campus: { select: { name: true } },
+          tribe: { select: { name: true } },
+          room: { select: { name: true, hostel: { select: { name: true } } } },
+          bed: { select: { label: true } },
+          teacherAssignments: {
+            include: { staffProfile: { select: { firstName: true, lastName: true, phone: true } } },
+          },
+        },
+      });
+
+      const updatedCampers = registrations.map((r: any) => {
+        const c = r.camper;
+        const base = {
+          registrationId: r.id,
+          camperId: c.id,
+          registrationNumber: r.registrationNumber || "REG-NUM",
+          qrToken: r.qrToken || "",
+          name: c.name || `${c.firstName || ""} ${c.lastName || ""}`.trim(),
+          photoUrl: c.photoUrl,
+          parentPhone: c.parentPhone,
+          teenPhone: c.teenPhone,
+          updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : null,
+        };
+
+        if (input.profile === "CHECK_IN") {
+          return base;
+        }
+
+        if (input.profile === "FOOD") {
+          return {
+            ...base,
+            allergies: c.allergies,
+            dietaryRestrictions: c.dietaryRestrictions,
+          };
+        }
+
+        if (input.profile === "HOSTEL") {
+          return {
+            ...base,
+            tribeName: r.tribe?.name || null,
+            hostelName: r.room?.hostel?.name || null,
+            roomName: r.room?.name || null,
+            bedLabel: r.bed?.label || null,
+          };
+        }
+
+        return {
+          ...base,
+          gender: c.gender,
+          dateOfBirth: c.dateOfBirth ? new Date(c.dateOfBirth).toISOString() : null,
+          allergies: c.allergies,
+          medicalConditions: c.medicalConditions,
+          medications: c.medications,
+          dietaryRestrictions: c.dietaryRestrictions,
+          emergencyContactName: c.emergencyContactName,
+          emergencyContactPhone: c.emergencyContactPhone,
+          relationship: c.relationship,
+          tribeName: r.tribe?.name || null,
+          hostelName: r.room?.hostel?.name || null,
+          roomName: r.room?.name || null,
+          bedLabel: r.bed?.label || null,
+          teacherName: r.teacherAssignments?.[0]?.staffProfile
+            ? `${r.teacherAssignments[0].staffProfile.firstName} ${r.teacherAssignments[0].staffProfile.lastName}`
+            : null,
+          teacherPhone: r.teacherAssignments?.[0]?.staffProfile?.phone || null,
+          campusName: r.campus?.name || null,
+        };
+      });
+
+      let deletedRegistrationIds: string[] = [];
+      if (lastSyncDate && !isNaN(lastSyncDate.getTime())) {
+        const deletedRegs = await ctx.prisma.registration.findMany({
+          where: {
+            campId,
+            deletedAt: { gte: lastSyncDate },
+          },
+          select: { id: true },
+        });
+        deletedRegistrationIds = deletedRegs.map((d: any) => d.id);
+      }
+
+      return {
+        updatedCampers,
+        deletedRegistrationIds,
+        serverSyncTimestamp,
+      };
+    }),
+
+  getOfflineDatasetEstimate: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        profile: z.enum(["FULL", "CHECK_IN", "FOOD", "HOSTEL", "TEACHER"]).optional().default("FULL"),
+        scope: z.enum(["CURRENT_STATION", "ASSIGNED_CAMPUS", "SELECTED_CAMPUSES", "ENTIRE_CAMP"]).optional().default("ENTIRE_CAMP"),
+        campusIds: z.array(z.string()).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { activeCampId: true },
+      });
+      const campId = org?.activeCampId;
+      if (!campId) return { estimatedCamperCount: 0, estimatedSizeBytes: 0, profile: input.profile, scope: input.scope };
+
+      const whereClause: any = {
+        campId,
+        status: { in: ["APPROVED", "CHECKED_IN"] },
+        deletedAt: null,
+      };
+
+      if (input.campusIds && input.campusIds.length > 0 && input.scope === "SELECTED_CAMPUSES") {
+        whereClause.campusId = { in: input.campusIds };
+      }
+
+      const count = await ctx.prisma.registration.count({ where: whereClause });
+
+      const bytesPerCamperMap: Record<string, number> = {
+        CHECK_IN: 5 * 1024,
+        FOOD: 8 * 1024,
+        HOSTEL: 10 * 1024,
+        TEACHER: 6 * 1024,
+        FULL: 35 * 1024,
+      };
+
+      const bytesPerCamper = bytesPerCamperMap[input.profile] || 35 * 1024;
+      const estimatedSizeBytes = count * bytesPerCamper;
+
+      return {
+        estimatedCamperCount: count,
+        estimatedSizeBytes,
+        profile: input.profile,
+        scope: input.scope,
+      };
+    }),
+
   bulkSyncOfflineScans: protectedProcedure
     .input(
       z.object({
         organizationId: z.string(),
         scans: z.array(
           z.object({
+            operationId: z.string().optional(),
             qrToken: z.string().optional(),
             query: z.string().optional(),
             station: z.string(),
@@ -823,6 +1000,26 @@ export const scanRouter = createTRPCRouter({
       // Process each scan under transaction-like flow (sequential queries)
       for (const scan of sortedScans) {
         try {
+          if (scan.operationId) {
+            const existingOp = await ctx.prisma.scanEvent.findFirst({
+              where: {
+                metadata: {
+                  path: ["operationId"],
+                  equals: scan.operationId,
+                },
+              },
+            });
+            if (existingOp) {
+              syncResults.push({
+                timestamp: scan.timestamp,
+                qrToken: scan.qrToken,
+                status: "SUCCESS",
+                alreadyProcessed: true,
+              });
+              continue;
+            }
+          }
+
           // Resolve date from ISO string
           const parsedTimestamp = new Date(scan.timestamp);
 

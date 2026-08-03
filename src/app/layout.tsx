@@ -10,6 +10,7 @@ import { extractRouterConfig } from "uploadthing/server";
 import { ourFileRouter } from "./api/uploadthing/core";
 import { Suspense } from "react";
 import { Analytics } from "@vercel/analytics/next";
+import { InstallPwaBanner } from "@/components/pwa/InstallPwaBanner";
 
 const geistSans = { variable: "font-sans" };
 const geistMono = { variable: "font-mono" };
@@ -24,17 +25,18 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/apple-icon.png", type: "image/png" }],
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Camply",
+  },
 };
 
-// viewportFit: "cover" lets fixed mobile chrome (bottom nav, bottom-sheet
-// dialogs) paint under the notch/home-indicator and pad it back in with
-// env(safe-area-inset-*); userScalable/maximumScale are deliberately left
-// unset so pinch-zoom stays available (WCAG 1.4.4).
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#e67e22",
+  themeColor: "#0D9488",
 };
 
 export default function RootLayout({
@@ -63,6 +65,7 @@ export default function RootLayout({
                   <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
                 </Suspense>
                 <ToastProvider>{children}</ToastProvider>
+                <InstallPwaBanner />
                 <Analytics />
               </BrandColorProvider>
             </ThemeProvider>
