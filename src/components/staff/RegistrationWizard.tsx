@@ -117,11 +117,7 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
         setLoading(false);
         return;
       }
-      if (password !== confirmPassword) {
-        setError("Passwords do not match");
-        setLoading(false);
-        return;
-      }
+      try {
         const res = await fetch("/api/base-user/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
