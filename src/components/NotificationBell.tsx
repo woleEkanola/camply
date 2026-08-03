@@ -33,6 +33,17 @@ export default function NotificationBell() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const filteredNotifications = notifications.filter((n) => {
@@ -83,12 +94,13 @@ export default function NotificationBell() {
       {open && (
         <div className="fixed inset-0 z-50 overflow-hidden">
           <div
-            className="fixed inset-0 bg-neutral-950/60 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-neutral-950/60 backdrop-blur-xs transition-opacity cursor-pointer"
             onClick={() => setOpen(false)}
+            aria-label="Close Notifications Backdrop"
           />
 
-          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-            <div className="w-screen max-w-md bg-elevated shadow-2xl border-l border-elevated-border flex flex-col">
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10 pointer-events-none">
+            <div className="w-screen max-w-md bg-elevated shadow-2xl border-l border-elevated-border flex flex-col pointer-events-auto">
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-elevated-border">
                 <div className="flex items-center space-x-2">
@@ -104,7 +116,7 @@ export default function NotificationBell() {
                   <button
                     type="button"
                     onClick={() => setSettingsOpen(true)}
-                    className="p-1.5 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-raised"
+                    className="p-2 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-raised transition-colors"
                     title="Notification Settings"
                   >
                     <Cog6ToothIcon className="h-5 w-5" />
@@ -112,7 +124,9 @@ export default function NotificationBell() {
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="p-1.5 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-raised"
+                    className="p-2 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-raised transition-colors"
+                    title="Close Notifications"
+                    aria-label="Close Notifications"
                   >
                     <XMarkIcon className="h-5 w-5" />
                   </button>

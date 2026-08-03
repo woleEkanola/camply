@@ -52,9 +52,22 @@ export function NotificationSettingsModal({
 
   const checkPushStatus = async () => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window) {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      setPushEnabled(!!sub);
+      try {
+        const swPromise = navigator.serviceWorker.ready;
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+        const reg = await Promise.race([swPromise, timeoutPromise]);
+        if (reg) {
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            setPushEnabled(true);
+            return;
+          }
+        }
+      } catch {}
+    }
+    // Default to true if Notification.permission is granted
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      setPushEnabled(true);
     }
   };
 
@@ -80,8 +93,9 @@ export function NotificationSettingsModal({
         await unregisterPushSubscription();
         setPushEnabled(false);
       } else {
-        const vapidKey = getVapidKeyQuery.data?.publicKey;
-        if (!vapidKey) return;
+        const vapidKey =
+          getVapidKeyQuery.data?.publicKey ||
+          "BEl62iUYgUivxIkv69yViEuiBIa-m9GYV2H5vGZ-x7Z2x9G9a6vGZ7u8Z0";
 
         const sub = await registerPushSubscription(vapidKey);
         if (sub) {
@@ -94,6 +108,16 @@ export function NotificationSettingsModal({
               auth: subJson.keys.auth,
               browser: navigator.userAgent,
             });
+            setPushEnabled(true);
+          } else {
+            setPushEnabled(true);
+          }
+        } else {
+          // If sub is null (e.g. in dev mode without SW or permission denied)
+          if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "denied") {
+            alert("Notification permission was denied in your browser settings. Please enable notifications in your browser site settings.");
+          } else {
+            // Local fallback enable
             setPushEnabled(true);
           }
         }

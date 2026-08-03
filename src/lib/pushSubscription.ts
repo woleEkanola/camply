@@ -17,8 +17,32 @@ export async function registerPushSubscription(vapidPublicKey: string): Promise<
     return null;
   }
 
+  // Request browser notification permission explicitly
+  if ("Notification" in window) {
+    if (Notification.permission === "denied") {
+      console.warn("Notification permission was denied by the user.");
+      return null;
+    }
+    if (Notification.permission === "default") {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        console.warn("Notification permission was not granted.");
+        return null;
+      }
+    }
+  }
+
   try {
-    const registration = await navigator.serviceWorker.ready;
+    // Race serviceWorker.ready with a 3-second timeout so it never hangs indefinitely
+    const swPromise = navigator.serviceWorker.ready;
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
+
+    const registration = await Promise.race([swPromise, timeoutPromise]);
+    if (!registration) {
+      console.warn("Service Worker is not ready or active in this environment.");
+      return null;
+    }
+
     let subscription = await registration.pushManager.getSubscription();
 
     if (!subscription) {
