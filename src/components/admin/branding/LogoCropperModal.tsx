@@ -128,10 +128,10 @@ export function LogoCropperModal({
   return (
     <Dialog open={open} onClose={onClose} title={title}>
       <div className="space-y-4">
-        <div className="flex items-center justify-between text-xs text-slate-600 dark:text-neutral-400">
+        <div className="flex items-center justify-between text-xs text-txt-secondary">
           <span>
             Preset:{" "}
-            <strong className="text-teal-700 dark:text-teal-400 font-bold">
+            <strong className="text-teal-600 dark:text-teal-400 font-bold">
               {preset} ({getAspectRatio() === 1 ? "1:1" : getAspectRatio() === 3 ? "3:1" : "4:1"})
             </strong>
           </span>
@@ -140,7 +140,7 @@ export function LogoCropperModal({
 
         {/* Canvas Workspace with Adaptive Checkerboard Grid */}
         <div
-          className="relative overflow-hidden rounded-2xl border border-slate-300 dark:border-neutral-800 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100 dark:bg-neutral-900 flex items-center justify-center p-6 cursor-grab active:cursor-grabbing select-none shadow-inner"
+          className="relative overflow-hidden rounded-xl border border-border-default bg-[radial-gradient(var(--border-default)_1px,transparent_1px)] [background-size:10px_10px] bg-surface-raised flex items-center justify-center p-4 cursor-grab active:cursor-grabbing select-none shadow-inner"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -148,14 +148,14 @@ export function LogoCropperModal({
         >
           <canvas
             ref={canvasRef}
-            className="max-w-full max-h-[350px] shadow-2xl rounded-xl border border-slate-300 dark:border-white/20 object-contain bg-white dark:bg-neutral-950"
+            className="max-w-full max-h-[320px] shadow-lg rounded-lg border border-border-default object-contain bg-surface"
           />
         </div>
 
         {/* Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800">
-          <div className="flex items-center space-x-3 flex-1">
-            <MagnifyingGlassMinusIcon className="h-4 w-4 text-slate-500 dark:text-neutral-400" />
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-bg-subtle rounded-xl border border-border-subtle">
+          <div className="flex items-center space-x-2 flex-1">
+            <MagnifyingGlassMinusIcon className="h-4 w-4 text-txt-muted" />
             <input
               type="range"
               min="0.5"
@@ -163,31 +163,31 @@ export function LogoCropperModal({
               step="0.05"
               value={zoom}
               onChange={(e) => setZoom(parseFloat(e.target.value))}
-              className="w-full h-2 bg-slate-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-teal-600"
+              className="w-full h-2 bg-surface-raised rounded-lg appearance-none cursor-pointer accent-teal-600"
             />
-            <MagnifyingGlassPlusIcon className="h-4 w-4 text-slate-500 dark:text-neutral-400" />
-            <span className="text-xs font-mono font-bold w-12 text-slate-900 dark:text-white">
+            <MagnifyingGlassPlusIcon className="h-4 w-4 text-txt-muted" />
+            <span className="text-xs font-mono font-bold w-10 text-txt-primary">
               {Math.round(zoom * 100)}%
             </span>
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleRotate}
-            className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-slate-50 text-slate-800 dark:text-white transition flex items-center gap-1.5 text-xs font-bold shadow-xs"
-            title="Rotate 90°"
+            className="flex items-center gap-1 text-xs"
           >
-            <ArrowPathIcon className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+            <ArrowPathIcon className="h-3.5 w-3.5" />
             Rotate 90°
-          </button>
+          </Button>
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end space-x-2 pt-2 border-t border-slate-200 dark:border-neutral-800">
-          <Button variant="ghost" onClick={onClose} className="font-semibold">
+        <div className="flex justify-end space-x-2 pt-2 border-t border-border-subtle">
+          <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSaveCrop} className="flex items-center gap-2 font-bold">
+          <Button onClick={handleSaveCrop} className="flex items-center gap-1.5 font-bold">
             <CheckIcon className="h-4 w-4" />
             Apply Crop
           </Button>

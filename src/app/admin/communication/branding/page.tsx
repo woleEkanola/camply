@@ -88,14 +88,14 @@ export default function BrandingPage() {
 
   return (
     <AppShell area="admin">
-      <div className="mx-auto max-w-5xl space-y-8 pb-12">
+      <div className="mx-auto max-w-5xl space-y-6 pb-12">
         <PageHeader
           title="Organization Branding"
           description="Manage your tenant's brand identity, optional email & ID card overrides, and theme colors"
         />
 
         {isError && (
-          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-amber-800 dark:text-amber-200 text-xs">
+          <div className="status-danger p-4 rounded-xl text-xs">
             Failed to load branding settings: {brandingError?.message}.{" "}
             <button type="button" onClick={() => refetch()} className="underline font-bold">
               Retry
@@ -112,7 +112,7 @@ export default function BrandingPage() {
             </CardBody>
           </Card>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-6">
             {/* Live Interactive Preview Workspace */}
             <BrandingLivePreview
               masterLogoUrl={masterLogoUrl}
@@ -124,15 +124,10 @@ export default function BrandingPage() {
             />
 
             {/* Section 1: Brand Identity */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2.5 border-b border-slate-200 dark:border-neutral-800 pb-3">
-                <div className="p-1.5 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400">
-                  <BuildingOfficeIcon className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="font-bold text-xl text-slate-900 dark:text-white tracking-tight">Brand Identity</h2>
-                  <p className="text-xs text-slate-500 dark:text-neutral-400">Primary brand mark automatically used across your entire organization</p>
-                </div>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2 border-b border-border-default pb-2">
+                <BuildingOfficeIcon className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                <h2 className="font-bold text-lg text-txt-primary">Brand Identity</h2>
               </div>
 
               <LogoUploadField
@@ -146,15 +141,10 @@ export default function BrandingPage() {
             </div>
 
             {/* Section 2: Optional Overrides */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2.5 border-b border-slate-200 dark:border-neutral-800 pb-3">
-                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                  <SparklesIcon className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="font-bold text-xl text-slate-900 dark:text-white tracking-tight">Optional Overrides</h2>
-                  <p className="text-xs text-slate-500 dark:text-neutral-400">Custom logo overrides for email headers and printable ID badges</p>
-                </div>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2 border-b border-border-default pb-2">
+                <SparklesIcon className="h-5 w-5 text-amber-500" />
+                <h2 className="font-bold text-lg text-txt-primary">Optional Overrides</h2>
               </div>
 
               <LogoUploadField
@@ -183,19 +173,17 @@ export default function BrandingPage() {
             </div>
 
             {/* Section 3: Theme & Styling Details */}
-            <Card className="rounded-2xl border border-slate-200 dark:border-neutral-800 shadow-sm">
-              <CardHeader className="border-b border-slate-200 dark:border-neutral-800 pb-4">
-                <CardTitle className="flex items-center gap-2.5 text-lg font-bold text-slate-900 dark:text-white">
-                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                    <SwatchIcon className="h-5 w-5" />
-                  </div>
+            <Card>
+              <CardHeader className="border-b border-border-default pb-3">
+                <CardTitle className="flex items-center gap-2 text-base font-bold text-txt-primary">
+                  <SwatchIcon className="h-5 w-5 text-indigo-500" />
                   Theme & Identity Details
                 </CardTitle>
               </CardHeader>
-              <CardBody className="space-y-5 pt-4">
+              <CardBody className="space-y-4 pt-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-700 dark:text-neutral-300">
+                    <label className="block text-xs font-bold text-txt-primary">
                       Primary Color
                     </label>
                     <div className="flex items-center gap-2">
@@ -203,7 +191,7 @@ export default function BrandingPage() {
                         type="color"
                         value={primaryColor}
                         onChange={(e) => setPrimaryColor(e.target.value)}
-                        className="h-10 w-14 cursor-pointer rounded-lg border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-1"
+                        className="h-9 w-12 cursor-pointer rounded-lg border border-border-default bg-surface p-1"
                       />
                       <Input
                         value={primaryColor}
@@ -215,7 +203,7 @@ export default function BrandingPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-700 dark:text-neutral-300">
+                    <label className="block text-xs font-bold text-txt-primary">
                       Accent Color
                     </label>
                     <div className="flex items-center gap-2">
@@ -223,7 +211,7 @@ export default function BrandingPage() {
                         type="color"
                         value={accentColor}
                         onChange={(e) => setAccentColor(e.target.value)}
-                        className="h-10 w-14 cursor-pointer rounded-lg border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-1"
+                        className="h-9 w-12 cursor-pointer rounded-lg border border-border-default bg-surface p-1"
                       />
                       <Input
                         value={accentColor}
@@ -250,7 +238,7 @@ export default function BrandingPage() {
                   />
                 </div>
 
-                <div className="flex items-center gap-4 pt-3 border-t border-slate-200 dark:border-neutral-800">
+                <div className="flex items-center gap-4 pt-3 border-t border-border-subtle">
                   <Button
                     onClick={handleSave}
                     loading={brandingUpdate.isPending}
