@@ -469,7 +469,7 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-accent-600 flex flex-col items-center">
           {/* Logo and group image positioning */}
           <div className="mt-6 mb-6">
-            <Image src="/logo.png" alt="Logo" width={100} height={100} />
+            <img src="/logo.png" alt="Logo" className="h-20 w-auto object-contain" />
           </div>
 
           <div className="w-full relative mt-4">
@@ -524,7 +524,7 @@ export default function LoginPage() {
             <h2 className="text-2xl md:text-3xl font-medium mt-1">Teens Camp</h2>
 
             <div className="my-4 md:my-6">
-              <Image src="/logo.png" alt="Logo" width={120} height={120} />
+              <img src="/logo.png" alt="Logo" className="h-24 w-auto object-contain" />
             </div>
 
             <div className="w-full flex-grow flex items-center justify-center max-h-[40vh] relative">

@@ -1242,11 +1242,29 @@ model EmailTemplate {
   @@index([deletedAt])
 }
 
+model PlatformBranding {
+  id              String   @id @default("default")
+  platformLogoUrl String?
+  faviconUrl      String?
+  pwaIcon192Url   String?
+  pwaIcon512Url   String?
+  appleIconUrl    String?
+  emailLogoUrl    String?
+  primaryColor    String   @default("#0D9488")
+  accentColor     String   @default("#E67E22")
+  headerImageUrl  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model OrganizationBranding {
   id             String       @id @default(cuid())
   organizationId String       @unique
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   logoUrl        String?
+  masterLogoUrl  String?      // Primary Brand Logo (Default for all tenant views)
+  emailLogoUrl   String?      // Optional Email Header override
+  idCardLogoUrl  String?      // Optional ID Card PDF override
   primaryColor   String       @default("#E67E22")
   accentColor    String       @default("#E67E22")
   buttonColor    String       @default("#E67E22")

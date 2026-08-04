@@ -1987,4 +1987,104 @@ export const communicationRouter = createTRPCRouter({
       if (item.userId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
       return ctx.prisma.emailRecipient.update({ where: { id: input.id }, data: { pinned: false } });
     }),
+
+  // ═══ Organization Branding ═════════════════════════════════════════════════
+
+  brandingGet: protectedProcedure.query(async ({ ctx }) => {
+    requireAdmin(ctx);
+    const oid = orgId(ctx);
+    let branding = await ctx.prisma.organizationBranding.findUnique({
+      where: { organizationId: oid },
+    });
+    if (!branding) {
+      branding = await ctx.prisma.organizationBranding.create({
+        data: { organizationId: oid },
+      });
+    }
+    return branding;
+  }),
+
+  brandingUpdate: protectedProcedure
+    .input(
+      z.object({
+        logoUrl: z.string().nullable().optional(),
+        masterLogoUrl: z.string().nullable().optional(),
+        emailLogoUrl: z.string().nullable().optional(),
+        idCardLogoUrl: z.string().nullable().optional(),
+        primaryColor: z.string().optional(),
+        accentColor: z.string().optional(),
+        buttonColor: z.string().optional(),
+        headerImageUrl: z.string().nullable().optional(),
+        senderName: z.string().nullable().optional(),
+        tagline: z.string().nullable().optional(),
+        footerText: z.string().nullable().optional(),
+        supportEmail: z.string().nullable().optional(),
+        supportPhone: z.string().nullable().optional(),
+        websiteUrl: z.string().nullable().optional(),
+        facebookUrl: z.string().nullable().optional(),
+        instagramUrl: z.string().nullable().optional(),
+        address: z.string().nullable().optional(),
+        supportTitle: z.string().nullable().optional(),
+        supportDescription: z.string().nullable().optional(),
+        footerCopyright: z.string().nullable().optional(),
+        phone: z.string().nullable().optional(),
+        xUrl: z.string().nullable().optional(),
+        linkedinUrl: z.string().nullable().optional(),
+        nextSteps: z.any().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx);
+      const oid = orgId(ctx);
+
+      const dataToSave = { ...input };
+      if (input.masterLogoUrl !== undefined && !input.logoUrl) {
+        dataToSave.logoUrl = input.masterLogoUrl;
+      }
+
+      return ctx.prisma.organizationBranding.upsert({
+        where: { organizationId: oid },
+        update: dataToSave,
+        create: {
+          organizationId: oid,
+          ...dataToSave,
+        },
+      });
+    }),
+
+  previewRender: protectedProcedure
+    .input(
+      z.object({
+        tiptapJson: z.any(),
+        branding: z.any().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const branding = input.branding || {};
+      const html = renderEmail({
+        bodyJson: input.tiptapJson,
+        branding: {
+          logoUrl: branding.emailLogoUrl || branding.masterLogoUrl || branding.logoUrl || "/logo.png",
+          primaryColor: branding.primaryColor || "#0D9488",
+          accentColor: branding.accentColor || "#E67E22",
+          buttonColor: branding.buttonColor || "#0D9488",
+          headerImageUrl: branding.headerImageUrl || null,
+          footerText: branding.footerText || null,
+          supportEmail: branding.supportEmail || null,
+          supportPhone: branding.supportPhone || null,
+          websiteUrl: branding.websiteUrl || null,
+          facebookUrl: branding.facebookUrl || null,
+          instagramUrl: branding.instagramUrl || null,
+          address: branding.address || null,
+          tagline: branding.tagline || null,
+          supportTitle: branding.supportTitle || null,
+          supportDescription: branding.supportDescription || null,
+          footerCopyright: branding.footerCopyright || null,
+          phone: branding.phone || null,
+          xUrl: branding.xUrl || null,
+          linkedinUrl: branding.linkedinUrl || null,
+        },
+      });
+      return html;
+    }),
 });

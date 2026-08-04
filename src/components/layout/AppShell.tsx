@@ -88,6 +88,17 @@ export default function AppShell({ area, children }: AppShellProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, role]);
 
+  const platformBrandingQuery = api.platformBranding.get.useQuery();
+  const orgBrandingQuery = api.communication.brandingGet.useQuery(undefined, { enabled: area !== "super-admin" });
+
+  const displayLogo =
+    area === "super-admin"
+      ? platformBrandingQuery.data?.platformLogoUrl || "/logo.png"
+      : (orgBrandingQuery.data as any)?.masterLogoUrl ||
+        orgBrandingQuery.data?.logoUrl ||
+        platformBrandingQuery.data?.platformLogoUrl ||
+        "/logo.png";
+
   const handleLogout = async () => {
     await signOut({ redirect: false });
     router.push("/login");
@@ -96,9 +107,13 @@ export default function AppShell({ area, children }: AppShellProps) {
   const sidebarContent = (
     <>
       <div className="flex h-14 items-center justify-between px-4">
-        <span className={cn("truncate font-semibold text-txt-primary", !sidebarOpen && "hidden")}>
-          {organization?.name || "Camply"}
-        </span>
+        <Link href={area === "super-admin" ? "/super-admin" : "/"} className="flex items-center space-x-2 max-w-[160px] overflow-hidden">
+          <img
+            src={displayLogo}
+            alt={area === "super-admin" ? "Camply SaaS" : organization?.name || "Camply"}
+            className="max-h-8 max-w-full object-contain"
+          />
+        </Link>
         <button
           onClick={() => setSidebarOpen((v) => !v)}
           className="hidden rounded-md p-1.5 text-txt-muted hover:bg-surface-raised hover:text-txt-primary md:block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
