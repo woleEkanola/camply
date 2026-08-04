@@ -30,7 +30,6 @@ export default function OrgProfileSettings({
 }) {
   const [name, setName] = useState(initialName);
   const [slug, setSlug] = useState(initialSlug);
-  const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [colorTheme, setColorTheme] = useState(initialColorTheme);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -43,10 +42,6 @@ export default function OrgProfileSettings({
   useEffect(() => {
     setSlug(initialSlug);
   }, [initialSlug]);
-
-  useEffect(() => {
-    setLogoUrl(initialLogoUrl);
-  }, [initialLogoUrl]);
 
   useEffect(() => {
     setColorTheme(initialColorTheme);
@@ -66,7 +61,6 @@ export default function OrgProfileSettings({
         name,
         slug: slug || undefined,
         settings: {
-          logoUrl,
           colorTheme,
         },
       });
@@ -97,8 +91,6 @@ export default function OrgProfileSettings({
           required
         />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-          <div className="md:col-span-2">
         <Input
           label="Email Sender Slug"
           value={slug}
