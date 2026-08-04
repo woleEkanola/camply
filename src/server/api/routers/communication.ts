@@ -877,10 +877,13 @@ export const communicationRouter = createTRPCRouter({
         branding: z
           .object({
             logoUrl: z.string().nullable().optional(),
-        senderName: z.string().nullable().optional(),
-            primaryColor: z.string().default("#E67E22"),
+            masterLogoUrl: z.string().nullable().optional(),
+            emailLogoUrl: z.string().nullable().optional(),
+            idCardLogoUrl: z.string().nullable().optional(),
+            senderName: z.string().nullable().optional(),
+            primaryColor: z.string().default("#0D9488"),
             accentColor: z.string().default("#E67E22"),
-            buttonColor: z.string().default("#E67E22"),
+            buttonColor: z.string().default("#0D9488"),
             headerImageUrl: z.string().nullable().optional(),
             footerText: z.string().nullable().optional(),
             supportEmail: z.string().nullable().optional(),
@@ -904,11 +907,16 @@ export const communicationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       const variables = getSampleData();
+      const resolvedLogo =
+        input.branding?.emailLogoUrl ||
+        input.branding?.masterLogoUrl ||
+        input.branding?.logoUrl ||
+        null;
       const branding: Branding = {
-        primaryColor: input.branding?.primaryColor ?? "#E67E22",
+        primaryColor: input.branding?.primaryColor ?? "#0D9488",
         accentColor: input.branding?.accentColor ?? "#E67E22",
-        buttonColor: input.branding?.buttonColor ?? "#E67E22",
-        logoUrl: input.branding?.logoUrl ?? null,
+        buttonColor: input.branding?.buttonColor ?? "#0D9488",
+        logoUrl: resolvedLogo,
         senderName: (input.branding as any)?.senderName ?? null,
         headerImageUrl: input.branding?.headerImageUrl ?? null,
         footerText: input.branding?.footerText ?? null,
@@ -1992,43 +2000,5 @@ export const communicationRouter = createTRPCRouter({
       const item = await ctx.prisma.emailRecipient.findUniqueOrThrow({ where: { id: input.id } });
       if (item.userId !== currentUser.id) throw new TRPCError({ code: "FORBIDDEN" });
       return ctx.prisma.emailRecipient.update({ where: { id: input.id }, data: { pinned: false } });
-    }),
-
-  // ═══ Email Preview Render ═══════════════════════════════════════════════════
-
-  previewRender: protectedProcedure
-    .input(
-      z.object({
-        tiptapJson: z.any(),
-        branding: z.any().optional(),
-      })
-    )
-    .query(async ({ input }) => {
-      const branding = input.branding || {};
-      const html = renderEmail({
-        bodyJson: input.tiptapJson,
-        branding: {
-          logoUrl: branding.emailLogoUrl || branding.masterLogoUrl || branding.logoUrl || "/logo.png",
-          primaryColor: branding.primaryColor || "#0D9488",
-          accentColor: branding.accentColor || "#E67E22",
-          buttonColor: branding.buttonColor || "#0D9488",
-          headerImageUrl: branding.headerImageUrl || null,
-          footerText: branding.footerText || null,
-          supportEmail: branding.supportEmail || null,
-          supportPhone: branding.supportPhone || null,
-          websiteUrl: branding.websiteUrl || null,
-          facebookUrl: branding.facebookUrl || null,
-          instagramUrl: branding.instagramUrl || null,
-          address: branding.address || null,
-          tagline: branding.tagline || null,
-          supportTitle: branding.supportTitle || null,
-          supportDescription: branding.supportDescription || null,
-          footerCopyright: branding.footerCopyright || null,
-          phone: branding.phone || null,
-          xUrl: branding.xUrl || null,
-          linkedinUrl: branding.linkedinUrl || null,
-        },
-      });
-      return html;
     }),
 });
