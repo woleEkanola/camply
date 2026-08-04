@@ -8,7 +8,6 @@ import {
   MagnifyingGlassMinusIcon,
   ArrowPathIcon,
   CheckIcon,
-  XMarkIcon,
 } from "@heroicons/react/24/outline";
 
 export type CropperPreset = "Wide" | "Banner" | "Square" | "Freeform";
@@ -38,7 +37,6 @@ export function LogoCropperModal({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [imgElement, setImgElement] = useState<HTMLImageElement | null>(null);
 
-  // Determine target aspect ratio from preset
   const getAspectRatio = () => {
     switch (preset) {
       case "Wide":
@@ -84,12 +82,10 @@ export function LogoCropperModal({
     ctx.clearRect(0, 0, targetWidth, targetHeight);
     ctx.save();
 
-    // Move to canvas center for rotation & pan
     ctx.translate(targetWidth / 2 + pan.x, targetHeight / 2 + pan.y);
     ctx.rotate((rotation * Math.PI) / 180);
     ctx.scale(zoom, zoom);
 
-    // Draw centered image
     ctx.drawImage(
       imgElement,
       -imgElement.width / 2,
@@ -132,14 +128,19 @@ export function LogoCropperModal({
   return (
     <Dialog open={open} onClose={onClose} title={title}>
       <div className="space-y-4">
-        <div className="flex items-center justify-between text-xs text-txt-muted">
-          <span>Preset: <strong className="text-teal-600 font-bold">{preset} ({getAspectRatio() === 1 ? "1:1" : getAspectRatio() === 3 ? "3:1" : "4:1"})</strong></span>
-          <span>Drag image to adjust alignment</span>
+        <div className="flex items-center justify-between text-xs text-slate-600 dark:text-neutral-400">
+          <span>
+            Preset:{" "}
+            <strong className="text-teal-700 dark:text-teal-400 font-bold">
+              {preset} ({getAspectRatio() === 1 ? "1:1" : getAspectRatio() === 3 ? "3:1" : "4:1"})
+            </strong>
+          </span>
+          <span>Drag image to adjust position</span>
         </div>
 
-        {/* Canvas Workspace */}
+        {/* Canvas Workspace with Adaptive Checkerboard Grid */}
         <div
-          className="relative overflow-hidden rounded-xl border border-border-default bg-neutral-900 flex items-center justify-center p-4 cursor-grab active:cursor-grabbing select-none"
+          className="relative overflow-hidden rounded-2xl border border-slate-300 dark:border-neutral-800 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100 dark:bg-neutral-900 flex items-center justify-center p-6 cursor-grab active:cursor-grabbing select-none shadow-inner"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -147,14 +148,14 @@ export function LogoCropperModal({
         >
           <canvas
             ref={canvasRef}
-            className="max-w-full max-h-[350px] shadow-lg rounded-lg border border-white/20 object-contain bg-neutral-950/80"
+            className="max-w-full max-h-[350px] shadow-2xl rounded-xl border border-slate-300 dark:border-white/20 object-contain bg-white dark:bg-neutral-950"
           />
         </div>
 
-        {/* Control Bar: Zoom & Rotate */}
-        <div className="flex flex-wrap items-center justify-between gap-4 p-3 bg-surface-raised rounded-xl border border-border-default">
+        {/* Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800">
           <div className="flex items-center space-x-3 flex-1">
-            <MagnifyingGlassMinusIcon className="h-4 w-4 text-txt-muted" />
+            <MagnifyingGlassMinusIcon className="h-4 w-4 text-slate-500 dark:text-neutral-400" />
             <input
               type="range"
               min="0.5"
@@ -162,10 +163,10 @@ export function LogoCropperModal({
               step="0.05"
               value={zoom}
               onChange={(e) => setZoom(parseFloat(e.target.value))}
-              className="w-full h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-teal-600"
+              className="w-full h-2 bg-slate-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-teal-600"
             />
-            <MagnifyingGlassPlusIcon className="h-4 w-4 text-txt-muted" />
-            <span className="text-xs font-mono font-semibold w-12 text-txt-primary">
+            <MagnifyingGlassPlusIcon className="h-4 w-4 text-slate-500 dark:text-neutral-400" />
+            <span className="text-xs font-mono font-bold w-12 text-slate-900 dark:text-white">
               {Math.round(zoom * 100)}%
             </span>
           </div>
@@ -173,20 +174,20 @@ export function LogoCropperModal({
           <button
             type="button"
             onClick={handleRotate}
-            className="p-2 rounded-lg border border-border-default hover:bg-bg-subtle text-txt-secondary hover:text-txt-primary transition flex items-center gap-1.5 text-xs font-medium"
+            className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-slate-50 text-slate-800 dark:text-white transition flex items-center gap-1.5 text-xs font-bold shadow-xs"
             title="Rotate 90°"
           >
-            <ArrowPathIcon className="h-4 w-4 text-teal-600" />
-            Rotate
+            <ArrowPathIcon className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+            Rotate 90°
           </button>
         </div>
 
-        {/* Footer Actions */}
-        <div className="flex justify-end space-x-2 pt-2 border-t border-border-default">
-          <Button variant="ghost" onClick={onClose}>
+        {/* Actions */}
+        <div className="flex justify-end space-x-2 pt-2 border-t border-slate-200 dark:border-neutral-800">
+          <Button variant="ghost" onClick={onClose} className="font-semibold">
             Cancel
           </Button>
-          <Button onClick={handleSaveCrop} className="flex items-center gap-2">
+          <Button onClick={handleSaveCrop} className="flex items-center gap-2 font-bold">
             <CheckIcon className="h-4 w-4" />
             Apply Crop
           </Button>
