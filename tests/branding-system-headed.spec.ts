@@ -3,7 +3,7 @@ import { loginWithPassword } from "./helpers";
 
 test.describe("Multi-Tenant Branding System - Headed Verification", () => {
   test("Organization Admin branding page renders Brand Logo and optional override cards", async ({ page }) => {
-    await loginWithPassword(page, "admin@test.com", "admin123");
+    await loginWithPassword(page, "owner@camply.com", "password123");
 
     // Navigate to Organization Branding
     await page.goto("/admin/communication/branding");
@@ -21,7 +21,7 @@ test.describe("Multi-Tenant Branding System - Headed Verification", () => {
   });
 
   test("Super Admin platform branding page renders platform controls", async ({ page }) => {
-    await loginWithPassword(page, "superadmin@test.com", "admin123");
+    await loginWithPassword(page, "superadmin@camply.com", "password123");
 
     // Navigate to Super Admin Platform Branding
     await page.goto("/super-admin/branding");
