@@ -131,7 +131,7 @@ export function LogoUploadField({
           {isOptional && isOverridden ? (
             <>
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
                 className="flex items-center gap-1.5 text-xs"
