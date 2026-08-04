@@ -106,28 +106,19 @@ export default function OrgProfileSettings({
           helpText="Used as the sender address: your-slug@camply.ng. Leave empty to use donotreply@camply.ng."
         />
 
-        <Input
-          label="Logo Image URL"
-          placeholder="https://example.com/logo.png"
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-            />
+        <div className="p-4 rounded-xl bg-surface-raised border border-border-default space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-txt-primary">Organization Branding & Logos</span>
+            <a
+              href="/admin/communication/branding"
+              className="text-xs font-bold text-teal-600 hover:text-teal-700 underline flex items-center gap-1"
+            >
+              Manage Logos & Cropper →
+            </a>
           </div>
-          <div className="flex flex-col items-center justify-center p-2 border border-dashed border-border-default rounded-lg h-[84px] bg-surface-raised">
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={logoUrl}
-                alt="Logo Preview"
-                className="max-h-[64px] max-w-full object-contain"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = "none";
-                }}
-              />
-            ) : (
-              <span className="text-xs text-txt-muted">No logo preview</span>
-            )}
-          </div>
+          <p className="text-xs text-txt-secondary">
+            Logos are now managed centrally with interactive croppers, live previews, and override settings in the <strong>Organization Branding Hub</strong>.
+          </p>
         </div>
 
         <div>
