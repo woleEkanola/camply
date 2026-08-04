@@ -499,6 +499,9 @@ export const communicationRouter = createTRPCRouter({
     .input(
       z.object({
         logoUrl: z.string().nullable().optional(),
+        masterLogoUrl: z.string().nullable().optional(),
+        emailLogoUrl: z.string().nullable().optional(),
+        idCardLogoUrl: z.string().nullable().optional(),
         senderName: z.string().nullable().optional(),
         primaryColor: z.string().optional(),
         accentColor: z.string().optional(),
@@ -511,7 +514,6 @@ export const communicationRouter = createTRPCRouter({
         facebookUrl: z.string().nullable().optional(),
         instagramUrl: z.string().nullable().optional(),
         address: z.string().nullable().optional(),
-        // Camp Invitation certificate email fields (Phase 2 email redesign)
         tagline: z.string().nullable().optional(),
         supportTitle: z.string().nullable().optional(),
         supportDescription: z.string().nullable().optional(),
@@ -519,22 +521,23 @@ export const communicationRouter = createTRPCRouter({
         phone: z.string().nullable().optional(),
         xUrl: z.string().nullable().optional(),
         linkedinUrl: z.string().nullable().optional(),
-        nextSteps: z
-          .array(z.object({ icon: z.string(), title: z.string(), description: z.string() }))
-          .nullable()
-          .optional(),
+        nextSteps: z.any().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
       const oid = orgId(ctx);
       const { nextSteps, ...rest } = input;
+      const dataToSave = {
+        ...rest,
+        ...(input.masterLogoUrl !== undefined && !input.logoUrl ? { logoUrl: input.masterLogoUrl } : {}),
+      };
       const nextStepsValue =
         nextSteps === null ? Prisma.JsonNull : nextSteps === undefined ? undefined : nextSteps;
       return ctx.prisma.organizationBranding.upsert({
         where: { organizationId: oid },
-        update: { ...rest, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
-        create: { organizationId: oid, ...rest, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
+        update: { ...dataToSave, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
+        create: { organizationId: oid, ...dataToSave, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
       });
     }),
 
@@ -1991,69 +1994,7 @@ export const communicationRouter = createTRPCRouter({
       return ctx.prisma.emailRecipient.update({ where: { id: input.id }, data: { pinned: false } });
     }),
 
-  // ═══ Organization Branding ═════════════════════════════════════════════════
-
-  brandingGet: protectedProcedure.query(async ({ ctx }) => {
-    requireAdmin(ctx);
-    const oid = orgId(ctx);
-    let branding = await ctx.prisma.organizationBranding.findUnique({
-      where: { organizationId: oid },
-    });
-    if (!branding) {
-      branding = await ctx.prisma.organizationBranding.create({
-        data: { organizationId: oid },
-      });
-    }
-    return branding;
-  }),
-
-  brandingUpdate: protectedProcedure
-    .input(
-      z.object({
-        logoUrl: z.string().nullable().optional(),
-        masterLogoUrl: z.string().nullable().optional(),
-        emailLogoUrl: z.string().nullable().optional(),
-        idCardLogoUrl: z.string().nullable().optional(),
-        primaryColor: z.string().optional(),
-        accentColor: z.string().optional(),
-        buttonColor: z.string().optional(),
-        headerImageUrl: z.string().nullable().optional(),
-        senderName: z.string().nullable().optional(),
-        tagline: z.string().nullable().optional(),
-        footerText: z.string().nullable().optional(),
-        supportEmail: z.string().nullable().optional(),
-        supportPhone: z.string().nullable().optional(),
-        websiteUrl: z.string().nullable().optional(),
-        facebookUrl: z.string().nullable().optional(),
-        instagramUrl: z.string().nullable().optional(),
-        address: z.string().nullable().optional(),
-        supportTitle: z.string().nullable().optional(),
-        supportDescription: z.string().nullable().optional(),
-        footerCopyright: z.string().nullable().optional(),
-        phone: z.string().nullable().optional(),
-        xUrl: z.string().nullable().optional(),
-        linkedinUrl: z.string().nullable().optional(),
-        nextSteps: z.any().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx);
-      const oid = orgId(ctx);
-
-      const dataToSave = { ...input };
-      if (input.masterLogoUrl !== undefined && !input.logoUrl) {
-        dataToSave.logoUrl = input.masterLogoUrl;
-      }
-
-      return ctx.prisma.organizationBranding.upsert({
-        where: { organizationId: oid },
-        update: dataToSave,
-        create: {
-          organizationId: oid,
-          ...dataToSave,
-        },
-      });
-    }),
+  // ═══ Email Preview Render ═══════════════════════════════════════════════════
 
   previewRender: protectedProcedure
     .input(
