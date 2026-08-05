@@ -1581,7 +1581,7 @@ export const scanRouter = createTRPCRouter({
 
       return {
         result: "SUCCESS" as const,
-        actionPerformed: input.stationId === "STAFF_CHECKOUT" ? "Checked Out" : "Checked In",
+        actionPerformed: `${input.stationId === "STAFF_CHECKOUT" ? "Checked Out" : "Checked In"} at ${input.station}`,
         profile,
       };
     }),

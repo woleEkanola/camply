@@ -90,7 +90,7 @@ describe("scanRouter - processStaffScan", () => {
     });
 
     expect(result.result).toBe("SUCCESS");
-    expect(result.actionPerformed).toBe("Checked In");
+    expect(result.actionPerformed).toBe("Checked In at Staff Check-In");
     expect(result.profile.id).toBe(staffProfileId);
 
     const event = await prisma.staffScanEvent.findFirst({ where: { staffProfileId } });
