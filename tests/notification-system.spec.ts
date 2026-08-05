@@ -14,10 +14,10 @@ test.describe("Camply Unified Notification & Vibration System", () => {
 
       // Spy on navigator.vibrate
       if (typeof navigator !== "undefined") {
-        navigator.vibrate = (pattern: number | number[]) => {
+        navigator.vibrate = ((pattern: VibratePattern) => {
           (window as any).__vibrationCalls.push(pattern);
           return true;
-        };
+        }) as typeof navigator.vibrate;
       }
     });
   });

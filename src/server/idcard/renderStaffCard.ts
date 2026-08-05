@@ -24,25 +24,39 @@ import {
   drawDotGrid,
   drawChurchGlyph,
   drawPersonGlyph,
+  drawBriefcaseGlyph,
+  drawShieldGlyph,
   loadLogoOrNull,
   initials,
 } from "./cardPrimitives";
 
-export interface CampIdCardData {
-  camperName: string;
+export interface StaffIdCardData {
+  staffName: string;
+  roleLabel: "TEACHER" | "VOLUNTEER";
   campusName: string;
   gender: string | null;
-  tribeName: string;
-  tribeColor: string; // hex; fallback '#1E3A8A' applied by the caller if Tribe.color is null
+  departmentLine: string | null; // null when neither a department nor a volunteerCategory is set
+  tribeLine: string | null; // null when no tribe assigned — the card must render fine without this row
   campName: string;
   campYear: string;
   logoUrl: string | null;
   qrToken: string;
 }
 
-export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer> {
+// Fixed per-role band colours — deliberately NOT derived from tribe/department,
+// so every staff card's band means the same thing regardless of assignment.
+const ROLE_COLORS: Record<StaffIdCardData["roleLabel"], string> = {
+  TEACHER: "#1D4ED8", // same family as ACCENT_COLOR
+  VOLUNTEER: "#0D9488", // teal — distinguishable from the teacher blue at a glance
+};
+
+type InfoRow = { label: string; value: string; glyph: "church" | "person" | "briefcase" | "shield" };
+
+export async function renderStaffIdCardPng(data: StaffIdCardData): Promise<Buffer> {
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   const ctx = canvas.getContext("2d");
+
+  const bandColor = ROLE_COLORS[data.roleLabel];
 
   const [logo, qrBuffer] = await Promise.all([
     loadLogoOrNull(data.logoUrl),
@@ -50,8 +64,6 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ]);
   const qrImage = await loadImage(qrBuffer);
 
-  // White background, clipped to the card's rounded outline so nothing
-  // drawn afterward can bleed past the corners.
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
   roundRectPath(ctx, 0, 0, CARD_WIDTH, CARD_HEIGHT, CORNER_RADIUS);
@@ -60,17 +72,17 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
-  // ─── Decorative halftone texture, bottom-left (behind everything else).
-  // Hugs the left edge and stays faint so it never competes with the info
-  // rows that sit just to its right.
   drawDotGrid(ctx, {
     x: 8, y: 424, width: 96, height: 210,
     spacing: 21, radius: 3.2, color: "#2563EB", fade: "toRight", maxAlpha: 0.5,
   });
 
-  // ─── Tribe-colour band, top-right, with a rounded bottom-left corner so the
-  // white header reads as a tab tucked beneath it (matches the reference).
-  ctx.fillStyle = data.tribeColor;
+  // ─── Role-colour band, top-right — always present, unlike the camper
+  // card's tribe band which requires a tribe. This is the card's one
+  // structural difference from the camper layout: the band communicates
+  // role (Teacher/Volunteer), a value every staff member always has,
+  // instead of tribe, a value only some have.
+  ctx.fillStyle = bandColor;
   ctx.beginPath();
   ctx.moveTo(BAND_X, 0);
   ctx.lineTo(CARD_WIDTH, 0);
@@ -80,7 +92,6 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.closePath();
   ctx.fill();
 
-  // Halftone texture inside the band's right end.
   ctx.save();
   ctx.beginPath();
   ctx.rect(BAND_X, 0, CARD_WIDTH - BAND_X, HEADER_HEIGHT);
@@ -91,12 +102,10 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   });
   ctx.restore();
 
-  // Accent bar underlining the white header tab, meeting the band.
   ctx.fillStyle = ACCENT_COLOR;
   roundRectPath(ctx, 28, HEADER_HEIGHT - 9, BAND_X - 28, 9, 4.5);
   ctx.fill();
 
-  // ─── Circular logo badge, top-left.
   const badgeCx = 95;
   const badgeCy = 76;
   const badgeR = 47;
@@ -123,8 +132,6 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2);
   ctx.stroke();
 
-  // ─── Camp name + year, right of the logo badge, shrink-to-fit so long camp
-  // names never collide with the vertical rule before the band.
   const campTextX = badgeCx + badgeR + 22;
   const campMaxWidth = BAND_X - 46 - campTextX;
   ctx.textAlign = "left";
@@ -138,7 +145,6 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.font = "bold 32px Inter, sans-serif";
   ctx.fillText(data.campYear, campTextX, 128);
 
-  // Vertical hairline between the camp block and the band.
   ctx.strokeStyle = HAIRLINE;
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -146,52 +152,44 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.lineTo(BAND_X - 30, 118);
   ctx.stroke();
 
-  // ─── Tribe name, centred in the band, shrink-to-fit.
+  // ─── Role label, centred in the band, shrink-to-fit — same treatment the
+  // camper card gives the tribe name.
   const bandInnerWidth = CARD_WIDTH - BAND_X - 56;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#FFFFFF";
-  const tribeUpper = data.tribeName.toUpperCase();
-  const tribeSize = fitFontSize(ctx, tribeUpper, bandInnerWidth, { start: 60, min: 24, step: 2 });
-  ctx.font = `bold ${tribeSize}px Inter, sans-serif`;
-  ctx.fillText(
-    truncateToFit(ctx, tribeUpper, bandInnerWidth),
-    BAND_X + (CARD_WIDTH - BAND_X) / 2,
-    HEADER_HEIGHT / 2 - 4
-  );
+  const roleSize = fitFontSize(ctx, data.roleLabel, bandInnerWidth, { start: 60, min: 24, step: 2 });
+  ctx.font = `bold ${roleSize}px Inter, sans-serif`;
+  ctx.fillText(data.roleLabel, BAND_X + (CARD_WIDTH - BAND_X) / 2, HEADER_HEIGHT / 2 - 4);
 
-  // ─── Camper name — the dominant element, wrapping to at most two lines.
+  // ─── Staff name — dominant element, up to two lines. Slightly tighter
+  // floor than the camper card's (26 vs 30) since the body can carry up to
+  // four info rows instead of two.
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = DARK_TEXT;
-  // Starts large enough that a typical two-part name stacks onto two lines,
-  // matching the reference artwork's proportions.
-  let nameSize = 92;
+  let nameSize = 88;
   let nameLines: string[] | null = null;
-  while (nameSize >= 30) {
+  while (nameSize >= 26) {
     ctx.font = `bold ${nameSize}px Inter, sans-serif`;
-    nameLines = wrapToLines(ctx, data.camperName, BODY_MAX_WIDTH, 2);
+    nameLines = wrapToLines(ctx, data.staffName, BODY_MAX_WIDTH, 2);
     if (nameLines) break;
     nameSize -= 2;
   }
   if (!nameLines) {
-    // A single unbreakable word wider than the column even at the floor size.
-    nameSize = 30;
+    nameSize = 26;
     ctx.font = `bold ${nameSize}px Inter, sans-serif`;
-    nameLines = [truncateToFit(ctx, data.camperName, BODY_MAX_WIDTH)];
+    nameLines = [truncateToFit(ctx, data.staffName, BODY_MAX_WIDTH)];
   }
   ctx.font = `bold ${nameSize}px Inter, sans-serif`;
   const nameLineHeight = Math.round(nameSize * 1.1);
-  // Anchor the block so one- and two-line names share the same optical centre:
-  // a short single-line name drops lower so the body doesn't sit top-heavy.
-  const nameTop = nameLines.length >= 2 ? 232 : 278;
+  const nameTop = nameLines.length >= 2 ? 208 : 254;
   nameLines.forEach((line, i) => {
     ctx.fillText(line, BODY_X, nameTop + i * nameLineHeight);
   });
   const nameBottom = nameTop + (nameLines.length - 1) * nameLineHeight;
 
-  // Short accent rule under the name.
-  const ruleY = nameBottom + 36;
+  const ruleY = nameBottom + 30;
   ctx.strokeStyle = ACCENT_COLOR;
   ctx.lineWidth = 4;
   ctx.beginPath();
@@ -199,43 +197,57 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.lineTo(BODY_X + Math.min(BODY_MAX_WIDTH, 382), ruleY);
   ctx.stroke();
 
-  // ─── Campus / Gender rows — solid accent disc + glyph, tracked label, bold value.
-  function drawInfoRow(centerY: number, label: string, value: string, glyph: "church" | "person") {
-    const discR = 24;
+  function drawInfoRow(centerY: number, row: InfoRow) {
+    const discR = 22;
     const discCx = BODY_X + discR;
     ctx.fillStyle = ACCENT_COLOR;
     ctx.beginPath();
     ctx.arc(discCx, centerY, discR, 0, Math.PI * 2);
     ctx.fill();
-    if (glyph === "church") drawChurchGlyph(ctx, discCx, centerY, discR * 1.55, ACCENT_COLOR);
-    else drawPersonGlyph(ctx, discCx, centerY, discR * 1.55);
+    const glyphSize = discR * 1.55;
+    if (row.glyph === "church") drawChurchGlyph(ctx, discCx, centerY, glyphSize, ACCENT_COLOR);
+    else if (row.glyph === "person") drawPersonGlyph(ctx, discCx, centerY, glyphSize);
+    else if (row.glyph === "briefcase") drawBriefcaseGlyph(ctx, discCx, centerY, glyphSize);
+    else drawShieldGlyph(ctx, discCx, centerY, glyphSize);
 
-    const textX = discCx + discR + 22;
+    const textX = discCx + discR + 20;
     const valueMaxWidth = BODY_MAX_WIDTH - (textX - BODY_X);
     ctx.textAlign = "left";
     ctx.fillStyle = MUTED_TEXT;
-    ctx.font = "bold 18px Inter, sans-serif";
-    fillTextTracked(ctx, label.toUpperCase(), textX, centerY - 8, 1.6);
+    ctx.font = "bold 16px Inter, sans-serif";
+    fillTextTracked(ctx, row.label.toUpperCase(), textX, centerY - 7, 1.4);
     ctx.fillStyle = DARK_TEXT;
-    ctx.font = "bold 26px Inter, sans-serif";
-    ctx.fillText(truncateToFit(ctx, value, valueMaxWidth), textX, centerY + 24);
+    ctx.font = "bold 23px Inter, sans-serif";
+    ctx.fillText(truncateToFit(ctx, row.value, valueMaxWidth), textX, centerY + 21);
   }
 
-  const campusRowY = ruleY + 56;
-  drawInfoRow(campusRowY, "Campus", data.campusName, "church");
+  // ─── Body rows — data-driven, 2 to 4 of them depending on what's
+  // assigned. Campus and Gender always render; Department and Tribe are
+  // omitted (not shown as "—") when the staff member has neither, which is
+  // the normal case for a volunteer with no tribe.
+  const rows: InfoRow[] = [
+    { label: "Campus", value: data.campusName, glyph: "church" },
+    { label: "Gender", value: data.gender ?? "—", glyph: "person" },
+  ];
+  if (data.departmentLine) rows.push({ label: "Department", value: data.departmentLine, glyph: "briefcase" });
+  if (data.tribeLine) rows.push({ label: "Tribe", value: data.tribeLine, glyph: "shield" });
 
-  const rowSeparatorY = campusRowY + 56;
-  ctx.strokeStyle = HAIRLINE;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(BODY_X, rowSeparatorY);
-  ctx.lineTo(BODY_X + Math.min(BODY_MAX_WIDTH, 382), rowSeparatorY);
-  ctx.stroke();
+  const rowSpacing = 52;
+  let rowY = ruleY + 46;
+  rows.forEach((row, i) => {
+    if (i > 0) {
+      const sepY = rowY - rowSpacing / 2;
+      ctx.strokeStyle = HAIRLINE;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(BODY_X, sepY);
+      ctx.lineTo(BODY_X + Math.min(BODY_MAX_WIDTH, 382), sepY);
+      ctx.stroke();
+    }
+    drawInfoRow(rowY, row);
+    rowY += rowSpacing;
+  });
 
-  drawInfoRow(rowSeparatorY + 52, "Gender", data.gender ?? "—", "person");
-
-  // ─── QR code: large rounded container on the right, vertically centred in
-  // the body, with an inset quiet zone for scan reliability.
   const qrInset = 22;
   const qrSize = QR_BOX_SIZE - qrInset * 2;
   const qrBoxY = HEADER_HEIGHT + Math.round((CARD_HEIGHT - HEADER_HEIGHT - QR_BOX_SIZE) / 2);
@@ -249,12 +261,8 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
 
   ctx.drawImage(qrImage, QR_BOX_X + qrInset, qrBoxY + qrInset, qrSize, qrSize);
 
-  ctx.restore(); // undo the card-outline clip
+  ctx.restore();
 
-  // Faint cut guide tracing the card's exact outline, so a printed sheet can
-  // be trimmed accurately. Drawn after the clip is released (a stroke inside
-  // the clip would lose its outer half) and kept light enough not to read as
-  // part of the design on screen.
   roundRectPath(ctx, 1.5, 1.5, CARD_WIDTH - 3, CARD_HEIGHT - 3, CORNER_RADIUS - 1);
   ctx.strokeStyle = "#CBD5E1";
   ctx.lineWidth = 3;
@@ -272,8 +280,8 @@ const SHEET_CARD_H = Math.round(CARD_HEIGHT * SHEET_SCALE);
 const SHEET_W = SHEET_CARD_W * SHEET_COLS + SHEET_GAP * (SHEET_COLS + 1);
 const SHEET_H = SHEET_CARD_H * SHEET_ROWS + SHEET_GAP * (SHEET_ROWS + 1);
 
-export async function renderCampIdCardSheetPng(data: CampIdCardData): Promise<Buffer> {
-  const singlePng = await renderCampIdCardPng(data);
+export async function renderStaffIdCardSheetPng(data: StaffIdCardData): Promise<Buffer> {
+  const singlePng = await renderStaffIdCardPng(data);
   const singleImg = await loadImage(singlePng);
 
   const canvas = createCanvas(SHEET_W, SHEET_H);

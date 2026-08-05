@@ -110,6 +110,7 @@ model User {
   reportsFromStaff StaffProfile[] @relation("StaffReportsToUser")
   pushSubscriptions PushSubscription[]
   scanEvents       ScanEvent[]
+  staffScanEventsPerformed StaffScanEvent[] @relation("StaffScanScannedBy")
   deletedAt        DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -365,6 +366,7 @@ model Camp {
   medicalVisits        MedicalVisit[]
   mealDistributions    MealDistribution[]
   scanEvents           ScanEvent[]
+  staffScanEvents      StaffScanEvent[]
   departments          Department[]
   positions            Position[]
   teacherCampusQuotas  TeacherCampusQuota[]
@@ -881,6 +883,13 @@ model StaffProfile {
   camperAssignments   TeacherCamperAssignment[]
   positionAssignments PositionAssignment[]
 
+  // Camp ID card / scan identity — nullable, lazily issued on approval (see
+  // ensureStaffQrToken). "STF-" prefixed so the scan resolver can distinguish
+  // a staff badge from a camper Registration.qrToken without ambiguity.
+  qrToken       String?   @unique
+  qrIssuedAt    DateTime?
+  staffScanEvents StaffScanEvent[]
+
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -890,6 +899,30 @@ model StaffProfile {
   @@index([userId, campId])
   @@index([organizationId, type, status])
   @@index([deletedAt])
+}
+
+// Staff (teacher/volunteer) badge scan log — deliberately parallel to
+// ScanEvent rather than reusing it: ScanEvent.registrationId is a required
+// FK, and relaxing that would touch 12+ existing camper-scan write sites and
+// every report/reader. This table is purely additive.
+model StaffScanEvent {
+  id             String       @id @default(cuid())
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  staffProfileId String
+  camp           Camp?        @relation(fields: [campId], references: [id])
+  campId         String?
+  station        String
+  timestamp      DateTime     @default(now())
+  scannedBy      User         @relation("StaffScanScannedBy", fields: [scannedById], references: [id], onDelete: Cascade)
+  scannedById    String
+  device         String?
+  location       String?
+  result         String // SUCCESS | DUPLICATE | ERROR
+  metadata       Json?
+
+  @@index([staffProfileId])
+  @@index([campId])
+  @@index([timestamp])
 }
 
 model TeacherCamperAssignment {

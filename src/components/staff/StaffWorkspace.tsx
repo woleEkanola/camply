@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import {
   ArrowLeftIcon,
+  PrinterIcon,
 } from "@heroicons/react/24/outline";
 
 export interface StaffWorkspaceTab {
@@ -90,6 +91,17 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
               <Button size="sm" data-testid="approve-button" loading={approve.isPending} onClick={() => approve.mutate({ id: staffId })}>Approve</Button>
               <Button size="sm" variant="secondary" data-testid="reject-button" loading={reject.isPending} onClick={() => setRejectOpen(true)}>Reject</Button>
             </div>
+          )}
+          {profile.status === "APPROVED" && (
+            <Button
+              size="sm"
+              variant="secondary"
+              data-testid="print-badge-button"
+              icon={<PrinterIcon className="h-4 w-4" />}
+              onClick={() => window.open(`/api/staff/${staffId}/id-card.pdf`, "_blank")}
+            >
+              Print Badge
+            </Button>
           )}
         </div>
       </div>

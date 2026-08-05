@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
+import { assertOrgAdmin, assertOrgAdminOrCampusRep } from "../trpc/scoping";
 import { sendStaffApprovedEmail, sendStaffRejectedEmail } from "../../email/sendStaffEmails";
 import crypto from "crypto";
 import { normalizeEmail } from "../../../lib/email";
 import { hashPassword } from "../../../lib/auth";
 import { isCompleteNigerianPhone } from "../../../lib/phone";
+import { ensureStaffQrToken, regenerateStaffQrToken } from "../../staff/idToken";
 
 
 async function requireStaffProfile(ctx: { prisma: any; userId: string }) {
@@ -264,6 +265,7 @@ export const staffRouter = createTRPCRouter({
         data: { status: "APPROVED", approvedAt: new Date(), reviewerId: ctx.userId },
       });
       await autoAssignSoleVenue(ctx, profile.id, profile.campId);
+      await ensureStaffQrToken(ctx.prisma, profile.id);
 
       await ctx.prisma.notification.create({
         data: {
@@ -340,7 +342,9 @@ export const staffRouter = createTRPCRouter({
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
-      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { status: "APPROVED", deactivatedAt: null } });
+      const updated = await ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { status: "APPROVED", deactivatedAt: null } });
+      await ensureStaffQrToken(ctx.prisma, profile.id);
+      return updated;
     }),
 
   bulkApprove: protectedProcedure
@@ -359,8 +363,21 @@ export const staffRouter = createTRPCRouter({
       });
       for (const profile of profiles) {
         await autoAssignSoleVenue(ctx, profile.id, profile.campId);
+        await ensureStaffQrToken(ctx.prisma, profile.id);
       }
       return { count: input.ids.length };
+    }),
+
+  // Org-admin-only: invalidates a lost/compromised staff ID card by issuing
+  // a fresh qrToken, mirroring registration.regenerateQr for campers.
+  regenerateQr: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
+      if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, profile.organizationId);
+      const qrToken = await regenerateStaffQrToken(ctx.prisma, { staffProfileId: profile.id, actorId: ctx.userId });
+      return { qrToken };
     }),
 
   bulkReject: protectedProcedure
@@ -745,6 +762,10 @@ export const staffRouter = createTRPCRouter({
             }))
           });
         }
+
+        // Manual add always lands as APPROVED (see status above), so it's
+        // eligible for a badge immediately, same as the approve/bulkApprove path.
+        await ensureStaffQrToken(tx, profile.id);
 
         return profile;
       });
