@@ -8,6 +8,7 @@ import { ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, UserIcon, ChevronRight
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import NotificationBell from "@/components/NotificationBell";
+import { ExportCenterTray } from "@/components/export/ExportCenterTray";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { getNavGroups, getBottomNavItems, type Role } from "./navConfig";
 import { CommandPalette } from "./CommandPalette";
@@ -216,7 +217,7 @@ export default function AppShell({ area, children }: AppShellProps) {
       {/* Desktop sidebar */}
       <div
         className={cn(
-          "hidden md:flex md:flex-col border-r border-sidebar-border bg-sidebar-bg transition-all duration-200",
+          "no-print hidden md:flex md:flex-col border-r border-sidebar-border bg-sidebar-bg transition-all duration-200",
           sidebarOpen ? "md:w-64" : "md:w-16"
         )}
       >
@@ -225,14 +226,14 @@ export default function AppShell({ area, children }: AppShellProps) {
 
       {/* Mobile off-canvas sidebar */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="no-print fixed inset-0 z-40 md:hidden">
           <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-xs" onClick={() => setMobileOpen(false)} aria-hidden="true" />
           <div className="fixed inset-y-0 left-0 flex w-72 flex-col bg-sidebar-bg border-r border-sidebar-border shadow-xl">{sidebarContent}</div>
         </div>
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border-default bg-surface px-4 pt-[env(safe-area-inset-top)]">
+        <header className="no-print flex h-14 shrink-0 items-center justify-between border-b border-border-default bg-surface px-4 pt-[env(safe-area-inset-top)]">
           <button
             onClick={() => setMobileOpen(true)}
             className="rounded-md p-1.5 text-txt-secondary hover:bg-surface-raised md:hidden"
@@ -249,6 +250,7 @@ export default function AppShell({ area, children }: AppShellProps) {
           </button>
           <div className="flex items-center gap-2">
             <RoleSwitcher />
+            <ExportCenterTray />
             <NotificationBell />
             <ThemeToggle />
             {session?.user?.email && (
@@ -323,13 +325,15 @@ export default function AppShell({ area, children }: AppShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto scrollbar-hide px-6 pt-6 pb-20 md:pb-6">
+        <main id="print-area" className="flex-1 overflow-auto scrollbar-hide px-6 pt-6 pb-20 md:pb-6">
           {children}
         </main>
       </div>
 
-      <BottomNav items={bottomNavItems} onMoreClick={() => setMobileOpen(true)} />
-      <CommandPalette area={area} />
+      <div className="no-print">
+        <BottomNav items={bottomNavItems} onMoreClick={() => setMobileOpen(true)} />
+        <CommandPalette area={area} />
+      </div>
     </div>
   );
 }

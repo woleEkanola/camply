@@ -45,6 +45,23 @@ services:
     sync: false
   - key: APP_URL
     sync: false
+# Retry/crash backstop for background export jobs (see
+# src/server/export/engine.ts, src/app/api/cron/exports/route.ts). Most
+# exports complete via the un-awaited kick-off fired at enqueue time; this
+# sweep only picks up jobs that failed, or a RUNNING job whose process died
+# mid-generation. Runs every minute — cheap no-op when nothing is queued.
+- type: cron
+  name: exports-sweep
+  runtime: node
+  plan: free
+  schedule: "* * * * *"
+  buildCommand: "true"
+  startCommand: curl -sf -X POST -H "x-cron-secret:$CRON_SECRET" "$APP_URL/api/cron/exports"
+  envVars:
+  - key: CRON_SECRET
+    sync: false
+  - key: APP_URL
+    sync: false
 # Uncomment the following to deploy this app as a static site on render
 # - type: web
 #   name: nextjs-static

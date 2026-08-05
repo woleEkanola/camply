@@ -9,6 +9,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { ImportPanel } from "./components/ImportPanel";
 import { ExportPanel } from "./components/ExportPanel";
 import { FormatGuide } from "./components/FormatGuide";
+import { ExportCenter } from "@/components/export/ExportCenter";
 
 type ExtendedUser = { id: string; role: string; organizationId?: string };
 
@@ -49,6 +50,7 @@ export default function ImportExportPage() {
         tabs={[
           { label: "Import", content: <ImportPanel organizationId={organizationId} /> },
           { label: "Export", content: <ExportPanel organizationId={organizationId} /> },
+          { label: "Job History", content: <ExportCenter organizationId={organizationId} /> },
           { label: "Format Guide", content: <FormatGuide /> },
         ]}
       />

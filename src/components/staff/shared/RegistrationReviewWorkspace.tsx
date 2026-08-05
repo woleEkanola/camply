@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { api } from "@/utils/trpc";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { DocumentDownloadLink } from "@/components/documents/DocumentDownloadLink";
 import { Textarea, Select } from "@/components/ui/Input";
 import { DocumentViewerDrawer } from "./DocumentViewerDrawer";
 import { AuditTimeline } from "./AuditTimeline";
@@ -25,7 +26,6 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   XCircleIcon,
-  ArrowDownTrayIcon,
   EyeIcon,
   PencilIcon,
   CheckIcon,
@@ -425,15 +425,7 @@ export function RegistrationReviewWorkspace({
                               >
                                 Preview
                               </Button>
-                              <a
-                                href={foundDoc.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-1.5 text-txt-muted hover:text-neutral-800 rounded-lg hover:bg-surface-raised transition"
-                                title="Download Document"
-                              >
-                                <ArrowDownTrayIcon className="h-4 w-4" />
-                              </a>
+                              <DocumentDownloadLink url={foundDoc.url} variant="icon-light" iconClassName="h-4 w-4" />
                             </div>
                           </div>
                         );

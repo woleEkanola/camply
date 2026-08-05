@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/Badge";
 import { isEndorsed } from "@/server/registration/endorsement";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
 import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
-import { downloadBlob, exportUserDataToXlsx } from "@/lib/import-export/serialize";
+import { ExportButton } from "@/components/export/ExportButton";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
@@ -279,34 +279,6 @@ function RegistrationsPage() {
     },
     { enabled: !!organizationId }
   );
-
-  const [isExportingData, setIsExportingData] = useState(false);
-  const exportUserDataQuery = api.importExport.exportUserData.useQuery(
-    {
-      organizationId,
-      userType: "CAMPER",
-      campusId: filterCampus || undefined,
-      status: filterStatus || undefined,
-      campId: activeCamp?.id,
-      search: debouncedSearchQuery || undefined,
-    },
-    { enabled: false, staleTime: 0 }
-  );
-
-  const handleQuickExport = async () => {
-    setIsExportingData(true);
-    try {
-      const { data: exportRows } = await exportUserDataQuery.refetch();
-      if (exportRows) {
-        const blob = await exportUserDataToXlsx(exportRows);
-        downloadBlob(`camply-registrations-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsExportingData(false);
-    }
-  };
 
   useEffect(() => {
     if (data?.items) {
@@ -569,9 +541,19 @@ function RegistrationsPage() {
         title="Registrations"
         description={activeCamp ? `For ${activeCamp.name}` : undefined}
         actions={
-          <Button variant="secondary" onClick={handleQuickExport} loading={isExportingData}>
-            Export Excel
-          </Button>
+          <ExportButton
+            kind="CAMPERS"
+            organizationId={organizationId}
+            label="Registrations"
+            filters={{
+              campusId: filterCampus || undefined,
+              status: filterStatus || undefined,
+              campId: activeCamp?.id,
+              search: debouncedSearchQuery || undefined,
+            }}
+          >
+            Export
+          </ExportButton>
         }
       />
 

@@ -17,7 +17,7 @@ import { Textarea, Select } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
-import { downloadBlob, exportUserDataToXlsx } from "@/lib/import-export/serialize";
+import { ExportButton } from "@/components/export/ExportButton";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -155,34 +155,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     setCursor(undefined);
     setAllCampers([]);
   }, [debouncedSearchTerm, campusFilter, statusFilter, genderFilter, tribeFilter, campId]);
-
-  const [isExportingData, setIsExportingData] = useState(false);
-  const exportUserDataQuery = api.importExport.exportUserData.useQuery(
-    {
-      organizationId,
-      userType: "CAMPER",
-      campusId: campusFilter !== "all" ? campusFilter : undefined,
-      status: statusFilter || undefined,
-      campId: campId || undefined,
-      search: debouncedSearchTerm || undefined,
-    },
-    { enabled: false, staleTime: 0 }
-  );
-
-  const handleExportCampers = async () => {
-    setIsExportingData(true);
-    try {
-      const { data: exportRows } = await exportUserDataQuery.refetch();
-      if (exportRows) {
-        const blob = await exportUserDataToXlsx(exportRows);
-        downloadBlob(`camply-campers-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsExportingData(false);
-    }
-  };
 
   // Get campers
   const { data: responseData, refetch: refetchProfiles, error: profilesError, isLoading } = api.camper.adminList.useQuery(
@@ -511,10 +483,69 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           </button>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <Button variant="secondary" onClick={handleExportCampers} loading={isExportingData}>
+      <div className="flex flex-wrap items-center gap-2">
+        <ExportButton
+          kind="CAMPERS"
+          organizationId={organizationId}
+          label="Campers"
+          selectedIds={selectedIds}
+          filters={{
+            campusId: campusFilter !== "all" ? campusFilter : undefined,
+            status: statusFilter || undefined,
+            gender: genderFilter || undefined,
+            tribeId: tribeFilter || undefined,
+            campId: campId || undefined,
+            search: debouncedSearchTerm || undefined,
+          }}
+        >
           Export Campers
-        </Button>
+        </ExportButton>
+        <ExportButton
+          kind="ID_CARDS"
+          organizationId={organizationId}
+          label="ID Cards"
+          size="sm"
+          selectedIds={selectedIds}
+          filters={{
+            campusId: campusFilter !== "all" ? campusFilter : undefined,
+            status: statusFilter || undefined,
+            gender: genderFilter || undefined,
+            tribeId: tribeFilter || undefined,
+            campId: campId || undefined,
+          }}
+        >
+          ID Cards
+        </ExportButton>
+        <ExportButton
+          kind="ATTENDANCE_SHEET"
+          organizationId={organizationId}
+          label="Attendance Sheet"
+          size="sm"
+          selectedIds={selectedIds}
+          filters={{
+            campusId: campusFilter !== "all" ? campusFilter : undefined,
+            status: statusFilter || undefined,
+            campId: campId || undefined,
+          }}
+        >
+          Attendance Sheet
+        </ExportButton>
+        {canManageCampers && (
+          <ExportButton
+            kind="CAMPERS_MEDICAL"
+            organizationId={organizationId}
+            label="Medical Summary"
+            size="sm"
+            selectedIds={selectedIds}
+            filters={{
+              campusId: campusFilter !== "all" ? campusFilter : undefined,
+              status: statusFilter || undefined,
+              campId: campId || undefined,
+            }}
+          >
+            Medical Summary
+          </ExportButton>
+        )}
         <Button onClick={() => { setSelectedProfile(null); setIsModalOpen(true); }}>Add Camper</Button>
       </div>
     </div>
