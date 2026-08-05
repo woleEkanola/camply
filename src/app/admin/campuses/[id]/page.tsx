@@ -27,6 +27,8 @@ import {
   ArrowTopRightOnSquareIcon,
   PlusIcon,
   BuildingOffice2Icon,
+  NoSymbolIcon,
+  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 
 const CampusDetailsPage = () => {
@@ -94,6 +96,24 @@ const CampusDetailsPage = () => {
       setQuotaError(err.message);
     },
   });
+
+  const utils = api.useUtils();
+  const deactivateLinkMutation = api.signupLink.deactivate.useMutation({
+    onSuccess: () => void utils.signupLink.getByOrganization.invalidate(),
+  });
+  const reactivateLinkMutation = api.signupLink.reactivate.useMutation({
+    onSuccess: () => void utils.signupLink.getByOrganization.invalidate(),
+  });
+  const isTogglingLink = deactivateLinkMutation.isPending || reactivateLinkMutation.isPending;
+
+  const handleToggleSignupLink = () => {
+    if (!signupLink) return;
+    if (signupLink.active) {
+      deactivateLinkMutation.mutate({ id: signupLink.id });
+    } else {
+      reactivateLinkMutation.mutate({ id: signupLink.id });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -188,8 +208,13 @@ const CampusDetailsPage = () => {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold tracking-tight text-txt-primary">{campus.name}</h1>
-              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
-                • Active
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                  (campus as any).active ? "bg-emerald-50 text-emerald-600" : "bg-neutral-100 text-neutral-500"
+                )}
+              >
+                • {(campus as any).active ? "Active" : "Inactive"}
               </span>
             </div>
             <p className="mt-0.5 text-xs font-semibold text-txt-secondary">
@@ -252,7 +277,7 @@ const CampusDetailsPage = () => {
             </div>
 
             {/* CARD 2: SIGNUP LINK */}
-            <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
+            <div data-testid="signup-link-card" className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-tint text-accent-600">
@@ -261,14 +286,27 @@ const CampusDetailsPage = () => {
                   <h3 className="text-xs font-bold text-txt-primary">Signup Link</h3>
                 </div>
 
-                <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
-                  Active
-                </span>
+                {signupLink && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                      signupLink.active ? "bg-emerald-50 text-emerald-600" : "bg-neutral-100 text-neutral-500"
+                    )}
+                  >
+                    {signupLink.active ? "Active" : "Inactive"}
+                  </span>
+                )}
               </div>
 
               <p className="text-xs text-txt-secondary font-mono truncate bg-surface-raised p-2 rounded-xl">
                 {signupUrl}
               </p>
+
+              {signupLink && !signupLink.active && (
+                <p className="text-[11px] font-medium text-amber-600">
+                  This link is disabled — parents visiting it cannot register for this campus.
+                </p>
+              )}
 
               <div className="flex items-center gap-2.5 pt-1">
                 <button
@@ -289,6 +327,32 @@ const CampusDetailsPage = () => {
                   View Link Analytics
                 </button>
               </div>
+
+              {signupLink && (
+                <button
+                  type="button"
+                  onClick={handleToggleSignupLink}
+                  disabled={isTogglingLink}
+                  className={cn(
+                    "w-full inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl font-semibold text-xs transition-colors disabled:opacity-50",
+                    signupLink.active
+                      ? "status-danger text-danger-600 hover:bg-danger-100"
+                      : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                  )}
+                >
+                  {signupLink.active ? (
+                    <>
+                      <NoSymbolIcon className="h-4 w-4" />
+                      {isTogglingLink ? "Disabling…" : "Disable Signup Link"}
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircleIcon className="h-4 w-4" />
+                      {isTogglingLink ? "Enabling…" : "Enable Signup Link"}
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* CARD 3: REGISTRATION CAPACITY */}

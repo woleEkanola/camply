@@ -67,3 +67,68 @@ test.describe("Admin: Campus detail and rep display", () => {
     await expect(page.getByText(/42 Detail Ave/)).toBeVisible();
   });
 });
+
+test.describe("Admin: Campus detail — signup link enable/disable", () => {
+  test.describe.configure({ mode: "serial" });
+
+  const campusName = `E2E Campus Link Toggle ${Date.now()}`;
+  let campusId: string | undefined;
+  let signupLinkId: string | undefined;
+  let organizationId: string | undefined;
+  let campId: string | undefined;
+
+  test.beforeAll(async () => {
+    const ctx = await getFixtureOrgContext();
+    organizationId = ctx.organizationId;
+    campId = ctx.campId;
+
+    const campus = await prisma.campus.create({
+      data: {
+        name: campusName,
+        slug: `e2e-campus-link-toggle-${Date.now()}`,
+        address: "7 Toggle St",
+        city: "Testville",
+        country: "Testland",
+        organizationId,
+      },
+    });
+    campusId = campus.id;
+
+    const link = await prisma.signupLink.create({
+      data: { token: `e2e-toggle-token-${Date.now()}`, campusId: campus.id, campId, active: true, quota: 0 },
+    });
+    signupLinkId = link.id;
+  });
+
+  test.afterAll(async () => {
+    if (signupLinkId) await prisma.signupLink.deleteMany({ where: { id: signupLinkId } });
+    if (campusId) await prisma.campus.deleteMany({ where: { id: campusId } });
+  });
+
+  test("admin can disable and re-enable a campus's signup link from the detail page, with the badge reflecting real state", async ({ page }) => {
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto(`/admin/campuses/${campusId}`);
+
+    await expect(page.getByRole("heading", { name: campusName })).toBeVisible({ timeout: 10000 });
+
+    const linkCard = page.getByTestId("signup-link-card");
+    await expect(linkCard.getByText("Active", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Disable Signup Link" }).click();
+    await expect(page.getByRole("button", { name: "Enable Signup Link" })).toBeVisible({ timeout: 10000 });
+    await expect(linkCard.getByText("Inactive", { exact: true })).toBeVisible();
+    await expect(page.getByText(/This link is disabled/)).toBeVisible();
+
+    await expect
+      .poll(async () => (await prisma.signupLink.findUniqueOrThrow({ where: { id: signupLinkId! } })).active)
+      .toBe(false);
+
+    await page.getByRole("button", { name: "Enable Signup Link" }).click();
+    await expect(page.getByRole("button", { name: "Disable Signup Link" })).toBeVisible({ timeout: 10000 });
+    await expect(linkCard.getByText("Active", { exact: true })).toBeVisible();
+
+    await expect
+      .poll(async () => (await prisma.signupLink.findUniqueOrThrow({ where: { id: signupLinkId! } })).active)
+      .toBe(true);
+  });
+});
