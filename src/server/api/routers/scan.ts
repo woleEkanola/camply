@@ -3,6 +3,7 @@ import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { normalizeScannedQRToken } from "../../../lib/qr";
 import { classifyMedical } from "../../../lib/medical";
+import { isStaffQrToken } from "../../staff/idToken";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
@@ -270,6 +271,17 @@ export const scanRouter = createTRPCRouter({
       let registration: any = null;
       const rawToken = input.qrToken || input.query || "";
       const normalizedToken = normalizeScannedQRToken(rawToken);
+
+      // A staff badge scanned at a camper station would otherwise just
+      // 404 as "not recognized" — a confusing dead end. STF- is reserved
+      // for StaffProfile.qrToken (see src/server/staff/idToken.ts), so
+      // catch it here with a clear, actionable message instead.
+      if (isStaffQrToken(normalizedToken)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This is a staff badge — switch to a staff station to scan it.",
+        });
+      }
 
       if (normalizedToken) {
         // A. Primary lookup: search qrToken, registrationNumber, registration ID, or camper ID under active camp.
@@ -1418,6 +1430,160 @@ export const scanRouter = createTRPCRouter({
           volunteerName,
         };
       });
+    }),
+
+  // ─── Staff badge scanning ────────────────────────────────────────────────
+  // Deliberately a separate mutation from processScan rather than an
+  // overload — processScan's response shape assumes `registration.camper`
+  // throughout (medical triage, meal/checkout branches that don't apply to
+  // staff at all), and staff scans write to StaffScanEvent, a parallel
+  // table (StaffProfile has no ScanEvent-compatible required FK path).
+  processStaffScan: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        qrToken: z.string().optional(),
+        query: z.string().optional(),
+        station: z.string(),
+        stationId: z.enum(["STAFF_CHECK_IN", "STAFF_CHECKOUT", "STAFF_LOOKUP"]),
+        device: z.string().optional(),
+        location: z.string().optional(),
+        timestamp: z.date().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+
+      const activeTime = input.timestamp ?? new Date();
+      const startOfToday = new Date(activeTime);
+      startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date(activeTime);
+      endOfToday.setHours(23, 59, 59, 999);
+
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { activeCampId: true },
+      });
+      const campId = org?.activeCampId;
+
+      const rawToken = input.qrToken || input.query || "";
+      const normalizedToken = normalizeScannedQRToken(rawToken);
+
+      const include = {
+        preferredCampus: { select: { name: true } },
+        department: { select: { name: true } },
+        assignedTribe: { select: { name: true, color: true } },
+      } as const;
+
+      let profile: any = null;
+      if (normalizedToken) {
+        profile = await ctx.prisma.staffProfile.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            deletedAt: null,
+            OR: [
+              { qrToken: normalizedToken },
+              { id: normalizedToken },
+            ],
+          },
+          include,
+        });
+      }
+      if (!profile && input.query) {
+        const q = input.query.trim();
+        profile = await ctx.prisma.staffProfile.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            deletedAt: null,
+            OR: [
+              { firstName: { contains: q, mode: "insensitive" } },
+              { lastName: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+              { phone: { contains: q, mode: "insensitive" } },
+            ],
+          },
+          include,
+        });
+      }
+
+      if (!profile) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: input.qrToken ? "Staff badge QR token not recognized." : "No matching staff profile found.",
+        });
+      }
+      if (profile.status !== "APPROVED") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Staff status is currently ${profile.status.replace(/_/g, " ")}. Only approved staff can be scanned.`,
+        });
+      }
+
+      if (input.stationId === "STAFF_LOOKUP") {
+        await ctx.prisma.staffScanEvent.create({
+          data: {
+            staffProfileId: profile.id,
+            campId,
+            station: input.station,
+            timestamp: activeTime,
+            scannedById: ctx.userId,
+            device: input.device,
+            location: input.location,
+            result: "SUCCESS",
+          },
+        });
+        return { result: "SUCCESS" as const, actionPerformed: "Identity Resolved", profile };
+      }
+
+      // Per-day, per-station dedupe — same shape as processScan's arrival/
+      // collectible checks, scoped to StaffScanEvent instead of ScanEvent.
+      const existing = await ctx.prisma.staffScanEvent.findFirst({
+        where: {
+          staffProfileId: profile.id,
+          station: input.station,
+          result: "SUCCESS",
+          timestamp: { gte: startOfToday, lte: endOfToday },
+        },
+      });
+      if (existing) {
+        await ctx.prisma.staffScanEvent.create({
+          data: {
+            staffProfileId: profile.id,
+            campId,
+            station: input.station,
+            timestamp: activeTime,
+            scannedById: ctx.userId,
+            device: input.device,
+            location: input.location,
+            result: "DUPLICATE",
+          },
+        });
+        return {
+          result: "DUPLICATE" as const,
+          message: `${input.station} already recorded today.`,
+          originalTime: existing.timestamp,
+          profile,
+        };
+      }
+
+      await ctx.prisma.staffScanEvent.create({
+        data: {
+          staffProfileId: profile.id,
+          campId,
+          station: input.station,
+          timestamp: activeTime,
+          scannedById: ctx.userId,
+          device: input.device,
+          location: input.location,
+          result: "SUCCESS",
+        },
+      });
+
+      return {
+        result: "SUCCESS" as const,
+        actionPerformed: input.stationId === "STAFF_CHECKOUT" ? "Checked Out" : "Checked In",
+        profile,
+      };
     }),
 
   getOperationalStats: protectedProcedure
