@@ -70,8 +70,6 @@ test.describe("Wizard upload gating and retry-safe submit", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;

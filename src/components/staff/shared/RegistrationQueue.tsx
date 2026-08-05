@@ -46,7 +46,7 @@ interface Registration {
     photoUrl?: string | null;
     user?: { email?: string | null } | null;
   };
-  campus?: { name?: string | null } | null;
+  campus?: { name?: string | null; suspended?: boolean } | null;
   registrationNumber?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -722,6 +722,8 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                             <Button
                               size="sm"
                               loading={endorseMutation.isPending}
+                              disabled={row.campus?.suspended}
+                              title={row.campus?.suspended ? "This campus is suspended — recommendations are paused." : undefined}
                               onClick={() => endorseMutation.mutate({ registrationId: row.id })}
                             >
                               Recommend
@@ -740,6 +742,8 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                           <Button
                             size="sm"
                             loading={approveMutation.isPending}
+                            disabled={row.campus?.suspended}
+                            title={row.campus?.suspended ? "This campus is suspended — approvals are paused." : undefined}
                             onClick={() => approveMutation.mutate({ registrationId: row.id })}
                           >
                             Approve

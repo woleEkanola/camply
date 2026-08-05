@@ -44,8 +44,6 @@ test.describe("Clearing a Details field persists as cleared, not the old value",
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;

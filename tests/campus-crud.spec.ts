@@ -35,7 +35,7 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
     const campus = await prisma.campus.findFirstOrThrow({ where: { name: campusName } });
     campusId = campus.id;
     expect(campus.address).toBe("42 E2E Test Ave");
-    expect(campus.active).toBe(true);
+    expect(campus.suspended).toBe(false);
 
     // Card shows Generate when no signup link exists
     await card.getByRole("button", { name: /Generate/i }).click();

@@ -154,8 +154,10 @@ model Campus {
   pastor       String?
   phone        String?
   email        String?
-  active       Boolean @default(true)
-  signupOpen   Boolean @default(true)
+  suspended       Boolean   @default(false) // halts submit/endorse/approve for this campus without touching its signup link — see src/server/registration/validation.ts and engine.ts
+  suspendedAt     DateTime?
+  suspendedById   String?
+  suspendedReason String?
   campusCode   String? // short code embedded in registration numbers
   displayOrder Int     @default(0) // order in dropdowns/lists
 

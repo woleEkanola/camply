@@ -19,6 +19,7 @@ import {
   ShareIcon,
   CheckCircleIcon,
   ArrowRightIcon,
+  ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 
 export default function CampusRepDashboard() {
@@ -89,6 +90,20 @@ export default function CampusRepDashboard() {
   return (
     <AppShell area="campus-rep">
       <PageHeader title="Campus Management Hub" />
+
+      {(campus as any)?.suspended && (
+        <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-600">
+          <ExclamationTriangleIcon className="h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-bold">This campus is suspended.</p>
+            <p className="text-xs">
+              New submissions, recommendations, and approvals are paused until an org admin
+              reactivates it.
+              {(campus as any).suspendedReason ? ` Reason: ${(campus as any).suspendedReason}` : ""}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-6">
         {/* 1. HERO CAMPUS HEADER & SHAREABLE SIGNUP LINK BOX */}
@@ -177,10 +192,16 @@ export default function CampusRepDashboard() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-500 text-white font-bold shadow-md group-hover:scale-105 transition-transform">
                   <ClipboardDocumentListIcon className="h-7 w-7" />
                 </div>
-                {pendingCount > 0 && (
-                  <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-black text-amber-400">
-                    {pendingCount} Pending
+                {(campus as any)?.suspended ? (
+                  <span className="rounded-full bg-rose-500/20 px-2.5 py-0.5 text-xs font-black text-rose-500">
+                    Suspended
                   </span>
+                ) : (
+                  pendingCount > 0 && (
+                    <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-black text-amber-400">
+                      {pendingCount} Pending
+                    </span>
+                  )
                 )}
               </div>
               <div className="mt-4">
@@ -189,7 +210,9 @@ export default function CampusRepDashboard() {
                   <ArrowRightIcon className="h-4 w-4" />
                 </div>
                 <div className="mt-0.5 text-xs text-txt-secondary">
-                  Vet teenager applications and recommend them to admins.
+                  {(campus as any)?.suspended
+                    ? "Recommendations and approvals are paused for this campus."
+                    : "Vet teenager applications and recommend them to admins."}
                 </div>
               </div>
             </button>

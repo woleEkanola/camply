@@ -7,10 +7,21 @@ const prisma = new PrismaClient();
 test.describe("Campus Rep Registration Actions & StatCard E2E Test", () => {
   let camperId: string;
   let regId: string;
+  let organizationId: string;
+  let originalApprovalWorkflow: string;
 
   test.beforeAll(async () => {
     const suffix = `${Date.now()}`;
     const ctx = await getFixtureOrgContext();
+    organizationId = ctx.organizationId;
+
+    // This spec asserts on the TWO_STEP-only "Recommend" affordance but never
+    // set up TWO_STEP itself — it was silently relying on another spec having
+    // left the shared fixture org in that state. Pin it explicitly and
+    // restore afterwards so this test no longer depends on run order.
+    const org = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId } });
+    originalApprovalWorkflow = org.approvalWorkflow;
+    await prisma.organization.update({ where: { id: organizationId }, data: { approvalWorkflow: "TWO_STEP" } });
 
     const parent = await prisma.user.create({
       data: {
@@ -51,6 +62,9 @@ test.describe("Campus Rep Registration Actions & StatCard E2E Test", () => {
   });
 
   test.afterAll(async () => {
+    if (organizationId && originalApprovalWorkflow) {
+      await prisma.organization.update({ where: { id: organizationId }, data: { approvalWorkflow: originalApprovalWorkflow } }).catch(() => {});
+    }
     if (regId) {
       await prisma.registration.delete({ where: { id: regId } }).catch(() => {});
     }

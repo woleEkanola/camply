@@ -9,8 +9,7 @@ const campus: CampusRow = {
   city: "Lagos",
   country: "Nigeria",
   state: "Lagos State",
-  active: true,
-  signupOpen: false,
+  suspended: false,
   displayOrder: 3,
 };
 
@@ -42,7 +41,8 @@ describe("toJsonBundle", () => {
 
 describe("toCsv", () => {
   it("serializes booleans and blanks correctly", () => {
-    const csv = toCsv("campuses", [campus]);
+    const suspendedCampus: CampusRow = { ...campus, name: "Isolo Campus", suspended: true };
+    const csv = toCsv("campuses", [campus, suspendedCampus]);
     expect(csv).toContain("Lekki Campus");
     expect(csv).toContain("true");
     expect(csv).toContain("false");

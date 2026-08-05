@@ -550,6 +550,20 @@ export const registrationRouter = createTRPCRouter({
         });
       }
 
+      // This procedure writes `status` directly (see `registrationSchema`),
+      // bypassing engine.ts's suspended-campus checks entirely — the one
+      // confirmed gap in "engine.ts is the sole choke point." Guard it here.
+      const targetCampus = await ctx.prisma.campus.findUnique({
+        where: { id: input.campusId },
+        select: { suspended: true },
+      });
+      if (targetCampus?.suspended) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This campus is suspended — new registrations can't be created for it right now.",
+        });
+      }
+
       // Create the registration
       return await ctx.prisma.registration.create({
         data: input,

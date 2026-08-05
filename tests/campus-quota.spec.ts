@@ -159,8 +159,6 @@ test.describe("Campus registration quota (SignupLink-scoped)", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     closeCampusId = closeCampus.id;
@@ -181,8 +179,6 @@ test.describe("Campus registration quota (SignupLink-scoped)", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     waitlistCampusId = waitlistCampus.id;

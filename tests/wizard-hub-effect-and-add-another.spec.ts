@@ -59,8 +59,6 @@ test.describe("Wizard hub-effect one-shot guard + Add Another Camper", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;
