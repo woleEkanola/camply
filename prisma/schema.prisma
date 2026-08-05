@@ -715,6 +715,38 @@ model Tribe {
   @@index([deletedAt])
 }
 
+model ExportJob {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  kind           String    // CAMPERS | CAMPERS_MEDICAL | ID_CARDS | ATTENDANCE_SHEET | REGISTRATIONS | STAFF | REPORT_OPERATIONS | CONFIG_BUNDLE | TEMPLATE
+  format         String    // XLSX | CSV | JSON | MD | PDF
+  label          String
+  params         Json
+  status         String    @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | CANCELLED
+  stage          String?
+  progress       Int       @default(0)
+  processed      Int?
+  total          Int?
+  fileName       String?
+  mimeType       String?
+  fileSize       Int?
+  fileData       Bytes?
+  error          String?
+  errorHint      String?
+  attempts       Int       @default(0)
+  runAfter       DateTime  @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, runAfter])
+  @@index([organizationId, userId, createdAt])
+  @@index([expiresAt])
+}
+
 model SideEffect {
   id                    String   @id @default(cuid())
   registrationId        String?

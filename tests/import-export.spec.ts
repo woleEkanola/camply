@@ -101,15 +101,29 @@ test.describe("Admin: Import / Export campuses, tribes, departments", () => {
   });
 
   test("owner can export campuses, tribes, and departments as a JSON bundle", async ({ page }) => {
+    test.setTimeout(45000);
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/import-export");
 
-    await page.getByRole("tab", { name: "Export" }).click();
-    await page.getByLabel(/JSON bundle/).check();
+    // Config bundle export now goes through the shared Export Dialog / background
+    // job engine (src/components/export/) rather than downloading synchronously —
+    // see src/server/export/builders/configBundle.ts.
+    await page.getByRole("tab", { name: "Export", exact: true }).click();
+    await page.getByRole("button", { name: "Export", exact: true }).click();
+
+    const dialog = page.getByTestId("dialog-panel");
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("JSON").check();
+    await dialog.getByRole("button", { name: "Export", exact: true }).click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
+
+    await page.getByRole("tab", { name: "Job History" }).click();
+    const completedRow = page.getByText(/camply-export-.*\.json/).first();
+    await expect(completedRow).toBeVisible({ timeout: 20000 });
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: "Export" }).click(),
+      page.getByRole("link", { name: "Download" }).first().click(),
     ]);
 
     const filePath = await download.path();

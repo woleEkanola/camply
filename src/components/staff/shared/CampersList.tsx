@@ -15,7 +15,8 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
 import EditCamperModal from "@/app/admin/components/EditCamperModal";
-import { ArrowDownTrayIcon, CameraIcon } from "@heroicons/react/24/outline";
+import { ExportButton } from "@/components/export/ExportButton";
+import { CameraIcon } from "@heroicons/react/24/outline";
 import { useSession } from "next-auth/react";
 
 function age(dob: string | Date | null | undefined) {
@@ -142,58 +143,6 @@ export function CampersList({
     }
   }, [responseData?.items, cursor]);
 
-  const exportCsv = () => {
-    // allItems only holds the cursor pages loaded so far (limit: 50 per
-    // page, grown by "Load more") — exporting without warning silently
-    // produced a CSV of just the first page, with no indication it was
-    // partial.
-    if (responseData?.nextCursor) {
-      const proceed = window.confirm(
-        "Not all campers matching this filter have been loaded yet — this export would only include what's currently on screen. Click \"Load more\" until the full list is shown, then export again. Export the partial list anyway?"
-      );
-      if (!proceed) return;
-    }
-    const rows = allItems.map((item) => {
-      const reg = item.registrations[0];
-      return {
-        Name: item.name,
-        Gender: item.gender ?? "—",
-        Age: age(item.dateOfBirth) ?? "—",
-        Campus: item.homeCampus?.name ?? "—",
-        "Reg #": reg?.registrationNumber ?? "—",
-        Status: reg?.status ?? "—",
-        Tribe: reg?.tribe?.name ?? "—",
-        Room: reg?.room?.name ?? "—",
-        Bed: reg?.bed?.label ?? "—",
-        "Parent Email": item.user.email,
-        Allergies: item.allergies ?? "—",
-        "Medical Conditions": item.medicalConditions ?? "—",
-      };
-    });
-    if (rows.length === 0) return;
-    const headers = Object.keys(rows[0]!);
-    // A leading =, +, -, or @ makes Excel/Sheets interpret the cell as a
-    // formula rather than text — camper/parent-entered fields (name,
-    // allergies, etc.) were written to the CSV unescaped against that.
-    // Prefixing with a straight quote is the standard mitigation: it forces
-    // text interpretation without changing the visible value.
-    const escapeFormula = (v: string) => (/^[=+\-@]/.test(v) ? `'${v}` : v);
-    const csv = [
-      headers.join(","),
-      ...rows.map((row) =>
-        headers.map((h) => `"${escapeFormula(String((row as any)[h])).replace(/"/g, '""')}"`).join(",")
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `campers-${campId ?? "all"}-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   const columns: Column<StaffCamperItem>[] = useMemo(
     () => [
@@ -346,10 +295,23 @@ export function CampersList({
         </div>
       </div>
       {isCampusRep && (
-        <Button size="sm" variant="secondary" onClick={exportCsv} aria-label="Export CSV">
-          <ArrowDownTrayIcon className="h-4 w-4 md:mr-1" />
+        <ExportButton
+          kind="CAMPERS"
+          organizationId={organizationId}
+          label="Campers"
+          size="sm"
+          aria-label="Export CSV"
+          filters={{
+            campId,
+            campusId: campusFilter !== "all" ? campusFilter : undefined,
+            status: statusFilter || undefined,
+            gender: genderFilter || undefined,
+            tribeId: tribeFilter || undefined,
+            search: debouncedSearchTerm || undefined,
+          }}
+        >
           <span className="hidden md:inline">Export CSV</span>
-        </Button>
+        </ExportButton>
       )}
     </div>
   );

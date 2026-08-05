@@ -27,6 +27,7 @@ import { accommodationRouter } from "./routers/accommodation";
 import { orgStructureRouter } from "./routers/orgStructure";
 import { trashRouter } from "./routers/trash";
 import { importExportRouter } from "./routers/importExport";
+import { exportRouter } from "./routers/export";
 import { registrationConfigRouter } from "./routers/registrationConfig";
 import { positionRouter } from "./routers/position";
 import { communicationRouter } from "./routers/communication";
@@ -70,6 +71,7 @@ export const appRouter = createTRPCRouter({
   orgStructure: orgStructureRouter,
   trash: trashRouter,
   importExport: importExportRouter,
+  export: exportRouter,
   registrationConfig: registrationConfigRouter,
   position: positionRouter,
   communication: communicationRouter,

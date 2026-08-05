@@ -182,8 +182,12 @@ export function RegistrationDetailsDrawer({
       })
     : "Yesterday, 9:15 PM";
 
+  // Opens the real ID-card PDF (server/idcard/sheetPdf.ts) in a new tab so the
+  // browser's own PDF viewer handles printing — window.print() on this drawer
+  // printed the whole app chrome around it, not the badge, since there was no
+  // @media print scoping to the badge content.
   const handlePrintBadge = () => {
-    window.print();
+    window.open(`/api/registrations/${registration.id}/camp-id-card.pdf`, "_blank", "noopener,noreferrer");
   };
 
   const userRole = (session?.user as any)?.role;

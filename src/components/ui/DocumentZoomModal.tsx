@@ -9,11 +9,11 @@ import {
   ArrowPathIcon,
   ArrowsPointingOutIcon,
   ArrowsPointingInIcon,
-  ArrowDownTrayIcon,
   ArrowTopRightOnSquareIcon,
   XMarkIcon,
   ArrowPathRoundedSquareIcon,
 } from "@heroicons/react/24/outline";
+import { DocumentDownloadLink } from "@/components/documents/DocumentDownloadLink";
 
 export interface DocumentZoomModalProps {
   isOpen: boolean;
@@ -249,16 +249,7 @@ export function DocumentZoomModal({
               <div className="h-4 w-[1px] bg-neutral-800 mx-1" />
 
               {/* Download */}
-              <a
-                href={url}
-                download={fileName}
-                target="_blank"
-                rel="noreferrer"
-                className="p-1.5 rounded-lg text-neutral-300 hover:text-white hover:bg-neutral-800 transition"
-                title="Download Document"
-              >
-                <ArrowDownTrayIcon className="h-5 w-5" />
-              </a>
+              <DocumentDownloadLink url={url} fileName={fileName} variant="icon-dark" />
 
               {/* Open in New Tab */}
               <a
@@ -344,13 +335,7 @@ export function DocumentZoomModal({
                   >
                     Open Document
                   </a>
-                  <a
-                    href={url}
-                    download={fileName}
-                    className="px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-sm font-medium transition"
-                  >
-                    Download
-                  </a>
+                  <DocumentDownloadLink url={url} fileName={fileName} variant="button-dark" />
                 </div>
               </div>
             )}

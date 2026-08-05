@@ -71,7 +71,7 @@ async function assertCanScan(
  * actually manage at least one campus in the org (DB-verified, never
  * trusted from the JWT role claim alone, matching this file's existing
  * assertOrgAdminOrCampusRep convention in src/server/api/trpc/scoping.ts). */
-async function assertReportsAccess(ctx: { prisma: any; session: any }, organizationId: string) {
+export async function assertReportsAccess(ctx: { prisma: any; session: any }, organizationId: string) {
   const user = ctx.session?.user;
   if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (user.organizationId !== organizationId) throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to view reports." });
@@ -93,7 +93,7 @@ async function assertReportsAccess(ctx: { prisma: any; session: any }, organizat
 
 /** Reports default to the organization's active camp when no campId is
  * given, matching processScan's own "no active camp" handling. */
-async function resolveReportCampId(ctx: { prisma: any }, organizationId: string, campId?: string): Promise<string | null> {
+export async function resolveReportCampId(ctx: { prisma: any }, organizationId: string, campId?: string): Promise<string | null> {
   if (campId) return campId;
   const org = await ctx.prisma.organization.findUnique({ where: { id: organizationId }, select: { activeCampId: true } });
   return org?.activeCampId ?? null;
@@ -127,6 +127,66 @@ function utcDayRange(date?: Date): { start: Date; end: Date } {
   const start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 0, 0, 0, 0));
   const end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 23, 59, 59, 999));
   return { start, end };
+}
+
+/**
+ * Shared with src/server/export/builders/reports.ts so the report export
+ * builder and the live dashboard query compute identical numbers — never
+ * duplicate this where-clause logic at the export call site.
+ */
+export async function computeMealReport(prisma: any, campId: string | null, date?: Date) {
+  const { start, end } = utcDayRange(date);
+  if (!campId) return { breakfast: 0, lunch: 0, dinner: 0 };
+  const [breakfast, lunch, dinner] = await Promise.all([
+    prisma.mealDistribution.count({ where: { campId, meal: "BREAKFAST", date: { gte: start, lte: end } } }),
+    prisma.mealDistribution.count({ where: { campId, meal: "LUNCH", date: { gte: start, lte: end } } }),
+    prisma.mealDistribution.count({ where: { campId, meal: "DINNER", date: { gte: start, lte: end } } }),
+  ]);
+  return { breakfast, lunch, dinner };
+}
+
+export async function computeArrivalsReport(
+  prisma: any,
+  campId: string | null,
+  date?: Date,
+  stationId?: "CAMP_ARRIVAL" | "HOSTEL_ARRIVAL" | "PICKUP_POINT"
+) {
+  const { start, end } = dayRange(date);
+  const stationIds = stationId ? [stationId] : (["CAMP_ARRIVAL", "HOSTEL_ARRIVAL", "PICKUP_POINT"] as const);
+  if (!campId) return { total: 0, byType: {} as Record<string, number>, rows: [] as { station: string; stationId: string; count: number }[] };
+
+  const groups = await Promise.all(
+    stationIds.map((id) =>
+      prisma.scanEvent
+        .groupBy({
+          by: ["station"],
+          where: { campId, result: "SUCCESS", timestamp: { gte: start, lte: end }, metadata: { path: ["stationId"], equals: id } },
+          _count: { _all: true },
+        })
+        .then((rows: any[]) => rows.map((r) => ({ station: r.station, stationId: id, count: r._count._all })))
+    )
+  );
+
+  const rows = groups.flat();
+  const byType: Record<string, number> = {};
+  for (const id of stationIds) byType[id] = rows.filter((r) => r.stationId === id).reduce((sum, r) => sum + r.count, 0);
+  const total = rows.reduce((sum, r) => sum + r.count, 0);
+  return { total, byType, rows };
+}
+
+export async function computeCollectiblesReport(prisma: any, campId: string | null, date?: Date) {
+  const { start, end } = dayRange(date);
+  if (!campId) return { total: 0, rows: [] as { station: string; count: number }[] };
+
+  const rows = await prisma.scanEvent.groupBy({
+    by: ["station"],
+    where: { campId, result: "SUCCESS", timestamp: { gte: start, lte: end }, metadata: { path: ["stationId"], equals: "COLLECTIBLE" } },
+    _count: { _all: true },
+  });
+
+  const mapped = rows.map((r: any) => ({ station: r.station, count: r._count._all }));
+  const total = mapped.reduce((sum: number, r: any) => sum + r.count, 0);
+  return { total, rows: mapped };
 }
 
 export const scanRouter = createTRPCRouter({
@@ -1514,16 +1574,7 @@ export const scanRouter = createTRPCRouter({
       // Queries the @db.Date `date` column — must use UTC boundaries, not
       // server-local ones, or this disagrees with getOperationalStats and
       // with what the meal dedupe check itself considers "today".
-      const { start, end } = utcDayRange(input.date);
-      if (!campId) return { breakfast: 0, lunch: 0, dinner: 0 };
-
-      const [breakfast, lunch, dinner] = await Promise.all([
-        ctx.prisma.mealDistribution.count({ where: { campId, meal: "BREAKFAST", date: { gte: start, lte: end } } }),
-        ctx.prisma.mealDistribution.count({ where: { campId, meal: "LUNCH", date: { gte: start, lte: end } } }),
-        ctx.prisma.mealDistribution.count({ where: { campId, meal: "DINNER", date: { gte: start, lte: end } } }),
-      ]);
-
-      return { breakfast, lunch, dinner };
+      return computeMealReport(ctx.prisma, campId, input.date);
     }),
 
   getArrivalsReport: protectedProcedure
@@ -1538,36 +1589,7 @@ export const scanRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await assertReportsAccess(ctx, input.organizationId);
       const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
-      const { start, end } = dayRange(input.date);
-      const stationIds = input.stationId
-        ? [input.stationId]
-        : (["CAMP_ARRIVAL", "HOSTEL_ARRIVAL", "PICKUP_POINT"] as const);
-
-      if (!campId) return { total: 0, byType: {}, rows: [] };
-
-      const groups = await Promise.all(
-        stationIds.map((id) =>
-          ctx.prisma.scanEvent
-            .groupBy({
-              by: ["station"],
-              where: {
-                campId,
-                result: "SUCCESS",
-                timestamp: { gte: start, lte: end },
-                metadata: { path: ["stationId"], equals: id },
-              },
-              _count: { _all: true },
-            })
-            .then((rows: any[]) => rows.map((r) => ({ station: r.station, stationId: id, count: r._count._all })))
-        )
-      );
-
-      const rows = groups.flat();
-      const byType: Record<string, number> = {};
-      for (const id of stationIds) byType[id] = rows.filter((r) => r.stationId === id).reduce((sum, r) => sum + r.count, 0);
-      const total = rows.reduce((sum, r) => sum + r.count, 0);
-
-      return { total, byType, rows };
+      return computeArrivalsReport(ctx.prisma, campId, input.date, input.stationId);
     }),
 
   getCollectiblesReport: protectedProcedure
@@ -1575,23 +1597,6 @@ export const scanRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await assertReportsAccess(ctx, input.organizationId);
       const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
-      const { start, end } = dayRange(input.date);
-      if (!campId) return { total: 0, rows: [] };
-
-      const rows = await ctx.prisma.scanEvent.groupBy({
-        by: ["station"],
-        where: {
-          campId,
-          result: "SUCCESS",
-          timestamp: { gte: start, lte: end },
-          metadata: { path: ["stationId"], equals: "COLLECTIBLE" },
-        },
-        _count: { _all: true },
-      });
-
-      const mapped = rows.map((r: any) => ({ station: r.station, count: r._count._all }));
-      const total = mapped.reduce((sum, r) => sum + r.count, 0);
-
-      return { total, rows: mapped };
+      return computeCollectiblesReport(ctx.prisma, campId, input.date);
     }),
 });

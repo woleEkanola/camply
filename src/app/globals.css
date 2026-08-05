@@ -339,3 +339,19 @@ body {
     touch-action: manipulation;
   }
 }
+
+/* Printable views (Reports page "Print", RegistrationDetailsDrawer's badge
+   PDF opens in a new tab instead — see handlePrintBadge). AppShell tags its
+   chrome (sidebar, header, bottom nav, command palette) with .no-print and
+   its content region with #print-area; anything not inside #print-area is
+   hidden so window.print() only outputs the report, not the whole app. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  #print-area {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+}

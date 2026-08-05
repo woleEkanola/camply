@@ -27,6 +27,14 @@ function cellValue(row: AnyRow, key: string): string {
   return String(v);
 }
 
+// A leading =, +, -, or @ makes Excel/Sheets interpret a CSV cell as a formula
+// rather than text — user-entered fields (names, allergies, notes, etc.) must
+// never reach a spreadsheet unescaped. Prefixing with a straight quote forces
+// text interpretation without changing the visible value.
+export function escapeFormula(v: string): string {
+  return /^[=+\-@]/.test(v) ? `'${v}` : v;
+}
+
 export function toJsonBundle(data: { campuses: CampusRow[]; tribes: TribeRow[]; departments: DepartmentRow[] }): ExportBundle {
   return {
     format: EXPORT_FORMAT,
@@ -41,7 +49,7 @@ export function toJsonBundle(data: { campuses: CampusRow[]; tribes: TribeRow[]; 
 export function toCsv(entity: EntityKind, rows: AnyRow[]): string {
   const columns = COLUMNS_FOR[entity];
   const headers = columns.map((c) => c.key);
-  const body = rows.map((row) => columns.map((c) => cellValue(row, c.key)));
+  const body = rows.map((row) => columns.map((c) => escapeFormula(cellValue(row, c.key))));
   return Papa.unparse({ fields: headers, data: body });
 }
 
@@ -107,7 +115,14 @@ export function downloadBlob(filename: string, blob: Blob) {
 
 export function exportUserDataToCsv(rows: Record<string, any>[]): string {
   if (!rows || rows.length === 0) return "";
-  return Papa.unparse(rows);
+  const escapedRows = rows.map((row) => {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(row)) {
+      out[k] = v === null || v === undefined ? v : escapeFormula(String(v));
+    }
+    return out;
+  });
+  return Papa.unparse(escapedRows);
 }
 
 export async function exportUserDataToXlsx(rows: Record<string, any>[]): Promise<Blob> {
@@ -126,7 +141,9 @@ export async function exportUserDataToXlsx(rows: Record<string, any>[]): Promise
       }
     }
     const headers = Array.from(headerSet);
-    const body = rows.map((r) => headers.map((h) => (r[h] !== undefined && r[h] !== null ? String(r[h]) : "")));
+    const body = rows.map((r) =>
+      headers.map((h) => (r[h] !== undefined && r[h] !== null ? escapeFormula(String(r[h])) : ""))
+    );
 
     const sheet = XLSX.utils.aoa_to_sheet([headers, ...body]);
 

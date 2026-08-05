@@ -72,10 +72,13 @@ test.describe("Today's Built Features — Full Comprehensive E2E Verification", 
     }
   });
 
-  test("5. Excel Export — Export Button Trigger", async ({ page }) => {
+  test("5. Export — Export Dialog Trigger", async ({ page }) => {
     await ensureRegistrationsListView(page);
 
-    const exportBtn = page.getByRole("button", { name: /Export Excel/i });
+    // Registrations now goes through the shared Export Dialog (see
+    // src/components/export/ExportButton.tsx) rather than downloading
+    // Excel immediately — the button opens the dialog instead.
+    const exportBtn = page.getByRole("button", { name: /^Export$/i });
     await expect(exportBtn).toBeVisible({ timeout: 10000 });
   });
 
