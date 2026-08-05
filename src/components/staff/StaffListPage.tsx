@@ -40,6 +40,7 @@ import { ViewModeToggle, type StaffViewMode } from "@/components/staff/ViewModeT
 import { TeacherRecruitmentPanel } from "@/components/staff/TeacherRecruitmentPanel";
 import { CampusQuotasCard } from "@/components/staff/CampusQuotasCard";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
+import { ExportButton } from "@/components/export/ExportButton";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 const VOLUNTEER_CATEGORIES = ["Registration", "Medical", "Kitchen", "Transport", "Security", "Media", "Logistics", "Technical", "Cleaning", "Protocol"];
@@ -318,6 +319,42 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 </Button>
               </>
             )}
+            <ExportButton
+              kind="STAFF"
+              organizationId={organizationId}
+              label={type === "TEACHER" ? "Teachers" : "Volunteers"}
+              size="sm"
+              selectedIds={selectedIds}
+              filters={{
+                campId: campId || undefined,
+                type,
+                status: statusFilter || undefined,
+                campusId: campusFilter || undefined,
+                gender: genderFilter || undefined,
+                tribeId: tribeFilter || undefined,
+                volunteerCategory: categoryFilter || undefined,
+              }}
+            >
+              Export
+            </ExportButton>
+            <ExportButton
+              kind="STAFF_ID_CARDS"
+              organizationId={organizationId}
+              label="ID Cards"
+              size="sm"
+              selectedIds={selectedIds}
+              filters={{
+                campId: campId || undefined,
+                type,
+                status: statusFilter || undefined,
+                campusId: campusFilter || undefined,
+                gender: genderFilter || undefined,
+                tribeId: tribeFilter || undefined,
+                volunteerCategory: categoryFilter || undefined,
+              }}
+            >
+              ID Cards
+            </ExportButton>
             <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto" onClick={() => setIsAddOpen(true)}>
               <PlusIcon className="mr-1 h-4 w-4" /> Add {type === "TEACHER" ? "Teacher" : "Volunteer"}
             </Button>

@@ -7,5 +7,7 @@ import "./idCards";
 import "./attendanceSheet";
 import "./reports";
 import "./configBundle";
+import "./staff";
+import "./staffIdCards";
 
 export {};
