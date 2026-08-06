@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { notificationEngine, AppNotification, NotificationPriority } from "@/lib/notificationEngine";
 import { NotificationSettingsModal } from "./notifications/NotificationSettingsModal";
 import { useSession } from "next-auth/react";
+import { api } from "@/utils/trpc";
 import {
   BellIcon,
   XMarkIcon,
@@ -13,6 +14,13 @@ import {
   MagnifyingGlassIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
+
+// DB-backed Notification rows (created by admin broadcasts, export-job
+// completions written server-side, etc. — src/server/api/routers/
+// notification.ts) get this id prefix once mapped into AppNotification
+// shape, so mark-as-read can route to the right backend (tRPC vs. the
+// client-only notificationEngine) without a second id namespace.
+const DB_ID_PREFIX = "db_";
 
 export default function NotificationBell() {
   const { data: session } = useSession();
@@ -33,6 +41,62 @@ export default function NotificationBell() {
     };
   }, []);
 
+  // This bell used to only ever show client-side (notificationEngine)
+  // notifications — admin broadcasts and other server-written Notification
+  // rows (src/server/api/routers/notification.ts's listMine/markRead/
+  // markAllRead, already used by volunteer/page.tsx and StaffTodayPanel)
+  // never appeared here at all. Merge both sources into one feed.
+  const utils = api.useUtils();
+  const { data: dbNotifications = [] } = api.notification.listMine.useQuery(undefined, {
+    enabled: !!session?.user,
+    refetchInterval: open ? 5000 : 30000,
+  });
+  const markReadMutation = api.notification.markRead.useMutation({
+    onSuccess: () => utils.notification.listMine.invalidate(),
+  });
+  const markAllReadMutation = api.notification.markAllRead.useMutation({
+    onSuccess: () => utils.notification.listMine.invalidate(),
+  });
+
+  const mappedDbNotifications: AppNotification[] = useMemo(
+    () =>
+      dbNotifications.map((n) => ({
+        id: `${DB_ID_PREFIX}${n.id}`,
+        icon: "📣",
+        title: n.title,
+        message: n.body,
+        timestamp: new Date(n.createdAt).toISOString(),
+        type: "PUSH" as const,
+        priority: "INFO" as const,
+        source: "Broadcast",
+        read: !!n.readAt,
+      })),
+    [dbNotifications]
+  );
+
+  const allNotifications = useMemo(
+    () =>
+      [...notifications, ...mappedDbNotifications].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      ),
+    [notifications, mappedDbNotifications]
+  );
+
+  const handleMarkAsRead = (id: string) => {
+    if (id.startsWith(DB_ID_PREFIX)) {
+      markReadMutation.mutate({ id: id.slice(DB_ID_PREFIX.length) });
+    } else {
+      notificationEngine.markAsRead(id);
+    }
+  };
+
+  const handleMarkAllAsRead = () => {
+    notificationEngine.markAllAsRead();
+    if (mappedDbNotifications.some((n) => !n.read)) {
+      markAllReadMutation.mutate();
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
@@ -44,9 +108,9 @@ export default function NotificationBell() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = allNotifications.filter((n) => !n.read).length;
 
-  const filteredNotifications = notifications.filter((n) => {
+  const filteredNotifications = allNotifications.filter((n) => {
     if (filterPriority !== "ALL" && n.priority !== filterPriority) return false;
     if (
       searchQuery.trim() &&
@@ -168,7 +232,7 @@ export default function NotificationBell() {
                   <div className="flex space-x-1">
                     <button
                       type="button"
-                      onClick={() => notificationEngine.markAllAsRead()}
+                      onClick={handleMarkAllAsRead}
                       className="p-1 text-txt-muted hover:text-teal-600"
                       title="Mark all as read"
                     >
@@ -196,7 +260,7 @@ export default function NotificationBell() {
                   filteredNotifications.map((item) => (
                     <div
                       key={item.id}
-                      onClick={() => notificationEngine.markAsRead(item.id)}
+                      onClick={() => handleMarkAsRead(item.id)}
                       className={`p-3.5 rounded-xl transition cursor-pointer ${getPriorityStripe(
                         item.priority
                       )} ${item.read ? "opacity-75" : "shadow-xs font-medium"}`}

@@ -7,10 +7,21 @@ const prisma = new PrismaClient();
 test.describe("Campus Rep Registration Actions & StatCard E2E Test", () => {
   let camperId: string;
   let regId: string;
+  let organizationId: string;
+  let originalApprovalWorkflow: string;
 
   test.beforeAll(async () => {
     const suffix = `${Date.now()}`;
     const ctx = await getFixtureOrgContext();
+    organizationId = ctx.organizationId;
+
+    // The "Recommend"/"Awaiting Approval" UI this test asserts on is
+    // TWO_STEP-only — must not silently depend on another test having left
+    // the shared fixture org in that state from a prior (possibly
+    // interrupted) run.
+    const org = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId } });
+    originalApprovalWorkflow = org.approvalWorkflow;
+    await prisma.organization.update({ where: { id: organizationId }, data: { approvalWorkflow: "TWO_STEP" } });
 
     const parent = await prisma.user.create({
       data: {
@@ -56,6 +67,9 @@ test.describe("Campus Rep Registration Actions & StatCard E2E Test", () => {
     }
     if (camperId) {
       await prisma.camper.delete({ where: { id: camperId } }).catch(() => {});
+    }
+    if (organizationId && originalApprovalWorkflow) {
+      await prisma.organization.update({ where: { id: organizationId }, data: { approvalWorkflow: originalApprovalWorkflow } }).catch(() => {});
     }
     await prisma.$disconnect();
   });

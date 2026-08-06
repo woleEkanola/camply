@@ -35,7 +35,7 @@ test.describe("Communication: Camp Invitation certificate email", () => {
     }
 
     await page.goto("/admin/communication/branding");
-    await expect(page.locator("h1")).toContainText("Email Branding");
+    await expect(page.locator("h1")).toContainText("Organization Branding");
 
     const taglineInput = page.locator('label:has-text("Tagline")').locator("xpath=following-sibling::input[1]");
     await expect(taglineInput).toBeVisible({ timeout: 10000 });
@@ -50,18 +50,21 @@ test.describe("Communication: Camp Invitation certificate email", () => {
     const supportEmailInput = page.locator('label:has-text("Support Email")').locator("xpath=following-sibling::input[1]");
     await supportEmailInput.fill("help@example.com");
 
-    // Edit the first Next Steps item's title
-    const firstStepTitle = page.getByLabel("Title").first();
+    // Edit the first Next Steps item's title. getByLabel does substring
+    // matching, and "Contact Card Title" (filled above) contains "Title" as
+    // a substring too — exact:true is required or .first() grabs that field
+    // instead (it renders earlier in the DOM than the Next Steps section).
+    const firstStepTitle = page.getByLabel("Title", { exact: true }).first();
     await firstStepTitle.fill("Print Your Invitation");
 
-    await page.getByRole("button", { name: "Save Branding" }).click();
+    await page.getByRole("button", { name: "Save Organization Branding" }).click();
     await expect(page.getByText("Saved successfully")).toBeVisible({ timeout: 10000 });
 
     // Reload and confirm persistence
     await page.reload();
     await expect(taglineInput).toHaveValue("Raising a generation of world changers", { timeout: 10000 });
     await expect(supportTitleInput).toHaveValue("Need Assistance?");
-    await expect(page.getByLabel("Title").first()).toHaveValue("Print Your Invitation");
+    await expect(page.getByLabel("Title", { exact: true }).first()).toHaveValue("Print Your Invitation");
 
     // ─── PART B: Templates — Camp Invitation certificate preview ───
     await page.goto("/admin/communication/templates");

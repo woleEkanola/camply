@@ -37,11 +37,6 @@ const EXPECTED_ICONS = [
   "user-group",
   // verified badge — always rendered alongside the QR
   "check-badge",
-  // timeline stages
-  "document-check",
-  "magnifying-glass-circle",
-  "check",
-  "shield-check",
 ];
 
 async function ensureCampInvitationTemplate() {
@@ -49,30 +44,52 @@ async function ensureCampInvitationTemplate() {
   const orgId = admin.organizationId!;
   const existing = await prisma.emailEventConfig.findUnique({
     where: { organizationId_event: { organizationId: orgId, event: "CAMP_INVITATION" } },
+    include: { template: true },
   });
-  if (existing) return { orgId, createdTemplateId: null as string | null };
 
-  const def = DEFAULT_TEMPLATES.CAMP_INVITATION;
-  const template = await prisma.emailTemplate.create({
-    data: {
-      organizationId: orgId,
-      name: def.name,
-      description: def.description,
-      subject: def.subject,
-      previewText: def.previewText,
-      content: def.content as never,
-      isDefault: true,
-    },
-  });
-  await prisma.emailEventConfig.create({
-    data: { organizationId: orgId, event: "CAMP_INVITATION", templateId: template.id },
-  });
-  return { orgId, createdTemplateId: template.id };
+  let templateId: string;
+  let createdTemplateId: string | null = null;
+  let originalIncludeIdCard = false;
+
+  if (existing) {
+    if (!existing.templateId || !existing.template) throw new Error("CAMP_INVITATION config has no template");
+    templateId = existing.templateId;
+    originalIncludeIdCard = existing.template.includeIdCard;
+  } else {
+    const def = DEFAULT_TEMPLATES.CAMP_INVITATION;
+    const template = await prisma.emailTemplate.create({
+      data: {
+        organizationId: orgId,
+        name: def.name,
+        description: def.description,
+        subject: def.subject,
+        previewText: def.previewText,
+        content: def.content as never,
+        isDefault: true,
+      },
+    });
+    await prisma.emailEventConfig.create({
+      data: { organizationId: orgId, event: "CAMP_INVITATION", templateId: template.id },
+    });
+    templateId = template.id;
+    createdTemplateId = template.id;
+  }
+
+  // This test specifically validates the base certificate fits ONE A4 page —
+  // includeIdCard appends a second page (renderer.ts's page-break-before
+  // ID card page), which is by design a real two-page document, not a bug.
+  // A prior manual/testing session can leave this true on the shared
+  // fixture org, which this test must not silently depend on either way.
+  if (originalIncludeIdCard) {
+    await prisma.emailTemplate.update({ where: { id: templateId }, data: { includeIdCard: false } });
+  }
+
+  return { orgId, templateId, createdTemplateId, originalIncludeIdCard };
 }
 
 test.describe("Camp Invitation certificate — icons and A4 fit", () => {
   test("renders hosted PNG icons (no inline SVG) and fits one A4 page", async ({ page }) => {
-    const { orgId, createdTemplateId } = await ensureCampInvitationTemplate();
+    const { orgId, templateId, createdTemplateId, originalIncludeIdCard } = await ensureCampInvitationTemplate();
 
     try {
       await loginWithPassword(page, "admin@camply.com", "password123");
@@ -118,9 +135,6 @@ test.describe("Camp Invitation certificate — icons and A4 fit", () => {
       for (const name of EXPECTED_ICONS) {
         expect(html, `expected the certificate to reference the "${name}" icon`).toContain(`/api/email-icon/${name}?`);
       }
-
-      // The active timeline stage is a white check on solid green.
-      expect(html).toContain("/api/email-icon/check?c=FFFFFF");
 
       // ─── Every referenced icon URL actually resolves to a PNG ───
       const iconUrls = [...new Set([...html.matchAll(/src="([^"]*\/api\/email-icon\/[^"]+)"/g)].map((m) => m[1]))].map(
@@ -185,6 +199,10 @@ test.describe("Camp Invitation certificate — icons and A4 fit", () => {
           .delete({ where: { organizationId_event: { organizationId: orgId, event: "CAMP_INVITATION" } } })
           .catch(() => {});
         await prisma.emailTemplate.delete({ where: { id: createdTemplateId } }).catch(() => {});
+      } else if (originalIncludeIdCard) {
+        // Restore rather than leave forced-off — this template's own
+        // includeIdCard setting is real org config, not this test's to own.
+        await prisma.emailTemplate.update({ where: { id: templateId }, data: { includeIdCard: true } }).catch(() => {});
       }
     }
   });

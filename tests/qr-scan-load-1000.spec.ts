@@ -50,6 +50,12 @@ test.beforeAll(async () => {
   const passwordHash = await hash(STATION_PASSWORD, 10);
   for (let i = 0; i < STATION_COUNT; i++) {
     const email = `${TAG.toLowerCase()}-volunteer-${i}@camply.test`;
+    // TAG is a fixed constant (used for camper-name search assertions below),
+    // so these station emails collide across retries/re-runs unless creation
+    // is idempotent — a prior attempt's afterAll may not have finished
+    // cleaning up before a retry's beforeAll starts.
+    await prisma.staffProfile.deleteMany({ where: { user: { email } } });
+    await prisma.user.deleteMany({ where: { email } });
     const user = await prisma.user.create({
       data: {
         email,

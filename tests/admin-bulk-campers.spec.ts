@@ -70,6 +70,8 @@ test.describe("Admin: bulk camper actions", () => {
   test("admin can bulk-approve active registrations for selected campers", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campers");
+    // CamperManagement defaults to Card view (no <tr> rows) — switch to List first.
+    await page.getByRole("button", { name: "List", exact: true }).click();
 
     const row = page.locator("tbody tr").filter({ hasText: "E2E Bulk Camper" });
     await expect(row).toBeVisible({ timeout: 10000 });
@@ -86,6 +88,8 @@ test.describe("Admin: bulk camper actions", () => {
   test("admin can bulk-delete selected campers", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campers");
+    // CamperManagement defaults to Card view (no <tr> rows) — switch to List first.
+    await page.getByRole("button", { name: "List", exact: true }).click();
 
     const row = page.locator("tbody tr").filter({ hasText: "E2E Bulk Camper" });
     await expect(row).toBeVisible({ timeout: 10000 });

@@ -113,6 +113,8 @@ test.describe("Teacher Dashboard & Campus Rep Improvements", () => {
     await loginWithOtp(page, repEmail);
     await page.waitForURL(/\/teacher/, { timeout: 45000 });
     await page.goto("/teacher/campers");
+    // CampersList defaults to Card view (no <tr>/<th> elements) — switch to List first.
+    await page.getByRole("button", { name: "List", exact: true }).click();
 
     // "Medical" header should not be present in the table headers (removed column)
     await expect(page.locator("th", { hasText: "Medical" })).toHaveCount(0);

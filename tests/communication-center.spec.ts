@@ -149,7 +149,7 @@ test.describe("Communication Center", () => {
 
   test("P7: Branding page loads with form and preview", async ({ page }) => {
     await page.goto("/admin/communication/branding");
-    await expect(page.locator("h1")).toContainText("Email Branding");
+    await expect(page.locator("h1")).toContainText("Organization Branding");
 
     // Form fields should exist
     await expect(page.locator('input[type="color"]').first()).toBeVisible();

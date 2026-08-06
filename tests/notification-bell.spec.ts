@@ -2,14 +2,15 @@ import { test, expect } from "@playwright/test";
 import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
 
 /**
- * Covers two reported bugs in the shared NotificationBell (src/components/
- * NotificationBell.tsx, rendered in every role's AppShell header):
- *  1. "Mark all read" fired the mutation correctly, but its onSuccess only
- *     refetched the notification list — never invalidated unreadCount — so
- *     the red badge count lagged up to 30s (its own refetchInterval),
- *     looking like the click did nothing.
- *  2. The popup had no outside-click/Escape handling at all; it only closed
- *     by clicking the bell again.
+ * Covers the shared NotificationBell (src/components/NotificationBell.tsx,
+ * rendered in every role's AppShell header). It used to only ever display
+ * client-side (notificationEngine) notifications — DB-backed Notification
+ * rows (admin broadcasts, etc. — src/server/api/routers/notification.ts's
+ * listMine/markRead/markAllRead, already consumed elsewhere by
+ * volunteer/page.tsx and StaffTodayPanel) never appeared here at all. This
+ * test seeds Notification rows directly and exercises the merged feed:
+ * badge count, mark-all-read (now also fires the tRPC mutation, not just
+ * the local engine), and outside-click-to-close.
  */
 test.describe("Notification bell: mark-all-read badge + outside-click close", () => {
   test.describe.configure({ mode: "serial" });
@@ -42,7 +43,7 @@ test.describe("Notification bell: mark-all-read badge + outside-click close", ()
   test("mark all read clears the badge promptly, and clicking outside the popup closes it", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
 
-    const bellButton = page.getByRole("button").filter({ hasText: "🔔" });
+    const bellButton = page.getByRole("button", { name: "Open Notifications" });
     await expect(bellButton).toBeVisible({ timeout: 10000 });
 
     const unreadBefore = await prisma.notification.count({ where: { userId, readAt: null } });
@@ -53,7 +54,7 @@ test.describe("Notification bell: mark-all-read badge + outside-click close", ()
     await expect(page.getByText(title1)).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(title2)).toBeVisible();
 
-    await page.getByRole("button", { name: "Mark all read" }).click();
+    await page.getByRole("button", { name: "Mark all as read" }).click();
 
     // The regression: this used to require waiting out the full 30s
     // refetchInterval for the badge to reflect reality. It must now clear

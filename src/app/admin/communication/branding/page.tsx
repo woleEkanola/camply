@@ -15,7 +15,23 @@ import {
   SparklesIcon,
   SwatchIcon,
   BuildingOfficeIcon,
+  LifebuoyIcon,
+  PlusIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
+
+interface NextStepItem {
+  icon: string;
+  title: string;
+  description: string;
+}
+
+const DEFAULT_NEXT_STEPS: NextStepItem[] = [
+  { icon: "printer", title: "Print This Page", description: "Print this page and bring it with you on check-in." },
+  { icon: "qr-code", title: "Bring Your QR Code", description: "Present this QR code during check-in at the pickup center." },
+  { icon: "clock", title: "Arrive On Time", description: "Arrive before the reporting time listed above." },
+  { icon: "backpack", title: "Pack & Prepare", description: "Bring all required items listed in your welcome packet." },
+];
 
 export default function BrandingPage() {
   const {
@@ -47,6 +63,10 @@ export default function BrandingPage() {
   const [footerText, setFooterText] = useState("");
   const [supportEmail, setSupportEmail] = useState("");
   const [supportPhone, setSupportPhone] = useState("");
+  const [supportTitle, setSupportTitle] = useState("");
+  const [supportDescription, setSupportDescription] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [nextSteps, setNextSteps] = useState<NextStepItem[]>(DEFAULT_NEXT_STEPS);
 
   const [saved, setSaved] = useState(false);
 
@@ -65,8 +85,19 @@ export default function BrandingPage() {
       setFooterText(branding.footerText || "");
       setSupportEmail(branding.supportEmail || "");
       setSupportPhone(branding.supportPhone || "");
+      setSupportTitle((branding as any).supportTitle || "");
+      setSupportDescription((branding as any).supportDescription || "");
+      setWebsiteUrl((branding as any).websiteUrl || "");
+      const savedSteps = (branding as any).nextSteps as NextStepItem[] | null | undefined;
+      setNextSteps(savedSteps && savedSteps.length ? savedSteps : DEFAULT_NEXT_STEPS);
     }
   }, [branding]);
+
+  const updateStep = (index: number, patch: Partial<NextStepItem>) => {
+    setNextSteps((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  };
+  const addStep = () => setNextSteps((prev) => [...prev, { icon: "check-circle", title: "", description: "" }]);
+  const removeStep = (index: number) => setNextSteps((prev) => prev.filter((_, i) => i !== index));
 
   const handleSave = () => {
     brandingUpdate.mutate({
@@ -83,6 +114,10 @@ export default function BrandingPage() {
       footerText: footerText || null,
       supportEmail: supportEmail || null,
       supportPhone: supportPhone || null,
+      supportTitle: supportTitle || null,
+      supportDescription: supportDescription || null,
+      websiteUrl: websiteUrl || null,
+      nextSteps: nextSteps.filter((s) => s.title.trim() || s.description.trim()),
     });
   };
 
@@ -237,8 +272,116 @@ export default function BrandingPage() {
                     onChange={(e) => setSenderName(e.target.value)}
                   />
                 </div>
+              </CardBody>
+            </Card>
 
-                <div className="flex items-center gap-4 pt-3 border-t border-border-subtle">
+            {/* Section 4: Contact & Support (certificate/invitation emails' Contact Card) */}
+            <Card>
+              <CardHeader className="border-b border-border-default pb-3">
+                <CardTitle className="flex items-center gap-2 text-base font-bold text-txt-primary">
+                  <LifebuoyIcon className="h-5 w-5 text-amber-500" />
+                  Contact &amp; Support
+                </CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4 pt-4">
+                <p className="text-xs text-txt-secondary">
+                  Shown as a "Need Help?" card on the Camp Invitation certificate and acceptance
+                  emails. The card only appears once at least one contact method is filled in.
+                </p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Input
+                    id="branding-support-title"
+                    label="Contact Card Title"
+                    placeholder="Need Help?"
+                    value={supportTitle}
+                    onChange={(e) => setSupportTitle(e.target.value)}
+                  />
+                  <Input
+                    id="branding-support-description"
+                    label="Contact Card Description"
+                    placeholder="We're here to help."
+                    value={supportDescription}
+                    onChange={(e) => setSupportDescription(e.target.value)}
+                  />
+                  <Input
+                    id="branding-support-email"
+                    label="Support Email"
+                    type="email"
+                    placeholder="help@example.com"
+                    value={supportEmail}
+                    onChange={(e) => setSupportEmail(e.target.value)}
+                  />
+                  <Input
+                    id="branding-support-phone"
+                    label="Support Phone"
+                    placeholder="+1 (555) 010-0100"
+                    value={supportPhone}
+                    onChange={(e) => setSupportPhone(e.target.value)}
+                  />
+                  <Input
+                    id="branding-website-url"
+                    label="Website URL"
+                    placeholder="https://example.org"
+                    value={websiteUrl}
+                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                  />
+                </div>
+              </CardBody>
+            </Card>
+
+            {/* Section 5: Next Steps (certificate/invitation emails' "What's Next?" card) */}
+            <Card>
+              <CardHeader className="border-b border-border-default pb-3">
+                <CardTitle className="flex items-center gap-2 text-base font-bold text-txt-primary">
+                  <SparklesIcon className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                  Next Steps
+                </CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4 pt-4">
+                <p className="text-xs text-txt-secondary">
+                  The "What's Next?" checklist shown on the Camp Invitation certificate. Starts
+                  from a sensible default — edit or reorder as needed.
+                </p>
+                <div className="space-y-3">
+                  {nextSteps.map((step, i) => (
+                    <div key={i} className="rounded-xl border border-border-default p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-txt-muted">Step {i + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeStep(i)}
+                          className="p-1 text-txt-muted hover:text-danger-600"
+                          aria-label={`Remove step ${i + 1}`}
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <Input
+                          id={`next-step-title-${i}`}
+                          label="Title"
+                          value={step.title}
+                          onChange={(e) => updateStep(i, { title: e.target.value })}
+                        />
+                        <Input
+                          id={`next-step-description-${i}`}
+                          label="Description"
+                          value={step.description}
+                          onChange={(e) => updateStep(i, { description: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Button variant="secondary" size="sm" onClick={addStep} icon={<PlusIcon className="h-4 w-4" />}>
+                  Add Step
+                </Button>
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardBody>
+                <div className="flex items-center gap-4">
                   <Button
                     onClick={handleSave}
                     loading={brandingUpdate.isPending}

@@ -48,15 +48,18 @@ test.describe("Admin: Camper edit (campus reassignment) and delete", () => {
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campers");
+    // CamperManagement defaults to Card view (no <tr> rows) — switch to List first.
+    await page.getByRole("button", { name: "List", exact: true }).click();
 
     const camper = await prisma.camper.findUniqueOrThrow({ where: { id: camperId } });
     const row = page.locator("tr", { hasText: camper.name });
     await row.getByRole("button", { name: "Edit" }).click();
 
     const modal = page.getByRole("dialog");
-    await expect(modal.getByRole("heading", { name: "Edit Camper" })).toBeVisible();
-    // First <select> in the modal is Home Campus (no Parent select shown when editing).
-    await modal.locator("select").first().selectOption(campusBId);
+    // EditCamperModal.tsx titles this `Edit Profile: <name>`, not "Edit Camper".
+    await expect(modal.getByRole("heading", { name: /^Edit Profile:/ })).toBeVisible();
+    // Target by label — Gender's <select> precedes Home Campus's in the DOM.
+    await modal.getByLabel("Home Campus").selectOption(campusBId);
     await modal.getByRole("button", { name: "Save" }).click();
 
     await expect(page.getByText("Camper profile updated successfully")).toBeVisible({ timeout: 10000 });
@@ -71,14 +74,20 @@ test.describe("Admin: Camper edit (campus reassignment) and delete", () => {
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campers");
+    await page.getByRole("button", { name: "List", exact: true }).click();
 
+    // CamperManagement has no per-row Delete button — only bulk delete
+    // (select checkbox + BulkActionBar), same flow as admin-bulk-campers.spec.ts.
     const camper = await prisma.camper.findUniqueOrThrow({ where: { id: camperId } });
     const row = page.locator("tr", { hasText: camper.name });
-    await row.getByRole("button", { name: "Delete" }).click();
+    await row.locator('input[type="checkbox"]').first().click();
 
-    await page.getByRole("dialog").getByRole("button", { name: "Delete Profile" }).click();
+    await page.getByTestId("bulk-delete-button").click();
+    await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
 
-    await expect(page.getByText("Camper profile deleted successfully")).toBeVisible({ timeout: 10000 });
+    // Bulk-delete's onSuccess ("Deleted N campers.") differs from the
+    // single-delete flow's message — this test uses bulk delete (see above).
+    await expect(page.getByText("Deleted 1 camper.")).toBeVisible({ timeout: 10000 });
 
     // Soft delete: recoverable from Trash for 60 days, not actually gone from the DB.
     await expect

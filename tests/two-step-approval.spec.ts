@@ -165,8 +165,12 @@ test.describe("Two-step registration approval", () => {
       expect(registration.qrToken).toBeTruthy();
     }).toPass({ timeout: 10000 });
 
-    const sideEffects = await prisma.sideEffect.findMany({ where: { registrationId: registrationEndorseId, type: "REGISTRATION_APPROVED" } });
-    expect(sideEffects.length).toBeGreaterThan(0);
+    // SideEffect rows are written via the outbox pattern (async, outside the
+    // approval transaction) — poll instead of a one-shot check.
+    await expect(async () => {
+      const sideEffects = await prisma.sideEffect.findMany({ where: { registrationId: registrationEndorseId, type: "REGISTRATION_APPROVED" } });
+      expect(sideEffects.length).toBeGreaterThan(0);
+    }).toPass({ timeout: 10000 });
 
     const auditRows = await prisma.auditLog.findMany({ where: { registrationId: registrationEndorseId, action: "REGISTRATION_APPROVED" } });
     expect(auditRows.some((r) => (r.newValue as any)?.twoStepOverride === false)).toBe(true);

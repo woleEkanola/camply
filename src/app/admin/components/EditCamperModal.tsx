@@ -572,6 +572,7 @@ export default function EditCamperModal({
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Select
+                      id="edit-camper-home-campus"
                       label="Home Campus"
                       value={homeCampusId ?? ""}
                       onChange={(e) => setHomeCampusId(e.target.value || null)}
