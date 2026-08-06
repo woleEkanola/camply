@@ -39,20 +39,25 @@ test.describe("Mobile: Export Dialog and Export Center", () => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campers");
 
-    await page.getByRole("button", { name: "Export Campers" }).click();
+    await page.getByRole("button", { name: "Export", exact: true }).click();
+
+    // The single Export button opens a type picker first — the same Dialog
+    // primitive, so this is still the right place to verify the bottom-sheet
+    // behavior on mobile.
+    const picker = page.getByTestId("export-picker-panel");
+    await expect(picker).toBeVisible();
+
+    const pickerBox = await picker.boundingBox();
+    expect(pickerBox).not.toBeNull();
+    if (pickerBox) {
+      expect(pickerBox.y + pickerBox.height).toBeGreaterThanOrEqual(844 - 4);
+    }
+
+    await picker.getByRole("button", { name: "Campers", exact: true }).click();
+    await expect(picker).not.toBeVisible();
 
     const dialog = page.getByTestId("dialog-panel");
     await expect(dialog).toBeVisible();
-
-    // The Dialog primitive renders as a bottom-anchored sheet below `md` —
-    // it must reach the bottom edge of the viewport, unlike the centered
-    // desktop card (see src/components/ui/Dialog.tsx).
-    const box = await dialog.boundingBox();
-    expect(box).not.toBeNull();
-    if (box) {
-      expect(box.y + box.height).toBeGreaterThanOrEqual(844 - 4);
-    }
-
     await dialog.getByRole("button", { name: "Export", exact: true }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10000 });
 

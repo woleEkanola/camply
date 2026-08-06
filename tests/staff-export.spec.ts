@@ -51,7 +51,12 @@ test.describe("Staff export: data spreadsheet and ID card sheet", () => {
     await page.goto("/admin/teachers");
     await expect(page.getByText(teacherName).first()).toBeVisible({ timeout: 15000 });
 
+    // A single Export button opens a type picker first (ExportMenuButton.tsx).
     await page.getByRole("button", { name: "Export", exact: true }).click();
+    const picker = page.getByTestId("export-picker-panel");
+    await expect(picker).toBeVisible();
+    await picker.getByRole("button", { name: "Teachers", exact: true }).click();
+
     const dialog = page.getByTestId("dialog-panel");
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Export", exact: true }).click();
@@ -74,7 +79,11 @@ test.describe("Staff export: data spreadsheet and ID card sheet", () => {
     await page.goto("/admin/teachers");
     await expect(page.getByText(teacherName).first()).toBeVisible({ timeout: 15000 });
 
-    await page.getByRole("button", { name: "ID Cards" }).click();
+    await page.getByRole("button", { name: "Export", exact: true }).click();
+    const picker = page.getByTestId("export-picker-panel");
+    await expect(picker).toBeVisible();
+    await picker.getByRole("button", { name: "ID Cards", exact: true }).click();
+
     const dialog = page.getByTestId("dialog-panel");
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Export", exact: true }).click();

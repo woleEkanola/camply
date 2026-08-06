@@ -41,7 +41,12 @@ test.describe("Export system: dialog → background job → Export Center → do
     await page.getByPlaceholder(/Search name, email, or registration/i).fill(camperName);
     await expect(page.getByText(camperName).first()).toBeVisible({ timeout: 15000 });
 
-    await page.getByRole("button", { name: "Export Campers" }).click();
+    // A single Export button opens a type picker first, replacing the
+    // previous one-button-per-kind row (see ExportMenuButton.tsx).
+    await page.getByRole("button", { name: "Export", exact: true }).click();
+    const picker = page.getByTestId("export-picker-panel");
+    await expect(picker).toBeVisible();
+    await picker.getByRole("button", { name: "Campers", exact: true }).click();
 
     const dialog = page.getByTestId("dialog-panel");
     await expect(dialog).toBeVisible();
@@ -77,13 +82,18 @@ test.describe("Export system: dialog → background job → Export Center → do
 
   test("medical summary export is hidden from a campus-representative-only session", async ({ page }) => {
     // A plain campus rep (not an org admin) doesn't get the Medical Summary
-    // button at all — see CamperManagement.tsx's canManageCampers gate. This
-    // is a UI convenience; server-side authorization (assertOrgAdmin) is the
-    // real enforcement and is covered by the CAMPERS_MEDICAL descriptor itself.
+    // option in the export type picker at all — see CamperManagement.tsx's
+    // canManageCampers gate. This is a UI convenience; server-side
+    // authorization (assertOrgAdmin) is the real enforcement and is covered
+    // by the CAMPERS_MEDICAL descriptor itself.
     await loginWithPassword(page, "campusrep@camply.com", "password123");
     await page.goto("/admin/campers");
     await expect(page.getByRole("heading", { name: "Campers", exact: true })).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole("button", { name: "Medical Summary" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Export", exact: true }).click();
+    const picker = page.getByTestId("export-picker-panel");
+    await expect(picker).toBeVisible();
+    await expect(picker.getByRole("button", { name: "Medical Summary" })).toHaveCount(0);
   });
 
   test("a failed export surfaces an error hint and can be retried from the Export Center", async ({ page }) => {

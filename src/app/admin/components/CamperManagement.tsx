@@ -17,7 +17,7 @@ import { Textarea, Select } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
-import { ExportButton } from "@/components/export/ExportButton";
+import { ExportMenuButton } from "@/components/export/ExportMenuButton";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -484,10 +484,8 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <ExportButton
-          kind="CAMPERS"
+        <ExportMenuButton
           organizationId={organizationId}
-          label="Campers"
           selectedIds={selectedIds}
           filters={{
             campusId: campusFilter !== "all" ? campusFilter : undefined,
@@ -497,55 +495,15 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             campId: campId || undefined,
             search: debouncedSearchTerm || undefined,
           }}
-        >
-          Export Campers
-        </ExportButton>
-        <ExportButton
-          kind="ID_CARDS"
-          organizationId={organizationId}
-          label="ID Cards"
-          size="sm"
-          selectedIds={selectedIds}
-          filters={{
-            campusId: campusFilter !== "all" ? campusFilter : undefined,
-            status: statusFilter || undefined,
-            gender: genderFilter || undefined,
-            tribeId: tribeFilter || undefined,
-            campId: campId || undefined,
-          }}
-        >
-          ID Cards
-        </ExportButton>
-        <ExportButton
-          kind="ATTENDANCE_SHEET"
-          organizationId={organizationId}
-          label="Attendance Sheet"
-          size="sm"
-          selectedIds={selectedIds}
-          filters={{
-            campusId: campusFilter !== "all" ? campusFilter : undefined,
-            status: statusFilter || undefined,
-            campId: campId || undefined,
-          }}
-        >
-          Attendance Sheet
-        </ExportButton>
-        {canManageCampers && (
-          <ExportButton
-            kind="CAMPERS_MEDICAL"
-            organizationId={organizationId}
-            label="Medical Summary"
-            size="sm"
-            selectedIds={selectedIds}
-            filters={{
-              campusId: campusFilter !== "all" ? campusFilter : undefined,
-              status: statusFilter || undefined,
-              campId: campId || undefined,
-            }}
-          >
-            Medical Summary
-          </ExportButton>
-        )}
+          options={[
+            { kind: "CAMPERS", label: "Campers", description: "Camper roster as a spreadsheet" },
+            { kind: "ID_CARDS", label: "ID Cards", description: "Printable A4 sheet of camp ID badges" },
+            { kind: "ATTENDANCE_SHEET", label: "Attendance Sheet", description: "Printable check-in sheet" },
+            ...(canManageCampers
+              ? [{ kind: "CAMPERS_MEDICAL" as const, label: "Medical Summary", description: "Allergies, conditions, and emergency contacts" }]
+              : []),
+          ]}
+        />
         <Button onClick={() => { setSelectedProfile(null); setIsModalOpen(true); }}>Add Camper</Button>
       </div>
     </div>
