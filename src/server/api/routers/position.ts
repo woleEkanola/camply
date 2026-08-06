@@ -34,7 +34,15 @@ export const positionRouter = createTRPCRouter({
           department: true,
           assignments: {
             where: { isCurrent: true },
-            include: { staff: true },
+            // Enriched beyond plain scalars so the Chain of Command view
+            // (src/components/orgStructure/ChainOfCommand.tsx) can open
+            // StaffProfileSheet directly from an occupant here, with the
+            // same Campus/Tribe/Hostel/Reports-To detail it shows elsewhere.
+            include: {
+              staff: {
+                include: { preferredCampus: true, assignedTribe: true, assignedHostel: true, reportsTo: true, reportsToUser: true },
+              },
+            },
           },
         },
         orderBy: [{ displayOrder: "asc" }, { name: "asc" }],

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ShareIcon } from "@heroicons/react/24/outline";
 import { api } from "@/utils/trpc";
 import { Button } from "@/components/ui/Button";
+import { Fab } from "@/components/ui/Fab";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -12,6 +14,7 @@ import { StaffChipRow } from "./StaffChipRow";
 import { DepartmentSidePanel } from "./DepartmentSidePanel";
 import { DirectorySearch } from "./DirectorySearch";
 import { StaffProfileSheet } from "./StaffProfileSheet";
+import { ChainOfCommand } from "./ChainOfCommand";
 import type { StaffChip } from "@/server/api/routers/_shared/staffChip";
 
 const HIGHLIGHT_DURATION_MS = 2200;
@@ -41,6 +44,7 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
   const [expanded, setExpanded] = useState<Set<string> | null>(null);
   const [activeChip, setActiveChip] = useState<StaffChip | null>(null);
   const [sidePanelDeptId, setSidePanelDeptId] = useState<string | null>(null);
+  const [chainOpen, setChainOpen] = useState(false);
 
   // Search-driven navigation: which id to visually pulse, and which DOM id
   // to scroll to once its section has expanded and committed to the DOM.
@@ -182,6 +186,16 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
             onSelectPosition={selectPosition}
           />
         </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setChainOpen(true)}
+          className="hidden shrink-0 md:inline-flex"
+          data-testid="chain-of-command-trigger-desktop"
+        >
+          <ShareIcon className="mr-1.5 h-4 w-4" />
+          Chain of Command
+        </Button>
         <Button size="sm" onClick={() => setCreateOpen(true)} className="shrink-0">
           + Add Department
         </Button>
@@ -311,6 +325,16 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
         campId={campId}
         onSite={activeChip ? onSiteIds.has(activeChip.id) : false}
         onClose={() => setActiveChip(null)}
+      />
+
+      <Fab icon={<ShareIcon className="h-6 w-6" />} label="Chain of Command" data-testid="chain-of-command-trigger-fab" onClick={() => setChainOpen(true)} />
+
+      <ChainOfCommand
+        organizationId={organizationId}
+        campId={campId}
+        departments={data.departments.map((d) => ({ id: d.id, name: d.name }))}
+        open={chainOpen}
+        onClose={() => setChainOpen(false)}
       />
     </div>
   );
