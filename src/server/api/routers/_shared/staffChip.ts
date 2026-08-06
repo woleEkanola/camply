@@ -25,6 +25,7 @@ export const staffChipSelect = {
   isAssistantHead: true,
   isCampMonitor: true,
   isAssistantMonitor: true,
+  department: { select: { id: true, name: true } },
   // NOTE: this is StaffProfile.preferredCampus — a signup-time PREFERENCE,
   // not a confirmed campus assignment. There is no assigned-campus concept
   // on StaffProfile today (the operational equivalent is assignedVenue).
@@ -32,6 +33,8 @@ export const staffChipSelect = {
   preferredCampus: { select: { id: true, name: true } },
   assignedTribe: { select: { id: true, name: true } },
   assignedHostel: { select: { id: true, name: true } },
+  reportsTo: { select: { firstName: true, lastName: true } },
+  reportsToUser: { select: { firstName: true, lastName: true, email: true } },
   positionAssignments: {
     where: { isCurrent: true },
     select: { position: { select: { id: true, name: true, displayOrder: true } } },
@@ -55,10 +58,12 @@ export interface StaffChip {
   status: string;
   gender: string | null;
   departmentId: string | null;
+  departmentName: string | null;
   campusId: string | null;
   campusName: string | null;
   tribeName: string | null;
   hostelName: string | null;
+  reportsToName: string | null;
   positionTitle: string | null;
   positionTitles: string[];
   isDepartmentHead: boolean;
@@ -98,6 +103,12 @@ export function toStaffChip(row: StaffChipRow): StaffChip {
 
   const roleRank: 0 | 1 | 2 = row.isDepartmentHead ? 0 : row.isAssistantHead ? 1 : 2;
 
+  const reportsToName = row.reportsTo
+    ? `${row.reportsTo.firstName} ${row.reportsTo.lastName}`
+    : row.reportsToUser
+      ? `${row.reportsToUser.firstName ?? ""} ${row.reportsToUser.lastName ?? ""}`.trim() || row.reportsToUser.email
+      : null;
+
   return {
     id: row.id,
     firstName: row.firstName,
@@ -111,10 +122,12 @@ export function toStaffChip(row: StaffChipRow): StaffChip {
     status: row.status,
     gender: row.gender,
     departmentId: row.departmentId,
+    departmentName: row.department?.name ?? null,
     campusId: row.preferredCampus?.id ?? null,
     campusName: row.preferredCampus?.name ?? null,
     tribeName: row.assignedTribe?.name ?? null,
     hostelName: row.assignedHostel?.name ?? null,
+    reportsToName,
     positionTitle: positionTitles[0] ?? null,
     positionTitles,
     isDepartmentHead: row.isDepartmentHead,

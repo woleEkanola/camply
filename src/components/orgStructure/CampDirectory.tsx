@@ -11,6 +11,7 @@ import { DirectorySkeleton } from "./DirectorySkeleton";
 import { StaffChipRow } from "./StaffChipRow";
 import { DepartmentSidePanel } from "./DepartmentSidePanel";
 import { DirectorySearch } from "./DirectorySearch";
+import { StaffProfileSheet } from "./StaffProfileSheet";
 import type { StaffChip } from "@/server/api/routers/_shared/staffChip";
 
 const HIGHLIGHT_DURATION_MS = 2200;
@@ -38,8 +39,6 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
   const onSiteIds = useMemo(() => new Set(onSite?.onSiteStaffIds ?? []), [onSite]);
 
   const [expanded, setExpanded] = useState<Set<string> | null>(null);
-  // Wired to the real StaffProfileSheet in a later phase — for now selecting
-  // a chip just tracks it (no visible sheet yet).
   const [activeChip, setActiveChip] = useState<StaffChip | null>(null);
   const [sidePanelDeptId, setSidePanelDeptId] = useState<string | null>(null);
 
@@ -299,6 +298,14 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
       {sidePanelDeptId && (
         <DepartmentSidePanel organizationId={organizationId} campId={campId} departmentId={sidePanelDeptId} onClose={() => setSidePanelDeptId(null)} />
       )}
+
+      <StaffProfileSheet
+        chip={activeChip}
+        organizationId={organizationId}
+        campId={campId}
+        onSite={activeChip ? onSiteIds.has(activeChip.id) : false}
+        onClose={() => setActiveChip(null)}
+      />
     </div>
   );
 }
