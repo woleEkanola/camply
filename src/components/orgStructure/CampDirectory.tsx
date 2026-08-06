@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SearchBar } from "@/components/ui/SearchBar";
 import { DepartmentSection } from "./DepartmentSection";
 import { DirectorySkeleton } from "./DirectorySkeleton";
 import { StaffChipRow } from "./StaffChipRow";
 import { DepartmentSidePanel } from "./DepartmentSidePanel";
+import { DirectorySearch } from "./DirectorySearch";
 import type { StaffChip } from "@/server/api/routers/_shared/staffChip";
+
+const HIGHLIGHT_DURATION_MS = 2200;
 
 export interface CampDirectoryProps {
   organizationId: string;
@@ -36,11 +38,15 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
   const onSiteIds = useMemo(() => new Set(onSite?.onSiteStaffIds ?? []), [onSite]);
 
   const [expanded, setExpanded] = useState<Set<string> | null>(null);
-  const [filter, setFilter] = useState("");
-  // Wired to the real StaffProfileSheet in a later phase — for now clicking
-  // a chip just tracks the selection so the row highlight/interaction works.
+  // Wired to the real StaffProfileSheet in a later phase — for now selecting
+  // a chip just tracks it (no visible sheet yet).
   const [activeChip, setActiveChip] = useState<StaffChip | null>(null);
   const [sidePanelDeptId, setSidePanelDeptId] = useState<string | null>(null);
+
+  // Search-driven navigation: which id to visually pulse, and which DOM id
+  // to scroll to once its section has expanded and committed to the DOM.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [pendingScrollId, setPendingScrollId] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -72,6 +78,55 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
     if (expanded === null || typeof window === "undefined") return;
     window.localStorage.setItem(expansionStorageKey(campId), JSON.stringify(Array.from(expanded)));
   }, [expanded, campId]);
+
+  // Scrolls to the pending target once its (possibly just-expanded) section
+  // has committed to the DOM. Depending on `expanded` too means an
+  // expand-then-scroll triggered in the same handler doesn't need a second
+  // render to find the element — by the time this effect runs after that
+  // commit, the section's children already exist.
+  useEffect(() => {
+    if (!pendingScrollId) return;
+    const el = document.getElementById(pendingScrollId);
+    if (!el) return;
+    const reduceMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+    setPendingScrollId(null);
+  }, [pendingScrollId, expanded]);
+
+  // Transient pulse — cleared on a timer rather than left as a permanent
+  // selection indicator.
+  useEffect(() => {
+    if (!highlightId) return;
+    const t = setTimeout(() => setHighlightId(null), HIGHLIGHT_DURATION_MS);
+    return () => clearTimeout(t);
+  }, [highlightId]);
+
+  function expandDept(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev ?? []);
+      next.add(id);
+      return next;
+    });
+  }
+
+  function selectStaff(chip: StaffChip) {
+    if (chip.departmentId) expandDept(chip.departmentId);
+    setActiveChip(chip);
+    setHighlightId(chip.id);
+    setPendingScrollId(`cs-staff-${chip.id}`);
+  }
+
+  function selectDepartment(departmentId: string) {
+    expandDept(departmentId);
+    setHighlightId(departmentId);
+    setPendingScrollId(`cs-dept-${departmentId}`);
+  }
+
+  function selectPosition(departmentId: string | null) {
+    // A position with no department (e.g. a top-level "Camp Director" role)
+    // has no section to jump to on this page — no-op rather than error.
+    if (departmentId) selectDepartment(departmentId);
+  }
 
   const invalidate = () => {
     utils.orgStructure.getCampDirectory.invalidate({ organizationId, campId });
@@ -116,27 +171,18 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
 
   if (isLoading || !data) return <DirectorySkeleton />;
 
-  const q = filter.trim().toLowerCase();
-  const filteredDepartments = q
-    ? data.departments.filter((d) => {
-        if (d.name.toLowerCase().includes(q)) return true;
-        return [...d.heads, ...d.assistantHeads, ...d.members].some((s) => s.displayName.toLowerCase().includes(q));
-      })
-    : data.departments;
-
-  const filteredUnassigned = q ? data.unassigned.filter((s) => s.displayName.toLowerCase().includes(q)) : data.unassigned;
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <SearchBar
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          onClear={() => setFilter("")}
-          placeholder="Filter by name or department…"
-          containerClassName="w-full sm:max-w-sm"
-          data-testid="directory-filter-input"
-        />
+        <div className="w-full sm:flex-1">
+          <DirectorySearch
+            organizationId={organizationId}
+            campId={campId}
+            onSelectStaff={selectStaff}
+            onSelectDepartment={selectDepartment}
+            onSelectPosition={selectPosition}
+          />
+        </div>
         <Button size="sm" onClick={() => setCreateOpen(true)} className="shrink-0">
           + Add Department
         </Button>
@@ -144,36 +190,43 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
 
       {data.departments.length === 0 ? (
         <EmptyState title="No departments yet" description="Create a department to start organizing staff." />
-      ) : filteredDepartments.length === 0 && filteredUnassigned.length === 0 ? (
-        <EmptyState title="No matches" description="Try a different name or department." />
       ) : (
         <div className="space-y-3" data-testid="camp-directory">
-          {filteredDepartments.map((group) => (
+          {data.departments.map((group) => (
             <DepartmentSection
               key={group.id}
               group={group}
               expanded={expanded?.has(group.id) ?? false}
               onToggle={() => toggle(group.id)}
-              onSelectStaff={setActiveChip}
+              onSelectStaff={selectStaff}
               onDuplicate={() => duplicateDept.mutate({ id: group.id })}
               onMerge={() => setMergeSourceId(group.id)}
               onArchive={() => archiveDept.mutate({ id: group.id })}
               onDelete={() => setDeleteTarget({ id: group.id, label: group.name })}
               onManagePositions={() => setSidePanelDeptId(group.id)}
               onSiteIds={onSiteIds}
-              highlightId={activeChip?.id ?? null}
+              highlightId={highlightId}
             />
           ))}
 
-          {filteredUnassigned.length > 0 && (
-            <section className="rounded-2xl border border-dashed border-border-default bg-surface">
+          {data.unassigned.length > 0 && (
+            <section
+              id="cs-dept-unassigned"
+              className="scroll-mt-28 rounded-2xl border border-dashed border-border-default bg-surface"
+            >
               <div className="px-4 py-3">
                 <div className="text-sm font-semibold text-txt-primary">Not in a department</div>
-                <div className="text-xs text-txt-secondary">{filteredUnassigned.length} staff</div>
+                <div className="text-xs text-txt-secondary">{data.unassigned.length} staff</div>
               </div>
               <div className="space-y-0.5 border-t border-border-default px-2 pb-3 pt-1">
-                {filteredUnassigned.map((chip) => (
-                  <StaffChipRow key={chip.id} chip={chip} onClick={setActiveChip} onSiteBadge={onSiteIds.has(chip.id)} />
+                {data.unassigned.map((chip) => (
+                  <StaffChipRow
+                    key={chip.id}
+                    chip={chip}
+                    onClick={selectStaff}
+                    onSiteBadge={onSiteIds.has(chip.id)}
+                    highlighted={highlightId === chip.id}
+                  />
                 ))}
               </div>
             </section>

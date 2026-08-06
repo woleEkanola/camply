@@ -80,7 +80,9 @@ export function DepartmentSection({
         // NOT overflow-hidden — the overflow menu below is an absolutely
         // positioned popover that must escape this container's bounds.
         "scroll-mt-28 rounded-2xl border border-border-default bg-surface transition-shadow duration-500",
-        highlightId && group.heads.concat(group.assistantHeads, group.members).some((c) => c.id === highlightId) && "ring-2 ring-accent-500 ring-offset-1"
+        highlightId &&
+          (highlightId === group.id || group.heads.concat(group.assistantHeads, group.members).some((c) => c.id === highlightId)) &&
+          "ring-2 ring-accent-500 ring-offset-1"
       )}
     >
       <div className="flex items-center">
