@@ -5,9 +5,9 @@ import type { Prisma } from "@prisma/client";
  * `orgStructure.getCampDirectory` and `orgStructure.searchDirectory` so a
  * search result can open the profile sheet with zero additional fetch.
  *
- * Deliberately never `include: { user: true }` (unlike the old
- * getLeadershipTree/getPersonProfile) — that pulls the whole User row,
- * password hash included, for data this UI never needs.
+ * Deliberately never `include: { user: true }` (unlike the old, now-deleted
+ * getLeadershipTree/getPersonProfile procedures this replaced) — that pulls
+ * the whole User row, password hash included, for data this UI never needs.
  */
 export const staffChipSelect = {
   id: true,

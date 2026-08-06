@@ -20,67 +20,7 @@ function assertOrgAccess(currentUser: { role: string; organizationId?: string | 
   }
 }
 
-type StaffNode = {
-  kind: "staff";
-  staffProfileId: string;
-  userId: string;
-  name: string;
-  role: string; // TEACHER | VOLUNTEER
-  title: string | null; // "Department Head" | "Camp Monitor" | etc, display-only
-  department: string | null;
-  tribe: string | null;
-  centre: string | null;
-  reportsToId: string | null; // normalized node id (userId or staffProfileId), see build logic
-  children: StaffNode[];
-};
-
 export const orgStructureRouter = createTRPCRouter({
-  // ─── Leadership tree ────────────────────────────────────────────────────
-  getLeadershipTree: protectedProcedure
-    .input(z.object({ organizationId: z.string(), campId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
-      assertOrgAccess(currentUser, input.organizationId);
-
-      const positions = await ctx.prisma.position.findMany({
-        where: { campId: input.campId, deletedAt: null },
-        include: {
-          department: true,
-          assignments: {
-            where: { isCurrent: true },
-            include: {
-              staff: {
-                include: {
-                  user: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-      });
-
-      // Build hierarchical tree structure of positions
-      type PositionNode = typeof positions[number] & { children: PositionNode[] };
-      const nodeMap = new Map<string, PositionNode>();
-
-      for (const pos of positions) {
-        nodeMap.set(pos.id, { ...pos, children: [] });
-      }
-
-      const roots: PositionNode[] = [];
-
-      for (const node of nodeMap.values()) {
-        if (node.parentPositionId && nodeMap.has(node.parentPositionId)) {
-          nodeMap.get(node.parentPositionId)!.children.push(node);
-        } else {
-          roots.push(node);
-        }
-      }
-
-      return roots;
-    }),
-
   // ─── Department structure ──────────────────────────────────────────────
   getDepartmentStructure: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string() }))
@@ -228,70 +168,6 @@ export const orgStructureRouter = createTRPCRouter({
       }
 
       return null;
-    }),
-
-  // ─── Person Profile Drawer payload ──────────────────────────────────────
-  getPersonProfile: protectedProcedure
-    .input(z.object({ staffProfileId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
-      // The one procedure in this file missing assertOrgAccess (every
-      // sibling has it) — any staff-module user could read any other org's
-      // staff profile by id, including full camper assignment details.
-      const profile = await ctx.prisma.staffProfile.findUnique({
-        where: { id: input.staffProfileId },
-        include: {
-          user: true,
-          department: true,
-          assignedTribe: true,
-          assignedVenue: true,
-          assignedHostel: true,
-          assignedRoom: true,
-          reportsTo: { include: { user: true } },
-          reportsToUser: true,
-          directReports: { include: { user: true } },
-          camperAssignments: { include: { registration: { include: { camper: true } } } },
-        },
-      });
-      if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      assertOrgAccess(currentUser, profile.organizationId);
-      return profile;
-    }),
-
-  // ─── Search ──────────────────────────────────────────────────────────────
-  search: protectedProcedure
-    .input(z.object({ organizationId: z.string(), campId: z.string(), query: z.string().min(1) }))
-    .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
-      assertOrgAccess(currentUser, input.organizationId);
-      const q = input.query;
-
-      const [staff, departments, tribes, hostels] = await Promise.all([
-        ctx.prisma.staffProfile.findMany({
-          where: {
-            organizationId: input.organizationId,
-            campId: input.campId,
-            OR: [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }],
-          },
-          include: { department: true, assignedTribe: true, assignedVenue: true },
-          take: 10,
-        }),
-        ctx.prisma.department.findMany({ where: { organizationId: input.organizationId, campId: input.campId, name: { contains: q, mode: "insensitive" } }, take: 5 }),
-        ctx.prisma.tribe.findMany({ where: { campId: input.campId, name: { contains: q, mode: "insensitive" } }, take: 5 }),
-        ctx.prisma.hostel.findMany({ where: { organizationId: input.organizationId, name: { contains: q, mode: "insensitive" } }, take: 5 }),
-      ]);
-
-      return [
-        ...staff.map((s: any) => ({
-          kind: "staff" as const,
-          id: s.id,
-          label: `${s.firstName} ${s.lastName}`,
-          path: [s.department?.name, s.assignedTribe?.name, s.assignedVenue?.name].filter(Boolean).join(" · "),
-        })),
-        ...departments.map((d: any) => ({ kind: "department" as const, id: d.id, label: d.name, path: "Department" })),
-        ...tribes.map((t: any) => ({ kind: "tribe" as const, id: t.id, label: t.name, path: "Tribe" })),
-        ...hostels.map((h: any) => ({ kind: "hostel" as const, id: h.id, label: h.name, path: "Hostel" })),
-      ];
     }),
 
   // ─── Camp Directory (mobile-first redesign) ──────────────────────────────
