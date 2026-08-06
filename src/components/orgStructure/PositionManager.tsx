@@ -274,7 +274,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
       {/* Assign staff dialog */}
       <Dialog open={!!assignTarget} onClose={() => setAssignTarget(null)} title={assignTarget ? `Assign — ${assignTarget.name}` : "Assign"} size="sm">
         <div className="space-y-4">
-          <Select label="Staff member" value={selectedStaffId} onChange={(e) => setSelectedStaffId(e.target.value)}>
+          <Select id="assign-staff-select" label="Staff member" value={selectedStaffId} onChange={(e) => setSelectedStaffId(e.target.value)}>
             <option value="">Select staff…</option>
             {assignableStaff.map((s: any) => (
               <option key={s.id} value={s.id}>{s.firstName} {s.lastName} ({s.type})</option>
@@ -297,7 +297,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
       <Dialog open={!!moveTarget} onClose={() => setMoveTarget(null)} title={moveTarget ? `Move — ${moveTarget.name}` : "Move"} size="sm">
         <div className="space-y-4">
           <p className="text-xs text-txt-secondary">Choose the new supervisor position for this role.</p>
-          <Select label="Reports to" value={selectedParentId} onChange={(e) => setSelectedParentId(e.target.value)}>
+          <Select id="move-parent-select" label="Reports to" value={selectedParentId} onChange={(e) => setSelectedParentId(e.target.value)}>
             <option value="">None (top-level)</option>
             {moveTarget && validParents(moveTarget.id).map((p) => (
               <option key={p.id} value={p.id}>{p.name}{p.department ? ` (${p.department.name})` : ""}</option>
@@ -318,7 +318,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
       {/* Add position dialog */}
       <Dialog open={!!addChildParent} onClose={() => setAddChildParent(null)} title="New Position" size="sm">
         <div className="space-y-4">
-          <Input label="Position name" placeholder="e.g. Team Member" value={newPositionName} onChange={(e) => setNewPositionName(e.target.value)} required />
+          <Input id="new-position-name" label="Position name" placeholder="e.g. Team Member" value={newPositionName} onChange={(e) => setNewPositionName(e.target.value)} required />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setAddChildParent(null)}>Cancel</Button>
             <Button
