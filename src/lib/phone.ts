@@ -31,3 +31,23 @@ export function normalizeNigerianPhone(raw: string): string {
   const local = toLocalNigerianDigits(raw);
   return isCompleteNigerianPhone(local) ? `+${COUNTRY_CODE}${local.slice(1)}` : local;
 }
+
+/**
+ * Converts a raw StaffProfile.phone value into the bare digit string a
+ * `https://wa.me/<digits>` link needs. Deliberately NOT built on
+ * `normalizeNigerianPhone`/`toLocalNigerianDigits` above — those assume
+ * every number is Nigerian and would mangle any other country's number
+ * (e.g. "+1-555-0500" -> "15550500" -> wrongly treated as NG-local and
+ * reformatted). Returns null for blank input so callers can render a
+ * "No phone on file" fallback instead of a dead wa.me link.
+ */
+export function toWhatsAppDigits(raw: string): string | null {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  const digits = onlyDigits(trimmed);
+  if (!digits) return null;
+  if (trimmed.startsWith("+")) return digits; // already international — pass through
+  if (digits.startsWith(COUNTRY_CODE)) return digits;
+  if (/^0\d{10}$/.test(digits)) return COUNTRY_CODE + digits.slice(1); // NG local
+  return digits; // best effort — still yields a usable wa.me link
+}

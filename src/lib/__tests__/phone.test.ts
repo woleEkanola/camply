@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toLocalNigerianDigits, isCompleteNigerianPhone, normalizeNigerianPhone } from "../phone";
+import { toLocalNigerianDigits, isCompleteNigerianPhone, normalizeNigerianPhone, toWhatsAppDigits } from "../phone";
 
 describe("toLocalNigerianDigits", () => {
   it("passes through an already-correct 11-digit local number", () => {
@@ -66,5 +66,32 @@ describe("normalizeNigerianPhone", () => {
 
   it("is idempotent on an already-normalized value", () => {
     expect(normalizeNigerianPhone("+2348020996939")).toBe("+2348020996939");
+  });
+});
+
+describe("toWhatsAppDigits", () => {
+  it("passes through a non-Nigerian international number unmangled (the reason this isn't built on normalizeNigerianPhone)", () => {
+    expect(toWhatsAppDigits("+1-555-0500")).toBe("15550500");
+  });
+
+  it("converts a complete NG local number to 234-prefixed digits", () => {
+    expect(toWhatsAppDigits("08020996939")).toBe("2348020996939");
+  });
+
+  it("passes through an already +234-prefixed number", () => {
+    expect(toWhatsAppDigits("+2348020996939")).toBe("2348020996939");
+  });
+
+  it("passes through a bare 234-prefixed number with no leading +", () => {
+    expect(toWhatsAppDigits("2348020996939")).toBe("2348020996939");
+  });
+
+  it("returns null for blank or whitespace-only input", () => {
+    expect(toWhatsAppDigits("")).toBeNull();
+    expect(toWhatsAppDigits("   ")).toBeNull();
+  });
+
+  it("strips formatting characters", () => {
+    expect(toWhatsAppDigits("+1 (555) 050-0000")).toBe("15550500000");
   });
 });

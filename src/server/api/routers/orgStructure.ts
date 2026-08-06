@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { staffChipSelect, toStaffChip, type StaffChip } from "./_shared/staffChip";
+import { STAFF_PRESENCE_STATIONS, STAFF_CHECK_IN_STATION } from "../../../lib/staffPresence";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
@@ -290,5 +292,201 @@ export const orgStructureRouter = createTRPCRouter({
         ...tribes.map((t: any) => ({ kind: "tribe" as const, id: t.id, label: t.name, path: "Tribe" })),
         ...hostels.map((h: any) => ({ kind: "hostel" as const, id: h.id, label: h.name, path: "Hostel" })),
       ];
+    }),
+
+  // ─── Camp Directory (mobile-first redesign) ──────────────────────────────
+  // Single-page replacement for the Leadership/Directory/Departments tabs:
+  // one procedure returns every department pre-grouped into Head/Assistant
+  // Heads/Members chips, plus an "unassigned" bucket, plus a chip-complete
+  // shape (photoUrl/phone/campus/position title) so the profile sheet needs
+  // no follow-up fetch. See backlog.md "Camp Structure Redesign".
+  getCampDirectory: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = assertStaffModuleAccess(ctx);
+      assertOrgAccess(currentUser, input.organizationId);
+
+      const [departments, staff] = await Promise.all([
+        ctx.prisma.department.findMany({
+          where: { organizationId: input.organizationId, campId: input.campId, status: "ACTIVE", deletedAt: null },
+          select: { id: true, name: true, description: true, status: true, maxCapacity: true, responsibilities: true },
+          orderBy: { name: "asc" },
+        }),
+        ctx.prisma.staffProfile.findMany({
+          where: {
+            organizationId: input.organizationId,
+            campId: input.campId,
+            deletedAt: null,
+            status: { in: ["APPROVED", "PENDING"] },
+          },
+          select: staffChipSelect,
+          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        }),
+      ]);
+
+      const chips = staff.map(toStaffChip);
+      const byDept = new Map<string, StaffChip[]>();
+      const unassigned: StaffChip[] = [];
+      for (const chip of chips) {
+        if (!chip.departmentId) {
+          unassigned.push(chip);
+          continue;
+        }
+        const bucket = byDept.get(chip.departmentId);
+        if (bucket) bucket.push(chip);
+        else byDept.set(chip.departmentId, [chip]);
+      }
+
+      const departmentGroups = departments.map((d) => {
+        const members = byDept.get(d.id) ?? [];
+        // .filter(), not .find() — a department can have more than one
+        // Assistant Head. The `&& !isDepartmentHead` guard matters: a staff
+        // member holding two positions (e.g. "X Head" + "Y Assistant Head")
+        // would otherwise render twice in the same section.
+        const heads = members.filter((s) => s.isDepartmentHead);
+        const assistantHeads = members.filter((s) => s.isAssistantHead && !s.isDepartmentHead);
+        const rest = members.filter((s) => !s.isDepartmentHead && !s.isAssistantHead);
+        const approvedCount = members.filter((s) => s.status === "APPROVED").length;
+        const volunteerCount = members.filter((s) => s.type === "VOLUNTEER").length;
+
+        return {
+          id: d.id,
+          name: d.name,
+          description: d.description,
+          status: d.status,
+          maxCapacity: d.maxCapacity,
+          responsibilities: d.responsibilities,
+          heads,
+          assistantHeads,
+          members: rest,
+          memberCount: members.length,
+          approvedCount,
+          signedUpCount: members.length, // query already filters to PENDING+APPROVED
+          volunteerCount,
+        };
+      });
+
+      return {
+        departments: departmentGroups,
+        unassigned,
+        totalStaff: chips.length,
+        generatedAt: new Date(),
+      };
+    }),
+
+  // ─── On Site presence (read-only; no new tracking) ───────────────────────
+  // StaffScanEvent already exists and is written by scan.processStaffScan.
+  // This surfaces "is this staff member on site right now" without adding
+  // any schema/column — the badge is simply absent when no scan exists.
+  getOnSiteStaff: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = assertStaffModuleAccess(ctx);
+      assertOrgAccess(currentUser, input.organizationId);
+
+      const dayStart = new Date();
+      dayStart.setHours(0, 0, 0, 0);
+
+      const events = await ctx.prisma.staffScanEvent.findMany({
+        where: {
+          result: "SUCCESS",
+          timestamp: { gte: dayStart },
+          station: { in: [...STAFF_PRESENCE_STATIONS] },
+          OR: [{ campId: input.campId }, { campId: null, staffProfile: { campId: input.campId } }],
+          staffProfile: { organizationId: input.organizationId, deletedAt: null },
+        },
+        // `distinct` compiles to Postgres DISTINCT ON, which requires the
+        // leading orderBy column to match the distinct column — hence
+        // staffProfileId first, NOT timestamp first.
+        orderBy: [{ staffProfileId: "asc" }, { timestamp: "desc" }],
+        distinct: ["staffProfileId"],
+        select: { staffProfileId: true, station: true, timestamp: true },
+      });
+
+      const onSiteStaffIds: string[] = [];
+      const lastSeen: Record<string, string> = {};
+      for (const e of events) {
+        lastSeen[e.staffProfileId] = e.timestamp.toISOString();
+        if (e.station === STAFF_CHECK_IN_STATION) onSiteStaffIds.push(e.staffProfileId);
+      }
+
+      return { onSiteStaffIds, lastSeen, asOf: new Date() };
+    }),
+
+  // ─── Universal directory search ──────────────────────────────────────────
+  // Replaces `search` above (kept for now, deleted alongside the page
+  // rewire): adds phone/email/campus/tribe/position matching, filters out
+  // soft-deleted/rejected staff, and returns chip-complete staff results so
+  // a search hit opens the profile sheet with zero extra fetch.
+  searchDirectory: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string(), query: z.string().min(2), limit: z.number().min(1).max(20).default(8) }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = assertStaffModuleAccess(ctx);
+      assertOrgAccess(currentUser, input.organizationId);
+      const q = input.query;
+      const digits = q.replace(/\D/g, "");
+
+      const [staff, departments, positions, tribes, hostels] = await Promise.all([
+        ctx.prisma.staffProfile.findMany({
+          where: {
+            organizationId: input.organizationId,
+            campId: input.campId,
+            deletedAt: null,
+            status: { in: ["APPROVED", "PENDING"] },
+            OR: [
+              { firstName: { contains: q, mode: "insensitive" } },
+              { lastName: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+              { phone: { contains: q, mode: "insensitive" } },
+              ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
+              { preferredCampus: { name: { contains: q, mode: "insensitive" as const } } },
+              { assignedTribe: { name: { contains: q, mode: "insensitive" as const } } },
+              { positionAssignments: { some: { isCurrent: true, position: { name: { contains: q, mode: "insensitive" as const } } } } },
+            ],
+          },
+          select: staffChipSelect,
+          take: input.limit,
+        }),
+        ctx.prisma.department.findMany({
+          where: { organizationId: input.organizationId, campId: input.campId, deletedAt: null, name: { contains: q, mode: "insensitive" } },
+          select: { id: true, name: true, _count: { select: { staff: { where: { status: { in: ["PENDING", "APPROVED"] }, deletedAt: null } } } } },
+          take: 5,
+        }),
+        ctx.prisma.position.findMany({
+          where: { campId: input.campId, deletedAt: null, name: { contains: q, mode: "insensitive" } },
+          select: {
+            id: true,
+            name: true,
+            departmentId: true,
+            department: { select: { name: true } },
+            assignments: { where: { isCurrent: true }, select: { staff: { select: { firstName: true, lastName: true } } }, take: 1 },
+          },
+          take: 5,
+        }),
+        ctx.prisma.tribe.findMany({
+          where: { campId: input.campId, deletedAt: null, name: { contains: q, mode: "insensitive" } },
+          select: { id: true, name: true },
+          take: 5,
+        }),
+        ctx.prisma.hostel.findMany({
+          where: { organizationId: input.organizationId, name: { contains: q, mode: "insensitive" } },
+          select: { id: true, name: true },
+          take: 5,
+        }),
+      ]);
+
+      return {
+        staff: staff.map(toStaffChip),
+        departments: departments.map((d) => ({ id: d.id, name: d.name, memberCount: d._count.staff })),
+        positions: positions.map((p) => ({
+          id: p.id,
+          name: p.name,
+          departmentId: p.departmentId,
+          departmentName: p.department?.name ?? null,
+          occupantName: p.assignments[0]?.staff ? `${p.assignments[0].staff.firstName} ${p.assignments[0].staff.lastName}` : null,
+        })),
+        tribes: tribes.map((t) => ({ id: t.id, name: t.name })),
+        hostels: hostels.map((h) => ({ id: h.id, name: h.name })),
+      };
     }),
 });

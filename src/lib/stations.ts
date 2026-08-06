@@ -9,6 +9,7 @@ import {
   GiftIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { STAFF_CHECK_IN_STATION, STAFF_CHECKOUT_STATION } from "./staffPresence";
 
 export type StationId =
   | "IDENTITY_LOOKUP"
@@ -207,7 +208,7 @@ export const STATIONS: Record<StationId, StationDef> = {
   },
   STAFF_CHECK_IN: {
     id: "STAFF_CHECK_IN",
-    name: "Staff Check-In",
+    name: STAFF_CHECK_IN_STATION,
     verb: "Checking In Staff",
     successVerb: "Checked In",
     duplicateVerb: "Already Checked In",
@@ -219,7 +220,7 @@ export const STATIONS: Record<StationId, StationDef> = {
   },
   STAFF_CHECKOUT: {
     id: "STAFF_CHECKOUT",
-    name: "Staff Checkout",
+    name: STAFF_CHECKOUT_STATION,
     verb: "Checking Out Staff",
     successVerb: "Checked Out",
     duplicateVerb: "Already Checked Out",
