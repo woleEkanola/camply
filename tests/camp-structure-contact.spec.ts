@@ -139,9 +139,11 @@ test.describe("Camp Structure — profile sheet contact actions", () => {
     await openSheetFor(page, "ContactPhoneE2E");
 
     const sheet = page.getByTestId("staff-profile-sheet");
-    await expect(sheet.getByText("Campus")).toBeVisible();
+    // exact: true — "Campus" (the label) is a substring of "Demo Campus" (the
+    // value), so a plain getByText("Campus") is a strict-mode violation.
+    await expect(sheet.getByText("Campus", { exact: true })).toBeVisible();
     await expect(sheet.getByText(campusName)).toBeVisible();
-    await expect(sheet.getByText("Department")).toBeVisible();
+    await expect(sheet.getByText("Department", { exact: true })).toBeVisible();
   });
 
   test("staff with no phone on file shows the fallback, not a dead tel: link", async ({ page }) => {

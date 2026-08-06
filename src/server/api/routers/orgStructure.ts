@@ -303,7 +303,7 @@ export const orgStructureRouter = createTRPCRouter({
       const q = input.query;
       const digits = q.replace(/\D/g, "");
 
-      const [staff, departments, positions, tribes, hostels] = await Promise.all([
+      const [staffMatches, phoneCandidates, departments, positions, tribes, hostels] = await Promise.all([
         ctx.prisma.staffProfile.findMany({
           where: {
             organizationId: input.organizationId,
@@ -315,7 +315,6 @@ export const orgStructureRouter = createTRPCRouter({
               { lastName: { contains: q, mode: "insensitive" } },
               { email: { contains: q, mode: "insensitive" } },
               { phone: { contains: q, mode: "insensitive" } },
-              ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
               { preferredCampus: { name: { contains: q, mode: "insensitive" as const } } },
               { assignedTribe: { name: { contains: q, mode: "insensitive" as const } } },
               { positionAssignments: { some: { isCurrent: true, position: { name: { contains: q, mode: "insensitive" as const } } } } },
@@ -324,6 +323,22 @@ export const orgStructureRouter = createTRPCRouter({
           select: staffChipSelect,
           take: input.limit,
         }),
+        // Phone numbers are stored with punctuation (e.g. "+234-800-0600"), so
+        // a plain `contains` on a digits-only search term misses any match
+        // whose digit run straddles a stored separator — `phone: { contains:
+        // "8000600" }` never matches "+234-800-0600" because of the literal
+        // dash between "800" and "0600". Fetch a bounded roster instead and
+        // compare digit-normalized in JS; camp rosters are small enough that
+        // this is cheap and avoids raw SQL entirely (same "bounded full
+        // fetch over cleverness" trade-off already used for the Positions
+        // assign picker's staff.adminList limit).
+        digits.length >= 3
+          ? ctx.prisma.staffProfile.findMany({
+              where: { organizationId: input.organizationId, campId: input.campId, deletedAt: null, status: { in: ["APPROVED", "PENDING"] } },
+              select: staffChipSelect,
+              take: 200,
+            })
+          : Promise.resolve([]),
         ctx.prisma.department.findMany({
           where: { organizationId: input.organizationId, campId: input.campId, deletedAt: null, name: { contains: q, mode: "insensitive" } },
           select: { id: true, name: true, _count: { select: { staff: { where: { status: { in: ["PENDING", "APPROVED"] }, deletedAt: null } } } } },
@@ -351,6 +366,11 @@ export const orgStructureRouter = createTRPCRouter({
           take: 5,
         }),
       ]);
+
+      const phoneMatches = phoneCandidates.filter((s) => s.phone.replace(/\D/g, "").includes(digits));
+      const staffById = new Map<string, (typeof staffMatches)[number]>();
+      for (const s of [...staffMatches, ...phoneMatches]) staffById.set(s.id, s);
+      const staff = [...staffById.values()].slice(0, input.limit);
 
       return {
         staff: staff.map(toStaffChip),
