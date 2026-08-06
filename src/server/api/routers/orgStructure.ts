@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { staffChipSelect, toStaffChip, type StaffChip } from "./_shared/staffChip";
+import { staffChipSelect, toStaffChip, type StaffChip, type DepartmentGroup, type CampDirectoryResult } from "./_shared/staffChip";
 import { STAFF_PRESENCE_STATIONS, STAFF_CHECK_IN_STATION } from "../../../lib/staffPresence";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
@@ -337,7 +337,7 @@ export const orgStructureRouter = createTRPCRouter({
         else byDept.set(chip.departmentId, [chip]);
       }
 
-      const departmentGroups = departments.map((d) => {
+      const departmentGroups: DepartmentGroup[] = departments.map((d) => {
         const members = byDept.get(d.id) ?? [];
         // .filter(), not .find() — a department can have more than one
         // Assistant Head. The `&& !isDepartmentHead` guard matters: a staff
@@ -366,12 +366,13 @@ export const orgStructureRouter = createTRPCRouter({
         };
       });
 
-      return {
+      const result: CampDirectoryResult = {
         departments: departmentGroups,
         unassigned,
         totalStaff: chips.length,
         generatedAt: new Date(),
       };
+      return result;
     }),
 
   // ─── On Site presence (read-only; no new tracking) ───────────────────────

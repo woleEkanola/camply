@@ -67,6 +67,30 @@ export interface StaffChip {
   roleRank: 0 | 1 | 2;
 }
 
+/** Shape returned per-department by `orgStructure.getCampDirectory`. */
+export interface DepartmentGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  maxCapacity: number | null;
+  responsibilities: string[];
+  heads: StaffChip[];
+  assistantHeads: StaffChip[];
+  members: StaffChip[];
+  memberCount: number;
+  approvedCount: number;
+  signedUpCount: number;
+  volunteerCount: number;
+}
+
+export interface CampDirectoryResult {
+  departments: DepartmentGroup[];
+  unassigned: StaffChip[];
+  totalStaff: number;
+  generatedAt: Date;
+}
+
 export function toStaffChip(row: StaffChipRow): StaffChip {
   const positionTitles = row.positionAssignments
     .map((a) => a.position.name)

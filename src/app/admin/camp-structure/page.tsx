@@ -12,6 +12,7 @@ import { LeadershipTab } from "@/components/orgStructure/LeadershipTab";
 import { DirectoryTab } from "@/components/orgStructure/DirectoryTab";
 import { DepartmentsTab } from "@/components/orgStructure/DepartmentsTab";
 import { CampStructureSearch } from "@/components/orgStructure/CampStructureSearch";
+import { CampDirectory } from "@/components/orgStructure/CampDirectory";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
@@ -54,6 +55,13 @@ export default function CampStructurePage() {
               {
                 label: "Departments",
                 content: <DepartmentsTab organizationId={organizationId} campId={campId} />,
+              },
+              // TEMPORARY — the in-progress mobile redesign, wired here only
+              // so it can be eyeballed during the build. Removed in the
+              // Phase 7 page rewire once this replaces the tabs above.
+              {
+                label: "New Directory (WIP)",
+                content: <CampDirectory organizationId={organizationId} campId={campId} />,
               },
             ]}
           />
