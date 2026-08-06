@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Avatar } from "@/components/ui/Avatar";
 
 interface StaffCardProps {
   row: any;
@@ -29,12 +30,6 @@ function skillColor(skill: string) {
 
 export function StaffCard({ row, onClick, actions, type, selected, onSelect }: StaffCardProps) {
   const name = `${row.firstName} ${row.lastName}`.trim();
-  const initials = name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
 
   return (
     <div
@@ -55,14 +50,7 @@ export function StaffCard({ row, onClick, actions, type, selected, onSelect }: S
             className="mt-2 h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
           />
         )}
-        {row.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={row.photoUrl} alt={name} className="h-12 w-12 rounded-xl object-cover" />
-        ) : (
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-100 text-sm font-bold text-accent-700">
-            {initials || "?"}
-          </span>
-        )}
+        <Avatar name={name} photoUrl={row.photoUrl} size="lg" rounded="squircle" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
