@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Dialog } from "@/components/ui/Dialog";
 import { DocumentZoomModal } from "@/components/ui/DocumentZoomModal";
+import { PositionManager } from "./PositionManager";
 import {
   PhoneIcon,
   EnvelopeIcon,
@@ -26,11 +27,14 @@ interface DepartmentSidePanelProps {
   campId: string;
   departmentId: string;
   onClose: () => void;
+  /** Deep-link straight to a tab by its label, e.g. "Positions" from the
+   * Camp Directory's overflow menu. Matched case-insensitively; falls back
+   * to the first tab (Overview) when it doesn't match. */
+  initialTab?: string;
 }
 
-export function DepartmentSidePanel({ organizationId, campId, departmentId, onClose }: DepartmentSidePanelProps) {
+export function DepartmentSidePanel({ organizationId, campId, departmentId, onClose, initialTab }: DepartmentSidePanelProps) {
   const utils = api.useUtils();
-  const [activeTab, setActiveTab] = useState("overview");
 
   // Dialog & Form states
   const [announceOpen, setAnnounceOpen] = useState(false);
@@ -479,21 +483,25 @@ export function DepartmentSidePanel({ organizationId, campId, departmentId, onCl
     </div>
   );
 
+  const positionsTab = <PositionManager organizationId={organizationId} campId={campId} departmentId={departmentId} departmentName={dept.name} />;
+
+  const tabs = [
+    { label: "Overview", content: overviewTab },
+    { label: "People", content: peopleTab },
+    { label: "Positions", content: positionsTab },
+    { label: "Responsibilities", content: responsibilitiesTab },
+    { label: "Announcements", content: announcementsTab },
+    { label: "Documents", content: documentsTab },
+    { label: "Activity", content: activityTab },
+  ];
+  const defaultIndex = initialTab ? Math.max(0, tabs.findIndex((t) => t.label.toLowerCase() === initialTab.toLowerCase())) : 0;
+
   return (
     <>
       <DocumentZoomModal isOpen={!!zoomDoc} onClose={() => setZoomDoc(null)} {...(zoomDoc || { url: "", fileName: "" })} />
       <Drawer open onClose={onClose} title={dept.name} subtitle="Department Operations Center" width="lg">
         <div className="h-full flex flex-col pt-3">
-          <Tabs
-            tabs={[
-              { label: "Overview", content: overviewTab },
-              { label: "People", content: peopleTab },
-              { label: "Responsibilities", content: responsibilitiesTab },
-              { label: "Announcements", content: announcementsTab },
-              { label: "Documents", content: documentsTab },
-              { label: "Activity", content: activityTab },
-            ]}
-          />
+          <Tabs tabs={tabs} defaultIndex={defaultIndex} />
         </div>
       </Drawer>
     </>

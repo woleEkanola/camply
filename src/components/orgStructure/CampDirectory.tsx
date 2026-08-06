@@ -296,7 +296,13 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
       </Dialog>
 
       {sidePanelDeptId && (
-        <DepartmentSidePanel organizationId={organizationId} campId={campId} departmentId={sidePanelDeptId} onClose={() => setSidePanelDeptId(null)} />
+        <DepartmentSidePanel
+          organizationId={organizationId}
+          campId={campId}
+          departmentId={sidePanelDeptId}
+          initialTab="Positions"
+          onClose={() => setSidePanelDeptId(null)}
+        />
       )}
 
       <StaffProfileSheet
