@@ -9,5 +9,6 @@ import "./reports";
 import "./configBundle";
 import "./staff";
 import "./staffIdCards";
+import "./leaderboardScores";
 
 export {};

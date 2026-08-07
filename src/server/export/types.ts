@@ -17,6 +17,7 @@ export const EXPORT_KINDS = [
   "REPORT_OPERATIONS",
   "CONFIG_BUNDLE",
   "TEMPLATE",
+  "LEADERBOARD_SCORES",
 ] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];
 

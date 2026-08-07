@@ -81,7 +81,9 @@ export async function rebuildRanks(tx: Tx, campId: string, subjectType: StatSubj
  * (ScoreEvent) always wins; this is what heals any drift from the
  * at-most-once scan-scoring hook (see Phase 2).
  */
-export async function rebuildLeaderboard(tx: Tx, campId: string, timezone = "Africa/Lagos"): Promise<void> {
+export type PerfectAttendanceAward = { tribeId: string; achievementName: string };
+
+export async function rebuildLeaderboard(tx: Tx, campId: string, timezone = "Africa/Lagos"): Promise<{ perfectAttendanceAwards: PerfectAttendanceAward[] }> {
   const subjectColumns: Array<{ column: "tribeId" | "registrationId" | "staffProfileId" | "campusId"; subjectType: StatSubject["subjectType"] }> = [
     { column: "tribeId", subjectType: "TRIBE" },
     { column: "registrationId", subjectType: "CAMPER" },
@@ -120,6 +122,56 @@ export async function rebuildLeaderboard(tx: Tx, campId: string, timezone = "Afr
   }
 
   await computeDerivedStats(tx, campId, timezone);
+  const perfectAttendanceAwards = await awardEligiblePerfectAttendance(tx, campId);
+  return { perfectAttendanceAwards };
+}
+
+// A camp with only one or two sessions so far makes 100% attendance
+// trivial; require a few sessions to have actually happened before it
+// means anything.
+const PERFECT_ATTENDANCE_MIN_SESSIONS = 3;
+
+/**
+ * After computeDerivedStats has attendancePct settled, awards the
+ * already-seeded "Perfect Attendance" achievement (TRIBE only, matching
+ * its AchievementDefinition.subjectType) to any tribe at 100% attendance
+ * with at least PERFECT_ATTENDANCE_MIN_SESSIONS sessions so far. Runs
+ * inside every full rebuild (nightly reconcile, admin "Rebuild Now",
+ * reset/import), not just the nightly cron — safe to call repeatedly since
+ * AchievementAward's existing `@@unique([definitionId, subjectKey])`
+ * dedupes re-awards for free (caught here as a P2002, not re-thrown).
+ * Notifications are deliberately NOT fired from in here — this runs inside
+ * the same transaction as the write that triggered it, so the caller fires
+ * `notifyAchievementAwarded` for each returned award only after the
+ * transaction commits (same discipline as `rebuildRanks`'s RankTransition
+ * return above).
+ */
+async function awardEligiblePerfectAttendance(tx: Tx, campId: string): Promise<PerfectAttendanceAward[]> {
+  const definition = await tx.achievementDefinition.findFirst({
+    where: { key: "PERFECT_ATTENDANCE", OR: [{ campId }, { campId: null }] },
+  });
+  if (!definition) return [];
+
+  const totalSessions = await tx.scoredSession.count({ where: { campId, date: { lte: new Date() } } });
+  if (totalSessions < PERFECT_ATTENDANCE_MIN_SESSIONS) return [];
+
+  const eligible = await tx.leaderboardStat.findMany({
+    where: { campId, subjectType: "TRIBE", day: null, attendancePct: 100 },
+    select: { subjectId: true },
+  });
+
+  const awarded: PerfectAttendanceAward[] = [];
+  for (const { subjectId: tribeId } of eligible) {
+    try {
+      await tx.achievementAward.create({
+        data: { definitionId: definition.id, campId, subjectKey: `T:${tribeId}` },
+      });
+      awarded.push({ tribeId, achievementName: definition.name });
+    } catch (err: any) {
+      if (err?.code !== "P2002") throw err;
+    }
+  }
+  return awarded;
 }
 
 /**

@@ -6,7 +6,7 @@ import { assertSameOrg, assertCanManageCamp } from "../trpc/scoping";
 import { assertReportsAccess } from "./scan";
 import { recordScoreEvent } from "../../leaderboard/record";
 import { rebuildLeaderboard } from "../../leaderboard/aggregate";
-import { toPublicDto } from "../../leaderboard/publicDto";
+import { toPublicDto, toPublicAnnouncementDto } from "../../leaderboard/publicDto";
 import { notifyAchievementAwarded } from "../../leaderboard/notify";
 import { drainScoreQueue } from "../../leaderboard/queue";
 
@@ -988,8 +988,13 @@ export const leaderboardRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const camp = await ctx.prisma.camp.findUniqueOrThrow({ where: { id: input.campId } });
       await assertCanManageCamp(ctx, input.campId);
-      await ctx.prisma.$transaction(async (tx: any) => rebuildLeaderboard(tx, input.campId));
+      const { perfectAttendanceAwards } = await ctx.prisma.$transaction(async (tx: any) => rebuildLeaderboard(tx, input.campId));
       await writeAudit(ctx, camp, "LEADERBOARD_REBUILD", {});
+      // Fired after the transaction commits, never from inside it — same
+      // discipline as record.ts's rank-transition notifications.
+      for (const award of perfectAttendanceAwards) {
+        await notifyAchievementAwarded(input.campId, award.achievementName, "TRIBE", award.tribeId);
+      }
       return { ok: true };
     }),
 
@@ -1038,6 +1043,19 @@ export const leaderboardRouter = createTRPCRouter({
 
     const dto = await toPublicDto(settings.campId, camp.name);
     return { ...dto, refreshIntervalSeconds: settings.refreshIntervalSeconds };
+  }),
+
+  /** Same token-gating as publicBoard (disabled/missing -> NOT_FOUND, never
+   * FORBIDDEN, so an unauthenticated caller learns nothing about whether a
+   * token ever existed). Backs `/l/[token]/announce`. */
+  publicAnnouncements: publicProcedure.input(z.object({ token: z.string() })).query(async ({ ctx, input }) => {
+    const settings = await ctx.prisma.leaderboardSettings.findUnique({ where: { publicToken: input.token } });
+    if (!settings || !settings.publicEnabled) throw new TRPCError({ code: "NOT_FOUND" });
+
+    const camp = await ctx.prisma.camp.findUnique({ where: { id: settings.campId }, select: { name: true } });
+    if (!camp) throw new TRPCError({ code: "NOT_FOUND" });
+
+    return toPublicAnnouncementDto(settings.campId, camp.name);
   }),
 });
 

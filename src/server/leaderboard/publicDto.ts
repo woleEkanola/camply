@@ -135,3 +135,34 @@ export async function toPublicDto(campId: string, campName: string): Promise<Pub
     lastUpdated: lastComputed._max.computedAt?.toISOString() ?? null,
   };
 }
+
+/**
+ * The whitelist boundary for `/l/[token]/announce` — deliberately its own
+ * DTO with its own PII test (see publicAnnouncement.test.ts), the same
+ * discipline as `PublicLeaderboardDto`, because it's the same trust
+ * boundary (unauthenticated, token-only). Built by transforming
+ * `toPublicDto`'s already-whitelisted output rather than re-querying
+ * Prisma directly — every field here traces back through the one
+ * PII-reviewed funnel, not a second hand-written query surface.
+ */
+export interface PublicAnnouncementDto {
+  campName: string;
+  items: { id: string; icon: string; text: string }[];
+}
+
+export async function toPublicAnnouncementDto(campId: string, campName: string): Promise<PublicAnnouncementDto> {
+  const dto = await toPublicDto(campId, campName);
+  const items: PublicAnnouncementDto["items"] = [];
+
+  if (dto.championTribe) {
+    items.push({ id: "champion", icon: "🏆", text: `${dto.championTribe.name} leads with ${dto.championTribe.points} pts!` });
+  }
+  for (const [i, a] of dto.achievements.entries()) {
+    items.push({ id: `ach-${i}`, icon: "🎖️", text: `${a.subjectDisplayName} earned ${a.achievementName}!` });
+  }
+  for (const [i, f] of dto.feed.slice(0, 10).entries()) {
+    items.push({ id: `feed-${i}`, icon: f.points >= 0 ? "✨" : "⚠️", text: f.text });
+  }
+
+  return { campName: dto.campName, items };
+}

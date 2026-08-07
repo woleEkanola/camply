@@ -1,5 +1,7 @@
 import { prisma } from "../db";
 import { rebuildLeaderboard } from "./aggregate";
+import { notifyAchievementAwarded } from "./notify";
+import { awardTeacherOfTheDay } from "./dailyOps";
 
 /**
  * Nightly full reconcile — the healing half of the at-most-once
@@ -10,6 +12,12 @@ import { rebuildLeaderboard } from "./aggregate";
  * recomputing every camp's stats from ScoreEvent (the ledger, which always
  * wins) rather than trusting the incremental deltas. Runs once a day, not
  * on any read path.
+ *
+ * Also the once-a-day home for Teacher of the Day (dailyOps.ts) — unlike
+ * the Perfect Attendance auto-award (fired on every rebuild, including
+ * admin "Rebuild Now"), Teacher of the Day is deliberately only computed
+ * here, since "today's top teacher" only makes sense to settle once per
+ * day, not be recomputed every time an admin manually rebuilds.
  */
 export async function reconcileAllCamps() {
   const camps = await prisma.camp.findMany({
@@ -19,9 +27,11 @@ export async function reconcileAllCamps() {
 
   let reconciled = 0;
   for (const camp of camps) {
-    await prisma.$transaction(async (tx) => {
-      await rebuildLeaderboard(tx, camp.id);
-    });
+    const { perfectAttendanceAwards } = await prisma.$transaction(async (tx) => rebuildLeaderboard(tx, camp.id));
+    for (const award of perfectAttendanceAwards) {
+      await notifyAchievementAwarded(camp.id, award.achievementName, "TRIBE", award.tribeId);
+    }
+    await awardTeacherOfTheDay(camp.id);
     reconciled++;
   }
   return { reconciled };

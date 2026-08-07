@@ -107,7 +107,7 @@ export default function LeaderboardAdminPage() {
               {tabIndex === 3 && <BulkAwardAdmin campId={campId} />}
               {tabIndex === 4 && <AchievementsAdmin campId={campId} />}
               {tabIndex === 5 && <AuditLogAdmin campId={campId} />}
-              {tabIndex === 6 && <SettingsAdmin campId={campId} />}
+              {tabIndex === 6 && <SettingsAdmin campId={campId} organizationId={organizationId!} />}
             </div>
           </>
         )}

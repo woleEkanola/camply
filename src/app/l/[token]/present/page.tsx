@@ -1,10 +1,12 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/utils/trpc";
 import { useFlipList } from "./useFlipList";
 import { useCountUp } from "./useCountUp";
 import { Confetti } from "./Confetti";
+import { useDemoTribes } from "./useDemoTribes";
 
 function TribeRow({ tribe, rank, setRef }: { tribe: { name: string; color: string | null; points: number }; rank: number; setRef: (el: HTMLElement | null) => void }) {
   const animatedPoints = useCountUp(tribe.points);
@@ -27,7 +29,19 @@ function TribeRow({ tribe, rank, setRef }: { tribe: { name: string; color: strin
 
 export default function PresentationModePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
-  const { data } = api.leaderboard.publicBoard.useQuery({ token }, { refetchInterval: 15_000, retry: false });
+  const searchParams = useSearchParams();
+  // Chrome throttles rAF/timer-driven polling on backgrounded/automated
+  // tabs, which made the live FLIP reorder + confetti genuinely
+  // unverifiable through browser automation (see backlog.md's PR4
+  // verification gap). This doesn't touch real data — it's a pure
+  // client-side view transform layered on top of (or, with no real data
+  // yet, standing in for) the live query below, so one person on one real
+  // screen can watch the reorder/confetti fire on demand, permanently.
+  const demoMode = searchParams.get("demo") === "1";
+  const demoData = useDemoTribes(demoMode);
+
+  const { data: liveData } = api.leaderboard.publicBoard.useQuery({ token }, { refetchInterval: 15_000, retry: false, enabled: !demoMode });
+  const data = demoMode ? demoData : liveData;
 
   const orderedNames = (data?.topTribes ?? []).map((t) => t.name);
   const setNodeRef = useFlipList(orderedNames);

@@ -2,14 +2,15 @@ import { prisma } from "../db";
 
 /**
  * Mirrors registration/effects.ts's resilience pattern: logs and swallows,
- * never blocks the caller (rebuildRanks / achievement.award). Two of the
- * plan's four triggers are implemented — tribe enters Top 3, and any
- * achievement award. "Teacher of the Day" (needs a daily-window
- * computation nothing in this codebase does yet) and an automatic
- * "reaches Perfect Attendance" trigger (that achievement can already be
- * awarded manually via achievement.award, which does notify) are
- * deliberately not built — see backlog.md. The "Announcement screen"
- * channel from the plan is also not built; only IN_APP exists today.
+ * never blocks the caller (rebuildRanks / achievement.award / dailyOps).
+ * All four of the plan's original triggers now exist: tribe enters Top 3,
+ * any achievement award (manual or the automatic Perfect Attendance one —
+ * see aggregate.ts's `awardEligiblePerfectAttendance`), and Teacher of the
+ * Day (see dailyOps.ts, called from the nightly reconcile cron only). The
+ * "Announcement screen" channel from the plan is the `/l/[token]/announce`
+ * page (publicDto.ts's `toPublicAnnouncementDto`) — it polls the public
+ * board's already-recomputed state rather than being a fifth push-notify
+ * trigger here.
  */
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"] as const;
@@ -86,5 +87,27 @@ export async function notifyAchievementAwarded(campId: string, achievementName: 
     ]);
   } catch (error) {
     console.error("[notify] notifyAchievementAwarded failed:", error);
+  }
+}
+
+/** Called once per camp per day from the nightly reconcile — see
+ * dailyOps.ts's `awardTeacherOfTheDay`, which already handles the
+ * AuditLog-based dedupe before ever calling this. */
+export async function notifyTeacherOfTheDay(campId: string, staffProfileId: string, staffName: string, points: number) {
+  try {
+    const camp = await prisma.camp.findUnique({ where: { id: campId }, select: { organizationId: true } });
+    if (!camp) return;
+    const staff = await prisma.staffProfile.findUnique({ where: { id: staffProfileId }, select: { userId: true } });
+    const title = "Teacher of the Day!";
+    const body = `${staffName} is Teacher of the Day with ${points} pts earned today.`;
+    const link = "/leaderboard";
+    await Promise.all([
+      notifyOrgAdmins(camp.organizationId, title, body, link),
+      staff?.userId
+        ? prisma.notification.create({ data: { organizationId: camp.organizationId, userId: staff.userId, title, body, link, channel: "IN_APP" } })
+        : Promise.resolve(),
+    ]);
+  } catch (error) {
+    console.error("[notify] notifyTeacherOfTheDay failed:", error);
   }
 }

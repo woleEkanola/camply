@@ -9,8 +9,9 @@ import { Dialog } from "@/components/ui/Dialog";
 import { useToast } from "@/components/ui/Toast";
 import { SkeletonText } from "@/components/ui/Skeleton";
 import { ClipboardIcon } from "@heroicons/react/24/outline";
+import { ExportButton } from "@/components/export/ExportButton";
 
-export function SettingsAdmin({ campId }: { campId: string }) {
+export function SettingsAdmin({ campId, organizationId }: { campId: string; organizationId: string }) {
   const utils = api.useUtils();
   const toast = useToast();
   const { data: settings, isLoading } = api.leaderboard.settings.get.useQuery({ campId });
@@ -213,6 +214,21 @@ export function SettingsAdmin({ campId }: { campId: string }) {
             </h4>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{weightRow("camperMetricWeights", settings.camperMetricWeights as any)}</div>
           </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Export</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <p className="mb-3 text-sm text-txt-secondary">
+            Every score event recorded for this camp — subject, category, points, source, and reason. Import is not
+            supported yet; this is export-only.
+          </p>
+          <ExportButton kind="LEADERBOARD_SCORES" organizationId={organizationId} label="Leaderboard Scores" filters={{ campId }} size="sm">
+            Export Leaderboard Scores
+          </ExportButton>
         </CardBody>
       </Card>
 
