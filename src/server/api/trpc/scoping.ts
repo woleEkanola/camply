@@ -3,6 +3,32 @@ import { TRPCError } from "@trpc/server";
 const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
 /**
+ * Throws unless the caller is an org admin for the organization that owns
+ * `campId`. Extracted from three private, near-duplicate copies
+ * (`documentRequirement.ts`, `position.ts`, `tribe.ts`) — this is the
+ * canonical version. Fixes a real bug in `position.ts`'s copy: its condition
+ * was `!ADMIN_ROLES.includes(role) && org !== camp.org`, which only denies
+ * when *both* are true — so any authenticated non-admin user (TEACHER,
+ * VOLUNTEER, PARENT, CAMPUS_REPRESENTATIVE) whose `organizationId` happened
+ * to match the camp's org could manage that camp's positions. This version
+ * requires both an admin role AND matching org, via `assertOrgAdmin`.
+ *
+ * The leaderboard feature additionally wants a "Camp Head" grant via the
+ * existing `Position`/`PositionAssignment` models rather than a new role —
+ * deliberately not wired in yet, since nothing in the schema currently
+ * flags which `Position` rows carry camp-management authority (they're
+ * free-text names like "Camp Director"). Add that check here once a
+ * `Position.grantsManageCamp`-style flag (or equivalent) exists, rather than
+ * matching on position name.
+ */
+export async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
+  const camp = await ctx.prisma.camp.findUnique({ where: { id: campId } });
+  if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+  await assertOrgAdmin(ctx, camp.organizationId);
+  return camp;
+}
+
+/**
  * Throws unless `organizationId` is the caller's own org — the baseline check
  * for any procedure that takes `organizationId` as input but doesn't need
  * admin/campus-rep escalation (e.g. a plain authenticated read). No role

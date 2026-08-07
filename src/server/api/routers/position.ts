@@ -2,23 +2,13 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { syncStaffProfileFromPositions, syncPositionOccupantsAndDescendants } from "../../utils/hierarchySync";
-
-const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
+import { assertCanManageCamp } from "../trpc/scoping";
 
 function assertStaffAccess(ctx: { session: any }) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (currentUser.role === "PARENT") throw new TRPCError({ code: "FORBIDDEN" });
   return currentUser;
-}
-
-async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
-  const camp = await ctx.prisma.camp.findUnique({ where: { id: campId } });
-  if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
-  const currentUser = ctx.session?.user;
-  if (!ADMIN_ROLES.includes(currentUser.role) && currentUser.organizationId !== camp.organizationId) {
-    throw new TRPCError({ code: "FORBIDDEN" });
-  }
 }
 
 export const positionRouter = createTRPCRouter({

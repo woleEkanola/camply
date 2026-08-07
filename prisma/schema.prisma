@@ -87,57 +87,57 @@ enum BedStatus {
 }
 
 model User {
-  id               String         @id @default(cuid())
-  email            String         @unique
-  password         String
-  passwordSet      Boolean        @default(false)
-  emailVerified    DateTime?
-  emailVerifyToken String?
-  photoUrl         String?
-  role             UserRole
-  firstName        String?
-  lastName         String?
-  phone            String?
-  active           Boolean        @default(true)
-  organization     Organization?  @relation(fields: [organizationId], references: [id])
-  organizationId   String?
-  homeCampus       Campus?        @relation("UserCampus", fields: [homeCampusId], references: [id])
-  homeCampusId     String?
-  managedCampuses  Campus[]       @relation("CampusReps")
-  permissions      Permission[]
-  campers          Camper[] // User can have multiple camper profiles
-  staffProfiles    StaffProfile[]
-  reportsFromStaff StaffProfile[] @relation("StaffReportsToUser")
-  pushSubscriptions PushSubscription[]
-  scanEvents       ScanEvent[]
-  staffScanEventsPerformed StaffScanEvent[] @relation("StaffScanScannedBy")
-  deletedAt        DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id                       String             @id @default(cuid())
+  email                    String             @unique
+  password                 String
+  passwordSet              Boolean            @default(false)
+  emailVerified            DateTime?
+  emailVerifyToken         String?
+  photoUrl                 String?
+  role                     UserRole
+  firstName                String?
+  lastName                 String?
+  phone                    String?
+  active                   Boolean            @default(true)
+  organization             Organization?      @relation(fields: [organizationId], references: [id])
+  organizationId           String?
+  homeCampus               Campus?            @relation("UserCampus", fields: [homeCampusId], references: [id])
+  homeCampusId             String?
+  managedCampuses          Campus[]           @relation("CampusReps")
+  permissions              Permission[]
+  campers                  Camper[] // User can have multiple camper profiles
+  staffProfiles            StaffProfile[]
+  reportsFromStaff         StaffProfile[]     @relation("StaffReportsToUser")
+  pushSubscriptions        PushSubscription[]
+  scanEvents               ScanEvent[]
+  staffScanEventsPerformed StaffScanEvent[]   @relation("StaffScanScannedBy")
+  deletedAt                DateTime?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
   @@index([deletedAt])
 }
 
 model Organization {
-  id           String      @id @default(cuid())
-  name         String      @unique
-  slug         String?
-  users        User[]
-  campuses     Campus[]
-  formFields   FormField[] // Organization defines registration form fields (camper/teacher/volunteer)
-  campers      Camper[] // Organization has many camper profiles
-  camps        Camp[] // Organization has many camps
-  activeCampId String? // Reference to the active camp
-  activeCamp   Camp?       @relation("ActiveCamp", fields: [activeCampId], references: [id])
-  settings     Json? // Holds admin settings such as age range, cutoff date, etc.
+  id                       String                    @id @default(cuid())
+  name                     String                    @unique
+  slug                     String?
+  users                    User[]
+  campuses                 Campus[]
+  formFields               FormField[] // Organization defines registration form fields (camper/teacher/volunteer)
+  campers                  Camper[] // Organization has many camper profiles
+  camps                    Camp[] // Organization has many camps
+  activeCampId             String? // Reference to the active camp
+  activeCamp               Camp?                     @relation("ActiveCamp", fields: [activeCampId], references: [id])
+  settings                 Json? // Holds admin settings such as age range, cutoff date, etc.
   registrationDeclarations RegistrationDeclaration[]
   registrationConfig       RegistrationConfig?
   branding                 OrganizationBranding?
   emailCampaigns           EmailCampaign[]
   savedAudiences           SavedAudience[]
-  approvalWorkflow String  @default("SINGLE_STEP") // SINGLE_STEP | TWO_STEP
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  approvalWorkflow         String                    @default("SINGLE_STEP") // SINGLE_STEP | TWO_STEP
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
 }
 
 // Campus: permanent church branch/organization structure. Identity only -
@@ -160,13 +160,13 @@ model Campus {
   campusCode   String? // short code embedded in registration numbers
   displayOrder Int     @default(0) // order in dropdowns/lists
 
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId String
-  reps           User[]         @relation("CampusReps")
-  users          User[]         @relation("UserCampus")
-  campers        Camper[]
-  registrations  Registration[]
-  signupLinks    SignupLink[]
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId      String
+  reps                User[]               @relation("CampusReps")
+  users               User[]               @relation("UserCampus")
+  campers             Camper[]
+  registrations       Registration[]
+  signupLinks         SignupLink[]
   teacherCampusQuotas TeacherCampusQuota[]
 
   registrationCounters RegistrationCounter[]
@@ -372,11 +372,11 @@ model Camp {
   teacherCampusQuotas  TeacherCampusQuota[]
 
   // Tribe Allocation (PRD Part 4A)
-  tribeAllocationEnabled Boolean  @default(false)
-  tribeAllocationMode    String   @default("MANUAL") // MANUAL | AUTOMATIC | HYBRID
-  tribeAllocationRules   Json?    // [{ criterion, enabled }] — legacy flat format; mapped to v2 internally
-  targetTribeSize        Int?     // Optional override; otherwise computed from approved_registrations / active_tribes
-  tribeAllocationPresets Json?    // [{ name, description, rules }]
+  tribeAllocationEnabled Boolean              @default(false)
+  tribeAllocationMode    String               @default("MANUAL") // MANUAL | AUTOMATIC | HYBRID
+  tribeAllocationRules   Json? // [{ criterion, enabled }] — legacy flat format; mapped to v2 internally
+  targetTribeSize        Int? // Optional override; otherwise computed from approved_registrations / active_tribes
+  tribeAllocationPresets Json? // [{ name, description, rules }]
   tribes                 Tribe[]
   tribeAllocationLogs    TribeAllocationLog[]
 
@@ -405,6 +405,18 @@ model Camp {
   orgCode              String?
   remindersHtml        String?
 
+  // Additive: leaderboard back-relations. Every other leaderboard model's
+  // subject FK (tribeId/registrationId/staffProfileId/categoryId/ruleId/
+  // scoredSessionId) is a deliberate plain scalar with no Prisma relation, to
+  // avoid touching Tribe/Registration/StaffProfile for this — only Camp
+  // (the tenant boundary) gets real relations here.
+  scoreEvents            ScoreEvent[]
+  scoreCategories        ScoreCategory[]
+  scoreRules             ScoreRule[]
+  scoredSessions         ScoredSession[]
+  achievementDefinitions AchievementDefinition[]
+  leaderboardSettings    LeaderboardSettings?
+
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -418,18 +430,18 @@ model Camp {
 }
 
 model SignupLink {
-  id        String   @id @default(cuid())
-  token     String   @unique // The unique token for the URL
-  campus    Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
-  campusId  String
-  camp      Camp     @relation(fields: [campId], references: [id], onDelete: Cascade)
-  campId    String
-  active    Boolean  @default(true)
-  quota     Int      @default(0) // 0 = unlimited
-  quotaFullBehavior String @default("CLOSE") // CLOSE | WAITLIST
-  clicks    SignupLinkClick[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String            @id @default(cuid())
+  token             String            @unique // The unique token for the URL
+  campus            Campus            @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  campusId          String
+  camp              Camp              @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId            String
+  active            Boolean           @default(true)
+  quota             Int               @default(0) // 0 = unlimited
+  quotaFullBehavior String            @default("CLOSE") // CLOSE | WAITLIST
+  clicks            SignupLinkClick[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@unique([campusId, campId])
 }
@@ -437,13 +449,13 @@ model SignupLink {
 // Teacher recruitment quota per campus, per camp. Mirrors the philosophy of
 // SignupLink.quota but is scoped to teacher recruitment via StaffSignupLink.
 model TeacherCampusQuota {
-  id                String  @id @default(cuid())
+  id                String @id @default(cuid())
   campId            String
-  camp              Camp    @relation(fields: [campId], references: [id], onDelete: Cascade)
+  camp              Camp   @relation(fields: [campId], references: [id], onDelete: Cascade)
   campusId          String
-  campus            Campus  @relation(fields: [campusId], references: [id], onDelete: Cascade)
-  quota             Int     @default(0) // 0 = unlimited
-  quotaFullBehavior String  @default("CLOSE") // CLOSE | WAITLIST
+  campus            Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  quota             Int    @default(0) // 0 = unlimited
+  quotaFullBehavior String @default("CLOSE") // CLOSE | WAITLIST
 
   @@unique([campId, campusId])
   @@index([campId])
@@ -485,42 +497,42 @@ model Registration {
   published       Boolean            @default(false)
 
   // Registration Engine fields (PRD Part 4)
-  registrationNumber String?   @unique
-  qrToken            String?   @unique
-  submittedAt        DateTime?
-  approvedAt         DateTime?
-  rejectionReason    String?
-  correctionRequest  String?
-  reviewerId         String?
-  checkedInAt        DateTime?
-  checkedInById      String?
-  checkedOutAt       DateTime?
-  checkedOutById     String?
-  checkoutCollectorName String?
+  registrationNumber            String?   @unique
+  qrToken                       String?   @unique
+  submittedAt                   DateTime?
+  approvedAt                    DateTime?
+  rejectionReason               String?
+  correctionRequest             String?
+  reviewerId                    String?
+  checkedInAt                   DateTime?
+  checkedInById                 String?
+  checkedOutAt                  DateTime?
+  checkedOutById                String?
+  checkoutCollectorName         String?
   checkoutCollectorRelationship String?
-  checkoutDetails    Json?
-  internalNotes      Json? // [{authorId, text, at}]
-  communicationLog   Json? // {"ACCEPTANCE":"SENT"|"NOT_SENT","REJECTION":"SENT"|"NOT_SENT","CORRECTION":"SENT"|"NOT_SENT","WAITLIST":"SENT"|"NOT_SENT"}
-  fieldChangeLog     Json? // [{field, previousValue, newValue, changedAt, changedById}]
-  waitlistPosition   Int?
+  checkoutDetails               Json?
+  internalNotes                 Json? // [{authorId, text, at}]
+  communicationLog              Json? // {"ACCEPTANCE":"SENT"|"NOT_SENT","REJECTION":"SENT"|"NOT_SENT","CORRECTION":"SENT"|"NOT_SENT","WAITLIST":"SENT"|"NOT_SENT"}
+  fieldChangeLog                Json? // [{field, previousValue, newValue, changedAt, changedById}]
+  waitlistPosition              Int?
 
   // Tribe Allocation (PRD Part 4A)
-  tribe                 Tribe?    @relation(fields: [tribeId], references: [id])
+  tribe                 Tribe?               @relation(fields: [tribeId], references: [id])
   tribeId               String?
   tribeAssignedAt       DateTime?
-  tribeAssignmentMethod String?   // AUTOMATIC | MANUAL | HYBRID_OVERRIDE
-  isTribeLocked         Boolean   @default(false)
+  tribeAssignmentMethod String? // AUTOMATIC | MANUAL | HYBRID_OVERRIDE
+  isTribeLocked         Boolean              @default(false)
   tribeAllocationLogs   TribeAllocationLog[]
 
   // Tribe Recommendation (v3 Recommendation Engine)
-  suggestedTribe            Tribe?    @relation("SuggestedTribe", fields: [suggestedTribeId], references: [id])
-  suggestedTribeId          String?
-  tribeSuggestedAt          DateTime?
-  tribeRecommendationStatus String    @default("NONE") // NONE | SUGGESTED | ACCEPTED | MANUAL_OVERRIDE | ASSIGNED | LOCKED
-  tribeRecommendationReason Json?     // string[] checklist of explanations
-  tribeRecommendationScore  Float?    // quality score / soft score
-  tribeRecommendationBreakdown Json?  // Record<Criterion, number>
-  tribeOriginalSuggestedId  String?   // Tracks original recommendation when overridden
+  suggestedTribe               Tribe?    @relation("SuggestedTribe", fields: [suggestedTribeId], references: [id])
+  suggestedTribeId             String?
+  tribeSuggestedAt             DateTime?
+  tribeRecommendationStatus    String    @default("NONE") // NONE | SUGGESTED | ACCEPTED | MANUAL_OVERRIDE | ASSIGNED | LOCKED
+  tribeRecommendationReason    Json? // string[] checklist of explanations
+  tribeRecommendationScore     Float? // quality score / soft score
+  tribeRecommendationBreakdown Json? // Record<Criterion, number>
+  tribeOriginalSuggestedId     String? // Tracks original recommendation when overridden
 
   // Accommodation (Camp Structure module)
   room   Room?   @relation(fields: [roomId], references: [id])
@@ -554,33 +566,36 @@ model Registration {
   @@index([venueId, status])
   @@index([campId, status])
   @@index([deletedAt])
+  // Additive: every tribe leaderboard read joins Registration through
+  // [campId, tribeId] — was missing entirely.
+  @@index([campId, tribeId])
 }
 
 // ─── Registration Review Workflow ────────────────────────────────────────────
 
 model RegistrationReview {
-  id                 String       @id @default(cuid())
-  registrationId     String       @unique
-  registration       Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  registrationId String       @unique
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
   // Verification (two-step only)
-  assignedToId       String?      // userId of verifier
-  verificationStatus String       @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | COMPLETED
-  verifiedById       String?      // userId who completed verification
-  recommendation     String?      // APPROVE | REJECT | CORRECTION
-  reviewNotes        String?      // verifier's private notes
+  assignedToId       String? // userId of verifier
+  verificationStatus String  @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | COMPLETED
+  verifiedById       String? // userId who completed verification
+  recommendation     String? // APPROVE | REJECT | CORRECTION
+  reviewNotes        String? // verifier's private notes
 
   // Admin decision (populated on final status change)
-  adminDecision      String?      // APPROVE | REJECT | WAITLIST | CORRECTION | CANCEL | ARCHIVE
-  decidedById        String?
-  decidedAt          DateTime?
+  adminDecision String? // APPROVE | REJECT | WAITLIST | CORRECTION | CANCEL | ARCHIVE
+  decidedById   String?
+  decidedAt     DateTime?
 
   // Timestamps
-  assignedAt         DateTime?
-  verifiedAt         DateTime?
-  completedAt        DateTime?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  assignedAt  DateTime?
+  verifiedAt  DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model DocumentRequirement {
@@ -626,19 +641,19 @@ model Document {
 }
 
 model DocumentAction {
-  id              String   @id @default(cuid())
-  documentId      String
-  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  status          String   @default("REQUIRES_ACTION") // REQUIRES_ACTION | RESOLVED
-  reason          String
-  requestedById   String
-  requestedAt     DateTime @default(now())
-  resolvedAt      DateTime?
-  resolvedById    String?
-  resolutionType  String? // PARENT_UPLOAD | REP_UPLOAD | ADMIN_OVERRIDE
+  id               String    @id @default(cuid())
+  documentId       String
+  document         Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  status           String    @default("REQUIRES_ACTION") // REQUIRES_ACTION | RESOLVED
+  reason           String
+  requestedById    String
+  requestedAt      DateTime  @default(now())
+  resolvedAt       DateTime?
+  resolvedById     String?
+  resolutionType   String? // PARENT_UPLOAD | REP_UPLOAD | ADMIN_OVERRIDE
   replacementForId String? // links to the document this action replaced, for history
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([documentId])
   @@index([status])
@@ -656,8 +671,18 @@ model AuditLog {
   newValue       Json?
   createdAt      DateTime      @default(now())
 
+  // Additive, for the leaderboard's audit trail (award/undo/reset/settings
+  // changes) — reuses this table rather than a parallel one. Nullable so
+  // every existing writer keeps working unmodified.
+  device      String?
+  ipAddress   String?
+  reason      String?
+  subjectType String? // e.g. "TRIBE" | "REGISTRATION" | "STAFF_PROFILE" | "SCORE_CATEGORY" | ...
+  subjectId   String?
+
   @@index([registrationId])
   @@index([organizationId, createdAt])
+  @@index([subjectType, subjectId])
 }
 
 model Notification {
@@ -673,40 +698,44 @@ model Notification {
   readAt         DateTime?
   createdAt      DateTime      @default(now())
 
+  // Additive: lets leaderboard notifications ("Judah entered Top 3") deep-link
+  // into the app instead of being a dead-end toast.
+  link String?
+
   @@index([userId, readAt])
 }
 
 model Tribe {
-  id                 String              @id @default(cuid())
-  camp               Camp                @relation(fields: [campId], references: [id], onDelete: Cascade)
-  campId             String
-  name               String
-  code               String?             // Short code e.g. AGP, BER, ZOE
-  color              String?             // HEX colour e.g. #E53935
-  displayOrder       Int                 @default(0) // Controls sort order throughout the app
-  logoUrl            String?
-  bannerUrl          String?             // Banner image for tribe dashboard / digital pass
-  description        String?
-  meaning            String?             // Short meaning or theme e.g. "Unconditional Love"
-  motto              String?             // e.g. "Love Never Fails"
-  scripture          String?             // e.g. "John 13:34"
-  gender             String?             // MALE | FEMALE | MIXED
-  ageRange           String?             // e.g. "10-12" | "All Ages"
-  allocationStrategy String              @default("MANUAL") // MANUAL | AUTOMATIC | INVITE_ONLY
-  maxCapacity        Int?
-  isAllocationLocked Boolean             @default(false)
-  status             String              @default("ACTIVE") // ACTIVE | INACTIVE
-  registrations      Registration[]
-  suggestedRegistrations Registration[] @relation("SuggestedTribe")
-  allocationLogs     TribeAllocationLog[]
-  preferredByStaff   StaffProfile[]      @relation("PreferredTribe")
-  assignedStaff      StaffProfile[]      @relation("AssignedStaffTribe")
-  attendanceSessions AttendanceSession[]
-  points             Int                 @default(0)
-  pointsLog          TribePointsLog[]
-  deletedAt          DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  id                     String               @id @default(cuid())
+  camp                   Camp                 @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId                 String
+  name                   String
+  code                   String? // Short code e.g. AGP, BER, ZOE
+  color                  String? // HEX colour e.g. #E53935
+  displayOrder           Int                  @default(0) // Controls sort order throughout the app
+  logoUrl                String?
+  bannerUrl              String? // Banner image for tribe dashboard / digital pass
+  description            String?
+  meaning                String? // Short meaning or theme e.g. "Unconditional Love"
+  motto                  String? // e.g. "Love Never Fails"
+  scripture              String? // e.g. "John 13:34"
+  gender                 String? // MALE | FEMALE | MIXED
+  ageRange               String? // e.g. "10-12" | "All Ages"
+  allocationStrategy     String               @default("MANUAL") // MANUAL | AUTOMATIC | INVITE_ONLY
+  maxCapacity            Int?
+  isAllocationLocked     Boolean              @default(false)
+  status                 String               @default("ACTIVE") // ACTIVE | INACTIVE
+  registrations          Registration[]
+  suggestedRegistrations Registration[]       @relation("SuggestedTribe")
+  allocationLogs         TribeAllocationLog[]
+  preferredByStaff       StaffProfile[]       @relation("PreferredTribe")
+  assignedStaff          StaffProfile[]       @relation("AssignedStaffTribe")
+  attendanceSessions     AttendanceSession[]
+  points                 Int                  @default(0)
+  pointsLog              TribePointsLog[]
+  deletedAt              DateTime?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
 
   // Partial unique indexes (WHERE "deletedAt" IS NULL) — Tribe_campId_name_key
   // and Tribe_campId_code_key (the latter also requires "code" IS NOT NULL,
@@ -717,12 +746,266 @@ model Tribe {
   @@index([deletedAt])
 }
 
+// ─── Leaderboard & Scoring ───────────────────────────────────────────────────
+// New enum ships in its own migration before anything references it
+// (Postgres requires enum values committed-before-use — see the
+// otp_purpose_enum -> otp_purpose precedent).
+
+enum ScoreSource {
+  AUTO
+  MANUAL
+  SYSTEM
+}
+
+// The immutable ledger. Totals are never stored directly on this model —
+// LeaderboardStat is a derived, rebuildable cache; this table is the source
+// of truth. Every subject FK below (campusId/tribeId/registrationId/
+// staffProfileId/categoryId/ruleId/scoredSessionId) is a deliberate plain
+// scalar with no Prisma relation — this is a high-write ledger, not a graph
+// to traverse via `include`; callers query by the indexed columns below and
+// resolve names with a second lookup.
+model ScoreEvent {
+  id     String @id @default(cuid())
+  camp   Camp   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId String
+
+  campusId        String?
+  tribeId         String?
+  registrationId  String?
+  staffProfileId  String?
+  categoryId      String
+  ruleId          String?
+  scoredSessionId String?
+
+  points Int
+  reason String?
+  notes  String?
+  source ScoreSource
+
+  occurredAt DateTime @default(now())
+  // @db.Date, not DateTime — the leaderboard's own dayKey.ts computes this
+  // from occurredAt + camp timezone. Never write it from a raw JS Date
+  // without going through that helper (see scan.ts's dayRange/utcDayRange
+  // footgun, which this schema deliberately avoids repeating).
+  day        DateTime @db.Date
+
+  createdById String?
+
+  // Double-award guard. Postgres treats NULL as distinct from every other
+  // NULL, so this unique index is a no-op for the (majority of) rows that
+  // don't set it, and a hard guard for the ones that do.
+  idempotencyKey String? @unique
+
+  // Undo is always a new compensating ScoreEvent with negated points,
+  // pointing back at the original via this column. The original row is
+  // never mutated or deleted.
+  reversesEventId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([campId, day])
+  @@index([campId, tribeId, day])
+  @@index([campId, registrationId, day])
+  @@index([campId, staffProfileId, day])
+  @@index([campId, createdAt])
+  @@index([campId, categoryId, day])
+  @@index([reversesEventId])
+}
+
+model ScoreCategory {
+  id     String  @id @default(cuid())
+  camp   Camp?   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId String? // null = org-level template, cloned per camp at seed time
+
+  key           String
+  name          String
+  description   String?
+  icon          String?
+  color         String?
+  defaultPoints Int     @default(0)
+  kind          String  @default("BOTH") // AUTO | MANUAL | BOTH
+  isPenalty     Boolean @default(false)
+  enabled       Boolean @default(true)
+  sortOrder     Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campId, enabled])
+  @@index([campId, key])
+}
+
+// Typed columns for what's queryable/filterable; `tiers` is the one
+// deliberate escape hatch for the tier ladder (no DSL) — e.g.
+// [{maxMinutesLate:0,points:10},{maxMinutesLate:5,points:6},
+//  {maxMinutesLate:10,points:3},{maxMinutesLate:null,points:0}]
+model ScoreRule {
+  id         String @id @default(cuid())
+  camp       Camp   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId     String
+  categoryId String
+
+  trigger   String // SCAN | SESSION | MEAL | MANUAL
+  stationId String?
+  subject   String // REGISTRATION | STAFF_PROFILE | TRIBE
+  points    Int     @default(0)
+  tiers     Json?
+
+  // maxPerDay/maxPointsPerDay need DB state (today's count/sum for this
+  // subject), so they're deliberately NOT evaluated in the pure rules.ts
+  // evaluator — enforced atomically inside recordScoreEvent's transaction.
+  multiplier      Float @default(1)
+  maxPerDay       Int?
+  maxPointsPerDay Int?
+  minPoints       Int?
+  maxPoints       Int?
+
+  enabled       Boolean   @default(true)
+  priority      Int       @default(0)
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campId, enabled])
+  @@index([campId, trigger, stationId])
+}
+
+// Deliberately NOT merged with AttendanceSession — that is a teacher-marked
+// roster whose AttendanceRecord.recordedAt is "when the teacher pressed
+// save", useless for punctuality. AttendanceSession.scoredSessionId is a
+// one-way optional link the other direction.
+model ScoredSession {
+  id     String @id @default(cuid())
+  camp   Camp   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId String
+
+  name         String
+  date         DateTime  @db.Date
+  startsAt     DateTime
+  endsAt       DateTime?
+  graceMinutes Int       @default(0)
+  lateCutoff   DateTime?
+
+  stationId  String?
+  tribeId    String?
+  scope      String  @default("CAMP") // CAMP | TRIBE | CAMPUS
+  categoryId String
+  ruleId     String?
+  status     String  @default("SCHEDULED") // SCHEDULED | ACTIVE | CLOSED | CANCELLED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campId, date])
+  @@index([campId, status])
+}
+
+// The award carries a subjectKey ("T:<id>" / "C:<id>" / "S:<id>") rather
+// than three separate nullable FK columns — a nullable-column composite
+// unique would silently permit infinite duplicate awards across the null
+// combinations.
+model AchievementDefinition {
+  id     String  @id @default(cuid())
+  camp   Camp?   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId String? // null = org-level template
+
+  key         String
+  name        String
+  description String?
+  icon        String?
+  subjectType String // TRIBE | CAMPER | STAFF
+  criteria    Json?
+  points      Int?
+  enabled     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  awards AchievementAward[]
+
+  @@index([campId, enabled])
+}
+
+model AchievementAward {
+  id           String                @id @default(cuid())
+  definition   AchievementDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  definitionId String
+  campId       String
+
+  subjectKey String // "T:<tribeId>" | "C:<registrationId>" | "S:<staffProfileId>"
+
+  awardedAt   DateTime @default(now())
+  awardedById String?
+
+  @@unique([definitionId, subjectKey])
+  @@index([campId, awardedAt])
+}
+
+// The materialised read cache — leaderboard.overview reads only this table,
+// never ScoreEvent directly. Write-through from recordScoreEvent's
+// applyStatDelta, deliberately never invalidated; a nightly rebuildLeaderboard
+// full recompute corrects any drift. Two partial unique indexes (WHERE "day"
+// IS NULL for the TOTAL row / WHERE "day" IS NOT NULL for daily rows) are
+// added via raw SQL in a follow-up migration — a plain composite unique can't
+// express "one TOTAL row plus one row per day" since day is nullable.
+model LeaderboardStat {
+  id          String    @id @default(cuid())
+  campId      String
+  subjectType String // TRIBE | CAMPER | STAFF | CAMPUS
+  subjectId   String
+  day         DateTime? @db.Date // null = all-time TOTAL row
+
+  totalPoints      Int      @default(0)
+  rank             Int?
+  rankDelta        Int?
+  attendancePct    Float?
+  promptnessPct    Float?
+  currentStreak    Int      @default(0)
+  achievementCount Int      @default(0)
+  avgScoreToday    Float?
+  campersPresent   Int?
+  computedAt       DateTime @default(now())
+
+  @@index([campId, subjectType, day, totalPoints])
+  @@index([campId, subjectType, subjectId, day])
+}
+
+model LeaderboardSettings {
+  id     String @id @default(cuid())
+  camp   Camp   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId String @unique
+
+  publicEnabled          Boolean   @default(false)
+  // randomBytes(16).toString("hex") — the SignupLink precedent. Rotating
+  // this permanently kills the old public URL; disabling keeps the token
+  // but stops serving it. Missing/disabled -> NOT_FOUND, never FORBIDDEN.
+  publicToken            String?   @unique
+  refreshIntervalSeconds Int       @default(30)
+  showTribes             Boolean   @default(true)
+  showCampers            Boolean   @default(true)
+  showTeachers           Boolean   @default(true)
+  showCampuses           Boolean   @default(false)
+  showAchievements       Boolean   @default(true)
+  camperMetricWeights    Json?
+  teacherMetricWeights   Json?
+  timezone               String    @default("Africa/Lagos")
+  lastRebuildAt          DateTime?
+  // O(1) reset: archive the settings row's cutoff instead of deleting
+  // ScoreEvent history.
+  archivedAt             DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model ExportJob {
   id             String    @id @default(cuid())
   organizationId String
   userId         String
-  kind           String    // CAMPERS | CAMPERS_MEDICAL | ID_CARDS | ATTENDANCE_SHEET | REGISTRATIONS | STAFF | REPORT_OPERATIONS | CONFIG_BUNDLE | TEMPLATE
-  format         String    // XLSX | CSV | JSON | MD | PDF
+  kind           String // CAMPERS | CAMPERS_MEDICAL | ID_CARDS | ATTENDANCE_SHEET | REGISTRATIONS | STAFF | REPORT_OPERATIONS | CONFIG_BUNDLE | TEMPLATE
+  format         String // XLSX | CSV | JSON | MD | PDF
   label          String
   params         Json
   status         String    @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | CANCELLED
@@ -750,28 +1033,36 @@ model ExportJob {
 }
 
 model SideEffect {
-  id                    String   @id @default(cuid())
-  registrationId        String?
-  broadcastRecipientId  String?
-  campaignId            String?
-  campaign              EmailCampaign? @relation(fields: [campaignId], references: [id])
-  organizationId        String?
-  deliverySource        String?  // REGISTRATION_APPROVED | CAMPAIGN | OTP | WELCOME | STAFF_APPROVED | BROADCAST_SEND | ...
-  recipientEmail        String?  // for display in queue UI
-  recipientType         String?  // PARENT | TEACHER | VOLUNTEER | CAMPUS_REP | ADMIN
-  txId                  String?  // Resend/history log id for tracking
-  type                  String   // REGISTRATION_APPROVED | BROADCAST_SEND | CAMPAIGN_SEND | ...
-  status                String   @default("QUEUED") // QUEUED | DONE | FAILED | CANCELLED
-  attempts              Int      @default(0)
-  lastError             String?
-  runAfter              DateTime @default(now())
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                   String         @id @default(cuid())
+  registrationId       String?
+  broadcastRecipientId String?
+  campaignId           String?
+  campaign             EmailCampaign? @relation(fields: [campaignId], references: [id])
+  organizationId       String?
+  deliverySource       String? // REGISTRATION_APPROVED | CAMPAIGN | OTP | WELCOME | STAFF_APPROVED | BROADCAST_SEND | ...
+  recipientEmail       String? // for display in queue UI
+  recipientType        String? // PARENT | TEACHER | VOLUNTEER | CAMPUS_REP | ADMIN
+  txId                 String? // Resend/history log id for tracking
+  type                 String // REGISTRATION_APPROVED | BROADCAST_SEND | CAMPAIGN_SEND | ...
+  status               String         @default("QUEUED") // QUEUED | DONE | FAILED | CANCELLED
+  attempts             Int            @default(0)
+  lastError            String?
+  runAfter             DateTime       @default(now())
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  // Additive: carries structured data for outbox consumers that don't fit the
+  // existing string/id columns above — first user is the leaderboard's
+  // SCORE_* effects (scanEventId, stationId, campId, etc).
+  payload Json?
 
   @@index([status, runAfter])
   @@index([campaignId])
   @@index([organizationId, status])
   @@index([recipientEmail])
+  // Additive: supports drainScoreQueue's `type: {startsWith:"SCORE_"}` filter
+  // without a full scan of the QUEUED backlog.
+  @@index([type, status, runAfter])
 }
 
 model RegistrationCounter {
@@ -800,16 +1091,16 @@ enum StaffStatus {
 }
 
 model StaffSignupLink {
-  id             String    @id @default(cuid())
-  token          String    @unique
+  id             String                 @id @default(cuid())
+  token          String                 @unique
   type           StaffType
-  camp           Camp      @relation(fields: [campId], references: [id], onDelete: Cascade)
+  camp           Camp                   @relation(fields: [campId], references: [id], onDelete: Cascade)
   campId         String
   organizationId String
-  active         Boolean   @default(true)
+  active         Boolean                @default(true)
   clicks         StaffSignupLinkClick[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   @@unique([campId, type])
 }
@@ -918,8 +1209,8 @@ model StaffProfile {
   // Camp ID card / scan identity — nullable, lazily issued on approval (see
   // ensureStaffQrToken). "STF-" prefixed so the scan resolver can distinguish
   // a staff badge from a camper Registration.qrToken without ambiguity.
-  qrToken       String?   @unique
-  qrIssuedAt    DateTime?
+  qrToken         String?          @unique
+  qrIssuedAt      DateTime?
   staffScanEvents StaffScanEvent[]
 
   deletedAt DateTime?
@@ -982,6 +1273,18 @@ model AttendanceSession {
   records     AttendanceRecord[]
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
+
+  // Additive: one-way optional link to the leaderboard's own scheduled-session
+  // concept. AttendanceSession/AttendanceRecord.recordedAt is "when the
+  // teacher pressed save" — useless for punctuality — so ScoredSession is a
+  // deliberately separate model, not a merge. No back-relation to keep this
+  // model untouched otherwise.
+  scoredSessionId String?
+
+  // Additive: this model previously had zero indexes.
+  @@index([campId, date])
+  @@index([tribeId, date])
+  @@index([scoredSessionId])
 }
 
 model AttendanceRecord {
@@ -995,6 +1298,9 @@ model AttendanceRecord {
   recordedAt     DateTime          @default(now())
 
   @@unique([sessionId, registrationId])
+  // Additive: the unique index above leads with sessionId, wrong column for
+  // "all attendance records for this registration" lookups.
+  @@index([registrationId])
 }
 
 model IncidentReport {
@@ -1141,24 +1447,24 @@ model TribePointsLog {
 }
 
 model TribeAllocationLog {
-  id               String       @id @default(cuid())
-  registration     Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  registrationId   String
-  tribe            Tribe        @relation(fields: [tribeId], references: [id], onDelete: Cascade)
-  tribeId          String
-  camp             Camp         @relation(fields: [campId], references: [id], onDelete: Cascade)
-  campId           String
-  engineVersion    String
-  allocationMode   String
-  rulesetVersion   String
-  rulesetSnapshot  Json
-  scoreBreakdown   Json
-  reasons          Json
-  wasOverridden    Boolean      @default(false)
-  overriddenById   String?
-  overriddenAt     DateTime?
-  actorId          String?
-  createdAt        DateTime     @default(now())
+  id              String       @id @default(cuid())
+  registration    Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationId  String
+  tribe           Tribe        @relation(fields: [tribeId], references: [id], onDelete: Cascade)
+  tribeId         String
+  camp            Camp         @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId          String
+  engineVersion   String
+  allocationMode  String
+  rulesetVersion  String
+  rulesetSnapshot Json
+  scoreBreakdown  Json
+  reasons         Json
+  wasOverridden   Boolean      @default(false)
+  overriddenById  String?
+  overriddenAt    DateTime?
+  actorId         String?
+  createdAt       DateTime     @default(now())
 }
 
 model RegistrationDeclaration {
@@ -1187,10 +1493,10 @@ model RegistrationConfig {
 
 model Position {
   id               String               @id @default(cuid())
-  name             String               // e.g. "Camp Director", "Registration Head"
+  name             String // e.g. "Camp Director", "Registration Head"
   campId           String
   camp             Camp                 @relation(fields: [campId], references: [id], onDelete: Cascade)
-  departmentId     String?              // Nullable for top-level admin roles outside departments
+  departmentId     String? // Nullable for top-level admin roles outside departments
   department       Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   parentPositionId String?
   parentPosition   Position?            @relation("PositionHierarchy", fields: [parentPositionId], references: [id], onDelete: SetNull)
@@ -1257,7 +1563,7 @@ model DepartmentActivityLog {
   id           String     @id @default(cuid())
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  action       String     // STAFF_ASSIGNED, STAFF_REMOVED, HEAD_CHANGED, DEPT_RENAMED, DEPT_ARCHIVED
+  action       String // STAFF_ASSIGNED, STAFF_REMOVED, HEAD_CHANGED, DEPT_RENAMED, DEPT_ARCHIVED
   actorId      String
   details      Json?
   createdAt    DateTime   @default(now())
@@ -1268,19 +1574,19 @@ model DepartmentActivityLog {
 // ─── Communication Center ──────────────────────────────────────────────────
 
 model EmailEventConfig {
-  id             String         @id @default(cuid())
-  organizationId String
-  event          String         // REGISTRATION_APPROVED | REGISTRATION_REJECTED | REGISTRATION_SUBMITTED | CORRECTION_REQUESTED | REGISTRATION_WAITLISTED | STAFF_APPROVED | STAFF_REJECTED | OTP_EMAIL | WELCOME_EMAIL
-  enabled        Boolean        @default(true)
-  templateId     String?
-  template       EmailTemplate? @relation(fields: [templateId], references: [id])
-  channels       Json           @default("[\"EMAIL\", \"IN_APP\"]")
-  recipients     Json           @default("[\"PARENT\"]")
-  senderMode     String         @default("ORG_SLUG")
+  id                  String         @id @default(cuid())
+  organizationId      String
+  event               String // REGISTRATION_APPROVED | REGISTRATION_REJECTED | REGISTRATION_SUBMITTED | CORRECTION_REQUESTED | REGISTRATION_WAITLISTED | STAFF_APPROVED | STAFF_REJECTED | OTP_EMAIL | WELCOME_EMAIL
+  enabled             Boolean        @default(true)
+  templateId          String?
+  template            EmailTemplate? @relation(fields: [templateId], references: [id])
+  channels            Json           @default("[\"EMAIL\", \"IN_APP\"]")
+  recipients          Json           @default("[\"PARENT\"]")
+  senderMode          String         @default("ORG_SLUG")
   customFromLocalPart String?
-  replyTo        String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  replyTo             String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
   @@unique([organizationId, event])
   @@index([organizationId])
@@ -1289,11 +1595,11 @@ model EmailEventConfig {
 model EmailTemplate {
   id             String             @id @default(cuid())
   organizationId String
-  name           String             // "Registration Approved", "Welcome", etc.
+  name           String // "Registration Approved", "Welcome", etc.
   description    String?
-  subject        String             // "You're approved for {{camp_name}}!"
+  subject        String // "You're approved for {{camp_name}}!"
   previewText    String?
-  content        Json               // TipTap JSON
+  content        Json // TipTap JSON
   isDefault      Boolean            @default(false)
   active         Boolean            @default(true)
   includeIdCard  Boolean            @default(false) // opts this template into {{camp_id_card}} substitution
@@ -1323,79 +1629,79 @@ model PlatformBranding {
 }
 
 model OrganizationBranding {
-  id             String       @id @default(cuid())
-  organizationId String       @unique
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  logoUrl        String?
-  masterLogoUrl  String?      // Primary Brand Logo (Default for all tenant views)
-  emailLogoUrl   String?      // Optional Email Header override
-  idCardLogoUrl  String?      // Optional ID Card PDF override
-  primaryColor   String       @default("#E67E22")
-  accentColor    String       @default("#E67E22")
-  buttonColor    String       @default("#E67E22")
-  headerImageUrl String?
-  senderName     String?      // Display name for email sender (e.g. "Grace Community Church")
-  footerText     String?
-  supportEmail   String?
-  supportPhone   String?
-  websiteUrl     String?
-  facebookUrl    String?
-  instagramUrl   String?
-  address        String?
+  id                 String       @id @default(cuid())
+  organizationId     String       @unique
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  logoUrl            String?
+  masterLogoUrl      String? // Primary Brand Logo (Default for all tenant views)
+  emailLogoUrl       String? // Optional Email Header override
+  idCardLogoUrl      String? // Optional ID Card PDF override
+  primaryColor       String       @default("#E67E22")
+  accentColor        String       @default("#E67E22")
+  buttonColor        String       @default("#E67E22")
+  headerImageUrl     String?
+  senderName         String? // Display name for email sender (e.g. "Grace Community Church")
+  footerText         String?
+  supportEmail       String?
+  supportPhone       String?
+  websiteUrl         String?
+  facebookUrl        String?
+  instagramUrl       String?
+  address            String?
   // Camp Invitation certificate email fields (Phase 2 email redesign)
-  tagline             String?      // shown under the org name in the certificate header
-  supportTitle        String?      // e.g. "Need Help?" — falls back to a hardcoded default if unset
-  supportDescription  String?      // e.g. "We're here to help."
-  footerCopyright     String?      // e.g. "© 2026 The Covenant Nation. All rights reserved."
-  phone               String?      // general org phone, distinct from supportPhone
-  xUrl                String?
-  linkedinUrl         String?
-  nextSteps           Json?        // [{ icon, title, description }] — admin-editable "What's Next" list
+  tagline            String? // shown under the org name in the certificate header
+  supportTitle       String? // e.g. "Need Help?" — falls back to a hardcoded default if unset
+  supportDescription String? // e.g. "We're here to help."
+  footerCopyright    String? // e.g. "© 2026 The Covenant Nation. All rights reserved."
+  phone              String? // general org phone, distinct from supportPhone
+  xUrl               String?
+  linkedinUrl        String?
+  nextSteps          Json? // [{ icon, title, description }] — admin-editable "What's Next" list
   // Camp ID Card feature — org-level master switch (per-template opt-in lives on EmailTemplate.includeIdCard)
-  idCardEnabled  Boolean      @default(false)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  idCardEnabled      Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 }
 
 model Broadcast {
-  id             String                @id @default(cuid())
-  organizationId String
-  title          String
-  subject        String
-  body           Json                  // TipTap JSON
-  audience       String                // PARENTS | TEACHERS | VOLUNTEERS | ALL
-  campId         String?
-  campusId       String?
-  status         String                @default("DRAFT") // DRAFT | SENDING | COMPLETED | FAILED
-  senderMode     String                @default("ORG_SLUG")
+  id                  String               @id @default(cuid())
+  organizationId      String
+  title               String
+  subject             String
+  body                Json // TipTap JSON
+  audience            String // PARENTS | TEACHERS | VOLUNTEERS | ALL
+  campId              String?
+  campusId            String?
+  status              String               @default("DRAFT") // DRAFT | SENDING | COMPLETED | FAILED
+  senderMode          String               @default("ORG_SLUG")
   customFromLocalPart String?
-  replyTo        String?
-  createdById    String
-  sentAt         DateTime?
-  completedAt    DateTime?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  recipients     BroadcastRecipient[]
+  replyTo             String?
+  createdById         String
+  sentAt              DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  recipients          BroadcastRecipient[]
 
   @@index([organizationId, status])
 }
 
 model BroadcastRecipient {
-  id          String    @id @default(cuid())
-  broadcastId String
-  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
-  recipientId String    // userId
-  email       String
-  status      String    @default("QUEUED") // QUEUED | SENT | FAILED
+  id           String    @id @default(cuid())
+  broadcastId  String
+  broadcast    Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  recipientId  String // userId
+  email        String
+  status       String    @default("QUEUED") // QUEUED | SENT | FAILED
   sideEffectId String?
-  queuedAt    DateTime  @default(now())
-  sentAt      DateTime?
-  failedAt    DateTime?
-  error       String?
-  readAt      DateTime?
-  pinned      Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  queuedAt     DateTime  @default(now())
+  sentAt       DateTime?
+  failedAt     DateTime?
+  error        String?
+  readAt       DateTime?
+  pinned       Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([broadcastId, status])
   @@index([recipientId, readAt])
@@ -1405,42 +1711,42 @@ model BroadcastRecipient {
 // ─── Campaigns (replaces Broadcast) ──────────────────────────────────────────
 
 model EmailCampaign {
-  id               String          @id @default(cuid())
-  organizationId   String
-  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name             String
-  description      String?
-  subject          String
-  previewText      String?
-  templateId       String?
-  template         EmailTemplate?  @relation(fields: [templateId], references: [id])
-  body             Json            // TipTap JSON
-  status           String          @default("DRAFT") // DRAFT | SCHEDULED | QUEUED | SENDING | COMPLETED | PAUSED | CANCELLED | FAILED
-  scheduledFor     DateTime?
-  startedAt        DateTime?
-  completedAt      DateTime?
-  recipientCount   Int             @default(0)
-  audienceFilter   Json?           // SavedAudience filter definition (inline or reference)
-  savedAudienceId  String?
-  savedAudience    SavedAudience?  @relation(fields: [savedAudienceId], references: [id])
-  senderMode       String          @default("ORG_SLUG")
+  id                  String           @id @default(cuid())
+  organizationId      String
+  organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                String
+  description         String?
+  subject             String
+  previewText         String?
+  templateId          String?
+  template            EmailTemplate?   @relation(fields: [templateId], references: [id])
+  body                Json // TipTap JSON
+  status              String           @default("DRAFT") // DRAFT | SCHEDULED | QUEUED | SENDING | COMPLETED | PAUSED | CANCELLED | FAILED
+  scheduledFor        DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  recipientCount      Int              @default(0)
+  audienceFilter      Json? // SavedAudience filter definition (inline or reference)
+  savedAudienceId     String?
+  savedAudience       SavedAudience?   @relation(fields: [savedAudienceId], references: [id])
+  senderMode          String           @default("ORG_SLUG")
   customFromLocalPart String?
-  replyTo          String?
-  attachments      Json?           // [{ url, fileName, fileType, fileSize }]
-  createdById      String
-  deletedAt        DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  recipients       EmailRecipient[]
-  sideEffects      SideEffect[]
+  replyTo             String?
+  attachments         Json? // [{ url, fileName, fileType, fileSize }]
+  createdById         String
+  deletedAt           DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  recipients          EmailRecipient[]
+  sideEffects         SideEffect[]
   // Personalized certificate-style campaigns (Phase 2 email redesign). When
   // set, the sender resolves one recipient per APPROVED registration in
   // personalizeCampId (not resolveAudience()'s flat user list) and renders
   // via renderEmailWithEvent's event-assembler pipeline instead of the
   // legacy renderEmail() TipTap-only path. Unset = today's unchanged
   // broadcast behavior, fully backward compatible.
-  personalizeEvent String?
-  personalizeCampId String?
+  personalizeEvent    String?
+  personalizeCampId   String?
 
   @@index([organizationId, status])
   @@index([organizationId, createdAt])
@@ -1448,31 +1754,31 @@ model EmailCampaign {
 }
 
 model EmailRecipient {
-  id               String         @id @default(cuid())
-  campaignId       String?
-  campaign         EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  organizationId   String?
-  userId           String
-  registrationId   String?
-  email            String
-  recipientType    String         // PARENT | TEACHER | VOLUNTEER | CAMPUS_REP | ADMIN
-  deliveryStatus   String         @default("QUEUED") // QUEUED | SENT | DELIVERED | OPENED | CLICKED | BOUNCED | FAILED | CANCELLED
-  deliverySource   String?        // REGISTRATION_APPROVED | CAMPAIGN | OTP | WELCOME | STAFF_APPROVED | ...
-  subject          String?        // email subject line
-  queuedAt         DateTime       @default(now())
-  sentAt           DateTime?
-  deliveredAt      DateTime?
-  openedAt         DateTime?
-  clickedAt        DateTime?
-  bouncedAt        DateTime?
-  failedReason     String?
-  retryCount       Int            @default(0)
+  id                String         @id @default(cuid())
+  campaignId        String?
+  campaign          EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  organizationId    String?
+  userId            String
+  registrationId    String?
+  email             String
+  recipientType     String // PARENT | TEACHER | VOLUNTEER | CAMPUS_REP | ADMIN
+  deliveryStatus    String         @default("QUEUED") // QUEUED | SENT | DELIVERED | OPENED | CLICKED | BOUNCED | FAILED | CANCELLED
+  deliverySource    String? // REGISTRATION_APPROVED | CAMPAIGN | OTP | WELCOME | STAFF_APPROVED | ...
+  subject           String? // email subject line
+  queuedAt          DateTime       @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  openedAt          DateTime?
+  clickedAt         DateTime?
+  bouncedAt         DateTime?
+  failedReason      String?
+  retryCount        Int            @default(0)
   providerMessageId String?
-  sideEffectId     String?
-  readAt           DateTime?      // inbox read tracking
-  pinned           Boolean        @default(false) // inbox pin
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  sideEffectId      String?
+  readAt            DateTime? // inbox read tracking
+  pinned            Boolean        @default(false) // inbox pin
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([campaignId, deliveryStatus])
   @@index([organizationId, createdAt])
@@ -1489,7 +1795,7 @@ model SavedAudience {
   organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name             String
   description      String?
-  filterDefinition Json            // { recipientType, filters: { registrationStatus?, campId?, campusId?, ... } }
+  filterDefinition Json // { recipientType, filters: { registrationStatus?, campId?, campusId?, ... } }
   createdById      String
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -1499,14 +1805,14 @@ model SavedAudience {
 }
 
 model EmailAuditLog {
-  id               String   @id @default(cuid())
-  organizationId   String
-  userId           String?
-  action           String   // CAMPAIGN_SENT | CAMPAIGN_CANCELLED | RETRY_TRIGGERED | QUEUE_PAUSED | QUEUE_RESUMED | CAMPAIGN_DELETED
-  targetType       String?  // CAMPAIGN | QUEUE | RECIPIENT | TEMPLATE | EVENT_CONFIG
-  targetId         String?
-  metadata         Json?
-  createdAt        DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String // CAMPAIGN_SENT | CAMPAIGN_CANCELLED | RETRY_TRIGGERED | QUEUE_PAUSED | QUEUE_RESUMED | CAMPAIGN_DELETED
+  targetType     String? // CAMPAIGN | QUEUE | RECIPIENT | TEMPLATE | EVENT_CONFIG
+  targetId       String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
 
   @@index([organizationId, createdAt])
   @@index([targetType, targetId])
@@ -1518,15 +1824,15 @@ model ScanEvent {
   registrationId String
   campId         String?
   camp           Camp?        @relation(fields: [campId], references: [id], onDelete: Cascade)
-  station        String       // e.g. "Lekki Pickup Point", "Camp Arrival", "Breakfast", "Checkout", "Identity Lookup"
+  station        String // e.g. "Lekki Pickup Point", "Camp Arrival", "Breakfast", "Checkout", "Identity Lookup"
   timestamp      DateTime     @default(now())
   volunteer      User         @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
   volunteerId    String
   device         String?
   location       String?
-  result         String       // "SUCCESS" | "DUPLICATE" | "ERROR"
-  metadata       Json?        // Stores collector name, relationship, offline timestamp details, etc.
-  
+  result         String // "SUCCESS" | "DUPLICATE" | "ERROR"
+  metadata       Json? // Stores collector name, relationship, offline timestamp details, etc.
+
   @@index([registrationId])
   @@index([campId])
   @@index([timestamp])
@@ -1538,7 +1844,7 @@ model SignupLinkClick {
   id           String     @id @default(cuid())
   signupLink   SignupLink @relation(fields: [signupLinkId], references: [id], onDelete: Cascade)
   signupLinkId String
-  userId       String?    // null = anonymous; populated after the visitor logs in/registers
+  userId       String? // null = anonymous; populated after the visitor logs in/registers
   ipAddress    String?
   userAgent    String?
   clickedAt    DateTime   @default(now())
@@ -1587,8 +1893,8 @@ model WebPushLog {
   title          String
   message        String
   priority       String   @default("INFO") // INFO | SUCCESS | WARNING | CRITICAL
-  targetAudience String   // ALL | CAMPUS | STATION | ROLE
-  targetId       String?  // campusId | stationName | roleName
+  targetAudience String // ALL | CAMPUS | STATION | ROLE
+  targetId       String? // campusId | stationName | roleName
   actionUrl      String?
   sentById       String?
   successCount   Int      @default(0)
