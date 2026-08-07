@@ -62,6 +62,40 @@ services:
     sync: false
   - key: APP_URL
     sync: false
+# Drains the leaderboard's SCORE_* SideEffect outbox (see
+# src/server/leaderboard/queue.ts, src/app/api/cron/score/route.ts) — the
+# at-most-once half of automatic scan scoring. Runs every minute, same
+# cadence as exports-sweep; deliberately a separate queue/route so a burst of
+# QR scans can't starve email/PDF delivery, and vice versa.
+- type: cron
+  name: leaderboard-score-drain
+  runtime: node
+  plan: free
+  schedule: "* * * * *"
+  buildCommand: "true"
+  startCommand: curl -sf -X POST -H "x-cron-secret:$CRON_SECRET" "$APP_URL/api/cron/score"
+  envVars:
+  - key: CRON_SECRET
+    sync: false
+  - key: APP_URL
+    sync: false
+# Nightly full LeaderboardStat rebuild from ScoreEvent (see
+# src/server/leaderboard/reconcile.ts, src/app/api/cron/score-reconcile/route.ts)
+# — the healing half of at-most-once scan scoring. This is load-bearing, not
+# just a drift-corrector: it's the only thing that ever catches a SideEffect
+# insert lost to a mid-transaction crash. Runs once a day, off-peak.
+- type: cron
+  name: leaderboard-score-reconcile
+  runtime: node
+  plan: free
+  schedule: "30 2 * * *"
+  buildCommand: "true"
+  startCommand: curl -sf -X POST -H "x-cron-secret:$CRON_SECRET" "$APP_URL/api/cron/score-reconcile"
+  envVars:
+  - key: CRON_SECRET
+    sync: false
+  - key: APP_URL
+    sync: false
 # Uncomment the following to deploy this app as a static site on render
 # - type: web
 #   name: nextjs-static

@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { normalizeScannedQRToken } from "../../../lib/qr";
 import { classifyMedical } from "../../../lib/medical";
 import { isStaffQrToken } from "../../staff/idToken";
+import { enqueueScoreScan, enqueueScoreStaffScan } from "../../leaderboard/queue";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
@@ -514,7 +515,7 @@ export const scanRouter = createTRPCRouter({
         // Record meal distribution + SUCCESS scan event as one transaction,
         // matching the check-in path's fix — otherwise a failure between the
         // two leaves a served meal with no audit trail (or vice versa).
-        const [mealRecord] = await ctx.prisma.$transaction([
+        const [mealRecord, mealScanEvent] = await ctx.prisma.$transaction([
           ctx.prisma.mealDistribution.create({
             data: {
               campId,
@@ -538,6 +539,9 @@ export const scanRouter = createTRPCRouter({
             },
           }),
         ]);
+        // At-most-once, healed by the nightly reconcile — deliberately not
+        // inside the transaction above (see queue.ts's enqueueScoreScan doc).
+        await enqueueScoreScan({ scanEventId: mealScanEvent.id, stationId: input.stationId ?? null, campId });
 
         return {
           result: "SUCCESS" as const,
@@ -596,7 +600,7 @@ export const scanRouter = createTRPCRouter({
         // Perform checkout + scan event + audit log as one transaction —
         // previously unwrapped, so a failure partway through could leave
         // checkedOutAt set with no matching ScanEvent/AuditLog trail.
-        const [updatedReg] = await ctx.prisma.$transaction([
+        const [updatedReg, checkoutScanEvent] = await ctx.prisma.$transaction([
           ctx.prisma.registration.update({
             where: { id: registrationId },
             data: {
@@ -638,6 +642,7 @@ export const scanRouter = createTRPCRouter({
             },
           }),
         ]);
+        await enqueueScoreScan({ scanEventId: checkoutScanEvent.id, stationId: input.stationId ?? null, campId });
 
         return {
           result: "SUCCESS" as const,
@@ -654,7 +659,7 @@ export const scanRouter = createTRPCRouter({
         : ["identity lookup", "emergency lookup"].includes(stationLower);
       if (isLookup) {
         // Just record audit event, no modifications
-        await ctx.prisma.scanEvent.create({
+        const lookupScanEvent = await ctx.prisma.scanEvent.create({
           data: {
             registrationId,
             campId,
@@ -666,6 +671,7 @@ export const scanRouter = createTRPCRouter({
             result: "SUCCESS",
           },
         });
+        await enqueueScoreScan({ scanEventId: lookupScanEvent.id, stationId: input.stationId ?? null, campId });
 
         return {
           result: "SUCCESS" as const,
@@ -721,7 +727,7 @@ export const scanRouter = createTRPCRouter({
           };
         }
 
-        await ctx.prisma.scanEvent.create({
+        const collectibleScanEvent = await ctx.prisma.scanEvent.create({
           data: {
             registrationId,
             campId,
@@ -734,6 +740,7 @@ export const scanRouter = createTRPCRouter({
             metadata: { stationId: "COLLECTIBLE" },
           },
         });
+        await enqueueScoreScan({ scanEventId: collectibleScanEvent.id, stationId: input.stationId ?? null, campId });
 
         return {
           result: "SUCCESS" as const,
@@ -798,7 +805,7 @@ export const scanRouter = createTRPCRouter({
       // day even though status never actually advanced.
       let updatedReg = registration;
       if (registration.status !== "CHECKED_IN") {
-        const [, newReg] = await ctx.prisma.$transaction([
+        const [arrivalScanEvent, newReg] = await ctx.prisma.$transaction([
           ctx.prisma.scanEvent.create({
             data: {
               registrationId,
@@ -833,8 +840,9 @@ export const scanRouter = createTRPCRouter({
           }),
         ]);
         updatedReg = newReg;
+        await enqueueScoreScan({ scanEventId: arrivalScanEvent.id, stationId: input.stationId ?? null, campId });
       } else {
-        await ctx.prisma.scanEvent.create({
+        const arrivalScanEvent = await ctx.prisma.scanEvent.create({
           data: {
             registrationId,
             campId,
@@ -847,6 +855,7 @@ export const scanRouter = createTRPCRouter({
             metadata: arrivalStationIdTag,
           },
         });
+        await enqueueScoreScan({ scanEventId: arrivalScanEvent.id, stationId: input.stationId ?? null, campId });
       }
 
       return {
@@ -1185,7 +1194,7 @@ export const scanRouter = createTRPCRouter({
               },
             });
 
-            await ctx.prisma.scanEvent.create({
+            const offlineMealScanEvent = await ctx.prisma.scanEvent.create({
               data: {
                 registrationId: reg.id,
                 campId,
@@ -1198,6 +1207,7 @@ export const scanRouter = createTRPCRouter({
                 metadata: { offlineSync: true },
               },
             });
+            await enqueueScoreScan({ scanEventId: offlineMealScanEvent.id, stationId: scan.stationId ?? null, campId });
 
             syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "SUCCESS" });
           }
@@ -1242,7 +1252,7 @@ export const scanRouter = createTRPCRouter({
               },
             });
 
-            await ctx.prisma.scanEvent.create({
+            const offlineCheckoutScanEvent = await ctx.prisma.scanEvent.create({
               data: {
                 registrationId: reg.id,
                 campId,
@@ -1259,6 +1269,7 @@ export const scanRouter = createTRPCRouter({
                 },
               },
             });
+            await enqueueScoreScan({ scanEventId: offlineCheckoutScanEvent.id, stationId: scan.stationId ?? null, campId });
 
             syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "SUCCESS" });
           }
@@ -1301,7 +1312,7 @@ export const scanRouter = createTRPCRouter({
               continue;
             }
 
-            await ctx.prisma.scanEvent.create({
+            const offlineCollectibleScanEvent = await ctx.prisma.scanEvent.create({
               data: {
                 registrationId: reg.id,
                 campId,
@@ -1314,6 +1325,7 @@ export const scanRouter = createTRPCRouter({
                 metadata: { offlineSync: true, stationId: "COLLECTIBLE" },
               },
             });
+            await enqueueScoreScan({ scanEventId: offlineCollectibleScanEvent.id, stationId: scan.stationId ?? null, campId });
 
             syncResults.push({ timestamp: scan.timestamp, qrToken: scan.qrToken, status: "SUCCESS" });
           }
@@ -1351,7 +1363,7 @@ export const scanRouter = createTRPCRouter({
               continue;
             }
 
-            await ctx.prisma.scanEvent.create({
+            const offlineCheckInScanEvent = await ctx.prisma.scanEvent.create({
               data: {
                 registrationId: reg.id,
                 campId,
@@ -1364,6 +1376,7 @@ export const scanRouter = createTRPCRouter({
                 metadata: { offlineSync: true },
               },
             });
+            await enqueueScoreScan({ scanEventId: offlineCheckInScanEvent.id, stationId: scan.stationId ?? null, campId });
 
             if (reg.status !== "CHECKED_IN") {
               await ctx.prisma.registration.update({
@@ -1520,7 +1533,7 @@ export const scanRouter = createTRPCRouter({
       }
 
       if (input.stationId === "STAFF_LOOKUP") {
-        await ctx.prisma.staffScanEvent.create({
+        const lookupStaffScanEvent = await ctx.prisma.staffScanEvent.create({
           data: {
             staffProfileId: profile.id,
             campId,
@@ -1532,6 +1545,9 @@ export const scanRouter = createTRPCRouter({
             result: "SUCCESS",
           },
         });
+        if (campId) {
+          await enqueueScoreStaffScan({ staffScanEventId: lookupStaffScanEvent.id, stationId: input.stationId, campId });
+        }
         return { result: "SUCCESS" as const, actionPerformed: "Identity Resolved", profile };
       }
 
@@ -1566,7 +1582,7 @@ export const scanRouter = createTRPCRouter({
         };
       }
 
-      await ctx.prisma.staffScanEvent.create({
+      const staffScanEvent = await ctx.prisma.staffScanEvent.create({
         data: {
           staffProfileId: profile.id,
           campId,
@@ -1578,6 +1594,9 @@ export const scanRouter = createTRPCRouter({
           result: "SUCCESS",
         },
       });
+      if (campId) {
+        await enqueueScoreStaffScan({ staffScanEventId: staffScanEvent.id, stationId: input.stationId, campId });
+      }
 
       return {
         result: "SUCCESS" as const,

@@ -434,7 +434,10 @@ export async function sweepPendingSideEffects(limit = 25) {
   }
 
   const due = await prisma.sideEffect.findMany({
-    where: { status: "QUEUED", runAfter: { lte: new Date() } },
+    // Excludes SCORE_* — those are drained separately by drainScoreQueue
+    // (src/server/leaderboard/queue.ts), so a burst of QR scans can't starve
+    // email/PDF delivery by filling this queue.
+    where: { status: "QUEUED", runAfter: { lte: new Date() }, type: { not: { startsWith: "SCORE_" } } },
     take: limit,
     orderBy: { runAfter: "asc" },
   });
