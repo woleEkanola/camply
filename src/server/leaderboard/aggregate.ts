@@ -72,7 +72,7 @@ export async function rebuildRanks(tx: Tx, campId: string, subjectType: StatSubj
  * (ScoreEvent) always wins; this is what heals any drift from the
  * at-most-once scan-scoring hook (see Phase 2).
  */
-export async function rebuildLeaderboard(tx: Tx, campId: string): Promise<void> {
+export async function rebuildLeaderboard(tx: Tx, campId: string, timezone = "Africa/Lagos"): Promise<void> {
   const subjectColumns: Array<{ column: "tribeId" | "registrationId" | "staffProfileId" | "campusId"; subjectType: StatSubject["subjectType"] }> = [
     { column: "tribeId", subjectType: "TRIBE" },
     { column: "registrationId", subjectType: "CAMPER" },
@@ -82,6 +82,16 @@ export async function rebuildLeaderboard(tx: Tx, campId: string): Promise<void> 
 
   await tx.leaderboardStat.deleteMany({ where: { campId } });
 
+  // Every Tribe gets a TOTAL row even with zero ScoreEvents — campersPresent
+  // (and the Tribes tab card generally) needs somewhere to attach a value
+  // regardless of scoring activity. Campers/staff/campuses only get a row
+  // once they've actually scored, which is fine since nothing reads their
+  // stat row before that.
+  const tribes = await tx.tribe.findMany({ where: { campId, deletedAt: null }, select: { id: true } });
+  for (const tribe of tribes) {
+    await applyStatDelta(tx, campId, { subjectType: "TRIBE", subjectId: tribe.id }, campDayKey(new Date(), timezone), 0);
+  }
+
   for (const { column, subjectType } of subjectColumns) {
     const totals: Array<{ subjectId: string; points: bigint }> = await tx.$queryRawUnsafe(
       `SELECT "${column}" AS "subjectId", SUM("points") AS "points" FROM "ScoreEvent"
@@ -89,7 +99,7 @@ export async function rebuildLeaderboard(tx: Tx, campId: string): Promise<void> 
       campId
     );
     for (const row of totals) {
-      await applyStatDelta(tx, campId, { subjectType, subjectId: row.subjectId }, campDayKey(new Date(), "UTC"), 0);
+      await applyStatDelta(tx, campId, { subjectType, subjectId: row.subjectId }, campDayKey(new Date(), timezone), 0);
       // applyStatDelta always deltas; set the TOTAL row to the true sum directly
       // since this is a full recompute, not an incremental step.
       await tx.$executeRaw`
@@ -99,4 +109,144 @@ export async function rebuildLeaderboard(tx: Tx, campId: string): Promise<void> 
     }
     await rebuildRanks(tx, campId, subjectType);
   }
+
+  await computeDerivedStats(tx, campId, timezone);
+}
+
+/**
+ * Fills in the columns beyond totalPoints/rank that Phase 4's cards need:
+ * currentStreak, attendancePct, promptnessPct, avgScoreToday, campersPresent
+ * (TRIBE only). Deliberately only run as part of a full rebuild (nightly
+ * reconcile, admin "Rebuild now", reset/import) — not on the incremental
+ * write path — because attendancePct/promptnessPct need "how many sessions
+ * have happened so far" as a denominator, which changes over time
+ * independent of any single ScoreEvent, so there is no correct incremental
+ * update to make from one event alone.
+ *
+ * promptnessPct is an approximation: a session-tied AUTO ScoreEvent with
+ * points > 0 counts as "on time" (within a rule's tiers, 0 pts is what a
+ * fully-late/after-cutoff arrival evaluates to — see rules.ts), zero or
+ * absent counts as not-prompt. This avoids needing to inspect each rule's
+ * tier boundaries to determine "was this arrival within the top tier".
+ */
+async function computeDerivedStats(tx: Tx, campId: string, timezone: string): Promise<void> {
+  const today = campDayKey(new Date(), timezone);
+  const todayDate = new Date(`${today}T00:00:00.000Z`);
+
+  const subjectColumns: Array<{ column: "tribeId" | "registrationId" | "staffProfileId"; subjectType: StatSubject["subjectType"] }> = [
+    { column: "tribeId", subjectType: "TRIBE" },
+    { column: "registrationId", subjectType: "CAMPER" },
+    { column: "staffProfileId", subjectType: "STAFF" },
+  ];
+
+  for (const { column, subjectType } of subjectColumns) {
+    // Attendance/promptness: sessions this subject has a session-tied
+    // ScoreEvent for, vs. every ScoredSession scheduled up to today for
+    // that subject's scope (camp-wide, or this specific tribe/subject).
+    const attendance: Array<{ subjectId: string; attended: bigint; prompt: bigint }> = await tx.$queryRawUnsafe(
+      `SELECT "${column}" AS "subjectId",
+              COUNT(DISTINCT "scoredSessionId") AS "attended",
+              COUNT(DISTINCT "scoredSessionId") FILTER (WHERE "points" > 0) AS "prompt"
+       FROM "ScoreEvent"
+       WHERE "campId" = $1 AND "${column}" IS NOT NULL AND "scoredSessionId" IS NOT NULL
+       GROUP BY "${column}"`,
+      campId
+    );
+
+    const totalSessions = await tx.scoredSession.count({ where: { campId, date: { lte: todayDate } } });
+
+    for (const row of attendance) {
+      if (totalSessions === 0) continue;
+      const attendancePct = (Number(row.attended) / totalSessions) * 100;
+      const promptnessPct = (Number(row.prompt) / totalSessions) * 100;
+      await tx.$executeRaw`
+        UPDATE "LeaderboardStat" SET "attendancePct" = ${attendancePct}, "promptnessPct" = ${promptnessPct}, "computedAt" = now()
+        WHERE "campId" = ${campId} AND "subjectType" = ${subjectType} AND "subjectId" = ${row.subjectId} AND "day" IS NULL
+      `;
+    }
+
+    // avgScoreToday: mean points per event recorded today for this subject.
+    // Comparing a @db.Date column against a raw-query Date parameter is a
+    // footgun: $queryRawUnsafe serializes the JS Date through the local
+    // system timezone (confirmed via a UTC+1 dev machine reproducing a
+    // silent zero-row match), not UTC, so an equality match against a
+    // midnight-UTC date column can miss by a day depending on the host's
+    // TZ. Pass the calendar-date string and cast explicitly instead.
+    const todayAvg: Array<{ subjectId: string; avg: number | null }> = await tx.$queryRawUnsafe(
+      `SELECT "${column}" AS "subjectId", AVG("points")::float AS "avg" FROM "ScoreEvent"
+       WHERE "campId" = $1 AND "${column}" IS NOT NULL AND "day" = $2::date GROUP BY "${column}"`,
+      campId,
+      today
+    );
+    for (const row of todayAvg) {
+      await tx.$executeRaw`
+        UPDATE "LeaderboardStat" SET "avgScoreToday" = ${row.avg}, "computedAt" = now()
+        WHERE "campId" = ${campId} AND "subjectType" = ${subjectType} AND "subjectId" = ${row.subjectId} AND "day" IS NULL
+      `;
+    }
+
+    // Streak: consecutive calendar days (ending today or the subject's most
+    // recent scored day) with net positive points.
+    const days: Array<{ subjectId: string; day: Date }> = await tx.$queryRawUnsafe(
+      `SELECT "${column}" AS "subjectId", "day" FROM "ScoreEvent"
+       WHERE "campId" = $1 AND "${column}" IS NOT NULL
+       GROUP BY "${column}", "day" HAVING SUM("points") > 0
+       ORDER BY "${column}", "day" DESC`,
+      campId
+    );
+    const daysBySubject = new Map<string, string[]>();
+    for (const row of days) {
+      // row.day is already a normalized @db.Date value (midnight UTC, no
+      // time-of-day component) — UTC here just re-reads that same
+      // calendar date, unlike `today`/`applyStatDelta` above which derive a
+      // day from a real timestamp and must use the camp's actual timezone.
+      const key = campDayKey(row.day, "UTC");
+      const list = daysBySubject.get(row.subjectId) ?? [];
+      list.push(key);
+      daysBySubject.set(row.subjectId, list);
+    }
+    for (const [subjectId, dayKeys] of daysBySubject) {
+      const streak = computeConsecutiveStreak(dayKeys);
+      await tx.$executeRaw`
+        UPDATE "LeaderboardStat" SET "currentStreak" = ${streak}, "computedAt" = now()
+        WHERE "campId" = ${campId} AND "subjectType" = ${subjectType} AND "subjectId" = ${subjectId} AND "day" IS NULL
+      `;
+    }
+  }
+
+  // campersPresent — TRIBE only, reuses Registration.status (the app's
+  // existing check-in/check-out state machine) rather than re-deriving
+  // "present" from scans, since that's already the source of truth
+  // elsewhere in the app: CHECKED_IN means arrived and not yet checked out.
+  const present: Array<{ tribeId: string; count: bigint }> = await tx.$queryRawUnsafe(
+    `SELECT "tribeId", COUNT(DISTINCT "id") AS "count" FROM "Registration"
+     WHERE "campId" = $1 AND "tribeId" IS NOT NULL AND "deletedAt" IS NULL AND "status" = 'CHECKED_IN'
+     GROUP BY "tribeId"`,
+    campId
+  );
+  for (const row of present) {
+    await tx.$executeRaw`
+      UPDATE "LeaderboardStat" SET "campersPresent" = ${Number(row.count)}, "computedAt" = now()
+      WHERE "campId" = ${campId} AND "subjectType" = 'TRIBE' AND "subjectId" = ${row.tribeId} AND "day" IS NULL
+    `;
+  }
+}
+
+/** `dayKeys` sorted descending (most recent first). Counts how many are
+ * consecutive calendar days starting from the first entry. */
+function computeConsecutiveStreak(dayKeysDesc: string[]): number {
+  if (dayKeysDesc.length === 0) return 0;
+  let streak = 1;
+  let cursor = new Date(`${dayKeysDesc[0]}T00:00:00.000Z`);
+  for (let i = 1; i < dayKeysDesc.length; i++) {
+    const expectedPrev = new Date(cursor.getTime() - 24 * 60 * 60_000);
+    const expectedKey = expectedPrev.toISOString().slice(0, 10);
+    if (dayKeysDesc[i] === expectedKey) {
+      streak++;
+      cursor = expectedPrev;
+    } else {
+      break;
+    }
+  }
+  return streak;
 }

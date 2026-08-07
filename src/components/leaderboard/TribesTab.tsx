@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Input, Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { TrophyIcon } from "@heroicons/react/24/outline";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { TrophyIcon, FireIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 
 function TribeCard({ tribe, stat, onAward }: { tribe: any; stat: any; onAward: () => void }) {
   return (
@@ -29,7 +30,7 @@ function TribeCard({ tribe, stat, onAward }: { tribe: any; stat: any; onAward: (
           </div>
         </div>
       </div>
-      <div className="space-y-2 p-4">
+      <div className="space-y-3 p-4">
         <div className="flex items-baseline justify-between">
           <span className="text-2xl font-extrabold text-txt-primary">{stat?.totalPoints ?? 0} pts</span>
           {stat?.rankDelta ? (
@@ -38,6 +39,39 @@ function TribeCard({ tribe, stat, onAward }: { tribe: any; stat: any; onAward: (
             </span>
           ) : null}
         </div>
+
+        {stat?.attendancePct != null && (
+          <div>
+            <div className="mb-1 flex justify-between text-xs text-txt-secondary">
+              <span>Attendance</span>
+              <span>{Math.round(stat.attendancePct)}%</span>
+            </div>
+            <ProgressBar percent={stat.attendancePct} tone="achievement" />
+          </div>
+        )}
+        {stat?.promptnessPct != null && (
+          <div>
+            <div className="mb-1 flex justify-between text-xs text-txt-secondary">
+              <span>Promptness</span>
+              <span>{Math.round(stat.promptnessPct)}%</span>
+            </div>
+            <ProgressBar percent={stat.promptnessPct} tone="achievement" />
+          </div>
+        )}
+
+        <div className="flex items-center gap-4 text-xs text-txt-secondary">
+          {!!stat?.currentStreak && (
+            <span className="flex items-center gap-1">
+              <FireIcon className="h-3.5 w-3.5 text-amber-500" /> {stat.currentStreak} day streak
+            </span>
+          )}
+          {stat?.campersPresent != null && (
+            <span className="flex items-center gap-1">
+              <UserGroupIcon className="h-3.5 w-3.5" /> {stat.campersPresent} present
+            </span>
+          )}
+        </div>
+
         {onAward && (
           <Button size="sm" variant="secondary" onClick={onAward} className="w-full">
             Award Points
