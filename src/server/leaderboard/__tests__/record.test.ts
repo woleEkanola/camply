@@ -99,4 +99,26 @@ describe("recordScoreEvent — LeaderboardStat", () => {
     });
     expect(total?.totalPoints).toBe(15);
   });
+
+  it("keeps rank fresh on every write, not only on the nightly reconcile", async () => {
+    const other = await prisma.tribe.create({ data: { campId, name: "Pistis" } });
+
+    await recordScoreEvent({ campId, tribeId, categoryId: "seed-cat-attendance", points: 10, source: "MANUAL" });
+    await recordScoreEvent({ campId, tribeId: other.id, categoryId: "seed-cat-attendance", points: 20, source: "MANUAL" });
+
+    const [judah, pistis] = await Promise.all([
+      prisma.leaderboardStat.findFirst({ where: { campId, subjectType: "TRIBE", subjectId: tribeId, day: null } }),
+      prisma.leaderboardStat.findFirst({ where: { campId, subjectType: "TRIBE", subjectId: other.id, day: null } }),
+    ]);
+    expect(pistis?.rank).toBe(1); // 20 pts, higher total
+    expect(judah?.rank).toBe(2); // 10 pts
+
+    // Judah overtakes — rank flips without any explicit rebuild call.
+    await recordScoreEvent({ campId, tribeId, categoryId: "seed-cat-sports", points: 15, source: "MANUAL" });
+    const judahAfter = await prisma.leaderboardStat.findFirst({
+      where: { campId, subjectType: "TRIBE", subjectId: tribeId, day: null },
+    });
+    expect(judahAfter?.rank).toBe(1);
+    expect(judahAfter?.rankDelta).toBe(1); // moved up one place
+  });
 });

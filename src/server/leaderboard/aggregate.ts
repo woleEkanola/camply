@@ -54,7 +54,7 @@ export async function rebuildRanks(tx: Tx, campId: string, subjectType: StatSubj
   const values = rows.map((r, i) => {
     const newRank = i + 1;
     const delta = r.rank == null ? null : r.rank - newRank; // positive = moved up
-    return Prisma.sql`(${r.id}::text, ${newRank}::int, ${delta})`;
+    return Prisma.sql`(${r.id}::text, ${newRank}::int, ${delta}::int)`;
   });
 
   await tx.$executeRaw`

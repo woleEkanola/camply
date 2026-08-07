@@ -33,6 +33,7 @@ import { positionRouter } from "./routers/position";
 import { communicationRouter } from "./routers/communication";
 
 import { scanRouter } from "./routers/scan";
+import { leaderboardRouter } from "./routers/leaderboard";
 import { searchRouter } from "./routers/search";
 import { pushRouter } from "./routers/push";
 import { platformBrandingRouter } from "./routers/platformBranding";
@@ -76,6 +77,7 @@ export const appRouter = createTRPCRouter({
   position: positionRouter,
   communication: communicationRouter,
   scan: scanRouter,
+  leaderboard: leaderboardRouter,
   search: searchRouter,
   push: pushRouter,
   platformBranding: platformBrandingRouter,

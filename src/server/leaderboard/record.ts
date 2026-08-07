@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import type { Prisma } from "@prisma/client";
 import { campDayKey } from "./dayKey";
-import { applyStatDelta, type StatSubject } from "./aggregate";
+import { applyStatDelta, rebuildRanks, type StatSubject } from "./aggregate";
 
 export type RecordScoreEventInput = {
   campId: string;
@@ -84,6 +84,17 @@ export async function recordScoreEvent(input: RecordScoreEventInput) {
 
     if (input.tribeId) {
       await tx.tribe.update({ where: { id: input.tribeId }, data: { points: { increment: input.points } } });
+    }
+
+    // Keep rank/rankDelta fresh on every write rather than only on the
+    // nightly reconcile — a full in-memory sort + one bulk UPDATE per
+    // touched subjectType, which is cheap at the scale this app targets
+    // (thousands of campers, not millions). If this ever becomes a
+    // bottleneck under burst scan load, move it out of the write path and
+    // rely on a much shorter reconcile interval instead.
+    const touchedTypes = new Set(subjects.map((s) => s.subjectType));
+    for (const subjectType of touchedTypes) {
+      await rebuildRanks(tx, input.campId, subjectType);
     }
 
     return event;
