@@ -54,6 +54,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "^3.10.1",
     "resend": "^6.17.1",
     "serwist": "^9.5.12",
     "superjson": "^2.2.2",

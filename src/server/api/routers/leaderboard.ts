@@ -238,6 +238,61 @@ export const leaderboardRouter = createTRPCRouter({
       return rows.map((r) => ({ day: r.day, total: Number(r.total) }));
     }),
 
+  /** Total points per category, camp-wide — the "category performance" bar
+   * chart. Joined against ScoreCategory for the display name (camp-scoped
+   * override if one exists, else the org-level template). */
+  categoryPerformance: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertLeaderboardRead(ctx, input.campId);
+      const rows: Array<{ categoryId: string; total: bigint }> = await ctx.prisma.$queryRaw`
+        SELECT "categoryId", SUM("points") AS total FROM "ScoreEvent"
+        WHERE "campId" = ${input.campId} GROUP BY "categoryId" ORDER BY total DESC
+      `;
+      const categories = await ctx.prisma.scoreCategory.findMany({ where: { id: { in: rows.map((r) => r.categoryId) } } });
+      const nameById = new Map(categories.map((c: any) => [c.id, { name: c.name, color: c.color }]));
+      return rows.map((r) => ({
+        categoryId: r.categoryId,
+        name: nameById.get(r.categoryId)?.name ?? r.categoryId,
+        color: nameById.get(r.categoryId)?.color ?? null,
+        total: Number(r.total),
+      }));
+    }),
+
+  /** "Most improved" — subjects whose points earned in the most recent
+   * scored day exceed their own trailing 7-day daily average by the
+   * largest margin. Uses LeaderboardStat's day rows (already maintained by
+   * applyStatDelta), not a fresh ScoreEvent scan. */
+  mostImproved: protectedProcedure
+    .input(z.object({ campId: z.string(), subjectType: subjectTypeSchema.default("TRIBE") }))
+    .query(async ({ ctx, input }) => {
+      await assertLeaderboardRead(ctx, input.campId);
+      const rows: Array<{ subjectId: string; latestDay: number; priorAvg: number | null }> = await ctx.prisma.$queryRaw`
+        WITH ranked AS (
+          SELECT "subjectId", "day", "totalPoints",
+                 ROW_NUMBER() OVER (PARTITION BY "subjectId" ORDER BY "day" DESC) AS rn
+          FROM "LeaderboardStat"
+          WHERE "campId" = ${input.campId} AND "subjectType" = ${input.subjectType} AND "day" IS NOT NULL
+        )
+        SELECT
+          latest."subjectId" AS "subjectId",
+          latest."totalPoints" AS "latestDay",
+          (SELECT AVG(r2."totalPoints") FROM ranked r2 WHERE r2."subjectId" = latest."subjectId" AND r2.rn BETWEEN 2 AND 8) AS "priorAvg"
+        FROM ranked latest
+        WHERE latest.rn = 1
+      `;
+      const top = rows
+        .map((r) => ({ subjectId: r.subjectId, latestDay: r.latestDay, priorAvg: r.priorAvg ?? 0, delta: r.latestDay - (r.priorAvg ?? 0) }))
+        .sort((a, b) => b.delta - a.delta)
+        .slice(0, 5);
+
+      const names =
+        input.subjectType === "TRIBE"
+          ? await namesFor(ctx.prisma, "tribe", top.map((r) => r.subjectId))
+          : {};
+      return top.map((r) => ({ ...r, name: names[r.subjectId] ?? r.subjectId }));
+    }),
+
   feed: protectedProcedure
     .input(z.object({ campId: z.string(), limit: z.number().min(1).max(100).default(30) }))
     .query(async ({ ctx, input }) => {
