@@ -5,13 +5,18 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton, SkeletonText } from "@/components/ui/Skeleton";
-import { TrophyIcon, FireIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import { TrophyIcon, FireIcon, SparklesIcon, ClockIcon } from "@heroicons/react/24/outline";
 
 const REFRESH_INTERVAL_MS = 30_000;
 
 export function OverviewTab({ campId, role }: { campId: string; role: string }) {
   const { data, isLoading } = api.leaderboard.overview.useQuery({ campId }, { refetchInterval: REFRESH_INTERVAL_MS });
   const { data: myChild } = api.leaderboard.myChild.useQuery({ campId }, { enabled: role === "PARENT" });
+  const firstChildTribeId = myChild?.[0]?.registration?.tribeId as string | undefined;
+  const { data: upcoming } = api.leaderboard.upcomingSessions.useQuery(
+    { campId, tribeId: firstChildTribeId },
+    { enabled: role === "PARENT" }
+  );
 
   if (isLoading) {
     return (
@@ -49,6 +54,22 @@ export function OverviewTab({ campId, role }: { campId: string; role: string }) 
               </CardBody>
             </Card>
           ))}
+          {upcoming && upcoming.length > 0 && (
+            <Card>
+              <CardBody className="space-y-2">
+                <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-txt-secondary">
+                  <ClockIcon className="h-3.5 w-3.5" /> Upcoming Opportunities Today
+                </span>
+                <ul className="space-y-1 text-sm text-txt-secondary">
+                  {upcoming.map((s: any) => (
+                    <li key={s.id}>
+                      <span className="font-medium text-txt-primary">{new Date(s.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> — {s.name}
+                    </li>
+                  ))}
+                </ul>
+              </CardBody>
+            </Card>
+          )}
         </div>
       )}
 

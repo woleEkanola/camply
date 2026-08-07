@@ -245,6 +245,14 @@
   50% { opacity: 1; }
 }
 
+/* Leaderboard presentation mode — a brief highlight flash when a subject's
+   rank changes, so a viewer's eye catches the movement even without
+   watching the FLIP reorder animation itself. */
+@keyframes rank-highlight {
+  0% { background-color: rgba(230, 126, 34, 0.35); }
+  100% { background-color: transparent; }
+}
+
 @utility animate-fade-in {
   animation: fade-in 220ms ease-out both;
 }
@@ -257,10 +265,15 @@
   animation: scan-guide-pulse 2s ease-in-out infinite;
 }
 
+@utility animate-rank-highlight {
+  animation: rank-highlight 1.2s ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
   .animate-slide-up-in,
-  .animate-scan-guide-pulse {
+  .animate-scan-guide-pulse,
+  .animate-rank-highlight {
     animation: none !important;
   }
 

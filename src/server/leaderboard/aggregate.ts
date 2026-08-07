@@ -43,13 +43,20 @@ export async function applyStatDelta(tx: Tx, campId: string, subject: StatSubjec
  * every event. Not called from the read path — only from the nightly
  * reconcile and admin rebuild/reset/import actions.
  */
-export async function rebuildRanks(tx: Tx, campId: string, subjectType: StatSubject["subjectType"]): Promise<void> {
+export type RankTransition = { subjectId: string; newRank: number; previousRank: number | null };
+
+/** Returns every subject whose rank just moved (for the caller to decide
+ * whether e.g. a "entered Top 3" notification is warranted) — deliberately
+ * NOT fired from in here, since this runs inside the same transaction as
+ * the write that triggered it; notifying from inside an uncommitted
+ * transaction risks acting on state that then rolls back. */
+export async function rebuildRanks(tx: Tx, campId: string, subjectType: StatSubject["subjectType"]): Promise<RankTransition[]> {
   const rows = await tx.leaderboardStat.findMany({
     where: { campId, subjectType, day: null },
     orderBy: { totalPoints: "desc" },
-    select: { id: true, rank: true },
+    select: { id: true, subjectId: true, rank: true },
   });
-  if (rows.length === 0) return;
+  if (rows.length === 0) return [];
 
   const values = rows.map((r, i) => {
     const newRank = i + 1;
@@ -63,6 +70,8 @@ export async function rebuildRanks(tx: Tx, campId: string, subjectType: StatSubj
     FROM (VALUES ${Prisma.join(values)}) AS v(id, rank, delta)
     WHERE ls."id" = v.id
   `;
+
+  return rows.map((r, i) => ({ subjectId: r.subjectId, newRank: i + 1, previousRank: r.rank }));
 }
 
 /**

@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { randomBytes } from "crypto";
 import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
 import { assertSameOrg, assertCanManageCamp } from "../trpc/scoping";
 import { assertReportsAccess } from "./scan";
 import { recordScoreEvent } from "../../leaderboard/record";
 import { rebuildLeaderboard } from "../../leaderboard/aggregate";
+import { toPublicDto } from "../../leaderboard/publicDto";
+import { notifyAchievementAwarded } from "../../leaderboard/notify";
 import { drainScoreQueue } from "../../leaderboard/queue";
 
 /**
@@ -339,6 +341,35 @@ export const leaderboardRouter = createTRPCRouter({
       return registrations.map((r: any) => ({ registration: r, stat: statByReg.get(r.id) ?? null }));
     }),
 
+  /** "Upcoming opportunities to earn points" for the parent view — the
+   * rest of today's scheduled sessions (camp-wide or scoped to the child's
+   * own tribe), not yet closed/cancelled. */
+  upcomingSessions: protectedProcedure
+    .input(z.object({ campId: z.string(), tribeId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const user = ctx.session?.user;
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const camp = await ctx.prisma.camp.findUniqueOrThrow({ where: { id: input.campId } });
+      assertSameOrg(ctx, camp.organizationId);
+
+      const now = new Date();
+      const endOfToday = new Date(now);
+      endOfToday.setHours(23, 59, 59, 999);
+
+      return ctx.prisma.scoredSession.findMany({
+        where: {
+          campId: input.campId,
+          startsAt: { gte: now, lte: endOfToday },
+          status: { in: ["SCHEDULED", "ACTIVE"] },
+          // input.tribeId undefined -> only camp-wide sessions match, never
+          // "every tribe's session" (a Prisma filter field set to
+          // `undefined` is dropped from the query, not matched-as-null).
+          OR: input.tribeId ? [{ scope: "CAMP" }, { scope: "TRIBE", tribeId: input.tribeId }] : [{ scope: "CAMP" }],
+        },
+        orderBy: { startsAt: "asc" },
+      });
+    }),
+
   // ─── Mutations ─────────────────────────────────────────────────────────
 
   award: protectedProcedure
@@ -623,8 +654,16 @@ export const leaderboardRouter = createTRPCRouter({
         try {
           const award = await ctx.prisma.achievementAward.create({
             data: { definitionId: input.definitionId, campId: input.campId, subjectKey, awardedById: ctx.session!.user.id },
+            include: { definition: true },
           });
           await writeAudit(ctx, camp, "LEADERBOARD_ACHIEVEMENT_AWARD", { subjectType: input.subjectType, subjectId: input.subjectId, newValue: { definitionId: input.definitionId } });
+          // AchievementDefinition.subjectType is TRIBE|CAMPER|STAFF only (no
+          // CAMPUS) — this input reuses the broader subjectTypeSchema, so
+          // narrow here rather than widen notify's signature to a case that
+          // can never actually occur for an achievement.
+          if (input.subjectType !== "CAMPUS") {
+            await notifyAchievementAwarded(input.campId, award.definition.name, input.subjectType, input.subjectId);
+          }
           return award;
         } catch (err: any) {
           if (err.code === "P2002") throw new TRPCError({ code: "CONFLICT", message: "Already awarded to this subject." });
@@ -732,6 +771,24 @@ export const leaderboardRouter = createTRPCRouter({
         take: input.limit,
       });
     }),
+
+  /**
+   * The unauthenticated public board's only data source. Missing or
+   * disabled token throws NOT_FOUND, never FORBIDDEN — this must not
+   * confirm a token exists to an unauthenticated caller. Deliberately does
+   * NOT drain the score queue (see queue.ts's enqueueScoreScan) — an
+   * unauthenticated endpoint must not be able to trigger work.
+   */
+  publicBoard: publicProcedure.input(z.object({ token: z.string() })).query(async ({ ctx, input }) => {
+    const settings = await ctx.prisma.leaderboardSettings.findUnique({ where: { publicToken: input.token } });
+    if (!settings || !settings.publicEnabled) throw new TRPCError({ code: "NOT_FOUND" });
+
+    const camp = await ctx.prisma.camp.findUnique({ where: { id: settings.campId }, select: { name: true } });
+    if (!camp) throw new TRPCError({ code: "NOT_FOUND" });
+
+    const dto = await toPublicDto(settings.campId, camp.name);
+    return { ...dto, refreshIntervalSeconds: settings.refreshIntervalSeconds };
+  }),
 });
 
 async function namesFor(prisma: any, model: "tribe", ids: string[]): Promise<Record<string, string>> {

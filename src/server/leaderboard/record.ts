@@ -1,7 +1,8 @@
 import { prisma } from "../db";
 import type { Prisma } from "@prisma/client";
 import { campDayKey } from "./dayKey";
-import { applyStatDelta, rebuildRanks, type StatSubject } from "./aggregate";
+import { applyStatDelta, rebuildRanks, type StatSubject, type RankTransition } from "./aggregate";
+import { notifyTribeEnteredTopThree } from "./notify";
 
 export type RecordScoreEventInput = {
   campId: string;
@@ -38,8 +39,9 @@ export type RecordScoreEventInput = {
 export async function recordScoreEvent(input: RecordScoreEventInput) {
   const occurredAt = input.occurredAt ?? new Date();
   const day = campDayKey(occurredAt, input.timezone ?? "Africa/Lagos");
+  let tribeTransitions: RankTransition[] = [];
 
-  return prisma.$transaction(async (tx) => {
+  const event = await prisma.$transaction(async (tx) => {
     if (input.ruleId) {
       const capped = await checkAndConsumeCap(tx, input, day);
       if (!capped.allowed) return null;
@@ -94,11 +96,27 @@ export async function recordScoreEvent(input: RecordScoreEventInput) {
     // rely on a much shorter reconcile interval instead.
     const touchedTypes = new Set(subjects.map((s) => s.subjectType));
     for (const subjectType of touchedTypes) {
-      await rebuildRanks(tx, input.campId, subjectType);
+      const transitions = await rebuildRanks(tx, input.campId, subjectType);
+      if (subjectType === "TRIBE") tribeTransitions = transitions;
     }
 
     return event;
   });
+
+  // Fired after the transaction commits — never from inside it, so a
+  // notification is never sent for a write that then rolls back. Only
+  // subjects that just crossed INTO the top 3 from a *worse, known* rank —
+  // a brand-new tribe's first-ever rank (previousRank null) deliberately
+  // does not count, or every tribe at the start of a camp would fire a
+  // simultaneous "entered Top 3!" burst the moment scoring begins.
+  for (const t of tribeTransitions) {
+    if (t.newRank <= 3 && t.previousRank != null && t.previousRank > 3) {
+      const tribe = await prisma.tribe.findUnique({ where: { id: t.subjectId }, select: { name: true } });
+      if (tribe) await notifyTribeEnteredTopThree(input.campId, t.subjectId, tribe.name, t.newRank, t.previousRank);
+    }
+  }
+
+  return event;
 }
 
 async function checkAndConsumeCap(
