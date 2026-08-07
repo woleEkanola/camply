@@ -25,6 +25,7 @@ import {
   DocumentTextIcon,
   PaintBrushIcon,
   ChartBarIcon,
+  TrophyIcon,
 } from "@heroicons/react/24/outline";
 
 export type Role =
@@ -65,10 +66,15 @@ export interface NavGroup {
  * modeled as independent siblings per the domain refactor — see
  * "Camply Domain Model Refactor.md".
  */
+/** Shared across all six area arrays below — there is no global-item
+ * mechanism (dispatch is by area, not role), so this const is spread into
+ * each group individually rather than declared once centrally. */
+const LEADERBOARD_ITEM: NavItem = { name: "Leaderboard", href: "/leaderboard", icon: TrophyIcon };
+
 const ADMIN_GROUPS: NavGroup[] = [
   {
     name: "Dashboard",
-    items: [{ name: "Dashboard", href: "/admin", icon: HomeIcon }],
+    items: [{ name: "Dashboard", href: "/admin", icon: HomeIcon }, LEADERBOARD_ITEM],
   },
   {
     name: "Registration",
@@ -243,7 +249,7 @@ const ADMIN_GROUPS: NavGroup[] = [
 ];
 
 const PARENT_GROUPS: NavGroup[] = [
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/dashboard", icon: HomeIcon }] },
+  { name: "Dashboard", items: [{ name: "Dashboard", href: "/dashboard", icon: HomeIcon }, LEADERBOARD_ITEM] },
 ];
 
 const CAMPUS_REP_GROUPS: NavGroup[] = [
@@ -254,11 +260,11 @@ const CAMPUS_REP_GROUPS: NavGroup[] = [
       { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
     ],
   },
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }] },
+  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }, LEADERBOARD_ITEM] },
 ];
 
 const SUPER_ADMIN_GROUPS: NavGroup[] = [
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/super-admin", icon: HomeIcon }] },
+  { name: "Dashboard", items: [{ name: "Dashboard", href: "/super-admin", icon: HomeIcon }, LEADERBOARD_ITEM] },
 ];
 
 const TEACHER_GROUPS: NavGroup[] = [
@@ -267,6 +273,7 @@ const TEACHER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/teacher", icon: HomeIcon },
       { name: "My Position", href: "/teacher/my-position", icon: MapIcon },
+      LEADERBOARD_ITEM,
     ],
   },
   {
@@ -287,6 +294,7 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/volunteer", icon: HomeIcon },
       { name: "My Position", href: "/volunteer/my-position", icon: MapIcon },
+      LEADERBOARD_ITEM,
     ],
   },
   {

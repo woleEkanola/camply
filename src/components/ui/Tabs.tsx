@@ -8,9 +8,24 @@ export interface TabItem {
   content: React.ReactNode;
 }
 
-export function Tabs({ tabs, className }: { tabs: TabItem[]; className?: string }) {
+export function Tabs({
+  tabs,
+  className,
+  defaultIndex,
+  selectedIndex,
+  onChange,
+}: {
+  tabs: TabItem[];
+  className?: string;
+  defaultIndex?: number;
+  /** Controlled mode (e.g. for ?tab= deep links) — pass alongside `onChange`.
+   * Headless UI's Tab.Group supports this natively; omit both to keep every
+   * other caller's existing uncontrolled behavior unchanged. */
+  selectedIndex?: number;
+  onChange?: (index: number) => void;
+}) {
   return (
-    <Tab.Group>
+    <Tab.Group defaultIndex={defaultIndex} selectedIndex={selectedIndex} onChange={onChange}>
       <Tab.List className={cn("flex gap-1 border-b border-neutral-200", className)}>
         {tabs.map((tab) => (
           <Tab
