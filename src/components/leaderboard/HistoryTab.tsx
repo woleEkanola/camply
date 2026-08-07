@@ -2,14 +2,21 @@
 
 import { api } from "@/utils/trpc";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
+import { StatCard } from "@/components/ui/StatCard";
 import { SkeletonText } from "@/components/ui/Skeleton";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { BarChartWrapper } from "@/components/charts/BarChartWrapper";
+import { BumpChart } from "@/components/charts/BumpChart";
+import { ClockIcon } from "@heroicons/react/24/outline";
 
 export function HistoryTab({ campId }: { campId: string }) {
   const { data: history, isLoading: historyLoading } = api.leaderboard.history.useQuery({ campId });
   const { data: categories, isLoading: categoriesLoading } = api.leaderboard.categoryPerformance.useQuery({ campId });
   const { data: mostImproved, isLoading: improvedLoading } = api.leaderboard.mostImproved.useQuery({ campId, subjectType: "TRIBE" });
+  const { data: rankHistory, isLoading: rankHistoryLoading } = api.leaderboard.rankHistory.useQuery({ campId });
+  const { data: arrivalTimes, isLoading: arrivalLoading } = api.leaderboard.averageArrivalTime.useQuery({ campId });
+
+  const latestAvgArrival = arrivalTimes && arrivalTimes.length > 0 ? arrivalTimes[arrivalTimes.length - 1].avgMinutesLate : null;
 
   return (
     <div className="space-y-6">
@@ -25,6 +32,32 @@ export function HistoryTab({ campId }: { campId: string }) {
           )}
         </CardBody>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tribe Rank Over Time</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {rankHistoryLoading ? (
+            <SkeletonText lines={6} />
+          ) : (
+            <BumpChart
+              days={(rankHistory?.days ?? []).map((d) => new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" }))}
+              series={rankHistory?.series ?? []}
+            />
+          )}
+        </CardBody>
+      </Card>
+
+      {!arrivalLoading && arrivalTimes && arrivalTimes.length > 0 && (
+        <StatCard
+          label="Average Arrival Time (most recent day)"
+          value={latestAvgArrival == null ? "—" : `${latestAvgArrival >= 0 ? "+" : ""}${Math.round(latestAvgArrival)} min`}
+          insight={latestAvgArrival != null && latestAvgArrival <= 0 ? "On time or early on average" : "Late on average"}
+          tone={latestAvgArrival != null && latestAvgArrival <= 0 ? "success" : "neutral"}
+          icon={<ClockIcon className="h-5 w-5" />}
+        />
+      )}
 
       <Card>
         <CardHeader>

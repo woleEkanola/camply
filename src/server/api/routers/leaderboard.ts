@@ -189,9 +189,15 @@ export const leaderboardRouter = createTRPCRouter({
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertLeaderboardRead(ctx, input.campId);
+      // Sorts by the weighted compositeScore once an admin has configured
+      // camperMetricWeights (see aggregate.ts's computeCompositeScores) —
+      // otherwise unchanged, raw totalPoints order, so a camp that never
+      // touches weights sees zero behavior change.
+      const settings = await ctx.prisma.leaderboardSettings.findUnique({ where: { campId: input.campId } });
+      const useWeighted = !!settings?.camperMetricWeights;
       const stats = await ctx.prisma.leaderboardStat.findMany({
         where: { campId: input.campId, subjectType: "CAMPER", day: null },
-        orderBy: { totalPoints: "desc" },
+        orderBy: useWeighted ? [{ compositeScore: { sort: "desc", nulls: "last" } }, { totalPoints: "desc" }] : { totalPoints: "desc" },
         take: 100,
       });
       const registrations = await ctx.prisma.registration.findMany({
@@ -199,7 +205,7 @@ export const leaderboardRouter = createTRPCRouter({
         include: { camper: { select: { name: true, firstName: true, lastName: true } }, tribe: { select: { name: true, color: true } } },
       });
       const regById = new Map(registrations.map((r: any) => [r.id, r]));
-      return stats.map((s: any) => ({ stat: s, registration: regById.get(s.subjectId) ?? null }));
+      return stats.map((s: any) => ({ stat: s, registration: regById.get(s.subjectId) ?? null, rankedByWeightedScore: useWeighted }));
     }),
 
   staff: protectedProcedure
@@ -256,6 +262,96 @@ export const leaderboardRouter = createTRPCRouter({
         WHERE "campId" = ${input.campId} GROUP BY "day" ORDER BY "day" ASC
       `;
       return rows.map((r) => ({ day: r.day, total: Number(r.total) }));
+    }),
+
+  /**
+   * Per-day rank for every TRIBE — the BumpChart's data source (built in
+   * PR3, never wired in until now). No schema change: computed on read from
+   * LeaderboardStat's existing day rows via a SQL window function
+   * (cumulative SUM(totalPoints) per tribe ordered by day, then RANK() per
+   * day). Cheap — a camp is one to two weeks of day rows, not months.
+   *
+   * Known approximation: a tribe only has a day row for a day it actually
+   * had a ScoreEvent, so a scoreless day produces no rank entry for that
+   * tribe that day (not a rank of "unchanged") — BumpChart's `connectNulls`
+   * bridges the visual gap. For a camp with daily activity (the normal
+   * case) this rarely matters; it's a read-time approximation rather than
+   * a new persisted per-day rank column, which would need its own write
+   * path and backfill.
+   *
+   * Pre-existing gap discovered while building this (not introduced here,
+   * left as-is — out of this PR's scope): `rebuildLeaderboard` only
+   * recomputes the all-time TOTAL row from ScoreEvent; per-day
+   * LeaderboardStat rows are maintained solely by `applyStatDelta` on the
+   * live write path (recordScoreEvent). So the nightly reconcile / admin
+   * "Rebuild Now" heals TOTAL-row drift but not day-row drift, which means
+   * this chart can't self-correct from a full rebuild the way every other
+   * card on this page can.
+   */
+  rankHistory: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertLeaderboardRead(ctx, input.campId);
+      const rows: Array<{ subjectId: string; day: Date; rank: bigint }> = await ctx.prisma.$queryRaw`
+        WITH cumulative AS (
+          SELECT "subjectId", "day",
+                 SUM("totalPoints") OVER (PARTITION BY "subjectId" ORDER BY "day") AS cum_points
+          FROM "LeaderboardStat"
+          WHERE "campId" = ${input.campId} AND "subjectType" = 'TRIBE' AND "day" IS NOT NULL
+        )
+        SELECT "subjectId", "day", RANK() OVER (PARTITION BY "day" ORDER BY cum_points DESC) AS rank
+        FROM cumulative
+        ORDER BY "day" ASC
+      `;
+      if (rows.length === 0) return { days: [] as string[], series: [] as { id: string; name: string; color: string; ranks: (number | null)[] }[] };
+
+      const days = [...new Set(rows.map((r) => r.day.toISOString().slice(0, 10)))].sort();
+      const dayIndex = new Map(days.map((d, i) => [d, i]));
+
+      const tribeIds = [...new Set(rows.map((r) => r.subjectId))];
+      const tribes = await ctx.prisma.tribe.findMany({ where: { id: { in: tribeIds } } });
+      const tribeById = new Map(tribes.map((t: any) => [t.id, t]));
+
+      const ranksBySubject = new Map<string, (number | null)[]>();
+      for (const id of tribeIds) ranksBySubject.set(id, days.map(() => null));
+      for (const r of rows) {
+        const i = dayIndex.get(r.day.toISOString().slice(0, 10));
+        if (i !== undefined) ranksBySubject.get(r.subjectId)![i] = Number(r.rank);
+      }
+
+      const series = tribeIds.map((id) => ({
+        id,
+        name: (tribeById.get(id) as any)?.name ?? id,
+        color: (tribeById.get(id) as any)?.color ?? "#6366f1",
+        ranks: ranksBySubject.get(id)!,
+      }));
+
+      return { days, series };
+    }),
+
+  /**
+   * Mean gap between a session's scheduled start and each subject's
+   * actual (session-tied) arrival ScoreEvent — the last of the spec's 10
+   * historical analyses. Positive minutes = arrived after start (late by
+   * that many minutes); negative = arrived early. Only ScoreEvent rows
+   * that are actually tied to a ScoredSession count (a manual award has no
+   * "arrival time" to measure), grouped per calendar day for the History
+   * tab's trend tile.
+   */
+  averageArrivalTime: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertLeaderboardRead(ctx, input.campId);
+      const rows: Array<{ day: Date; avgMinutesLate: number | null }> = await ctx.prisma.$queryRaw`
+        SELECT se."day",
+               AVG(EXTRACT(EPOCH FROM (se."occurredAt" - ss."startsAt")) / 60.0)::float AS "avgMinutesLate"
+        FROM "ScoreEvent" se
+        JOIN "ScoredSession" ss ON ss."id" = se."scoredSessionId"
+        WHERE se."campId" = ${input.campId} AND se."scoredSessionId" IS NOT NULL
+        GROUP BY se."day"
+        ORDER BY se."day" ASC
+      `;
+      return rows.map((r) => ({ day: r.day, avgMinutesLate: r.avgMinutesLate ?? 0 }));
     }),
 
   /** Total points per category, camp-wide — the "category performance" bar
@@ -330,14 +426,24 @@ export const leaderboardRouter = createTRPCRouter({
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertLeaderboardRead(ctx, input.campId);
-      const [categories, rules] = await Promise.all([
+      const [categories, rules, settings] = await Promise.all([
         ctx.prisma.scoreCategory.findMany({
           where: { OR: [{ campId: input.campId }, { campId: null }], enabled: true },
           orderBy: { sortOrder: "asc" },
         }),
         ctx.prisma.scoreRule.findMany({ where: { campId: input.campId, enabled: true } }),
+        ctx.prisma.leaderboardSettings.findUnique({ where: { campId: input.campId } }),
       ]);
-      return { categories, rules: rules.map((r: any) => ({ id: r.id, categoryId: r.categoryId, trigger: r.trigger, tiers: r.tiers, points: r.points })) };
+      return {
+        categories,
+        rules: rules.map((r: any) => ({ id: r.id, categoryId: r.categoryId, trigger: r.trigger, tiers: r.tiers, points: r.points })),
+        // Read-only surface for the "ranking method stays transparent"
+        // requirement — the same weights admins edit in Settings. null
+        // means "not customized yet", not "zero weight" (see aggregate.ts's
+        // DEFAULT_COMPOSITE_WEIGHTS, equal 25 each).
+        teacherMetricWeights: settings?.teacherMetricWeights ?? null,
+        camperMetricWeights: settings?.camperMetricWeights ?? null,
+      };
     }),
 
   myChild: protectedProcedure
@@ -712,8 +818,8 @@ export const leaderboardRouter = createTRPCRouter({
           showTeachers: z.boolean().optional(),
           showCampuses: z.boolean().optional(),
           showAchievements: z.boolean().optional(),
-          camperMetricWeights: z.any().optional(),
-          teacherMetricWeights: z.any().optional(),
+          camperMetricWeights: z.record(z.string(), z.number()).optional(),
+          teacherMetricWeights: z.record(z.string(), z.number()).optional(),
           timezone: z.string().optional(),
         })
       )

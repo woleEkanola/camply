@@ -17,6 +17,14 @@ export function TeachersTab({ campId }: { campId: string }) {
     },
     { header: "Type", accessor: (row) => row.staff?.type ?? "—", secondary: true },
     { header: "Points", accessor: (row) => `${row.stat?.totalPoints ?? 0} pts` },
+    {
+      header: (
+        <span title="Blend of attendance, promptness, points, and achievements — see the Rules tab for weights">
+          Composite
+        </span>
+      ),
+      accessor: (row) => (typeof row.stat?.compositeScore === "number" ? `${row.stat.compositeScore.toFixed(1)} / 5` : "—"),
+    },
   ];
 
   return (

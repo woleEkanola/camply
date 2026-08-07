@@ -61,6 +61,40 @@ export function RulesTab({ campId }: { campId: string }) {
           </div>
         </div>
       )}
+
+      <RankingWeightsSummary label="Teacher Composite (0-5 rating)" weights={data.teacherMetricWeights as any} />
+      <RankingWeightsSummary label="Camper Ranking" weights={data.camperMetricWeights as any} />
+    </div>
+  );
+}
+
+const WEIGHT_METRIC_LABELS: Record<string, string> = {
+  attendancePct: "Attendance",
+  promptnessPct: "Promptness",
+  totalPoints: "Points",
+  achievementCount: "Achievements",
+};
+const DEFAULT_WEIGHT_METRICS = ["attendancePct", "promptnessPct", "totalPoints", "achievementCount"];
+
+/** Read-only display of the same weights editable in admin Settings — how a
+ * camp's teacher composite / camper ranking is actually blended, per the
+ * spec's "ranking method stays transparent" requirement. `weights === null`
+ * means the camp hasn't customized them, so the four tracked metrics count
+ * equally (see aggregate.ts's DEFAULT_COMPOSITE_WEIGHTS). */
+function RankingWeightsSummary({ label, weights }: { label: string; weights: Record<string, number> | null }) {
+  const keys = weights ? Object.keys(weights) : DEFAULT_WEIGHT_METRICS;
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold text-txt-secondary">{label}</h3>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {keys.map((key) => (
+          <div key={key} className="rounded-lg border border-border-default bg-surface px-3 py-2 text-center text-sm">
+            <div className="text-txt-secondary">{WEIGHT_METRIC_LABELS[key] ?? key}</div>
+            <div className="font-semibold text-txt-primary">{weights?.[key] ?? 25}</div>
+          </div>
+        ))}
+      </div>
+      {!weights && <p className="mt-1 text-xs text-txt-secondary">Not customized — all four metrics count equally.</p>}
     </div>
   );
 }

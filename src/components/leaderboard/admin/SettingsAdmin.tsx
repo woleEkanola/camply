@@ -72,6 +72,36 @@ export function SettingsAdmin({ campId }: { campId: string }) {
 
   const publicUrl = typeof window !== "undefined" && settings.publicToken ? `${window.location.origin}/l/${settings.publicToken}` : null;
 
+  const WEIGHT_METRICS: { key: "attendancePct" | "promptnessPct" | "totalPoints" | "achievementCount"; label: string }[] = [
+    { key: "attendancePct", label: "Attendance" },
+    { key: "promptnessPct", label: "Promptness" },
+    { key: "totalPoints", label: "Points" },
+    { key: "achievementCount", label: "Achievements" },
+  ];
+  const DEFAULT_WEIGHT = 25;
+
+  function weightRow(
+    settingsKey: "teacherMetricWeights" | "camperMetricWeights",
+    current: Record<string, number> | null | undefined
+  ) {
+    return WEIGHT_METRICS.map(({ key, label }) => (
+      <Input
+        key={key}
+        id={`${settingsKey}-${key}`}
+        label={label}
+        type="number"
+        min={0}
+        value={current?.[key] ?? DEFAULT_WEIGHT}
+        onChange={(e) =>
+          update.mutate({
+            campId,
+            [settingsKey]: { ...WEIGHT_METRICS.reduce((acc, m) => ({ ...acc, [m.key]: current?.[m.key] ?? DEFAULT_WEIGHT }), {}), [key]: Number(e.target.value) },
+          } as any)
+        }
+      />
+    ));
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -158,6 +188,31 @@ export function SettingsAdmin({ campId }: { campId: string }) {
               {key.replace("show", "")}
             </label>
           ))}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Ranking Weights</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-6">
+          <p className="text-sm text-txt-secondary">
+            Relative weights (any positive numbers — they're normalized against each other, not required to sum to
+            100) blended into a single score per subject. These are also shown, read-only, on the public Rules tab so
+            the ranking method stays transparent.
+          </p>
+          <div>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-txt-secondary">
+              Teacher Composite (0-5 rating)
+            </h4>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{weightRow("teacherMetricWeights", settings.teacherMetricWeights as any)}</div>
+          </div>
+          <div>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-txt-secondary">
+              Camper Ranking (sort order)
+            </h4>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{weightRow("camperMetricWeights", settings.camperMetricWeights as any)}</div>
+          </div>
         </CardBody>
       </Card>
 

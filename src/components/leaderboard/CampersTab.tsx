@@ -3,10 +3,11 @@
 import { api } from "@/utils/trpc";
 import { Table, type Column } from "@/components/ui/Table";
 
-type Row = { stat: any; registration: any };
+type Row = { stat: any; registration: any; rankedByWeightedScore?: boolean };
 
 export function CampersTab({ campId }: { campId: string }) {
   const { data, isLoading } = api.leaderboard.campers.useQuery({ campId }, { refetchInterval: 30_000 });
+  const rankedByWeightedScore = !!data?.[0]?.rankedByWeightedScore;
 
   const columns: Column<Row>[] = [
     {
@@ -31,13 +32,20 @@ export function CampersTab({ campId }: { campId: string }) {
   ];
 
   return (
-    <Table
-      columns={columns}
-      data={data ?? []}
-      rowKey={(row) => row.stat.id}
-      isLoading={isLoading}
-      emptyTitle="No camper scores yet"
-      emptyDescription="Camper standings will appear here once points are recorded."
-    />
+    <div className="space-y-2">
+      {rankedByWeightedScore && (
+        <p className="text-xs text-txt-secondary">
+          Ordered by weighted score, not raw points — see the Rules tab for the current weights.
+        </p>
+      )}
+      <Table
+        columns={columns}
+        data={data ?? []}
+        rowKey={(row) => row.stat.id}
+        isLoading={isLoading}
+        emptyTitle="No camper scores yet"
+        emptyDescription="Camper standings will appear here once points are recorded."
+      />
+    </div>
   );
 }

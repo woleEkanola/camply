@@ -966,6 +966,15 @@ model LeaderboardStat {
   achievementCount Int      @default(0)
   avgScoreToday    Float?
   campersPresent   Int?
+  // STAFF: a 0-5 blend of attendancePct/promptnessPct/totalPoints/
+  // achievementCount per LeaderboardSettings.teacherMetricWeights (min-max
+  // normalized across the camp's teachers, then weighted). CAMPER: the same
+  // blend on a 0-100 scale, used only as a sort key (see
+  // LeaderboardSettings.camperMetricWeights) — never shown as a rating.
+  // TRIBE/CAMPUS leave this null; nothing ranks them on anything but raw
+  // totalPoints. Only ever set by computeDerivedStats (aggregate.ts),
+  // same as the other derived-stat columns above.
+  compositeScore   Float?
   computedAt       DateTime @default(now())
 
   @@index([campId, subjectType, day, totalPoints])
