@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { api } from "@/utils/trpc";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -72,11 +73,19 @@ function TribeCard({ tribe, stat, onAward }: { tribe: any; stat: any; onAward: (
           )}
         </div>
 
-        {onAward && (
-          <Button size="sm" variant="secondary" onClick={onAward} className="w-full">
-            Award Points
-          </Button>
-        )}
+        <div className="flex gap-2">
+          <Link
+            href={`/leaderboard/tribe/${tribe.id}`}
+            className="flex-1 rounded-lg border border-border-default px-3 py-1.5 text-center text-sm font-medium text-txt-primary hover:bg-surface-raised"
+          >
+            View Detail
+          </Link>
+          {onAward && (
+            <Button size="sm" variant="secondary" onClick={onAward} className="flex-1">
+              Award Points
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

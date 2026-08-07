@@ -162,11 +162,18 @@ export const leaderboardRouter = createTRPCRouter({
         .sort((a: any, b: any) => (a.stat?.rank ?? Infinity) - (b.stat?.rank ?? Infinity));
     }),
 
+  /**
+   * The tribe detail page's data source — extended in PR6-follow-up (PR7)
+   * beyond the original PR3 shape (tribe/stat/timeline/achievements) with
+   * teachers, campers, and a manual-vs-penalty split, to cover the spec's
+   * 12 detail-page sections. Everything the page needs comes back in one
+   * call rather than several, since it's all scoped to the same tribe.
+   */
   tribeDetail: protectedProcedure
     .input(z.object({ campId: z.string(), tribeId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertLeaderboardRead(ctx, input.campId);
-      const [tribe, stat, timeline, achievements] = await Promise.all([
+      const [tribe, stat, timelineRaw, achievements, assignedStaff, registrations, dailyTotals] = await Promise.all([
         ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.tribeId } }),
         ctx.prisma.leaderboardStat.findFirst({
           where: { campId: input.campId, subjectType: "TRIBE", subjectId: input.tribeId, day: null },
@@ -181,8 +188,127 @@ export const leaderboardRouter = createTRPCRouter({
           include: { definition: true },
           orderBy: { awardedAt: "desc" },
         }),
+        ctx.prisma.staffProfile.findMany({
+          where: { assignedTribeId: input.tribeId, deletedAt: null },
+          select: { id: true, firstName: true, lastName: true, type: true, photoUrl: true },
+        }),
+        ctx.prisma.registration.findMany({
+          where: { campId: input.campId, tribeId: input.tribeId, deletedAt: null },
+          include: { camper: { select: { name: true, firstName: true, lastName: true } } },
+        }),
+        ctx.prisma.leaderboardStat.findMany({
+          where: { campId: input.campId, subjectType: "TRIBE", subjectId: input.tribeId, day: { not: null } },
+          orderBy: { day: "asc" },
+          select: { day: true, totalPoints: true },
+        }),
       ]);
-      return { tribe, stat, timeline, achievements };
+
+      const categoryIds = [...new Set(timelineRaw.map((e: any) => e.categoryId))];
+      const categories = await ctx.prisma.scoreCategory.findMany({ where: { id: { in: categoryIds } } });
+      const categoryById = new Map(categories.map((c: any) => [c.id, c]));
+      const timeline = timelineRaw.map((e: any) => ({ ...e, category: categoryById.get(e.categoryId) ?? null }));
+
+      // ScoreEvent.scoredSessionId is a plain scalar (no Prisma relation
+      // declared to ScoredSession), so session names need a separate lookup
+      // rather than an `include`.
+      const sessionIds = [...new Set(timelineRaw.map((e: any) => e.scoredSessionId).filter(Boolean))];
+      const sessions = sessionIds.length ? await ctx.prisma.scoredSession.findMany({ where: { id: { in: sessionIds } }, select: { id: true, name: true } }) : [];
+      const sessionNameById = new Map(sessions.map((s: any) => [s.id, s.name]));
+
+      const manualAwards = timeline.filter((e: any) => e.source === "MANUAL" && !e.category?.isPenalty);
+      const penalties = timeline.filter((e: any) => e.category?.isPenalty);
+      const sessionPerformanceMap = new Map<string, { sessionId: string; sessionName: string; totalPoints: number; eventCount: number }>();
+      for (const e of timeline) {
+        if (!e.scoredSessionId) continue;
+        const existing = sessionPerformanceMap.get(e.scoredSessionId) ?? {
+          sessionId: e.scoredSessionId,
+          sessionName: sessionNameById.get(e.scoredSessionId) ?? e.scoredSessionId,
+          totalPoints: 0,
+          eventCount: 0,
+        };
+        existing.totalPoints += e.points;
+        existing.eventCount += 1;
+        sessionPerformanceMap.set(e.scoredSessionId, existing);
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      const todayBreakdown = timeline.filter((e: any) => new Date(e.createdAt).toISOString().slice(0, 10) === today);
+
+      const camperRegistrationIds = registrations.map((r: any) => r.id);
+      const camperStats = await ctx.prisma.leaderboardStat.findMany({
+        where: { campId: input.campId, subjectType: "CAMPER", subjectId: { in: camperRegistrationIds }, day: null },
+      });
+      const camperStatByReg = new Map(camperStats.map((s: any) => [s.subjectId, s]));
+      const campers = registrations.map((r: any) => ({ registration: r, stat: camperStatByReg.get(r.id) ?? null }));
+
+      return {
+        tribe,
+        stat,
+        timeline,
+        achievements,
+        teachers: assignedStaff,
+        campers,
+        manualAwards,
+        penalties,
+        sessionPerformance: [...sessionPerformanceMap.values()],
+        todayBreakdown,
+        dailyTotals: dailyTotals.map((d: any) => ({ day: d.day, totalPoints: d.totalPoints })),
+      };
+    }),
+
+  /** Mirrors tribeDetail's shape (stat + score timeline + achievements),
+   * scoped to one camper's registration. No teachers/campers/session-
+   * performance sections — those are tribe-level concepts. */
+  camperDetail: protectedProcedure
+    .input(z.object({ campId: z.string(), registrationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertLeaderboardRead(ctx, input.campId);
+      const [registration, stat, timeline, achievements] = await Promise.all([
+        ctx.prisma.registration.findUniqueOrThrow({
+          where: { id: input.registrationId },
+          include: { camper: { select: { name: true, firstName: true, lastName: true } }, tribe: { select: { name: true, color: true } } },
+        }),
+        ctx.prisma.leaderboardStat.findFirst({
+          where: { campId: input.campId, subjectType: "CAMPER", subjectId: input.registrationId, day: null },
+        }),
+        ctx.prisma.scoreEvent.findMany({
+          where: { campId: input.campId, registrationId: input.registrationId },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        }),
+        ctx.prisma.achievementAward.findMany({
+          where: { campId: input.campId, subjectKey: `C:${input.registrationId}` },
+          include: { definition: true },
+          orderBy: { awardedAt: "desc" },
+        }),
+      ]);
+      return { registration, stat, timeline, achievements };
+    }),
+
+  /** Mirrors tribeDetail's shape, scoped to one staff member. */
+  staffDetail: protectedProcedure
+    .input(z.object({ campId: z.string(), staffId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertLeaderboardRead(ctx, input.campId);
+      const [staff, stat, timeline, achievements] = await Promise.all([
+        ctx.prisma.staffProfile.findUniqueOrThrow({
+          where: { id: input.staffId },
+          select: { id: true, firstName: true, lastName: true, type: true, photoUrl: true },
+        }),
+        ctx.prisma.leaderboardStat.findFirst({
+          where: { campId: input.campId, subjectType: "STAFF", subjectId: input.staffId, day: null },
+        }),
+        ctx.prisma.scoreEvent.findMany({
+          where: { campId: input.campId, staffProfileId: input.staffId },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        }),
+        ctx.prisma.achievementAward.findMany({
+          where: { campId: input.campId, subjectKey: `S:${input.staffId}` },
+          include: { definition: true },
+          orderBy: { awardedAt: "desc" },
+        }),
+      ]);
+      return { staff, stat, timeline, achievements };
     }),
 
   campers: protectedProcedure
