@@ -72,6 +72,24 @@ function subjectColumn(subjectType: z.infer<typeof subjectTypeSchema>): "tribeId
 export const leaderboardRouter = createTRPCRouter({
   // ─── Reads ─────────────────────────────────────────────────────────────
 
+  // Lets the client-side admin-area gate (src/app/leaderboard/admin/page.tsx)
+  // widen beyond the SUPER_ADMIN/OWNER/ADMIN role check to also admit a
+  // current Camp Head (Position.grantsManageCamp) — a boolean rather than
+  // exposing the underlying grant details, since the client only needs a
+  // yes/no to decide whether to render the admin area at all. Never throws
+  // on "no" (unlike assertCanManageCamp) since a negative answer is an
+  // expected, common case for this query, not an authorization failure.
+  canManageCamp: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      try {
+        await assertCanManageCamp(ctx, input.campId);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+
   overview: protectedProcedure
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {

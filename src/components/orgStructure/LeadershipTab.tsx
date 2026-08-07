@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody } from "@/components/ui/Card";
@@ -8,8 +9,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ChevronRightIcon, ChevronDownIcon, Squares2X2Icon, ListBulletIcon } from "@heroicons/react/24/outline";
+import { ShieldCheckIcon as ShieldCheckIconSolid } from "@heroicons/react/24/solid";
 import { DepartmentSidePanel } from "./DepartmentSidePanel";
 import { cn } from "@/lib/cn";
+
+const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
 interface LeadershipTabProps {
   organizationId: string;
@@ -18,6 +22,12 @@ interface LeadershipTabProps {
 
 export function LeadershipTab({ organizationId, campId }: { organizationId: string; campId: string }) {
   const utils = api.useUtils();
+  const { data: session } = useSession();
+  // Only true org admins may grant/revoke the Camp Head flag itself — see
+  // the matching guard in position.ts's `update` mutation. A current Camp
+  // Head can manage positions generally but must not be able to widen who
+  // else holds that same grant.
+  const isOrgAdmin = ORG_ADMIN_ROLES.includes((session?.user as any)?.role);
   const [viewMode, setViewMode] = useState<"graph" | "list">("graph");
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
   const [keyboardMoveTarget, setKeyboardMoveTarget] = useState<string | null>(null);
@@ -40,6 +50,12 @@ export function LeadershipTab({ organizationId, campId }: { organizationId: stri
   });
 
   const assignPosition = api.position.assignPosition.useMutation({
+    onSuccess: () => {
+      utils.position.getHierarchy.invalidate({ campId });
+    },
+  });
+
+  const updatePosition = api.position.update.useMutation({
     onSuccess: () => {
       utils.position.getHierarchy.invalidate({ campId });
     },
@@ -131,6 +147,8 @@ export function LeadershipTab({ organizationId, campId }: { organizationId: stri
                 onSelectDepartment={setSelectedDeptId}
                 movePosition={movePosition}
                 setKeyboardMoveTarget={setKeyboardMoveTarget}
+                isOrgAdmin={isOrgAdmin}
+                updatePosition={updatePosition}
               />
             </div>
           ) : (
@@ -208,9 +226,11 @@ interface GraphNodeProps {
   onSelectDepartment: (deptId: string) => void;
   movePosition: any;
   setKeyboardMoveTarget: (id: string | null) => void;
+  isOrgAdmin: boolean;
+  updatePosition: any;
 }
 
-function GraphViewNode({ node, onDragStart, onDragOver, onDrop, onSelectDepartment, movePosition, setKeyboardMoveTarget }: GraphNodeProps) {
+function GraphViewNode({ node, onDragStart, onDragOver, onDrop, onSelectDepartment, movePosition, setKeyboardMoveTarget, isOrgAdmin, updatePosition }: GraphNodeProps) {
   const currentOccupant = node.assignments?.[0]?.staff;
   const isVacant = !currentOccupant;
 
@@ -237,7 +257,14 @@ function GraphViewNode({ node, onDragStart, onDragOver, onDrop, onSelectDepartme
               {node.department.name}
             </button>
           )}
-          <div className="text-xs font-semibold text-neutral-900 truncate w-full">{node.name}</div>
+          <div className="flex items-center gap-1 w-full">
+            <div className="text-xs font-semibold text-neutral-900 truncate">{node.name}</div>
+            {node.grantsManageCamp && (
+              <span title="Camp Head — grants leaderboard admin access">
+                <ShieldCheckIconSolid className="h-3.5 w-3.5 flex-shrink-0 text-accent-600" />
+              </span>
+            )}
+          </div>
 
           {/* Occupant section */}
           <div
@@ -264,6 +291,22 @@ function GraphViewNode({ node, onDragStart, onDragOver, onDrop, onSelectDepartme
 
         {/* Floating action buttons */}
         <div className="absolute right-2 top-2 hidden group-hover:flex items-center gap-1">
+          {isOrgAdmin && (
+            <button
+              onClick={() =>
+                updatePosition.mutate({ id: node.id, grantsManageCamp: !node.grantsManageCamp })
+              }
+              className={cn(
+                "rounded p-1 text-[10px] font-medium border",
+                node.grantsManageCamp
+                  ? "text-accent-700 bg-accent-50 hover:bg-accent-100 border-accent-200"
+                  : "text-neutral-500 bg-neutral-50 hover:bg-neutral-100 border-neutral-200"
+              )}
+              title={node.grantsManageCamp ? "Revoke Camp Head access" : "Grant Camp Head access (leaderboard admin)"}
+            >
+              {node.grantsManageCamp ? "Camp Head ✓" : "Make Camp Head"}
+            </button>
+          )}
           <button
             onClick={() => setKeyboardMoveTarget(node.id)}
             className="rounded p-1 text-[10px] font-medium text-neutral-500 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200"
@@ -302,6 +345,8 @@ function GraphViewNode({ node, onDragStart, onDragOver, onDrop, onSelectDepartme
               onSelectDepartment={onSelectDepartment}
               movePosition={movePosition}
               setKeyboardMoveTarget={setKeyboardMoveTarget}
+              isOrgAdmin={isOrgAdmin}
+              updatePosition={updatePosition}
             />
           ))}
         </div>
@@ -310,7 +355,7 @@ function GraphViewNode({ node, onDragStart, onDragOver, onDrop, onSelectDepartme
   );
 }
 
-function GraphView({ nodes, onDragStart, onDragOver, onDrop, onSelectDepartment, movePosition, setKeyboardMoveTarget }: Omit<GraphNodeProps, "node"> & { nodes: any[] }) {
+function GraphView({ nodes, onDragStart, onDragOver, onDrop, onSelectDepartment, movePosition, setKeyboardMoveTarget, isOrgAdmin, updatePosition }: Omit<GraphNodeProps, "node"> & { nodes: any[] }) {
   return (
     <div className="flex justify-center gap-8 py-4">
       {nodes.map((node) => (
@@ -323,6 +368,8 @@ function GraphView({ nodes, onDragStart, onDragOver, onDrop, onSelectDepartment,
           onSelectDepartment={onSelectDepartment}
           movePosition={movePosition}
           setKeyboardMoveTarget={setKeyboardMoveTarget}
+          isOrgAdmin={isOrgAdmin}
+          updatePosition={updatePosition}
         />
       ))}
     </div>

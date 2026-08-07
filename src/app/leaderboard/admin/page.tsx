@@ -18,20 +18,41 @@ import { SettingsAdmin } from "@/components/leaderboard/admin/SettingsAdmin";
 const SUB_TABS = ["Categories", "Rules", "Sessions", "Bulk Award", "Achievements", "Audit Log", "Settings"] as const;
 
 /** Role-gated in-page (not via middleware, matching the rest of the app's
- * per-route auth pattern) — SUPER_ADMIN/OWNER/ADMIN only. Import/Export is
- * deliberately not built here yet; it depends on the existing ExportJob
- * subsystem and is tracked as a separate follow-up in backlog.md rather
- * than a rushed partial integration. */
+ * per-route auth pattern) — SUPER_ADMIN/OWNER/ADMIN, or a current Camp Head
+ * (Position.grantsManageCamp, checked via leaderboard.canManageCamp against
+ * the same assertCanManageCamp the mutations below already enforce). Import/
+ * Export is deliberately not built here yet; it depends on the existing
+ * ExportJob subsystem and is tracked as a separate follow-up in backlog.md
+ * rather than a rushed partial integration. */
 export default function LeaderboardAdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [tabIndex, setTabIndex] = useState(0);
 
   const organizationId = session?.user?.organizationId as string | undefined;
-  const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId: organizationId! }, { enabled: !!organizationId });
+  const { data: activeCamp, isLoading: activeCampLoading } = api.camp.getActiveCamp.useQuery(
+    { organizationId: organizationId! },
+    { enabled: !!organizationId }
+  );
   const campId = activeCamp?.id;
 
-  if (status === "loading") {
+  const role = session?.user?.role as string | undefined;
+  const isOrgManager = !!role && ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role);
+  // A Camp Head (Position.grantsManageCamp) also gets in — checked against
+  // the DB via the same assertCanManageCamp used server-side, not trusted
+  // from the role claim alone. Only queried when the role check alone
+  // doesn't already admit the user, since org managers don't need it.
+  const { data: isCampHead, isLoading: campHeadLoading } = api.leaderboard.canManageCamp.useQuery(
+    { campId: campId! },
+    { enabled: !isOrgManager && !!campId }
+  );
+
+  // Must wait for activeCamp to resolve before the Camp Head check can even
+  // run — deciding "not manager" while campId is still undefined would
+  // redirect a real Camp Head away before their grant was ever checked.
+  const stillResolvingAccess = !isOrgManager && (activeCampLoading || (!!campId && campHeadLoading));
+
+  if (status === "loading" || stillResolvingAccess) {
     return (
       <div className="flex h-screen items-center justify-center bg-page-bg">
         <span className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-accent-600 border-t-transparent" />
@@ -40,8 +61,7 @@ export default function LeaderboardAdminPage() {
   }
   if (!session?.user) return null;
 
-  const role = session.user.role as string;
-  const isManager = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role);
+  const isManager = isOrgManager || !!isCampHead;
   if (!isManager) {
     router.replace("/leaderboard");
     return null;

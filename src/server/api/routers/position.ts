@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { syncStaffProfileFromPositions, syncPositionOccupantsAndDescendants } from "../../utils/hierarchySync";
-import { assertCanManageCamp } from "../trpc/scoping";
+import { assertCanManageCamp, assertOrgAdmin } from "../trpc/scoping";
 
 function assertStaffAccess(ctx: { session: any }) {
   const currentUser = ctx.session?.user;
@@ -81,6 +81,7 @@ export const positionRouter = createTRPCRouter({
       id: z.string(),
       name: z.string().min(1).optional(),
       status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
+      grantsManageCamp: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const position = await ctx.prisma.position.findUnique({
@@ -88,6 +89,17 @@ export const positionRouter = createTRPCRouter({
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertCanManageCamp(ctx, position.campId);
+
+      // Granting/revoking the Camp Head flag itself is deliberately gated
+      // tighter than ordinary position edits: assertCanManageCamp above
+      // already lets a *current* Camp Head pass, and if that were enough to
+      // also toggle grantsManageCamp, a Camp Head could grant the flag to
+      // arbitrary other positions (or keep it after being reassigned) —
+      // unbounded privilege escalation. Only a true org admin may change it.
+      if (input.grantsManageCamp !== undefined) {
+        const camp = await ctx.prisma.camp.findUnique({ where: { id: position.campId } });
+        await assertOrgAdmin(ctx, camp!.organizationId);
+      }
 
       const { id, ...data } = input;
       return ctx.prisma.position.update({

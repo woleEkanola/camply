@@ -13,19 +13,41 @@ const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
  * to match the camp's org could manage that camp's positions. This version
  * requires both an admin role AND matching org, via `assertOrgAdmin`.
  *
- * The leaderboard feature additionally wants a "Camp Head" grant via the
- * existing `Position`/`PositionAssignment` models rather than a new role —
- * deliberately not wired in yet, since nothing in the schema currently
- * flags which `Position` rows carry camp-management authority (they're
- * free-text names like "Camp Director"). Add that check here once a
- * `Position.grantsManageCamp`-style flag (or equivalent) exists, rather than
- * matching on position name.
+ * The leaderboard feature additionally grants "Camp Head" access via the
+ * existing `Position`/`PositionAssignment` models rather than a new role:
+ * whoever currently holds a `Position` flagged `grantsManageCamp` for this
+ * camp gets the same rights as an org admin, without needing an
+ * ADMIN/OWNER/SUPER_ADMIN role. This is a same-org user only (a Position
+ * assignment doesn't cross orgs), checked fresh against the DB every call —
+ * never trusted from the JWT session claim, same discipline as
+ * `assertOrgAdminOrCampusRep`'s campus-rep check.
  */
 export async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
   const camp = await ctx.prisma.camp.findUnique({ where: { id: campId } });
   if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
-  await assertOrgAdmin(ctx, camp.organizationId);
-  return camp;
+  try {
+    await assertOrgAdmin(ctx, camp.organizationId);
+    return camp;
+  } catch (err) {
+    const user = ctx.session?.user;
+    if (!user) throw err;
+    const now = new Date();
+    const campHead = await ctx.prisma.positionAssignment.findFirst({
+      where: {
+        isCurrent: true,
+        OR: [{ endDate: null }, { endDate: { gte: now } }],
+        staff: { userId: user.id },
+        position: {
+          campId,
+          grantsManageCamp: true,
+          status: "ACTIVE",
+          deletedAt: null,
+        },
+      },
+    });
+    if (campHead) return camp;
+    throw err;
+  }
 }
 
 /**

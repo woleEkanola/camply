@@ -70,6 +70,11 @@ export default function NotificationBell() {
         priority: "INFO" as const,
         source: "Broadcast",
         read: !!n.readAt,
+        // Was never passed through, so the "Open Link →" affordance never
+        // appeared for any DB-backed notification — including every
+        // leaderboard notification (src/server/leaderboard/notify.ts),
+        // which all set `link: "/leaderboard"`.
+        actionUrl: (n as any).link ?? undefined,
       })),
     [dbNotifications]
   );

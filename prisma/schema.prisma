@@ -1504,6 +1504,12 @@ model Position {
   displayOrder     Int                  @default(0)
   status           String               @default("ACTIVE") // ACTIVE | ARCHIVED
   assignments      PositionAssignment[]
+  // Additive: the "Camp Head" leaderboard-admin grant (src/server/api/trpc/
+  // scoping.ts's assertCanManageCamp) — whoever currently holds a Position
+  // with this flag set, for this camp, gets leaderboard-admin rights
+  // without needing an ADMIN/OWNER/SUPER_ADMIN role. Defaults false, so
+  // every existing Position row is unaffected.
+  grantsManageCamp Boolean              @default(false)
   deletedAt        DateTime?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
