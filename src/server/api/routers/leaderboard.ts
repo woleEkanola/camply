@@ -377,7 +377,7 @@ export const leaderboardRouter = createTRPCRouter({
         reason: input.reason,
         subjectType: input.subjectType,
         subjectId: input.subjectId,
-        newValue: { points: input.points, categoryId: input.categoryId },
+        newValue: { points: input.points, categoryId: input.categoryId, eventId: event.id },
       });
 
       return event;
@@ -648,6 +648,7 @@ export const leaderboardRouter = createTRPCRouter({
       .input(
         z.object({
           campId: z.string(),
+          publicEnabled: z.boolean().optional(),
           refreshIntervalSeconds: z.number().int().min(5).optional(),
           showTribes: z.boolean().optional(),
           showCampers: z.boolean().optional(),
