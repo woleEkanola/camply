@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { loginWithPassword, getFixtureOrgContext, prisma } from "./helpers";
+import { loginWithPassword, getFixtureOrgContext, expectSettingsSaved, prisma } from "./helpers";
 
 test.describe("Leaderboard admin area", () => {
   test.describe.configure({ mode: "serial" });
@@ -55,8 +55,13 @@ test.describe("Leaderboard admin area", () => {
     await page.goto("/leaderboard/admin");
     await page.getByRole("tab", { name: "Settings" }).click();
 
+    // Assert the write landed, not that a toast appeared — see
+    // expectSettingsSaved's comment in helpers.ts. This test raises the same
+    // "Settings updated." string twice (here and at the cleanup below), which
+    // is exactly the race that made it flaky.
     await page.getByLabel("Enable the public, no-login leaderboard page").check();
-    await expect(page.getByText("Settings updated.")).toBeVisible();
+    await expectSettingsSaved(campId, (s) => s?.publicEnabled === true);
+
     await page.getByRole("button", { name: "Generate Public Link" }).click();
     await expect(page.getByAltText("Public leaderboard QR code")).toBeVisible();
 
@@ -74,9 +79,14 @@ test.describe("Leaderboard admin area", () => {
     const settings2 = await prisma.leaderboardSettings.findFirstOrThrow({ where: { campId } });
     expect(settings2.publicToken).not.toBe(settings1.publicToken);
 
-    // Clean up: leave public disabled for other specs/manual testing.
-    await page.getByLabel("Enable the public, no-login leaderboard page").uncheck();
-    await expect(page.getByText("Settings updated.")).toBeVisible();
+    // Clean up: leave public disabled for other specs/manual testing. Waiting
+    // on the DB rather than the toast is what guarantees this actually
+    // committed before the test ends — previously it could not, leaving
+    // publicEnabled true for whatever ran next.
+    const publicToggle = page.getByLabel("Enable the public, no-login leaderboard page");
+    await expect(publicToggle).toBeChecked();
+    await publicToggle.uncheck();
+    await expectSettingsSaved(campId, (s) => s?.publicEnabled === false);
   });
 
   test("audit log lists the award and undo works from there", async ({ page }) => {

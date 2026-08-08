@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { loginWithPassword, getFixtureOrgContext, prisma } from "./helpers";
+import { loginWithPassword, getFixtureOrgContext, expectSettingsSaved, prisma } from "./helpers";
 
 /**
  * PR 6 — teacher composite score / weighted camper ranking, BumpChart
@@ -39,10 +39,9 @@ test.describe("Leaderboard composite scoring (PR 6)", () => {
 
     const achievementsInput = page.locator("#teacherMetricWeights-achievementCount");
     await achievementsInput.fill("60");
-    await expect(page.getByText("Settings updated.")).toBeVisible();
-
-    const settings = await prisma.leaderboardSettings.findFirstOrThrow({ where: { campId } });
-    expect((settings.teacherMetricWeights as any)?.achievementCount).toBe(60);
+    // Poll the DB rather than the shared "Settings updated." toast — see
+    // expectSettingsSaved in helpers.ts.
+    await expectSettingsSaved(campId, (s) => (s?.teacherMetricWeights as any)?.achievementCount === 60);
   });
 
   test("the public Rules tab shows the configured weights read-only", async ({ page }) => {

@@ -392,3 +392,30 @@ export async function loginWithOtp(page: Page, email: string) {
   await fillOtpGrid(page, code);
   await page.locator('button:visible', { hasText: "Verify OTP" }).click();
 }
+
+/**
+ * Waits for a leaderboard settings mutation to actually land, by polling the
+ * DB for the expected state.
+ *
+ * **Never assert on the "Settings updated." toast to prove a settings write
+ * landed.** Every mutation in `SettingsAdmin` raises that same string, and
+ * toasts linger for seconds, so a second back-to-back mutation's toast
+ * assertion matches the *first* toast and passes instantly — the test then
+ * proceeds (or ends, skipping cleanup) while the write is still in flight.
+ * That is the root cause of the long-running `leaderboard-admin.spec.ts`
+ * flake: it surfaced as a `.uncheck()` actionability failure rather than a
+ * wrong value, because `SettingsAdmin`'s optimistic update re-renders the
+ * bound input on `onSettled` invalidation.
+ *
+ * `predicate` receives the LeaderboardSettings row (or null if none exists
+ * yet) and should return true once the expected state is visible.
+ */
+export async function expectSettingsSaved(
+  campId: string,
+  predicate: (settings: any | null) => boolean,
+  timeout = 15000
+): Promise<void> {
+  await expect
+    .poll(async () => predicate(await prisma.leaderboardSettings.findFirst({ where: { campId } })), { timeout })
+    .toBe(true);
+}

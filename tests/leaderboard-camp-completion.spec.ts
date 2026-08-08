@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { loginWithPassword, getFixtureOrgContext, prisma } from "./helpers";
+import { loginWithPassword, getFixtureOrgContext, expectSettingsSaved, prisma } from "./helpers";
 
 /**
  * PR 10 — camp completion (the spec's last unimplemented automatic scoring
@@ -32,19 +32,8 @@ test.describe("Leaderboard camp completion and campus weights (PR 10)", () => {
     await page.locator("#completion-mode").selectOption("CHECKOUT");
     await page.locator("#completion-points").fill("75");
 
-    // Poll the DB rather than waiting on the "Settings updated." toast: these
-    // are two back-to-back mutations and the first one's toast is still on
-    // screen when the second fires, so a toast assertion passes immediately
-    // and races the write. (Caught as a real flake on the first run.)
-    await expect
-      .poll(
-        async () => {
-          const s = await prisma.leaderboardSettings.findFirst({ where: { campId } });
-          return { mode: s?.completionMode, points: s?.completionPoints };
-        },
-        { timeout: 15000 }
-      )
-      .toEqual({ mode: "CHECKOUT", points: 75 });
+    // Two back-to-back mutations sharing one toast — see expectSettingsSaved.
+    await expectSettingsSaved(campId, (s) => s?.completionMode === "CHECKOUT" && s?.completionPoints === 75);
   });
 
   test("the manual Award Camp Completion button records real score events", async ({ page }) => {
@@ -76,15 +65,7 @@ test.describe("Leaderboard camp completion and campus weights (PR 10)", () => {
     await expect(page.getByText("Campus Ranking (sort order)")).toBeVisible();
     await page.locator("#campusMetricWeights-attendancePct").fill("44");
 
-    await expect
-      .poll(
-        async () => {
-          const s = await prisma.leaderboardSettings.findFirst({ where: { campId } });
-          return (s?.campusMetricWeights as any)?.attendancePct;
-        },
-        { timeout: 15000 }
-      )
-      .toBe(44);
+    await expectSettingsSaved(campId, (s) => (s?.campusMetricWeights as any)?.attendancePct === 44);
 
     await page.goto("/leaderboard");
     await page.getByRole("tab", { name: "Rules" }).click();
