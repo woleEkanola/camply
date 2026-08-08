@@ -999,6 +999,15 @@ model LeaderboardSettings {
   showAchievements       Boolean   @default(true)
   camperMetricWeights    Json?
   teacherMetricWeights   Json?
+  campusMetricWeights    Json?
+  // CHECKOUT | CAMP_END | MANUAL — how "camp completion" points get awarded
+  // (aggregate.ts / dailyOps.ts). Deliberately a String, not an enum: a new
+  // enum value would need its own migration ahead of any use of it (see
+  // CLAUDE.md), and this set is small, camp-scoped config rather than a
+  // referential type. Defaults to MANUAL so nothing fires until an admin
+  // opts in.
+  completionMode         String    @default("MANUAL")
+  completionPoints       Int       @default(50)
   timezone               String    @default("Africa/Lagos")
   lastRebuildAt          DateTime?
   // O(1) reset: archive the settings row's cutoff instead of deleting

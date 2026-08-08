@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { rebuildLeaderboard } from "./aggregate";
 import { notifyAchievementAwarded } from "./notify";
-import { awardTeacherOfTheDay } from "./dailyOps";
+import { awardTeacherOfTheDay, awardCampCompletion } from "./dailyOps";
 
 /**
  * Nightly full reconcile — the healing half of the at-most-once
@@ -32,6 +32,9 @@ export async function reconcileAllCamps() {
       await notifyAchievementAwarded(camp.id, award.achievementName, "TRIBE", award.tribeId);
     }
     await awardTeacherOfTheDay(camp.id);
+    // No-ops unless the camp opted into CHECKOUT or CAMP_END mode; every
+    // award is idempotencyKey-guarded, so running nightly is safe.
+    await awardCampCompletion(camp.id);
     reconciled++;
   }
   return { reconciled };

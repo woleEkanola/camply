@@ -194,10 +194,21 @@ async function computeDerivedStats(tx: Tx, campId: string, timezone: string): Pr
   const today = campDayKey(new Date(), timezone);
   const todayDate = new Date(`${today}T00:00:00.000Z`);
 
-  const subjectColumns: Array<{ column: "tribeId" | "registrationId" | "staffProfileId"; subjectType: StatSubject["subjectType"]; achievementPrefix: "T" | "C" | "S" }> = [
+  // CAMPUS is included here (it was previously skipped) so campuses get the
+  // same attendance/promptness/streak treatment every other subject gets —
+  // the campus composite in computeCompositeScores needs those inputs, and
+  // the spec ranks campuses on attendance and promptness explicitly.
+  // `achievementPrefix` is null for CAMPUS because AchievementAward.subjectKey
+  // only ever encodes T:/C:/S: — there is no such thing as a campus achievement.
+  const subjectColumns: Array<{
+    column: "tribeId" | "registrationId" | "staffProfileId" | "campusId";
+    subjectType: StatSubject["subjectType"];
+    achievementPrefix: "T" | "C" | "S" | null;
+  }> = [
     { column: "tribeId", subjectType: "TRIBE", achievementPrefix: "T" },
     { column: "registrationId", subjectType: "CAMPER", achievementPrefix: "C" },
     { column: "staffProfileId", subjectType: "STAFF", achievementPrefix: "S" },
+    { column: "campusId", subjectType: "CAMPUS", achievementPrefix: null },
   ];
 
   for (const { column, subjectType, achievementPrefix } of subjectColumns) {
@@ -283,14 +294,16 @@ async function computeDerivedStats(tx: Tx, campId: string, timezone: string): Pr
     // ScoreEvents (e.g. a manual non-point achievement) and therefore no
     // LeaderboardStat row yet — applyStatDelta(0) guarantees one exists
     // before the UPDATE, the same treatment TRIBE rows already get above.
-    const achievementCounts: Array<{ subjectId: string; count: bigint }> = await tx.$queryRawUnsafe(
-      `SELECT split_part("subjectKey", ':', 2) AS "subjectId", COUNT(*) AS "count"
-       FROM "AchievementAward"
-       WHERE "campId" = $1 AND "subjectKey" LIKE $2
-       GROUP BY split_part("subjectKey", ':', 2)`,
-      campId,
-      `${achievementPrefix}:%`
-    );
+    const achievementCounts: Array<{ subjectId: string; count: bigint }> = achievementPrefix
+      ? await tx.$queryRawUnsafe(
+          `SELECT split_part("subjectKey", ':', 2) AS "subjectId", COUNT(*) AS "count"
+           FROM "AchievementAward"
+           WHERE "campId" = $1 AND "subjectKey" LIKE $2
+           GROUP BY split_part("subjectKey", ':', 2)`,
+          campId,
+          `${achievementPrefix}:%`
+        )
+      : [];
     for (const row of achievementCounts) {
       await applyStatDelta(tx, campId, { subjectType, subjectId: row.subjectId }, today, 0);
       await tx.$executeRaw`
@@ -320,74 +333,220 @@ async function computeDerivedStats(tx: Tx, campId: string, timezone: string): Pr
   }
 }
 
-const COMPOSITE_METRIC_KEYS = ["attendancePct", "promptnessPct", "totalPoints", "achievementCount"] as const;
-type CompositeMetricKey = (typeof COMPOSITE_METRIC_KEYS)[number];
-const DEFAULT_COMPOSITE_WEIGHTS: Record<CompositeMetricKey, number> = {
-  attendancePct: 25,
-  promptnessPct: 25,
-  totalPoints: 25,
-  achievementCount: 25,
+/** Metrics read straight off the subject's own LeaderboardStat row. */
+const BASE_METRIC_KEYS = ["attendancePct", "promptnessPct", "totalPoints", "achievementCount"] as const;
+
+/**
+ * Metrics derived from the *tribe a staff member is assigned to* — the spec's
+ * teacher metrics "camper attendance" and "average camper punctuality", which
+ * are real data via `StaffProfile.assignedTribeId` joined to that tribe's
+ * LeaderboardStat row. Only meaningful for STAFF.
+ */
+const STAFF_TRIBE_METRIC_KEYS = ["tribeAttendancePct", "tribePromptnessPct"] as const;
+
+/**
+ * Per-`ScoreCategory` point totals, addressed as `cat:<categoryId>`. This is
+ * what makes the spec's named metrics real rather than approximated: the 20
+ * seeded categories *are* the metric names it lists (Bible Quiz, Sports,
+ * Service, Leadership, Special Recognition, Teamwork), and every ScoreEvent
+ * carries a non-nullable `categoryId`, so grouping by (subject, category)
+ * yields them directly. Any category — including admin-created ones — can be
+ * weighted this way; these constants only drive the default weight maps and
+ * the Settings UI's suggested list.
+ */
+export const CATEGORY_METRIC_IDS = {
+  bibleQuiz: "seed-cat-bible-quiz",
+  sports: "seed-cat-sports",
+  service: "seed-cat-service",
+  leadership: "seed-cat-leadership",
+  recognition: "seed-cat-special-recognition",
+  teamwork: "seed-cat-teamwork",
+} as const;
+
+const catKey = (categoryId: string) => `cat:${categoryId}`;
+
+/**
+ * Default blends, one per subject type, replacing the previous flat
+ * "four metrics at 25 each" for every type.
+ *
+ * CAMPER covers 8 of the spec's 9 named ranking metrics. STAFF covers 6 of
+ * its 8. **The genuinely missing ones are "participation" (both) and
+ * "session management" (staff)** — nothing in the schema measures either, and
+ * they are deliberately absent rather than approximated by a proxy that would
+ * make the number look more precise than it is. Everything here is editable
+ * per camp in admin Settings and rendered read-only on the public Rules tab.
+ */
+const DEFAULT_WEIGHTS_BY_SUBJECT: Record<"STAFF" | "CAMPER" | "CAMPUS", Record<string, number>> = {
+  // attendance, camper attendance, average camper punctuality, recognition,
+  // manual commendations (≈ points), leadership, achievements.
+  STAFF: {
+    attendancePct: 20,
+    promptnessPct: 10,
+    tribeAttendancePct: 15,
+    tribePromptnessPct: 10,
+    [catKey(CATEGORY_METRIC_IDS.recognition)]: 15,
+    [catKey(CATEGORY_METRIC_IDS.leadership)]: 10,
+    totalPoints: 15,
+    achievementCount: 5,
+  },
+  // attendance, promptness, Bible Quiz, sports, service, leadership,
+  // positive recognition, manual awards (≈ points), achievements.
+  CAMPER: {
+    attendancePct: 20,
+    promptnessPct: 15,
+    [catKey(CATEGORY_METRIC_IDS.bibleQuiz)]: 10,
+    [catKey(CATEGORY_METRIC_IDS.sports)]: 10,
+    [catKey(CATEGORY_METRIC_IDS.service)]: 10,
+    [catKey(CATEGORY_METRIC_IDS.leadership)]: 10,
+    [catKey(CATEGORY_METRIC_IDS.recognition)]: 10,
+    totalPoints: 10,
+    achievementCount: 5,
+  },
+  // attendance, promptness, average tribe score (≈ totalPoints), teamwork,
+  // service. "Participation" and an explicit "teacher performance" rollup
+  // have no data source — same honesty rule as above.
+  CAMPUS: {
+    attendancePct: 30,
+    promptnessPct: 25,
+    totalPoints: 25,
+    [catKey(CATEGORY_METRIC_IDS.teamwork)]: 10,
+    [catKey(CATEGORY_METRIC_IDS.service)]: 10,
+  },
 };
 
 /**
- * Blends four distinctly-tracked metrics (attendancePct, promptnessPct,
- * totalPoints, achievementCount) into a single per-subject composite score
- * for STAFF (teachers) and CAMPER — TRIBE/CAMPUS are left alone, they only
- * ever rank by raw totalPoints.
+ * Per-(subject, category) point totals for one camp. Not index-covered —
+ * `ScoreEvent` has `(campId, categoryId, day)` and `(campId, <subject>, day)`
+ * but no composite spanning both — so this groups in-heap. Fine at camp scale
+ * (one to two weeks of events); revisit if a camp ever runs for months.
+ */
+async function perCategoryTotals(tx: Tx, campId: string, column: string): Promise<Map<string, Map<string, number>>> {
+  const rows: Array<{ subjectId: string; categoryId: string; points: bigint }> = await tx.$queryRawUnsafe(
+    `SELECT "${column}" AS "subjectId", "categoryId", SUM("points") AS "points"
+     FROM "ScoreEvent"
+     WHERE "campId" = $1 AND "${column}" IS NOT NULL
+     GROUP BY "${column}", "categoryId"`,
+    campId
+  );
+  const bySubject = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    const inner = bySubject.get(r.subjectId) ?? new Map<string, number>();
+    inner.set(r.categoryId, Number(r.points));
+    bySubject.set(r.subjectId, inner);
+  }
+  return bySubject;
+}
+
+/**
+ * Blends weighted metrics into one composite score per subject, for STAFF,
+ * CAMPER and CAMPUS. TRIBE is deliberately left alone — the spec ranks
+ * tribes on raw points, and `rank`/`rankDelta` (which notify.ts's Top-3
+ * transition logic depends on) stay points-based for every subject type.
  *
- * Honesty about the data gap (per the plan this PR implements): the
- * original leaderboard spec names eight distinct teacher-quality metrics.
- * Only these four have real, distinctly-tracked backing data today — the
- * rest (things like a subjective punctuality-beyond-arrival-time rating,
- * or peer/parent feedback) have no data source anywhere in the schema.
- * Rather than inventing a precise-looking number for metrics nothing
- * measures, the composite is built honestly from what's actually tracked,
- * and `LeaderboardSettings.teacherMetricWeights`/`camperMetricWeights`
- * (editable in admin Settings, rendered read-only on the public Rules tab)
- * make exactly which of these four — and how much each counts — fully
- * transparent, rather than a black-box "4.9 out of 5".
+ * Three metric families, all weighted through the same mechanism:
+ *  - **base** — `attendancePct`, `promptnessPct`, `totalPoints`,
+ *    `achievementCount`, read off the subject's own stat row.
+ *  - **per-category** — `cat:<categoryId>`, the subject's point total in one
+ *    ScoreCategory. This is what makes the spec's named metrics (Bible Quiz,
+ *    Sports, Service, Leadership, Recognition, Teamwork) real measurements
+ *    rather than approximations.
+ *  - **staff tribe-derived** — `tribeAttendancePct` / `tribePromptnessPct`,
+ *    the assigned tribe's figures, i.e. the spec's teacher metrics "camper
+ *    attendance" and "average camper punctuality".
+ *
+ * **Still genuinely unmeasurable, and therefore absent:** "participation"
+ * (camper and staff) and "session management" (staff). Nothing in the schema
+ * records either. They are left out rather than proxied, so the number never
+ * looks more precise than the data supports — the same rule the rest of this
+ * feature follows. `LeaderboardSettings.teacherMetricWeights` /
+ * `camperMetricWeights` / `campusMetricWeights` are editable in admin
+ * Settings and rendered read-only on the public Rules tab, so which metrics
+ * count and by how much is always inspectable.
  *
  * Each metric is min-max normalized across the camp's subjects of that type
- * (0-100) before weighting, since totalPoints/achievementCount have no
- * natural upper bound and can't be blended with percentage metrics
- * otherwise. Ties (including the common all-zero case, e.g. no
- * achievements awarded yet) get full credit for that metric rather than an
- * undefined 0/0 — nobody should be penalized for a metric that hasn't had
- * a chance to differentiate anyone yet.
+ * (0-100) before weighting, since points/counts have no natural upper bound
+ * and can't otherwise be blended with percentages. Ties (including the
+ * common all-zero case, e.g. a category nobody has scored in yet) get full
+ * credit rather than an undefined 0/0 — nobody should be penalized for a
+ * metric that hasn't had a chance to differentiate anyone.
  *
  * STAFF is displayed as a 0-5 rating (the spec's "teacher composite score"
- * framing). CAMPER stays 0-100 and is used only as an optional sort key
- * (see leaderboard.campers/staff's orderBy) — never shown as a rating.
+ * framing). CAMPER and CAMPUS stay 0-100 and are used only as optional sort
+ * keys (see `leaderboard.campers`/`campuses`) — never shown as a rating.
  */
 async function computeCompositeScores(tx: Tx, campId: string): Promise<void> {
   const settings = await tx.leaderboardSettings.findUnique({ where: { campId } });
 
-  for (const subjectType of ["STAFF", "CAMPER"] as const) {
-    const configured =
-      subjectType === "STAFF" ? (settings?.teacherMetricWeights as Record<string, number> | null) : (settings?.camperMetricWeights as Record<string, number> | null);
-    const weights: Record<CompositeMetricKey, number> = { ...DEFAULT_COMPOSITE_WEIGHTS, ...(configured && typeof configured === "object" ? configured : {}) };
-    const totalWeight = COMPOSITE_METRIC_KEYS.reduce((sum, k) => sum + (weights[k] ?? 0), 0) || 1;
+  const subjectConfig = [
+    { subjectType: "STAFF" as const, column: "staffProfileId", configured: settings?.teacherMetricWeights },
+    { subjectType: "CAMPER" as const, column: "registrationId", configured: settings?.camperMetricWeights },
+    { subjectType: "CAMPUS" as const, column: "campusId", configured: (settings as any)?.campusMetricWeights },
+  ];
+
+  for (const { subjectType, column, configured } of subjectConfig) {
+    const weights: Record<string, number> = {
+      ...DEFAULT_WEIGHTS_BY_SUBJECT[subjectType],
+      ...(configured && typeof configured === "object" ? (configured as Record<string, number>) : {}),
+    };
+    // Only metrics carrying positive weight are computed or normalized —
+    // a zeroed-out metric can't influence the result, so it shouldn't drag
+    // the min/max range around either.
+    const metricKeys = Object.keys(weights).filter((k) => (weights[k] ?? 0) > 0);
+    const totalWeight = metricKeys.reduce((sum, k) => sum + weights[k], 0) || 1;
+    if (metricKeys.length === 0) continue;
 
     const rows = await tx.leaderboardStat.findMany({
       where: { campId, subjectType, day: null },
-      select: { id: true, totalPoints: true, attendancePct: true, promptnessPct: true, achievementCount: true },
+      select: { id: true, subjectId: true, totalPoints: true, attendancePct: true, promptnessPct: true, achievementCount: true },
     });
     if (rows.length === 0) continue;
 
+    const needsCategories = metricKeys.some((k) => k.startsWith("cat:"));
+    const categoryTotals = needsCategories ? await perCategoryTotals(tx, campId, column) : new Map<string, Map<string, number>>();
+
+    // STAFF only: the assigned tribe's attendance/promptness, i.e. the spec's
+    // "camper attendance" and "average camper punctuality" for a teacher.
+    const tribeMetricsByStaff = new Map<string, { attendancePct: number; promptnessPct: number }>();
+    if (subjectType === "STAFF" && metricKeys.some((k) => (STAFF_TRIBE_METRIC_KEYS as readonly string[]).includes(k))) {
+      const staffRows = await tx.staffProfile.findMany({
+        where: { id: { in: rows.map((r: any) => r.subjectId) }, assignedTribeId: { not: null } },
+        select: { id: true, assignedTribeId: true },
+      });
+      const tribeIds = [...new Set(staffRows.map((s: any) => s.assignedTribeId as string))];
+      const tribeStats = tribeIds.length
+        ? await tx.leaderboardStat.findMany({
+            where: { campId, subjectType: "TRIBE", subjectId: { in: tribeIds }, day: null },
+            select: { subjectId: true, attendancePct: true, promptnessPct: true },
+          })
+        : [];
+      const statByTribe = new Map(tribeStats.map((t: any) => [t.subjectId, t]));
+      for (const s of staffRows) {
+        const t = statByTribe.get(s.assignedTribeId as string) as any;
+        if (t) tribeMetricsByStaff.set(s.id, { attendancePct: Number(t.attendancePct ?? 0), promptnessPct: Number(t.promptnessPct ?? 0) });
+      }
+    }
+
+    function rawValue(row: any, key: string): number {
+      if (key.startsWith("cat:")) return categoryTotals.get(row.subjectId)?.get(key.slice(4)) ?? 0;
+      if (key === "tribeAttendancePct") return tribeMetricsByStaff.get(row.subjectId)?.attendancePct ?? 0;
+      if (key === "tribePromptnessPct") return tribeMetricsByStaff.get(row.subjectId)?.promptnessPct ?? 0;
+      return Number(row[key] ?? 0);
+    }
+
     const ranges = Object.fromEntries(
-      COMPOSITE_METRIC_KEYS.map((k) => {
-        const values = rows.map((r: any) => Number(r[k] ?? 0));
+      metricKeys.map((k) => {
+        const values = rows.map((r: any) => rawValue(r, k));
         return [k, { min: Math.min(...values), max: Math.max(...values) }];
       })
-    ) as Record<CompositeMetricKey, { min: number; max: number }>;
+    ) as Record<string, { min: number; max: number }>;
 
     for (const row of rows) {
       let weightedSum = 0;
-      for (const k of COMPOSITE_METRIC_KEYS) {
+      for (const k of metricKeys) {
         const { min, max } = ranges[k];
-        const raw = Number((row as any)[k] ?? 0);
+        const raw = rawValue(row, k);
         const normalized = max === min ? 100 : ((raw - min) / (max - min)) * 100;
-        weightedSum += normalized * (weights[k] ?? 0);
+        weightedSum += normalized * weights[k];
       }
       const blended = weightedSum / totalWeight; // 0-100
       const compositeScore = subjectType === "STAFF" ? Math.round((blended / 20) * 10) / 10 : Math.round(blended * 100) / 100;

@@ -1,6 +1,104 @@
 import { prisma } from "../db";
 import { campDayKey } from "./dayKey";
 import { notifyTeacherOfTheDay } from "./notify";
+import { recordScoreEvent } from "./record";
+
+export const CAMP_COMPLETION_CATEGORY_ID = "seed-cat-camp-completion";
+
+export type CompletionMode = "CHECKOUT" | "CAMP_END" | "MANUAL";
+
+/**
+ * Awards the spec's "camp completion" points — the one automatic scoring
+ * trigger that was never implemented.
+ *
+ * Three modes, per camp (`LeaderboardSettings.completionMode`, default
+ * MANUAL so nothing fires until an admin opts in):
+ *  - `CHECKOUT`  — anyone who has actually checked out
+ *                  (`Registration.checkedOutAt`, the field the checkout scan
+ *                  already writes).
+ *  - `CAMP_END`  — everyone still active once `Camp.endDate` has passed,
+ *                  swept by the nightly reconcile. Credits people who left
+ *                  without a checkout scan; that's the trade-off of the mode.
+ *  - `MANUAL`    — nothing automatic; an admin presses "Award Camp
+ *                  Completion" to round everyone up at once.
+ *
+ * `force` is what the manual admin action passes, so it can award regardless
+ * of the configured mode. Every award goes through `recordScoreEvent` with a
+ * stable `completion:*` idempotencyKey, so the modes are mutually safe, the
+ * nightly sweep is re-runnable, and a subject can never be double-credited
+ * even if the mode changes mid-camp.
+ *
+ * Deliberately does NOT touch `Registration.status`. `COMPLETED` exists in the
+ * enum and the state machine allows CHECKED_IN -> COMPLETED, but status
+ * transitions belong to the registration engine (its single choke point), not
+ * to scoring.
+ */
+export async function awardCampCompletion(
+  campId: string,
+  opts: { force?: boolean } = {}
+): Promise<{ campers: number; staff: number; skipped: "MODE" | null }> {
+  const camp = await prisma.camp.findUnique({ where: { id: campId }, select: { endDate: true } });
+  if (!camp) return { campers: 0, staff: 0, skipped: null };
+
+  const settings = await prisma.leaderboardSettings.findUnique({ where: { campId } });
+  const mode = ((settings as any)?.completionMode ?? "MANUAL") as CompletionMode;
+  const points = (settings as any)?.completionPoints ?? 50;
+
+  if (!opts.force) {
+    if (mode === "MANUAL") return { campers: 0, staff: 0, skipped: "MODE" };
+    if (mode === "CAMP_END" && camp.endDate > new Date()) return { campers: 0, staff: 0, skipped: "MODE" };
+  }
+
+  // CHECKOUT mode only credits registrations that actually checked out;
+  // the other two modes sweep everyone who reached the camp.
+  const requireCheckout = !opts.force && mode === "CHECKOUT";
+  const registrations = await prisma.registration.findMany({
+    where: {
+      campId,
+      deletedAt: null,
+      status: { in: ["APPROVED", "CHECKED_IN", "COMPLETED"] },
+      ...(requireCheckout ? { checkedOutAt: { not: null } } : {}),
+    },
+    select: { id: true, tribeId: true, campusId: true },
+  });
+
+  let campers = 0;
+  for (const reg of registrations) {
+    const event = await recordScoreEvent({
+      campId,
+      registrationId: reg.id,
+      tribeId: reg.tribeId,
+      campusId: reg.campusId,
+      categoryId: CAMP_COMPLETION_CATEGORY_ID,
+      points,
+      reason: "Camp completion",
+      source: "SYSTEM",
+      idempotencyKey: `completion:${reg.id}`,
+    });
+    if (event) campers++;
+  }
+
+  const staffProfiles = await prisma.staffProfile.findMany({
+    where: { campId, deletedAt: null, status: "APPROVED" },
+    select: { id: true, assignedTribeId: true },
+  });
+
+  let staff = 0;
+  for (const s of staffProfiles) {
+    const event = await recordScoreEvent({
+      campId,
+      staffProfileId: s.id,
+      categoryId: CAMP_COMPLETION_CATEGORY_ID,
+      points,
+      reason: "Camp completion",
+      source: "SYSTEM",
+      idempotencyKey: `completion:staff:${s.id}`,
+    });
+    if (event) staff++;
+  }
+
+  return { campers, staff, skipped: null };
+}
 
 /**
  * Computed in the nightly reconcile cron only (never on a read path, never

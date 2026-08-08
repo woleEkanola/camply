@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api } from "@/utils/trpc";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Input, Select } from "@/components/ui/Input";
 import { Dialog } from "@/components/ui/Dialog";
 import { useToast } from "@/components/ui/Toast";
 import { SkeletonText } from "@/components/ui/Skeleton";
@@ -61,6 +61,15 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
     },
   });
 
+  const completion = api.leaderboard.awardCampCompletion.useMutation({
+    onSuccess: (result) => {
+      utils.leaderboard.overview.invalidate({ campId });
+      utils.leaderboard.campers.invalidate({ campId });
+      toast.success(`Camp completion awarded to ${result.campers} camper(s) and ${result.staff} staff.`);
+    },
+    onError: (err) => toast.error(err.message || "Failed to award camp completion."),
+  });
+
   const rebuild = api.leaderboard.rebuild.useMutation({
     onSuccess: () => {
       utils.leaderboard.tribes.invalidate({ campId });
@@ -73,30 +82,62 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
 
   const publicUrl = typeof window !== "undefined" && settings.publicToken ? `${window.location.origin}/l/${settings.publicToken}` : null;
 
-  const WEIGHT_METRICS: { key: "attendancePct" | "promptnessPct" | "totalPoints" | "achievementCount"; label: string }[] = [
-    { key: "attendancePct", label: "Attendance" },
-    { key: "promptnessPct", label: "Promptness" },
-    { key: "totalPoints", label: "Points" },
-    { key: "achievementCount", label: "Achievements" },
-  ];
-  const DEFAULT_WEIGHT = 25;
+  // Mirrors aggregate.ts's DEFAULT_WEIGHTS_BY_SUBJECT. Metrics with no data
+  // source anywhere in the schema — "participation" (all subjects) and
+  // "session management" (staff) — are deliberately absent rather than shown
+  // as un-editable zeros, so this list only ever offers real measurements.
+  type WeightMetric = { key: string; label: string; def: number };
+  const BASE: Record<string, WeightMetric[]> = {
+    teacherMetricWeights: [
+      { key: "attendancePct", label: "Attendance", def: 20 },
+      { key: "promptnessPct", label: "Promptness", def: 10 },
+      { key: "tribeAttendancePct", label: "Camper Attendance", def: 15 },
+      { key: "tribePromptnessPct", label: "Camper Punctuality", def: 10 },
+      { key: "cat:seed-cat-special-recognition", label: "Recognition", def: 15 },
+      { key: "cat:seed-cat-leadership", label: "Leadership", def: 10 },
+      { key: "totalPoints", label: "Points", def: 15 },
+      { key: "achievementCount", label: "Achievements", def: 5 },
+    ],
+    camperMetricWeights: [
+      { key: "attendancePct", label: "Attendance", def: 20 },
+      { key: "promptnessPct", label: "Promptness", def: 15 },
+      { key: "cat:seed-cat-bible-quiz", label: "Bible Quiz", def: 10 },
+      { key: "cat:seed-cat-sports", label: "Sports", def: 10 },
+      { key: "cat:seed-cat-service", label: "Service", def: 10 },
+      { key: "cat:seed-cat-leadership", label: "Leadership", def: 10 },
+      { key: "cat:seed-cat-special-recognition", label: "Recognition", def: 10 },
+      { key: "totalPoints", label: "Manual Awards", def: 10 },
+      { key: "achievementCount", label: "Achievements", def: 5 },
+    ],
+    campusMetricWeights: [
+      { key: "attendancePct", label: "Attendance", def: 30 },
+      { key: "promptnessPct", label: "Promptness", def: 25 },
+      { key: "totalPoints", label: "Avg Tribe Score", def: 25 },
+      { key: "cat:seed-cat-teamwork", label: "Teamwork", def: 10 },
+      { key: "cat:seed-cat-service", label: "Service", def: 10 },
+    ],
+  };
 
   function weightRow(
-    settingsKey: "teacherMetricWeights" | "camperMetricWeights",
+    settingsKey: "teacherMetricWeights" | "camperMetricWeights" | "campusMetricWeights",
     current: Record<string, number> | null | undefined
   ) {
-    return WEIGHT_METRICS.map(({ key, label }) => (
+    const metrics = BASE[settingsKey];
+    return metrics.map(({ key, label, def }) => (
       <Input
         key={key}
-        id={`${settingsKey}-${key}`}
+        id={`${settingsKey}-${key.replace(/[:]/g, "-")}`}
         label={label}
         type="number"
         min={0}
-        value={current?.[key] ?? DEFAULT_WEIGHT}
+        value={current?.[key] ?? def}
         onChange={(e) =>
           update.mutate({
             campId,
-            [settingsKey]: { ...WEIGHT_METRICS.reduce((acc, m) => ({ ...acc, [m.key]: current?.[m.key] ?? DEFAULT_WEIGHT }), {}), [key]: Number(e.target.value) },
+            [settingsKey]: {
+              ...metrics.reduce((acc, m) => ({ ...acc, [m.key]: current?.[m.key] ?? m.def }), {}),
+              [key]: Number(e.target.value),
+            },
           } as any)
         }
       />
@@ -214,6 +255,56 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
             </h4>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{weightRow("camperMetricWeights", settings.camperMetricWeights as any)}</div>
           </div>
+          <div>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-txt-secondary">
+              Campus Ranking (sort order)
+            </h4>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{weightRow("campusMetricWeights", (settings as any).campusMetricWeights)}</div>
+          </div>
+          <p className="text-xs text-txt-muted">
+            Only metrics with real backing data are listed. &quot;Participation&quot; and &quot;session management&quot; are not
+            tracked anywhere in Camply yet, so they are deliberately excluded rather than estimated.
+          </p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Camp Completion</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <p className="text-sm text-txt-secondary">
+            Awards a one-off bonus when someone completes camp. Every award is de-duplicated, so switching modes or
+            pressing the button twice can never double-credit anyone.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Select
+              id="completion-mode"
+              label="When to award"
+              value={(settings as any).completionMode ?? "MANUAL"}
+              onChange={(e) => update.mutate({ campId, completionMode: e.target.value } as any)}
+            >
+              <option value="MANUAL">Manually, when an admin presses the button</option>
+              <option value="CHECKOUT">Automatically at checkout</option>
+              <option value="CAMP_END">Automatically once the camp end date passes</option>
+            </Select>
+            <Input
+              id="completion-points"
+              label="Completion points"
+              type="number"
+              min={0}
+              value={(settings as any).completionPoints ?? 50}
+              onChange={(e) => update.mutate({ campId, completionPoints: Number(e.target.value) } as any)}
+            />
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={completion.isPending}
+            onClick={() => completion.mutate({ campId })}
+          >
+            Award Camp Completion Now
+          </Button>
         </CardBody>
       </Card>
 

@@ -8,6 +8,7 @@ import { recordScoreEvent } from "../../leaderboard/record";
 import { rebuildLeaderboard } from "../../leaderboard/aggregate";
 import { toPublicDto, toPublicAnnouncementDto } from "../../leaderboard/publicDto";
 import { notifyAchievementAwarded } from "../../leaderboard/notify";
+import { awardCampCompletion } from "../../leaderboard/dailyOps";
 import { drainScoreQueue } from "../../leaderboard/queue";
 
 /**
@@ -362,13 +363,18 @@ export const leaderboardRouter = createTRPCRouter({
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertLeaderboardRead(ctx, input.campId);
+      // Same opt-in pattern as `campers`: ordering only switches to the
+      // weighted composite once an admin has configured campusMetricWeights,
+      // so a camp that never touches them sees no behaviour change.
+      const settings = await ctx.prisma.leaderboardSettings.findUnique({ where: { campId: input.campId } });
+      const useWeighted = !!(settings as any)?.campusMetricWeights;
       const stats = await ctx.prisma.leaderboardStat.findMany({
         where: { campId: input.campId, subjectType: "CAMPUS", day: null },
-        orderBy: { totalPoints: "desc" },
+        orderBy: useWeighted ? [{ compositeScore: { sort: "desc", nulls: "last" } }, { totalPoints: "desc" }] : { totalPoints: "desc" },
       });
       const campuses = await ctx.prisma.campus.findMany({ where: { id: { in: stats.map((s: any) => s.subjectId) } } });
       const campusById = new Map(campuses.map((c: any) => [c.id, c]));
-      return stats.map((s: any) => ({ stat: s, campus: campusById.get(s.subjectId) ?? null }));
+      return stats.map((s: any) => ({ stat: s, campus: campusById.get(s.subjectId) ?? null, rankedByWeightedScore: useWeighted }));
     }),
 
   achievements: protectedProcedure
@@ -576,6 +582,7 @@ export const leaderboardRouter = createTRPCRouter({
         // DEFAULT_COMPOSITE_WEIGHTS, equal 25 each).
         teacherMetricWeights: settings?.teacherMetricWeights ?? null,
         camperMetricWeights: settings?.camperMetricWeights ?? null,
+        campusMetricWeights: (settings as any)?.campusMetricWeights ?? null,
       };
     }),
 
@@ -953,6 +960,9 @@ export const leaderboardRouter = createTRPCRouter({
           showAchievements: z.boolean().optional(),
           camperMetricWeights: z.record(z.string(), z.number()).optional(),
           teacherMetricWeights: z.record(z.string(), z.number()).optional(),
+          campusMetricWeights: z.record(z.string(), z.number()).optional(),
+          completionMode: z.enum(["CHECKOUT", "CAMP_END", "MANUAL"]).optional(),
+          completionPoints: z.number().int().min(0).optional(),
           timezone: z.string().optional(),
         })
       )
@@ -1003,6 +1013,23 @@ export const leaderboardRouter = createTRPCRouter({
         await notifyAchievementAwarded(input.campId, award.achievementName, "TRIBE", award.tribeId);
       }
       return { ok: true };
+    }),
+
+  /**
+   * The MANUAL arm of camp completion — "the press of a button by admin to
+   * round up everything". Passes `force`, so it awards regardless of the
+   * configured `completionMode`; every award is idempotencyKey-guarded, so
+   * pressing it twice (or pressing it in a camp already running CHECKOUT
+   * mode) can never double-credit anyone.
+   */
+  awardCampCompletion: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const camp = await ctx.prisma.camp.findUniqueOrThrow({ where: { id: input.campId } });
+      await assertCanManageCamp(ctx, input.campId);
+      const result = await awardCampCompletion(input.campId, { force: true });
+      await writeAudit(ctx, camp, "LEADERBOARD_CAMP_COMPLETION", { newValue: result });
+      return result;
     }),
 
   /** O(1) reset: archives the settings row's cutoff rather than deleting any
