@@ -14,6 +14,7 @@ import { CampusesTab } from "@/components/leaderboard/CampusesTab";
 import { AchievementsTab } from "@/components/leaderboard/AchievementsTab";
 import { HistoryTab } from "@/components/leaderboard/HistoryTab";
 import { RulesTab } from "@/components/leaderboard/RulesTab";
+import { leaderboardArea } from "@/components/leaderboard/area";
 
 /**
  * One route serving all seven roles — the verified /profile precedent
@@ -39,12 +40,7 @@ export default function LeaderboardPage() {
   if (!session?.user) return null;
 
   const role = session.user.role as string;
-  let area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer" = "dashboard";
-  if (role === "SUPER_ADMIN") area = "super-admin";
-  else if (role === "OWNER" || role === "ADMIN") area = "admin";
-  else if (role === "CAMPUS_REPRESENTATIVE") area = "campus-rep";
-  else if (role === "TEACHER") area = "teacher";
-  else if (role === "VOLUNTEER") area = "volunteer";
+  const area = leaderboardArea(role);
 
   const isManager = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role);
 

@@ -44,6 +44,27 @@ export async function awardTeacherOfTheDay(campId: string, timezone = "Africa/La
     },
   });
 
+  // The spec calls Teacher of the Day a *persisted award*, and the seeded
+  // "Top Teacher" definition (seed-ach-top-teacher) exists precisely for it —
+  // before this, the only trace was the AuditLog dedupe row above and a
+  // transient notification, so nothing ever showed up on the Achievements tab
+  // or the staff detail page. Deduped for free by AchievementAward's existing
+  // @@unique([definitionId, subjectKey]), so a teacher who wins on multiple
+  // days keeps one award (matching every other achievement's semantics)
+  // rather than accumulating duplicates.
+  const definition = await prisma.achievementDefinition.findFirst({
+    where: { key: "TOP_TEACHER", OR: [{ campId }, { campId: null }] },
+  });
+  if (definition) {
+    try {
+      await prisma.achievementAward.create({
+        data: { definitionId: definition.id, campId, subjectKey: `S:${top.subjectId}` },
+      });
+    } catch (err: any) {
+      if (err?.code !== "P2002") throw err;
+    }
+  }
+
   const staffName = `${staff.firstName} ${staff.lastName}`;
   await notifyTeacherOfTheDay(campId, top.subjectId, staffName, top.totalPoints);
   return { staffProfileId: top.subjectId, staffName };

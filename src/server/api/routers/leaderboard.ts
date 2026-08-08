@@ -135,13 +135,20 @@ export const leaderboardRouter = createTRPCRouter({
         ctx.prisma.leaderboardStat.aggregate({ where: { campId: input.campId }, _max: { computedAt: true } }),
       ]);
 
-      const tribeNames = await namesFor(ctx.prisma, "tribe", topTribes.map((t: any) => t.subjectId));
+      // All three name maps resolved together — before this, only tribes were
+      // resolved, so the Overview tab's Top Campers / Top Teachers lists
+      // rendered the raw `subjectId` cuid straight to the user.
+      const [tribeNames, camperNames, staffNames] = await Promise.all([
+        namesFor(ctx.prisma, "tribe", topTribes.map((t: any) => t.subjectId)),
+        camperNamesFor(ctx.prisma, topCampers.map((c: any) => c.subjectId)),
+        staffNamesFor(ctx.prisma, topStaff.map((s: any) => s.subjectId)),
+      ]);
 
       return {
         championTribe: topTribes[0] ? { ...topTribes[0], name: tribeNames[topTribes[0].subjectId] } : null,
         topTribes: topTribes.map((t: any) => ({ ...t, name: tribeNames[t.subjectId] })),
-        topCampers,
-        topStaff,
+        topCampers: topCampers.map((c: any) => ({ ...c, name: camperNames[c.subjectId] ?? "Camper" })),
+        topStaff: topStaff.map((s: any) => ({ ...s, name: staffNames[s.subjectId] ?? "Staff" })),
         recentAchievements,
         feed,
         lastUpdated: lastComputed._max.computedAt,
@@ -1063,4 +1070,32 @@ async function namesFor(prisma: any, model: "tribe", ids: string[]): Promise<Rec
   if (ids.length === 0) return {};
   const rows = await prisma[model].findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
   return Object.fromEntries(rows.map((r: any) => [r.id, r.name]));
+}
+
+/**
+ * CAMPER `LeaderboardStat.subjectId` is a `Registration.id`, so the camper's
+ * name is one join away. Full names (not the public board's firstName +
+ * last-initial treatment) because this is the authenticated surface, where
+ * `CampersTab` and the tribe detail page already render `camper.name` — using
+ * a different form here would be inconsistent without adding any privacy,
+ * since the same viewers already see the full name one tab over. The public
+ * board's whitelist DTO (publicDto.ts) is unaffected and keeps last-initial.
+ */
+async function camperNamesFor(prisma: any, registrationIds: string[]): Promise<Record<string, string>> {
+  if (registrationIds.length === 0) return {};
+  const rows = await prisma.registration.findMany({
+    where: { id: { in: registrationIds } },
+    select: { id: true, camper: { select: { name: true } } },
+  });
+  return Object.fromEntries(rows.map((r: any) => [r.id, r.camper?.name ?? "Camper"]));
+}
+
+/** STAFF `LeaderboardStat.subjectId` is a `StaffProfile.id`. */
+async function staffNamesFor(prisma: any, staffIds: string[]): Promise<Record<string, string>> {
+  if (staffIds.length === 0) return {};
+  const rows = await prisma.staffProfile.findMany({
+    where: { id: { in: staffIds } },
+    select: { id: true, firstName: true, lastName: true },
+  });
+  return Object.fromEntries(rows.map((s: any) => [s.id, `${s.firstName} ${s.lastName}`.trim()]));
 }

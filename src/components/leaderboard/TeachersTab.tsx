@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
 import { Table, type Column } from "@/components/ui/Table";
 
 type Row = { stat: any; staff: any };
 
 export function TeachersTab({ campId }: { campId: string }) {
+  const router = useRouter();
   const { data, isLoading } = api.leaderboard.staff.useQuery({ campId }, { refetchInterval: 30_000 });
 
   const columns: Column<Row>[] = [
@@ -32,6 +34,9 @@ export function TeachersTab({ campId }: { campId: string }) {
       columns={columns}
       data={data ?? []}
       rowKey={(row) => row.stat.id}
+      // `stat.subjectId` is the StaffProfile id and is always present, unlike
+      // `row.staff` which can be null when the join misses.
+      onRowClick={(row) => router.push(`/leaderboard/staff/${row.stat.subjectId}`)}
       isLoading={isLoading}
       emptyTitle="No teacher/volunteer scores yet"
       emptyDescription="Staff standings will appear here once points are recorded."

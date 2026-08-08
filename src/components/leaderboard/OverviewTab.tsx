@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { api } from "@/utils/trpc";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Skeleton, SkeletonText } from "@/components/ui/Skeleton";
 import { TrophyIcon, FireIcon, SparklesIcon, ClockIcon } from "@heroicons/react/24/outline";
 
@@ -37,23 +39,81 @@ export function OverviewTab({ campId, role }: { campId: string; role: string }) 
     <div className="space-y-6">
       {role === "PARENT" && myChild && myChild.length > 0 && (
         <div className="space-y-3">
-          {myChild.map(({ registration, stat }) => (
-            <Card key={registration.id} className="border-accent-300 bg-accent-500/5">
-              <CardBody className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-accent-700">My Child</span>
-                  <h3 className="text-lg font-bold text-txt-primary">{registration.camper?.name}</h3>
-                  {registration.tribe && (
-                    <span className="text-sm text-txt-secondary">{registration.tribe.name} Tribe</span>
+          {myChild.map(({ registration, stat }) => {
+            // The child's tribe rank comes from the standings already fetched
+            // above rather than a second query — tribes are few, so a miss
+            // just means the tribe isn't in the top 10 and the row is omitted.
+            const tribeStat = data?.topTribes?.find((t: any) => t.subjectId === (registration as any).tribeId);
+            return (
+              <Card key={registration.id} className="border-accent-300 bg-accent-500/5">
+                <CardBody className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-accent-700">My Child</span>
+                      <h3 className="text-lg font-bold text-txt-primary">{registration.camper?.name}</h3>
+                      {registration.tribe && (
+                        <span className="text-sm text-txt-secondary">
+                          {registration.tribe.name} Tribe
+                          {tribeStat?.rank ? ` · Tribe Rank #${tribeStat.rank}` : ""}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-extrabold text-txt-primary">{stat?.totalPoints ?? 0}</div>
+                      <div className="text-xs text-txt-secondary">
+                        pts {stat?.rank ? `· Rank #${stat.rank}` : ""}
+                      </div>
+                      {!!stat?.rankDelta && (
+                        <div className={stat.rankDelta > 0 ? "text-xs font-medium text-emerald-600" : "text-xs font-medium text-rose-600"}>
+                          {stat.rankDelta > 0 ? `▲ Up ${stat.rankDelta}` : `▼ Down ${Math.abs(stat.rankDelta)}`}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {stat?.attendancePct != null && (
+                    <div>
+                      <div className="mb-1 flex justify-between text-xs text-txt-secondary">
+                        <span>Attendance</span>
+                        <span>{Math.round(stat.attendancePct)}%</span>
+                      </div>
+                      <ProgressBar percent={stat.attendancePct} tone="achievement" />
+                    </div>
                   )}
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-extrabold text-txt-primary">{stat?.totalPoints ?? 0}</div>
-                  <div className="text-xs text-txt-secondary">pts {stat?.rank ? `· Rank #${stat.rank}` : ""}</div>
-                </div>
-              </CardBody>
-            </Card>
-          ))}
+                  {stat?.promptnessPct != null && (
+                    <div>
+                      <div className="mb-1 flex justify-between text-xs text-txt-secondary">
+                        <span>Promptness</span>
+                        <span>{Math.round(stat.promptnessPct)}%</span>
+                      </div>
+                      <ProgressBar percent={stat.promptnessPct} tone="achievement" />
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-txt-secondary">
+                    {!!stat?.currentStreak && (
+                      <span className="flex items-center gap-1">
+                        <FireIcon className="h-3.5 w-3.5 text-amber-500" /> {stat.currentStreak} day streak
+                      </span>
+                    )}
+                    {!!stat?.achievementCount && (
+                      <span className="flex items-center gap-1">
+                        <SparklesIcon className="h-3.5 w-3.5" /> {stat.achievementCount} achievement
+                        {stat.achievementCount === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </div>
+
+                  <Link
+                    href={`/leaderboard/camper/${registration.id}`}
+                    className="block rounded-lg border border-border-default px-3 py-1.5 text-center text-sm font-medium text-txt-primary hover:bg-surface-raised"
+                  >
+                    View Full Progress
+                  </Link>
+                </CardBody>
+              </Card>
+            );
+          })}
           {upcoming && upcoming.length > 0 && (
             <Card>
               <CardBody className="space-y-2">
@@ -120,7 +180,9 @@ export function OverviewTab({ campId, role }: { campId: string; role: string }) 
               {data.topCampers.map((c: any, i: number) => (
                 <li key={c.subjectId} className="flex items-center justify-between text-sm">
                   <span className="text-txt-primary font-medium">#{i + 1}</span>
-                  <span className="flex-1 px-3 text-txt-secondary">{c.subjectId}</span>
+                  <Link href={`/leaderboard/camper/${c.subjectId}`} className="flex-1 px-3 text-txt-secondary hover:text-accent-700 hover:underline">
+                    {c.name}
+                  </Link>
                   <span className="font-semibold text-txt-primary">{c.totalPoints} pts</span>
                 </li>
               ))}
@@ -142,7 +204,9 @@ export function OverviewTab({ campId, role }: { campId: string; role: string }) 
               {data.topStaff.map((s: any, i: number) => (
                 <li key={s.subjectId} className="flex items-center justify-between text-sm">
                   <span className="text-txt-primary font-medium">#{i + 1}</span>
-                  <span className="flex-1 px-3 text-txt-secondary">{s.subjectId}</span>
+                  <Link href={`/leaderboard/staff/${s.subjectId}`} className="flex-1 px-3 text-txt-secondary hover:text-accent-700 hover:underline">
+                    {s.name}
+                  </Link>
                   <span className="font-semibold text-txt-primary">{s.totalPoints} pts</span>
                 </li>
               ))}

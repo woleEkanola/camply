@@ -78,6 +78,22 @@ describe("awardTeacherOfTheDay", () => {
     const result = await awardTeacherOfTheDay(campId);
     expect(result).toBeNull();
   });
+
+  it("creates the seeded Top Teacher achievement award exactly once", async () => {
+    await recordScoreEvent({ campId, staffProfileId: staffId, categoryId: "seed-cat-cleaning", points: 20, source: "MANUAL" });
+
+    await awardTeacherOfTheDay(campId);
+    const awards = await prisma.achievementAward.findMany({ where: { campId, subjectKey: `S:${staffId}` }, include: { definition: true } });
+    expect(awards.length).toBe(1);
+    expect(awards[0].definition.key).toBe("TOP_TEACHER");
+
+    // A second call the same day short-circuits on the AuditLog dedupe before
+    // reaching the award, and even if it didn't, the AchievementAward unique
+    // constraint would hold the count at one.
+    await awardTeacherOfTheDay(campId);
+    const awardsAfter = await prisma.achievementAward.findMany({ where: { campId, subjectKey: `S:${staffId}` } });
+    expect(awardsAfter.length).toBe(1);
+  });
 });
 
 describe("awardEligiblePerfectAttendance (via rebuildLeaderboard)", () => {

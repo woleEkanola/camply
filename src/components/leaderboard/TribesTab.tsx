@@ -10,7 +10,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Input, Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { TrophyIcon, FireIcon, UserGroupIcon } from "@heroicons/react/24/outline";
+import { TrophyIcon, FireIcon, UserGroupIcon, SparklesIcon } from "@heroicons/react/24/outline";
 
 function TribeCard({ tribe, stat, onAward }: { tribe: any; stat: any; onAward: () => void }) {
   return (
@@ -60,10 +60,15 @@ function TribeCard({ tribe, stat, onAward }: { tribe: any; stat: any; onAward: (
           </div>
         )}
 
-        <div className="flex items-center gap-4 text-xs text-txt-secondary">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-txt-secondary">
           {!!stat?.currentStreak && (
             <span className="flex items-center gap-1">
               <FireIcon className="h-3.5 w-3.5 text-amber-500" /> {stat.currentStreak} day streak
+            </span>
+          )}
+          {!!stat?.achievementCount && (
+            <span className="flex items-center gap-1">
+              <SparklesIcon className="h-3.5 w-3.5" /> {stat.achievementCount} achievement{stat.achievementCount === 1 ? "" : "s"}
             </span>
           )}
           {stat?.campersPresent != null && (

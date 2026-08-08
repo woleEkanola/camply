@@ -11,6 +11,7 @@ import { SkeletonText } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { ArrowLeftIcon, TrophyIcon, UserGroupIcon, FireIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import { leaderboardArea } from "@/components/leaderboard/area";
 
 /**
  * The tribe detail page — `tribeDetail` existed in the router since PR3 but
@@ -38,13 +39,7 @@ export default function TribeDetailPage({ params }: { params: Promise<{ tribeId:
     );
   }
 
-  const role = session.user.role as string;
-  let area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer" = "dashboard";
-  if (role === "SUPER_ADMIN") area = "super-admin";
-  else if (role === "OWNER" || role === "ADMIN") area = "admin";
-  else if (role === "CAMPUS_REPRESENTATIVE") area = "campus-rep";
-  else if (role === "TEACHER") area = "teacher";
-  else if (role === "VOLUNTEER") area = "volunteer";
+  const area = leaderboardArea(session.user.role as string);
 
   return (
     <AppShell area={area}>
