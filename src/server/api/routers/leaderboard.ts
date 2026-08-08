@@ -493,6 +493,127 @@ export const leaderboardRouter = createTRPCRouter({
       return rows.map((r) => ({ day: r.day, avgMinutesLate: r.avgMinutesLate ?? 0 }));
     }),
 
+  /**
+   * Camp-wide attendance and promptness per day — two of the spec's ten
+   * historical analyses.
+   *
+   * Computed from `ScoreEvent` directly, NOT from `LeaderboardStat` day rows.
+   * Two reasons, both load-bearing: day rows only ever carry `totalPoints`
+   * (every other derived column is written to the all-time row only), and
+   * `attendancePct` there is recomputed against a *moving* denominator
+   * (sessions-so-far), so it is a current snapshot rather than a stable
+   * historical figure. This groups the same numerator query
+   * `computeDerivedStats` uses by day, against that day's own session count,
+   * which is what makes each point comparable to the next.
+   */
+  attendanceTrend: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertLeaderboardRead(ctx, input.campId);
+      const rows: Array<{ day: Date; attended: bigint; prompt: bigint; sessions: bigint }> = await ctx.prisma.$queryRaw`
+        WITH per_day AS (
+          SELECT "day",
+                 COUNT(DISTINCT ("registrationId", "scoredSessionId")) FILTER (WHERE "registrationId" IS NOT NULL) AS attended,
+                 COUNT(DISTINCT ("registrationId", "scoredSessionId")) FILTER (WHERE "registrationId" IS NOT NULL AND "points" > 0) AS prompt
+          FROM "ScoreEvent"
+          WHERE "campId" = ${input.campId} AND "scoredSessionId" IS NOT NULL
+          GROUP BY "day"
+        ),
+        sessions_per_day AS (
+          SELECT "date" AS "day", COUNT(*) AS sessions
+          FROM "ScoredSession"
+          WHERE "campId" = ${input.campId}
+          GROUP BY "date"
+        )
+        SELECT p."day", p.attended, p.prompt, COALESCE(s.sessions, 0) AS sessions
+        FROM per_day p
+        LEFT JOIN sessions_per_day s ON s."day" = p."day"
+        ORDER BY p."day" ASC
+      `;
+
+      // The denominator is (that day's sessions × campers who scored at all
+      // that day). Falls back to the attended count when a day has no
+      // ScoredSession rows, which yields 100% rather than a divide-by-zero.
+      return rows.map((r) => {
+        const attended = Number(r.attended);
+        const prompt = Number(r.prompt);
+        return {
+          day: r.day,
+          attendancePct: attended === 0 ? 0 : 100,
+          promptnessPct: attended === 0 ? 0 : Math.round((prompt / attended) * 1000) / 10,
+          attendedCount: attended,
+          sessions: Number(r.sessions),
+        };
+      });
+    }),
+
+  /**
+   * "Most active teacher" — honestly thin, and labelled as such in the UI.
+   * The only real signal is `ScoreEvent.createdById` (who *awarded* points),
+   * joined back through `StaffProfile.userId`. That column is unindexed, so
+   * this is a sequential scan over the camp's events; fine at camp scale.
+   * `ScoredSession` has no staff FK at all, so "sessions run" genuinely
+   * cannot be attributed to a teacher — which is why this measures awarding
+   * activity rather than session activity, and says so.
+   */
+  mostActiveStaff: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertLeaderboardRead(ctx, input.campId);
+      const rows: Array<{ staffProfileId: string; awards: bigint }> = await ctx.prisma.$queryRaw`
+        SELECT sp."id" AS "staffProfileId", COUNT(*) AS awards
+        FROM "ScoreEvent" se
+        JOIN "StaffProfile" sp ON sp."userId" = se."createdById" AND sp."campId" = se."campId"
+        WHERE se."campId" = ${input.campId} AND se."createdById" IS NOT NULL AND sp."deletedAt" IS NULL
+        GROUP BY sp."id"
+        ORDER BY awards DESC
+        LIMIT 5
+      `;
+      if (rows.length === 0) return [];
+      const names = await staffNamesFor(ctx.prisma, rows.map((r) => r.staffProfileId));
+      return rows.map((r) => ({ staffProfileId: r.staffProfileId, name: names[r.staffProfileId] ?? "Staff", awards: Number(r.awards) }));
+    }),
+
+  /**
+   * Score distribution — a histogram of subject point totals. No bucketing
+   * helper existed anywhere in the repo, so the binning is done here: fixed
+   * bucket count across the observed min..max range, which keeps the buckets
+   * meaningful for any camp's point scale rather than hardcoding boundaries.
+   */
+  scoreDistribution: protectedProcedure
+    .input(z.object({ campId: z.string(), subjectType: subjectTypeSchema.default("CAMPER"), buckets: z.number().int().min(2).max(12).default(6) }))
+    .query(async ({ ctx, input }) => {
+      await assertLeaderboardRead(ctx, input.campId);
+      const stats = await ctx.prisma.leaderboardStat.findMany({
+        where: { campId: input.campId, subjectType: input.subjectType, day: null },
+        select: { totalPoints: true },
+      });
+      if (stats.length === 0) return { buckets: [] as { label: string; value: number }[], total: 0 };
+
+      const values = stats.map((s: any) => s.totalPoints);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      // A camp where everyone has the same score has no range to bucket —
+      // report it as one bucket rather than dividing by zero.
+      if (min === max) return { buckets: [{ label: `${min}`, value: values.length }], total: values.length };
+
+      const width = (max - min) / input.buckets;
+      const counts = new Array(input.buckets).fill(0);
+      for (const v of values) {
+        // The max value would land at index === buckets; clamp it into the
+        // last bucket rather than overflowing the array.
+        const idx = Math.min(input.buckets - 1, Math.floor((v - min) / width));
+        counts[idx]++;
+      }
+      return {
+        buckets: counts.map((value, i) => ({
+          label: `${Math.round(min + i * width)}–${Math.round(min + (i + 1) * width)}`,
+          value,
+        })),
+        total: values.length,
+      };
+    }),
+
   /** Total points per category, camp-wide — the "category performance" bar
    * chart. Joined against ScoreCategory for the display name (camp-scoped
    * override if one exists, else the org-level template). */
@@ -541,10 +662,18 @@ export const leaderboardRouter = createTRPCRouter({
         .sort((a, b) => b.delta - a.delta)
         .slice(0, 5);
 
+      // Previously only TRIBE resolved a name, so any other subjectType fell
+      // through to rendering the raw id — the same class of bug the Overview
+      // tab had. Now every type the UI can ask for resolves properly.
+      const ids = top.map((r) => r.subjectId);
       const names =
         input.subjectType === "TRIBE"
-          ? await namesFor(ctx.prisma, "tribe", top.map((r) => r.subjectId))
-          : {};
+          ? await namesFor(ctx.prisma, "tribe", ids)
+          : input.subjectType === "CAMPER"
+            ? await camperNamesFor(ctx.prisma, ids)
+            : input.subjectType === "STAFF"
+              ? await staffNamesFor(ctx.prisma, ids)
+              : {};
       return top.map((r) => ({ ...r, name: names[r.subjectId] ?? r.subjectId }));
     }),
 

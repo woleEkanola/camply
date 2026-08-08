@@ -12,9 +12,25 @@ export interface BarChartDatum {
 /** Score distribution / category performance bars. Empty data and
  * arbitrary/missing per-bar colours (falls back to the brand accent) are
  * the two things a hand-rolled version tends to get wrong. */
-export function BarChartWrapper({ data, height = 240, defaultColor = "#e67e22" }: { data: BarChartDatum[]; height?: number; defaultColor?: string }) {
+export function BarChartWrapper({
+  data,
+  height = 240,
+  defaultColor = "#e67e22",
+  // Defaults to "pts" so existing callers are unchanged; a histogram of
+  // subject counts passes its own ("campers", "staff", …).
+  unit = "pts",
+  emptyTitle = "No data yet",
+  emptyDescription = "Bars will appear once there's scored activity to compare.",
+}: {
+  data: BarChartDatum[];
+  height?: number;
+  defaultColor?: string;
+  unit?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
+}) {
   if (data.length === 0) {
-    return <EmptyState title="No data yet" description="Bars will appear once there's scored activity to compare." />;
+    return <EmptyState title={emptyTitle} description={emptyDescription} />;
   }
 
   return (
@@ -25,7 +41,7 @@ export function BarChartWrapper({ data, height = 240, defaultColor = "#e67e22" }
         <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={36} />
         <Tooltip
           contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid var(--border-default, #e5e5e5)" }}
-          formatter={(value: unknown) => [`${value} pts`, ""]}
+          formatter={(value: unknown) => [unit ? `${value} ${unit}` : `${value}`, ""]}
         />
         <Bar dataKey="value" radius={[4, 4, 0, 0]}>
           {data.map((d, i) => (

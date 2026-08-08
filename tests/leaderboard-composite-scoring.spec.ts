@@ -77,6 +77,23 @@ test.describe("Leaderboard composite scoring (PR 6)", () => {
     await expect(page.getByText(/application error/i)).not.toBeVisible();
   });
 
+  test("History tab renders the PR11 analyses, and Most Improved can switch to campers", async ({ page }) => {
+    await loginWithPassword(page, "admin@camply.com", "password123");
+    await page.goto("/leaderboard");
+    await page.getByRole("tab", { name: "History" }).click();
+
+    await expect(page.getByRole("heading", { name: "Attendance & Punctuality Trend" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Score Distribution (Campers)" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Most Active Staff" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Most Improved" })).toBeVisible();
+
+    // The subject toggle is the fix for `mostImproved` being hardcoded to
+    // TRIBE, which made "most improved camper" unreachable.
+    await page.getByRole("button", { name: "Campers", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Campers", exact: true })).toBeVisible();
+    await expect(page.getByText(/application error/i)).not.toBeVisible();
+  });
+
   test("Teachers tab shows a Composite column", async ({ page }) => {
     // Table renders only its EmptyState with zero rows — no header cells at
     // all — so this needs at least one STAFF LeaderboardStat row to exist.

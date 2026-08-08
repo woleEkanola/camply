@@ -14,14 +14,29 @@ export interface TrendChartPoint {
  * min === max (a flat line that would otherwise render at the very bottom
  * or top edge of the chart depending on the library's default domain).
  */
-export function TrendChart({ data, height = 240, color = "#e67e22" }: { data: TrendChartPoint[]; height?: number; color?: string }) {
+export function TrendChart({
+  data,
+  height = 240,
+  color = "#e67e22",
+  // Defaults to "pts" so every existing caller is unchanged. Percentage and
+  // minute-based series (attendance trend, punctuality trend) must pass their
+  // own, or 97% would render as "97 pts".
+  unit = "pts",
+}: {
+  data: TrendChartPoint[];
+  height?: number;
+  color?: string;
+  unit?: string;
+}) {
+  const fmt = (v: unknown) => (unit ? `${v} ${unit}` : `${v}`);
+
   if (data.length === 0) {
     return <EmptyState title="No data yet" description="A trend line will appear once there's more than one day of activity." />;
   }
   if (data.length === 1) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-neutral-300 py-8 text-sm text-txt-secondary">
-        Only one day of data so far — {data[0].label}: {data[0].value} pts
+        Only one day of data so far — {data[0].label}: {fmt(data[0].value)}
       </div>
     );
   }
@@ -47,7 +62,7 @@ export function TrendChart({ data, height = 240, color = "#e67e22" }: { data: Tr
         <YAxis domain={domain} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={36} />
         <Tooltip
           contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid var(--border-default, #e5e5e5)" }}
-          formatter={(value: unknown) => [`${value} pts`, ""]}
+          formatter={(value: unknown) => [fmt(value), ""]}
         />
         <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2} fill="url(#trendFill)" />
       </AreaChart>
