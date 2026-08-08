@@ -345,6 +345,30 @@ const BASE_METRIC_KEYS = ["attendancePct", "promptnessPct", "totalPoints", "achi
 const STAFF_TRIBE_METRIC_KEYS = ["tribeAttendancePct", "tribePromptnessPct"] as const;
 
 /**
+ * **`participation`** (all subject types) — the number of *distinct*
+ * `ScoreCategory` values the subject has scored in. Breadth of engagement,
+ * not volume: a camper who earned points across eight different activities
+ * participated broadly, while one with only attendance points did not, even
+ * if their totals match. Costs no extra query — it is the size of the inner
+ * map `perCategoryTotals` already builds.
+ *
+ * **`sessionManagement`** (STAFF only) — the number of `AttendanceSession`
+ * rows this staff member actually ran (`AttendanceSession.createdById`).
+ * That column holds a `User.id`, so it joins back through
+ * `StaffProfile.userId`, and it is **unindexed** (the model's indexes are
+ * `[campId,date]`, `[tribeId,date]`, `[scoredSessionId]`) — a sequential scan
+ * over one camp's sessions, which is fine at camp scale. Note this measures
+ * sessions *run*, not `ScoredSession`s: `ScoredSession` has no staff FK at
+ * all, so it cannot be attributed to a teacher.
+ *
+ * Both were previously excluded as "unmeasurable". That was too pessimistic —
+ * the data exists; what was missing was a stated definition. These are those
+ * definitions, and they are surfaced verbatim in the UI rather than left
+ * implicit.
+ */
+const ACTIVITY_METRIC_KEYS = ["participation", "sessionManagement"] as const;
+
+/**
  * Per-`ScoreCategory` point totals, addressed as `cat:<categoryId>`. This is
  * what makes the spec's named metrics real rather than approximated: the 20
  * seeded categories *are* the metric names it lists (Bible Quiz, Sports,
@@ -366,48 +390,52 @@ export const CATEGORY_METRIC_IDS = {
 const catKey = (categoryId: string) => `cat:${categoryId}`;
 
 /**
- * Default blends, one per subject type, replacing the previous flat
- * "four metrics at 25 each" for every type.
- *
- * CAMPER covers 8 of the spec's 9 named ranking metrics. STAFF covers 6 of
- * its 8. **The genuinely missing ones are "participation" (both) and
- * "session management" (staff)** — nothing in the schema measures either, and
- * they are deliberately absent rather than approximated by a proxy that would
- * make the number look more precise than it is. Everything here is editable
- * per camp in admin Settings and rendered read-only on the public Rules tab.
+ * Default blends, one per subject type. Every metric the original spec names
+ * for campers (9) and teachers (8) is represented, each by a real
+ * measurement. Weights are relative — they don't have to sum to 100 — and
+ * every one is editable per camp in admin Settings and rendered read-only on
+ * the public Rules tab.
  */
 const DEFAULT_WEIGHTS_BY_SUBJECT: Record<"STAFF" | "CAMPER" | "CAMPUS", Record<string, number>> = {
-  // attendance, camper attendance, average camper punctuality, recognition,
-  // manual commendations (≈ points), leadership, achievements.
+  // The spec's 8 teacher metrics: attendance, camper attendance,
+  // participation, recognition, session management, manual commendations
+  // (≈ points), average camper punctuality, + achievements/leadership.
   STAFF: {
-    attendancePct: 20,
-    promptnessPct: 10,
-    tribeAttendancePct: 15,
+    attendancePct: 18,
+    promptnessPct: 8,
+    tribeAttendancePct: 14,
     tribePromptnessPct: 10,
-    [catKey(CATEGORY_METRIC_IDS.recognition)]: 15,
-    [catKey(CATEGORY_METRIC_IDS.leadership)]: 10,
-    totalPoints: 15,
-    achievementCount: 5,
+    participation: 10,
+    sessionManagement: 10,
+    [catKey(CATEGORY_METRIC_IDS.recognition)]: 12,
+    [catKey(CATEGORY_METRIC_IDS.leadership)]: 8,
+    totalPoints: 7,
+    achievementCount: 3,
   },
-  // attendance, promptness, Bible Quiz, sports, service, leadership,
-  // positive recognition, manual awards (≈ points), achievements.
+  // The spec's 9 camper metrics: attendance, promptness, participation,
+  // Bible Quiz, sports, service, leadership, positive recognition,
+  // manual awards (≈ points), + achievements.
   CAMPER: {
-    attendancePct: 20,
-    promptnessPct: 15,
-    [catKey(CATEGORY_METRIC_IDS.bibleQuiz)]: 10,
-    [catKey(CATEGORY_METRIC_IDS.sports)]: 10,
-    [catKey(CATEGORY_METRIC_IDS.service)]: 10,
-    [catKey(CATEGORY_METRIC_IDS.leadership)]: 10,
-    [catKey(CATEGORY_METRIC_IDS.recognition)]: 10,
-    totalPoints: 10,
-    achievementCount: 5,
+    attendancePct: 18,
+    promptnessPct: 12,
+    participation: 12,
+    [catKey(CATEGORY_METRIC_IDS.bibleQuiz)]: 9,
+    [catKey(CATEGORY_METRIC_IDS.sports)]: 9,
+    [catKey(CATEGORY_METRIC_IDS.service)]: 9,
+    [catKey(CATEGORY_METRIC_IDS.leadership)]: 9,
+    [catKey(CATEGORY_METRIC_IDS.recognition)]: 9,
+    totalPoints: 9,
+    achievementCount: 4,
   },
-  // attendance, promptness, average tribe score (≈ totalPoints), teamwork,
-  // service. "Participation" and an explicit "teacher performance" rollup
-  // have no data source — same honesty rule as above.
+  // attendance, promptness, participation, average tribe score
+  // (≈ totalPoints), teamwork, service. A distinct "teacher performance"
+  // rollup is the one campus metric with no measurement of its own — a
+  // campus's staff composite average would be a derived-from-derived figure,
+  // so it's left out rather than compounded.
   CAMPUS: {
-    attendancePct: 30,
-    promptnessPct: 25,
+    attendancePct: 25,
+    promptnessPct: 20,
+    participation: 10,
     totalPoints: 25,
     [catKey(CATEGORY_METRIC_IDS.teamwork)]: 10,
     [catKey(CATEGORY_METRIC_IDS.service)]: 10,
@@ -453,15 +481,18 @@ async function perCategoryTotals(tx: Tx, campId: string, column: string): Promis
  *  - **staff tribe-derived** — `tribeAttendancePct` / `tribePromptnessPct`,
  *    the assigned tribe's figures, i.e. the spec's teacher metrics "camper
  *    attendance" and "average camper punctuality".
+ *  - **activity-derived** — `participation` (all types) and
+ *    `sessionManagement` (STAFF). See their definitions at the constants
+ *    below; both are counts of things the app already records, deliberately
+ *    defined rather than estimated, and both definitions are stated verbatim
+ *    in admin Settings and on the public Rules tab so neither is a black box.
  *
- * **Still genuinely unmeasurable, and therefore absent:** "participation"
- * (camper and staff) and "session management" (staff). Nothing in the schema
- * records either. They are left out rather than proxied, so the number never
- * looks more precise than the data supports — the same rule the rest of this
- * feature follows. `LeaderboardSettings.teacherMetricWeights` /
- * `camperMetricWeights` / `campusMetricWeights` are editable in admin
- * Settings and rendered read-only on the public Rules tab, so which metrics
- * count and by how much is always inspectable.
+ * With those two, every metric the original spec names for campers (9) and
+ * teachers (8) now has a real measurement behind it.
+ * `LeaderboardSettings.teacherMetricWeights` / `camperMetricWeights` /
+ * `campusMetricWeights` are editable in admin Settings and rendered read-only
+ * on the public Rules tab, so which metrics count and by how much is always
+ * inspectable.
  *
  * Each metric is min-max normalized across the camp's subjects of that type
  * (0-100) before weighting, since points/counts have no natural upper bound
@@ -501,33 +532,64 @@ async function computeCompositeScores(tx: Tx, campId: string): Promise<void> {
     });
     if (rows.length === 0) continue;
 
-    const needsCategories = metricKeys.some((k) => k.startsWith("cat:"));
+    // `participation` also needs the category map — it's that map's size —
+    // so it counts toward needing the fetch even with no `cat:` key weighted.
+    const needsCategories = metricKeys.some((k) => k.startsWith("cat:") || k === "participation");
     const categoryTotals = needsCategories ? await perCategoryTotals(tx, campId, column) : new Map<string, Map<string, number>>();
 
     // STAFF only: the assigned tribe's attendance/promptness, i.e. the spec's
-    // "camper attendance" and "average camper punctuality" for a teacher.
+    // "camper attendance" and "average camper punctuality" for a teacher, plus
+    // sessions-run for `sessionManagement`. Both need StaffProfile rows, so
+    // they share one fetch.
     const tribeMetricsByStaff = new Map<string, { attendancePct: number; promptnessPct: number }>();
-    if (subjectType === "STAFF" && metricKeys.some((k) => (STAFF_TRIBE_METRIC_KEYS as readonly string[]).includes(k))) {
+    const sessionsRunByStaff = new Map<string, number>();
+    const needsTribeMetrics = metricKeys.some((k) => (STAFF_TRIBE_METRIC_KEYS as readonly string[]).includes(k));
+    const needsSessionManagement = metricKeys.includes("sessionManagement");
+
+    if (subjectType === "STAFF" && (needsTribeMetrics || needsSessionManagement)) {
       const staffRows = await tx.staffProfile.findMany({
-        where: { id: { in: rows.map((r: any) => r.subjectId) }, assignedTribeId: { not: null } },
-        select: { id: true, assignedTribeId: true },
+        where: { id: { in: rows.map((r: any) => r.subjectId) } },
+        select: { id: true, userId: true, assignedTribeId: true },
       });
-      const tribeIds = [...new Set(staffRows.map((s: any) => s.assignedTribeId as string))];
-      const tribeStats = tribeIds.length
-        ? await tx.leaderboardStat.findMany({
-            where: { campId, subjectType: "TRIBE", subjectId: { in: tribeIds }, day: null },
-            select: { subjectId: true, attendancePct: true, promptnessPct: true },
-          })
-        : [];
-      const statByTribe = new Map(tribeStats.map((t: any) => [t.subjectId, t]));
-      for (const s of staffRows) {
-        const t = statByTribe.get(s.assignedTribeId as string) as any;
-        if (t) tribeMetricsByStaff.set(s.id, { attendancePct: Number(t.attendancePct ?? 0), promptnessPct: Number(t.promptnessPct ?? 0) });
+
+      if (needsTribeMetrics) {
+        const tribeIds = [...new Set(staffRows.map((s: any) => s.assignedTribeId).filter(Boolean) as string[])];
+        const tribeStats = tribeIds.length
+          ? await tx.leaderboardStat.findMany({
+              where: { campId, subjectType: "TRIBE", subjectId: { in: tribeIds }, day: null },
+              select: { subjectId: true, attendancePct: true, promptnessPct: true },
+            })
+          : [];
+        const statByTribe = new Map(tribeStats.map((t: any) => [t.subjectId, t]));
+        for (const s of staffRows) {
+          if (!s.assignedTribeId) continue;
+          const t = statByTribe.get(s.assignedTribeId) as any;
+          if (t) tribeMetricsByStaff.set(s.id, { attendancePct: Number(t.attendancePct ?? 0), promptnessPct: Number(t.promptnessPct ?? 0) });
+        }
+      }
+
+      if (needsSessionManagement) {
+        // AttendanceSession.createdById is a User.id, hence the userId hop.
+        // Unindexed on that column — a scan over one camp's sessions.
+        const userIds = [...new Set(staffRows.map((s: any) => s.userId as string))];
+        const grouped = userIds.length
+          ? await tx.attendanceSession.groupBy({
+              by: ["createdById"],
+              where: { campId, createdById: { in: userIds } },
+              _count: { _all: true },
+            })
+          : [];
+        const countByUser = new Map(grouped.map((g: any) => [g.createdById, g._count._all as number]));
+        for (const s of staffRows) sessionsRunByStaff.set(s.id, countByUser.get(s.userId as string) ?? 0);
       }
     }
 
     function rawValue(row: any, key: string): number {
       if (key.startsWith("cat:")) return categoryTotals.get(row.subjectId)?.get(key.slice(4)) ?? 0;
+      // Breadth of engagement: how many distinct categories this subject has
+      // scored in at all, regardless of how many points each contributed.
+      if (key === "participation") return categoryTotals.get(row.subjectId)?.size ?? 0;
+      if (key === "sessionManagement") return sessionsRunByStaff.get(row.subjectId) ?? 0;
       if (key === "tribeAttendancePct") return tribeMetricsByStaff.get(row.subjectId)?.attendancePct ?? 0;
       if (key === "tribePromptnessPct") return tribeMetricsByStaff.get(row.subjectId)?.promptnessPct ?? 0;
       return Number(row[key] ?? 0);

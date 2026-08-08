@@ -66,10 +66,18 @@ export function RulesTab({ campId }: { campId: string }) {
       <RankingWeightsSummary label="Camper Ranking" weights={data.camperMetricWeights as any} subject="camper" />
       <RankingWeightsSummary label="Campus Ranking" weights={(data as any).campusMetricWeights} subject="campus" />
 
-      <p className="text-xs text-txt-muted">
-        Only metrics Camply actually measures are used. &quot;Participation&quot; and &quot;session management&quot; are not
-        tracked anywhere yet, so they are excluded rather than estimated.
-      </p>
+      <div className="space-y-1 text-xs text-txt-muted">
+        <p>Weights are relative — they don&apos;t need to add up to 100, and a metric at 0 simply doesn&apos;t count.</p>
+        <p>
+          <span className="font-medium text-txt-secondary">Participation</span> counts the number of different
+          activities someone has earned points in — breadth, not volume, so scoring across many activities counts for
+          more than piling points into one.
+        </p>
+        <p>
+          <span className="font-medium text-txt-secondary">Session Management</span> counts the attendance sessions a
+          teacher actually ran.
+        </p>
+      </div>
     </div>
   );
 }
@@ -81,6 +89,8 @@ const WEIGHT_METRIC_LABELS: Record<string, string> = {
   achievementCount: "Achievements",
   tribeAttendancePct: "Camper Attendance",
   tribePromptnessPct: "Camper Punctuality",
+  participation: "Participation",
+  sessionManagement: "Session Management",
   "cat:seed-cat-bible-quiz": "Bible Quiz",
   "cat:seed-cat-sports": "Sports",
   "cat:seed-cat-service": "Service",
@@ -93,29 +103,33 @@ const WEIGHT_METRIC_LABELS: Record<string, string> = {
  * hasn't customized its weights, so the tab is never blank. */
 const DEFAULT_WEIGHTS: Record<string, Record<string, number>> = {
   teacher: {
-    attendancePct: 20,
-    promptnessPct: 10,
-    tribeAttendancePct: 15,
+    attendancePct: 18,
+    promptnessPct: 8,
+    tribeAttendancePct: 14,
     tribePromptnessPct: 10,
-    "cat:seed-cat-special-recognition": 15,
-    "cat:seed-cat-leadership": 10,
-    totalPoints: 15,
-    achievementCount: 5,
+    participation: 10,
+    sessionManagement: 10,
+    "cat:seed-cat-special-recognition": 12,
+    "cat:seed-cat-leadership": 8,
+    totalPoints: 7,
+    achievementCount: 3,
   },
   camper: {
-    attendancePct: 20,
-    promptnessPct: 15,
-    "cat:seed-cat-bible-quiz": 10,
-    "cat:seed-cat-sports": 10,
-    "cat:seed-cat-service": 10,
-    "cat:seed-cat-leadership": 10,
-    "cat:seed-cat-special-recognition": 10,
-    totalPoints: 10,
-    achievementCount: 5,
+    attendancePct: 18,
+    promptnessPct: 12,
+    participation: 12,
+    "cat:seed-cat-bible-quiz": 9,
+    "cat:seed-cat-sports": 9,
+    "cat:seed-cat-service": 9,
+    "cat:seed-cat-leadership": 9,
+    "cat:seed-cat-special-recognition": 9,
+    totalPoints: 9,
+    achievementCount: 4,
   },
   campus: {
-    attendancePct: 30,
-    promptnessPct: 25,
+    attendancePct: 25,
+    promptnessPct: 20,
+    participation: 10,
     totalPoints: 25,
     "cat:seed-cat-teamwork": 10,
     "cat:seed-cat-service": 10,

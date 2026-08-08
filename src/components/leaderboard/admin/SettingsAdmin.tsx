@@ -65,7 +65,14 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
     onSuccess: (result) => {
       utils.leaderboard.overview.invalidate({ campId });
       utils.leaderboard.campers.invalidate({ campId });
-      toast.success(`Camp completion awarded to ${result.campers} camper(s) and ${result.staff} staff.`);
+      utils.leaderboard.tribes.invalidate({ campId });
+      const parts = [`${result.campers} camper(s) and ${result.staff} staff scored`];
+      if (result.completed) parts.push(`${result.completed} marked completed`);
+      // Surfaced rather than silently ignored: only CHECKED_IN registrations
+      // can legally become COMPLETED, so anyone who never checked in keeps
+      // their status even though they earned the points.
+      if (result.notCheckedIn) parts.push(`${result.notCheckedIn} not checked in, status unchanged`);
+      toast.success(`Camp completion: ${parts.join(", ")}.`);
     },
     onError: (err) => toast.error(err.message || "Failed to award camp completion."),
   });
@@ -82,36 +89,38 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
 
   const publicUrl = typeof window !== "undefined" && settings.publicToken ? `${window.location.origin}/l/${settings.publicToken}` : null;
 
-  // Mirrors aggregate.ts's DEFAULT_WEIGHTS_BY_SUBJECT. Metrics with no data
-  // source anywhere in the schema — "participation" (all subjects) and
-  // "session management" (staff) — are deliberately absent rather than shown
-  // as un-editable zeros, so this list only ever offers real measurements.
-  type WeightMetric = { key: string; label: string; def: number };
+  // Mirrors aggregate.ts's DEFAULT_WEIGHTS_BY_SUBJECT. Every metric the
+  // original spec names is here, each backed by a real measurement.
+  type WeightMetric = { key: string; label: string; def: number; hint?: string };
   const BASE: Record<string, WeightMetric[]> = {
     teacherMetricWeights: [
-      { key: "attendancePct", label: "Attendance", def: 20 },
-      { key: "promptnessPct", label: "Promptness", def: 10 },
-      { key: "tribeAttendancePct", label: "Camper Attendance", def: 15 },
+      { key: "attendancePct", label: "Attendance", def: 18 },
+      { key: "promptnessPct", label: "Promptness", def: 8 },
+      { key: "tribeAttendancePct", label: "Camper Attendance", def: 14 },
       { key: "tribePromptnessPct", label: "Camper Punctuality", def: 10 },
-      { key: "cat:seed-cat-special-recognition", label: "Recognition", def: 15 },
-      { key: "cat:seed-cat-leadership", label: "Leadership", def: 10 },
-      { key: "totalPoints", label: "Points", def: 15 },
-      { key: "achievementCount", label: "Achievements", def: 5 },
+      { key: "participation", label: "Participation", def: 10, hint: "Distinct activities scored in" },
+      { key: "sessionManagement", label: "Session Management", def: 10, hint: "Attendance sessions run" },
+      { key: "cat:seed-cat-special-recognition", label: "Recognition", def: 12 },
+      { key: "cat:seed-cat-leadership", label: "Leadership", def: 8 },
+      { key: "totalPoints", label: "Commendations", def: 7 },
+      { key: "achievementCount", label: "Achievements", def: 3 },
     ],
     camperMetricWeights: [
-      { key: "attendancePct", label: "Attendance", def: 20 },
-      { key: "promptnessPct", label: "Promptness", def: 15 },
-      { key: "cat:seed-cat-bible-quiz", label: "Bible Quiz", def: 10 },
-      { key: "cat:seed-cat-sports", label: "Sports", def: 10 },
-      { key: "cat:seed-cat-service", label: "Service", def: 10 },
-      { key: "cat:seed-cat-leadership", label: "Leadership", def: 10 },
-      { key: "cat:seed-cat-special-recognition", label: "Recognition", def: 10 },
-      { key: "totalPoints", label: "Manual Awards", def: 10 },
-      { key: "achievementCount", label: "Achievements", def: 5 },
+      { key: "attendancePct", label: "Attendance", def: 18 },
+      { key: "promptnessPct", label: "Promptness", def: 12 },
+      { key: "participation", label: "Participation", def: 12, hint: "Distinct activities scored in" },
+      { key: "cat:seed-cat-bible-quiz", label: "Bible Quiz", def: 9 },
+      { key: "cat:seed-cat-sports", label: "Sports", def: 9 },
+      { key: "cat:seed-cat-service", label: "Service", def: 9 },
+      { key: "cat:seed-cat-leadership", label: "Leadership", def: 9 },
+      { key: "cat:seed-cat-special-recognition", label: "Recognition", def: 9 },
+      { key: "totalPoints", label: "Manual Awards", def: 9 },
+      { key: "achievementCount", label: "Achievements", def: 4 },
     ],
     campusMetricWeights: [
-      { key: "attendancePct", label: "Attendance", def: 30 },
-      { key: "promptnessPct", label: "Promptness", def: 25 },
+      { key: "attendancePct", label: "Attendance", def: 25 },
+      { key: "promptnessPct", label: "Promptness", def: 20 },
+      { key: "participation", label: "Participation", def: 10, hint: "Distinct activities scored in" },
       { key: "totalPoints", label: "Avg Tribe Score", def: 25 },
       { key: "cat:seed-cat-teamwork", label: "Teamwork", def: 10 },
       { key: "cat:seed-cat-service", label: "Service", def: 10 },
@@ -123,11 +132,12 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
     current: Record<string, number> | null | undefined
   ) {
     const metrics = BASE[settingsKey];
-    return metrics.map(({ key, label, def }) => (
+    return metrics.map(({ key, label, def, hint }) => (
       <Input
         key={key}
         id={`${settingsKey}-${key.replace(/[:]/g, "-")}`}
         label={label}
+        helpText={hint}
         type="number"
         min={0}
         value={current?.[key] ?? def}
@@ -262,8 +272,9 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{weightRow("campusMetricWeights", (settings as any).campusMetricWeights)}</div>
           </div>
           <p className="text-xs text-txt-muted">
-            Only metrics with real backing data are listed. &quot;Participation&quot; and &quot;session management&quot; are not
-            tracked anywhere in Camply yet, so they are deliberately excluded rather than estimated.
+            Every metric here is a real measurement, not an estimate. &quot;Participation&quot; counts the distinct
+            activities a subject has scored in (breadth, not volume); &quot;Session Management&quot; counts attendance
+            sessions a teacher actually ran. Both definitions are shown to everyone on the Rules tab.
           </p>
         </CardBody>
       </Card>
