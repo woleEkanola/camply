@@ -1009,7 +1009,7 @@ export const registrationRouter = createTRPCRouter({
   bulkTransition: protectedProcedure
     .input(z.object({
       ids: z.array(z.string()).min(1),
-      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN", "ADVANCE_FROM_REQUIRES_ACTION"]),
+      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN", "ADVANCE_FROM_REQUIRES_ACTION", "COMPLETE"]),
       reason: z.string().optional(),
       message: z.string().optional(),
       sendEmail: z.boolean().default(true),
@@ -1081,6 +1081,13 @@ export const registrationRouter = createTRPCRouter({
               break;
             case "ADVANCE_FROM_REQUIRES_ACTION":
               await engine.advanceFromRequiresAction({ registrationId: id, actorId: currentUser.id });
+              break;
+            // No email: like ARCHIVE/UNDO_CHECK_IN, and SideEffectType has no
+            // completion member. Only legal from CHECKED_IN — anything else
+            // throws IllegalTransitionError and lands in `failed` with its
+            // message, which is the behaviour the bulk UI already expects.
+            case "COMPLETE":
+              await engine.completeRegistration({ registrationId: id, actorId: currentUser.id });
               break;
           }
 
@@ -1570,7 +1577,7 @@ export const registrationRouter = createTRPCRouter({
   transitionWithOptions: protectedProcedure
     .input(z.object({
       registrationId: z.string(),
-      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "CANCEL", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN", "ADVANCE_FROM_REQUIRES_ACTION"]),
+      action: z.enum(["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION", "CANCEL", "ARCHIVE", "REVOKE_APPROVAL", "UNDO_CHECK_IN", "ADVANCE_FROM_REQUIRES_ACTION", "COMPLETE"]),
       reason: z.string().optional(),
       message: z.string().optional(),
       sendEmail: z.boolean().default(true),
@@ -1623,6 +1630,12 @@ export const registrationRouter = createTRPCRouter({
             break;
           case "UNDO_CHECK_IN":
             result = await engine.undoCheckIn({ registrationId: input.registrationId, actorId, reason: input.reason ?? "" });
+            break;
+          // Legal only from CHECKED_IN; anything else throws
+          // IllegalTransitionError, surfaced via toTRPCError like every other
+          // action here. StatusDialog only offers it on CHECKED_IN rows.
+          case "COMPLETE":
+            result = await engine.completeRegistration({ registrationId: input.registrationId, actorId });
             break;
           case "ADVANCE_FROM_REQUIRES_ACTION":
             result = await engine.advanceFromRequiresAction({ registrationId: input.registrationId, actorId });

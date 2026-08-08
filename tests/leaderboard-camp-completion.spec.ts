@@ -11,13 +11,24 @@ test.describe("Leaderboard camp completion and campus weights (PR 10)", () => {
 
   const stamp = Date.now();
   let campId: string;
+  // Since PR14, awarding camp completion also transitions CHECKED_IN
+  // registrations to COMPLETED — and this spec runs against the *shared*
+  // fixture org, so without snapshotting and restoring these it would
+  // permanently mutate seeded data that other specs (and manual testing)
+  // depend on being CHECKED_IN.
+  let checkedInBefore: string[] = [];
 
   test.beforeAll(async () => {
     ({ campId } = await getFixtureOrgContext());
     await prisma.leaderboardSettings.deleteMany({ where: { campId } });
+    checkedInBefore = (
+      await prisma.registration.findMany({ where: { campId, status: "CHECKED_IN", deletedAt: null }, select: { id: true } })
+    ).map((r) => r.id);
   });
 
   test.afterAll(async () => {
+    await prisma.registration.updateMany({ where: { id: { in: checkedInBefore } }, data: { status: "CHECKED_IN" } });
+    await prisma.auditLog.deleteMany({ where: { registrationId: { in: checkedInBefore }, action: "REGISTRATION_COMPLETED" } });
     await prisma.scoreEvent.deleteMany({ where: { campId, categoryId: "seed-cat-camp-completion" } });
     await prisma.auditLog.deleteMany({ where: { action: "LEADERBOARD_CAMP_COMPLETION" } });
     await prisma.leaderboardSettings.deleteMany({ where: { campId } });
@@ -42,7 +53,9 @@ test.describe("Leaderboard camp completion and campus weights (PR 10)", () => {
     await page.getByRole("tab", { name: "Settings" }).click();
 
     await page.getByRole("button", { name: "Award Camp Completion Now" }).click();
-    await expect(page.getByText(/Camp completion awarded to/)).toBeVisible({ timeout: 20000 });
+    // PR14 widened this toast to also report status transitions, so it now
+    // reads "Camp completion: N camper(s) and M staff scored, …".
+    await expect(page.getByText(/Camp completion:/)).toBeVisible({ timeout: 20000 });
 
     const events = await prisma.scoreEvent.findMany({ where: { campId, categoryId: "seed-cat-camp-completion" } });
     expect(events.length).toBeGreaterThan(0);
@@ -52,7 +65,7 @@ test.describe("Leaderboard camp completion and campus weights (PR 10)", () => {
     // Pressing again must not double-credit.
     const before = events.length;
     await page.getByRole("button", { name: "Award Camp Completion Now" }).click();
-    await expect(page.getByText(/Camp completion awarded to 0 camper/)).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/Camp completion: 0 camper\(s\) and 0 staff scored/)).toBeVisible({ timeout: 20000 });
     const after = await prisma.scoreEvent.count({ where: { campId, categoryId: "seed-cat-camp-completion" } });
     expect(after).toBe(before);
   });
@@ -73,13 +86,16 @@ test.describe("Leaderboard camp completion and campus weights (PR 10)", () => {
     await expect(campusWeights.getByText("44", { exact: true })).toBeVisible();
   });
 
-  test("the Rules tab names the per-category metrics and is honest about untracked ones", async ({ page }) => {
+  test("the Rules tab names the per-category metrics and defines the derived ones", async ({ page }) => {
     await loginWithPassword(page, "admin@camply.com", "password123");
     await page.goto("/leaderboard");
     await page.getByRole("tab", { name: "Rules" }).click();
 
     await expect(page.getByText("Bible Quiz").first()).toBeVisible();
     await expect(page.getByText("Camper Attendance").first()).toBeVisible();
-    await expect(page.getByText(/not tracked anywhere yet/)).toBeVisible();
+    // PR13 replaced the "not tracked anywhere yet" disclaimer with actual
+    // definitions, since both metrics now have real measurements behind them.
+    await expect(page.getByText(/different activities someone has earned points in/)).toBeVisible();
+    await expect(page.getByText(/attendance sessions a teacher actually ran/)).toBeVisible();
   });
 });

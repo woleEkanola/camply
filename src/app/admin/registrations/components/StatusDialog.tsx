@@ -7,7 +7,7 @@ import { Select } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
 import { isEndorsed } from "@/server/registration/endorsement";
 
-type Action = "APPROVE" | "REJECT" | "WAITLIST" | "REQUEST_CORRECTION" | "CANCEL" | "ARCHIVE" | "REVOKE_APPROVAL" | "UNDO_CHECK_IN" | "ADVANCE_FROM_REQUIRES_ACTION";
+type Action = "APPROVE" | "REJECT" | "WAITLIST" | "REQUEST_CORRECTION" | "CANCEL" | "ARCHIVE" | "REVOKE_APPROVAL" | "UNDO_CHECK_IN" | "ADVANCE_FROM_REQUIRES_ACTION" | "COMPLETE";
 
 interface StatusDialogProps {
   open: boolean;
@@ -32,7 +32,14 @@ export function StatusDialog({ open, onClose, registration, onSubmit, isTwoStep,
   const actionOptions: { value: Action; label: string }[] = [
     ...BASE_ACTIONS,
     ...(status === "APPROVED" ? [{ value: "REVOKE_APPROVAL" as Action, label: "Revoke Approval" }] : []),
-    ...(status === "CHECKED_IN" ? [{ value: "UNDO_CHECK_IN" as Action, label: "Undo Check-in" }] : []),
+    // CHECKED_IN is the only status the state machine lets reach COMPLETED,
+    // so the option only exists there.
+    ...(status === "CHECKED_IN"
+      ? [
+          { value: "UNDO_CHECK_IN" as Action, label: "Undo Check-in" },
+          { value: "COMPLETE" as Action, label: "Mark Completed" },
+        ]
+      : []),
     ...(status === "REQUIRES_ACTION" ? [{ value: "ADVANCE_FROM_REQUIRES_ACTION" as Action, label: "Advance to Review" }] : []),
   ];
   const [action, setAction] = useState<Action>("APPROVE");

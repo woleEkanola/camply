@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { campDayKey } from "./dayKey";
 import { notifyTeacherOfTheDay } from "./notify";
 import { recordScoreEvent } from "./record";
+import { completeRegistration } from "../registration/engine";
 
 export const CAMP_COMPLETION_CATEGORY_ID = "seed-cat-camp-completion";
 
@@ -28,25 +29,32 @@ export type CompletionMode = "CHECKOUT" | "CAMP_END" | "MANUAL";
  * nightly sweep is re-runnable, and a subject can never be double-credited
  * even if the mode changes mid-camp.
  *
- * Deliberately does NOT touch `Registration.status`. `COMPLETED` exists in the
- * enum and the state machine allows CHECKED_IN -> COMPLETED, but status
- * transitions belong to the registration engine (its single choke point), not
- * to scoring.
+ * Also transitions each **CHECKED_IN** registration to `COMPLETED`, via the
+ * registration engine's `completeRegistration` — scoring never writes
+ * `Registration.status` itself. That set is narrower than the points sweep
+ * (see the comment at the transition loop), and the difference is reported
+ * back rather than hidden.
+ *
+ * Note on CHECKOUT mode: completion lands on the next nightly reconcile, not
+ * instantly at the checkout desk. `scan.ts`'s checkout branch is deliberately
+ * untouched — it is the most latency-sensitive path in the app, is
+ * at-most-once by design, and is duplicated in an offline-sync branch that
+ * would have to be kept in step.
  */
 export async function awardCampCompletion(
   campId: string,
-  opts: { force?: boolean } = {}
-): Promise<{ campers: number; staff: number; skipped: "MODE" | null }> {
+  opts: { force?: boolean; actorId?: string } = {}
+): Promise<{ campers: number; staff: number; completed: number; notCheckedIn: number; skipped: "MODE" | null }> {
   const camp = await prisma.camp.findUnique({ where: { id: campId }, select: { endDate: true } });
-  if (!camp) return { campers: 0, staff: 0, skipped: null };
+  if (!camp) return { campers: 0, staff: 0, completed: 0, notCheckedIn: 0, skipped: null };
 
   const settings = await prisma.leaderboardSettings.findUnique({ where: { campId } });
   const mode = ((settings as any)?.completionMode ?? "MANUAL") as CompletionMode;
   const points = (settings as any)?.completionPoints ?? 50;
 
   if (!opts.force) {
-    if (mode === "MANUAL") return { campers: 0, staff: 0, skipped: "MODE" };
-    if (mode === "CAMP_END" && camp.endDate > new Date()) return { campers: 0, staff: 0, skipped: "MODE" };
+    if (mode === "MANUAL") return { campers: 0, staff: 0, completed: 0, notCheckedIn: 0, skipped: "MODE" };
+    if (mode === "CAMP_END" && camp.endDate > new Date()) return { campers: 0, staff: 0, completed: 0, notCheckedIn: 0, skipped: "MODE" };
   }
 
   // CHECKOUT mode only credits registrations that actually checked out;
@@ -59,7 +67,7 @@ export async function awardCampCompletion(
       status: { in: ["APPROVED", "CHECKED_IN", "COMPLETED"] },
       ...(requireCheckout ? { checkedOutAt: { not: null } } : {}),
     },
-    select: { id: true, tribeId: true, campusId: true },
+    select: { id: true, tribeId: true, campusId: true, status: true },
   });
 
   let campers = 0;
@@ -97,7 +105,33 @@ export async function awardCampCompletion(
     if (event) staff++;
   }
 
-  return { campers, staff, skipped: null };
+  // Status transition, through the registration engine's own choke point —
+  // scoring never writes Registration.status directly.
+  //
+  // This covers a NARROWER set than the points sweep above: CHECKED_IN is the
+  // only status the state machine allows to reach COMPLETED, so an APPROVED
+  // camper who never checked in earns completion points but keeps their
+  // status. That asymmetry is intentional (you cannot complete a camp you were
+  // never checked into) and is reported back rather than hidden, so the admin
+  // toast can say what actually moved.
+  let completed = 0;
+  let notCheckedIn = 0;
+  for (const reg of registrations) {
+    if (reg.status !== "CHECKED_IN") {
+      if (reg.status !== "COMPLETED") notCheckedIn++;
+      continue;
+    }
+    try {
+      await completeRegistration({ registrationId: reg.id, actorId: opts.actorId });
+      completed++;
+    } catch (error) {
+      // Never let one registration abort the sweep — the nightly reconcile
+      // runs unattended, and a single bad row must not stop every other camp.
+      console.error(`[dailyOps] completeRegistration failed for ${reg.id}:`, error);
+    }
+  }
+
+  return { campers, staff, completed, notCheckedIn, skipped: null };
 }
 
 /**

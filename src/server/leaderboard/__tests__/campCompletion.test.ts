@@ -152,6 +152,60 @@ describe("awardCampCompletion", () => {
     expect(afterEnd.staff).toBe(1);
   });
 
+  it("transitions CHECKED_IN registrations to COMPLETED, and reports those it cannot", async () => {
+    // A second camper who never checked in: earns the points, but APPROVED
+    // cannot legally reach COMPLETED, so their status must stay put.
+    const parent2 = await prisma.user.create({
+      data: { email: `completion-parent2-${Date.now()}-${Math.random()}@test.com`, password: "x", role: "PARENT", organizationId: orgId },
+    });
+    const camper2 = await prisma.camper.create({
+      data: {
+        name: "Never Checked In",
+        firstName: "Never",
+        lastName: "CheckedIn",
+        dateOfBirth: new Date(2013, 5, 1),
+        gender: "MALE",
+        userId: parent2.id,
+        organizationId: orgId,
+        homeCampusId: campusId,
+      },
+    });
+    const approvedOnly = await prisma.registration.create({
+      data: { camperId: camper2.id, campId, campusId, tribeId, status: "APPROVED" },
+    });
+
+    await prisma.leaderboardSettings.create({ data: { campId, completionMode: "MANUAL" } });
+    const result = await awardCampCompletion(campId, { force: true });
+
+    expect(result.campers).toBe(2); // both scored
+    expect(result.completed).toBe(1); // only the CHECKED_IN one transitioned
+    expect(result.notCheckedIn).toBe(1);
+
+    const checkedIn = await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } });
+    const untouched = await prisma.registration.findUniqueOrThrow({ where: { id: approvedOnly.id } });
+    expect(checkedIn.status).toBe("COMPLETED");
+    expect(untouched.status).toBe("APPROVED");
+
+    // The transition is audited through the engine's own logEvent.
+    const audit = await prisma.auditLog.findFirst({
+      where: { registrationId, action: "REGISTRATION_COMPLETED" },
+    });
+    expect(audit).not.toBeNull();
+  });
+
+  it("re-running after everyone is COMPLETED is a clean no-op", async () => {
+    await prisma.leaderboardSettings.create({ data: { campId, completionMode: "MANUAL" } });
+    await awardCampCompletion(campId, { force: true });
+
+    const second = await awardCampCompletion(campId, { force: true });
+    expect(second.campers).toBe(0); // idempotencyKey short-circuits the points
+    expect(second.completed).toBe(0); // already COMPLETED, so nothing to move
+    expect(second.notCheckedIn).toBe(0); // COMPLETED is not counted as a failure
+
+    const audits = await prisma.auditLog.count({ where: { registrationId, action: "REGISTRATION_COMPLETED" } });
+    expect(audits).toBe(1);
+  });
+
   it("uses the configured completionPoints", async () => {
     await prisma.leaderboardSettings.create({ data: { campId, completionMode: "MANUAL", completionPoints: 123 } });
     await awardCampCompletion(campId, { force: true });

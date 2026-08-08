@@ -1156,7 +1156,7 @@ export const leaderboardRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const camp = await ctx.prisma.camp.findUniqueOrThrow({ where: { id: input.campId } });
       await assertCanManageCamp(ctx, input.campId);
-      const result = await awardCampCompletion(input.campId, { force: true });
+      const result = await awardCampCompletion(input.campId, { force: true, actorId: ctx.session!.user.id });
       await writeAudit(ctx, camp, "LEADERBOARD_CAMP_COMPLETION", { newValue: result });
       return result;
     }),
