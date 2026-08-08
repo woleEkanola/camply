@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { recordScoreEvent } from "../record";
 
@@ -121,4 +121,12 @@ describe("recordScoreEvent — LeaderboardStat", () => {
     expect(judahAfter?.rank).toBe(1);
     expect(judahAfter?.rankDelta).toBe(1); // moved up one place
   });
+});
+
+// Matches the repo convention (e.g. accommodation/__tests__/engine.test.ts):
+// disconnect once at module teardown, not per test. Vitest reuses fork
+// workers across files, so a leaked PrismaClient here keeps a connection
+// pool + query engine alive inside a reused worker for the rest of the run.
+afterAll(async () => {
+  await prisma.$disconnect();
 });

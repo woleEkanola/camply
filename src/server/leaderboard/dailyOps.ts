@@ -29,11 +29,21 @@ export type CompletionMode = "CHECKOUT" | "CAMP_END" | "MANUAL";
  * nightly sweep is re-runnable, and a subject can never be double-credited
  * even if the mode changes mid-camp.
  *
- * Also transitions each **CHECKED_IN** registration to `COMPLETED`, via the
+ * Camper eligibility is **CHECKED_IN or COMPLETED only** — not APPROVED. An
+ * earlier version of this also swept APPROVED registrations, so a camper who
+ * was approved but never showed up earned "Camp Completion" points; fixed
+ * rather than left as a documented quirk, since "completed camp" cannot be
+ * true for someone who never checked in.
+ *
+ * Also transitions each CHECKED_IN registration to `COMPLETED`, via the
  * registration engine's `completeRegistration` — scoring never writes
- * `Registration.status` itself. That set is narrower than the points sweep
- * (see the comment at the transition loop), and the difference is reported
- * back rather than hidden.
+ * `Registration.status` itself. This now covers exactly the same set the
+ * points sweep just awarded.
+ *
+ * Staff have no equivalent check-in concept in the schema at all
+ * (`StaffStatus` is PENDING/APPROVED/REJECTED/DEACTIVATED — nothing tracks
+ * arrival), so `APPROVED` remains the closest available signal there. That
+ * gap is real and pre-existing, not something this function can close.
  *
  * Note on CHECKOUT mode: completion lands on the next nightly reconcile, not
  * instantly at the checkout desk. `scan.ts`'s checkout branch is deliberately
@@ -44,27 +54,35 @@ export type CompletionMode = "CHECKOUT" | "CAMP_END" | "MANUAL";
 export async function awardCampCompletion(
   campId: string,
   opts: { force?: boolean; actorId?: string } = {}
-): Promise<{ campers: number; staff: number; completed: number; notCheckedIn: number; skipped: "MODE" | null }> {
+): Promise<{ campers: number; staff: number; completed: number; skipped: "MODE" | null }> {
   const camp = await prisma.camp.findUnique({ where: { id: campId }, select: { endDate: true } });
-  if (!camp) return { campers: 0, staff: 0, completed: 0, notCheckedIn: 0, skipped: null };
+  if (!camp) return { campers: 0, staff: 0, completed: 0, skipped: null };
 
   const settings = await prisma.leaderboardSettings.findUnique({ where: { campId } });
   const mode = ((settings as any)?.completionMode ?? "MANUAL") as CompletionMode;
   const points = (settings as any)?.completionPoints ?? 50;
 
   if (!opts.force) {
-    if (mode === "MANUAL") return { campers: 0, staff: 0, completed: 0, notCheckedIn: 0, skipped: "MODE" };
-    if (mode === "CAMP_END" && camp.endDate > new Date()) return { campers: 0, staff: 0, completed: 0, notCheckedIn: 0, skipped: "MODE" };
+    if (mode === "MANUAL") return { campers: 0, staff: 0, completed: 0, skipped: "MODE" };
+    if (mode === "CAMP_END" && camp.endDate > new Date()) return { campers: 0, staff: 0, completed: 0, skipped: "MODE" };
   }
 
   // CHECKOUT mode only credits registrations that actually checked out;
   // the other two modes sweep everyone who reached the camp.
+  //
+  // Deliberately CHECKED_IN/COMPLETED only — NOT APPROVED. An earlier
+  // version of this also swept APPROVED registrations, which meant a camper
+  // who was approved but never showed up still earned "Camp Completion"
+  // points. Fixed here rather than left as a documented quirk: "completed
+  // camp" cannot be true for someone who never checked in — and now the
+  // points sweep and the status-transition sweep below cover exactly the
+  // same set of campers.
   const requireCheckout = !opts.force && mode === "CHECKOUT";
   const registrations = await prisma.registration.findMany({
     where: {
       campId,
       deletedAt: null,
-      status: { in: ["APPROVED", "CHECKED_IN", "COMPLETED"] },
+      status: { in: ["CHECKED_IN", "COMPLETED"] },
       ...(requireCheckout ? { checkedOutAt: { not: null } } : {}),
     },
     select: { id: true, tribeId: true, campusId: true, status: true },
@@ -106,21 +124,13 @@ export async function awardCampCompletion(
   }
 
   // Status transition, through the registration engine's own choke point —
-  // scoring never writes Registration.status directly.
-  //
-  // This covers a NARROWER set than the points sweep above: CHECKED_IN is the
-  // only status the state machine allows to reach COMPLETED, so an APPROVED
-  // camper who never checked in earns completion points but keeps their
-  // status. That asymmetry is intentional (you cannot complete a camp you were
-  // never checked into) and is reported back rather than hidden, so the admin
-  // toast can say what actually moved.
+  // scoring never writes Registration.status directly. `registrations` is
+  // already scoped to CHECKED_IN/COMPLETED above, so this covers exactly the
+  // same set the points loop just awarded — no camper can earn completion
+  // points while being structurally ineligible for the COMPLETED status.
   let completed = 0;
-  let notCheckedIn = 0;
   for (const reg of registrations) {
-    if (reg.status !== "CHECKED_IN") {
-      if (reg.status !== "COMPLETED") notCheckedIn++;
-      continue;
-    }
+    if (reg.status !== "CHECKED_IN") continue; // already COMPLETED — nothing to transition
     try {
       await completeRegistration({ registrationId: reg.id, actorId: opts.actorId });
       completed++;
@@ -131,7 +141,7 @@ export async function awardCampCompletion(
     }
   }
 
-  return { campers, staff, completed, notCheckedIn, skipped: null };
+  return { campers, staff, completed, skipped: null };
 }
 
 /**

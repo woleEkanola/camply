@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { recordScoreEvent } from "../record";
 import { rebuildLeaderboard } from "../aggregate";
@@ -152,9 +152,12 @@ describe("awardCampCompletion", () => {
     expect(afterEnd.staff).toBe(1);
   });
 
-  it("transitions CHECKED_IN registrations to COMPLETED, and reports those it cannot", async () => {
-    // A second camper who never checked in: earns the points, but APPROVED
-    // cannot legally reach COMPLETED, so their status must stay put.
+  it("an APPROVED-but-never-checked-in camper earns nothing at all — not points with an unmoved status", async () => {
+    // Real bug, fixed: an earlier version scored every APPROVED registration,
+    // so someone who was approved but never showed up still earned "Camp
+    // Completion" points, just with their status left behind. Eligibility is
+    // now CHECKED_IN/COMPLETED only, so this camper must be untouched on
+    // both axes — no ScoreEvent, no status change.
     const parent2 = await prisma.user.create({
       data: { email: `completion-parent2-${Date.now()}-${Math.random()}@test.com`, password: "x", role: "PARENT", organizationId: orgId },
     });
@@ -177,14 +180,16 @@ describe("awardCampCompletion", () => {
     await prisma.leaderboardSettings.create({ data: { campId, completionMode: "MANUAL" } });
     const result = await awardCampCompletion(campId, { force: true });
 
-    expect(result.campers).toBe(2); // both scored
-    expect(result.completed).toBe(1); // only the CHECKED_IN one transitioned
-    expect(result.notCheckedIn).toBe(1);
+    expect(result.campers).toBe(1); // only the CHECKED_IN one scored
+    expect(result.completed).toBe(1); // and transitioned
 
     const checkedIn = await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } });
     const untouched = await prisma.registration.findUniqueOrThrow({ where: { id: approvedOnly.id } });
     expect(checkedIn.status).toBe("COMPLETED");
     expect(untouched.status).toBe("APPROVED");
+
+    const approvedEvents = await prisma.scoreEvent.count({ where: { campId, registrationId: approvedOnly.id } });
+    expect(approvedEvents).toBe(0);
 
     // The transition is audited through the engine's own logEvent.
     const audit = await prisma.auditLog.findFirst({
@@ -200,7 +205,6 @@ describe("awardCampCompletion", () => {
     const second = await awardCampCompletion(campId, { force: true });
     expect(second.campers).toBe(0); // idempotencyKey short-circuits the points
     expect(second.completed).toBe(0); // already COMPLETED, so nothing to move
-    expect(second.notCheckedIn).toBe(0); // COMPLETED is not counted as a failure
 
     const audits = await prisma.auditLog.count({ where: { registrationId, action: "REGISTRATION_COMPLETED" } });
     expect(audits).toBe(1);
@@ -263,4 +267,12 @@ describe("composite scoring — per-category and campus", () => {
     // Previously always null — CAMPUS was skipped by computeCompositeScores.
     expect(stat.compositeScore).not.toBeNull();
   });
+});
+
+// Matches the repo convention (e.g. accommodation/__tests__/engine.test.ts):
+// disconnect once at module teardown, not per test. Vitest reuses fork
+// workers across files, so a leaked PrismaClient here keeps a connection
+// pool + query engine alive inside a reused worker for the rest of the run.
+afterAll(async () => {
+  await prisma.$disconnect();
 });

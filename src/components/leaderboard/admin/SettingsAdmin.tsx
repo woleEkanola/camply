@@ -68,10 +68,6 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
       utils.leaderboard.tribes.invalidate({ campId });
       const parts = [`${result.campers} camper(s) and ${result.staff} staff scored`];
       if (result.completed) parts.push(`${result.completed} marked completed`);
-      // Surfaced rather than silently ignored: only CHECKED_IN registrations
-      // can legally become COMPLETED, so anyone who never checked in keeps
-      // their status even though they earned the points.
-      if (result.notCheckedIn) parts.push(`${result.notCheckedIn} not checked in, status unchanged`);
       toast.success(`Camp completion: ${parts.join(", ")}.`);
     },
     onError: (err) => toast.error(err.message || "Failed to award camp completion."),
