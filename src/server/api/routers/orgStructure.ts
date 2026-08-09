@@ -340,7 +340,7 @@ export const orgStructureRouter = createTRPCRouter({
   getOnSiteStaff: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
       const dayStart = new Date();
@@ -380,7 +380,7 @@ export const orgStructureRouter = createTRPCRouter({
   searchDirectory: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string(), query: z.string().min(2), limit: z.number().min(1).max(20).default(8) }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
       const q = input.query;
       const digits = q.replace(/\D/g, "");
