@@ -46,8 +46,6 @@ test.describe("Wizard: Nigerian phone field validation", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;

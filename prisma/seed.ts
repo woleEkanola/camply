@@ -71,12 +71,12 @@ async function seedCampuses(organizationId: string) {
     if (existing) {
       await prisma.campus.update({
         where: { id: existing.id },
-        data: { slug, address: campus.address, city: campus.city, state: campus.state, zipCode: (campus as any).zipCode || null, country: campus.country, campusCode: campus.campusCode, displayOrder: campus.displayOrder, active: true, signupOpen: true },
+        data: { slug, address: campus.address, city: campus.city, state: campus.state, zipCode: (campus as any).zipCode || null, country: campus.country, campusCode: campus.campusCode, displayOrder: campus.displayOrder },
       });
       updated++;
     } else {
       await prisma.campus.create({
-        data: { name: campus.name, slug, address: campus.address, city: campus.city, state: campus.state, zipCode: (campus as any).zipCode || null, country: campus.country, campusCode: campus.campusCode, displayOrder: campus.displayOrder, organizationId, active: true, signupOpen: true },
+        data: { name: campus.name, slug, address: campus.address, city: campus.city, state: campus.state, zipCode: (campus as any).zipCode || null, country: campus.country, campusCode: campus.campusCode, displayOrder: campus.displayOrder, organizationId },
       });
       created++;
     }
@@ -409,7 +409,6 @@ async function main() {
         campusCode: "DEM",
         email: "campus@camply.com",
         phone: "+1-555-0100",
-        active: true,
       },
     });
   }

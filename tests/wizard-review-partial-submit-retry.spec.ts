@@ -53,8 +53,6 @@ test.describe("Review step retry never re-submits an already-succeeded teen", ()
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;

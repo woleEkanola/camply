@@ -62,6 +62,9 @@ test.describe("Campus Rep Registration Actions & StatCard E2E Test", () => {
   });
 
   test.afterAll(async () => {
+    if (organizationId && originalApprovalWorkflow) {
+      await prisma.organization.update({ where: { id: organizationId }, data: { approvalWorkflow: originalApprovalWorkflow } }).catch(() => {});
+    }
     if (regId) {
       await prisma.registration.delete({ where: { id: regId } }).catch(() => {});
     }

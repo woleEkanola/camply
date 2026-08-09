@@ -46,8 +46,6 @@ test.describe("Wizard survives a mid-flow page reload", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;

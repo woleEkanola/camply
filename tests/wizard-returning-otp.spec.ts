@@ -42,8 +42,6 @@ test.describe("Wizard returning-user OTP sign-in", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;

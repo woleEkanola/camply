@@ -256,6 +256,13 @@ async function approveRegistrationInTx(
 
   assertTransition(registration.status, "APPROVED");
 
+  if (registration.campus.suspended) {
+    throw new RegistrationEngineError(
+      "CAMPUS_SUSPENDED",
+      "This campus is suspended — approvals are paused until it's reactivated."
+    );
+  }
+
   // Two-layer approval: in a TWO_STEP org, a campus rep can only endorse
   // (see endorseRegistration below) — final approval, and the acceptance
   // email it triggers, requires an org admin. An admin may still approve
@@ -425,11 +432,17 @@ export async function endorseRegistration(params: { registrationId: string; acto
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camper: true },
+      include: { camper: true, campus: true },
     });
 
     if (registration.status !== "PENDING") {
       throw new RegistrationEngineError("NOT_PENDING", "Only a pending registration can be endorsed.");
+    }
+    if (registration.campus.suspended) {
+      throw new RegistrationEngineError(
+        "CAMPUS_SUSPENDED",
+        "This campus is suspended — recommendations are paused until it's reactivated."
+      );
     }
     const twoStep = await isTwoStepOrg(tx, registration.camper.organizationId);
     if (!twoStep) {

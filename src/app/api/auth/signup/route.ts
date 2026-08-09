@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     if (!signupLink || !signupLink.active) {
       return NextResponse.json({ message: 'Invalid or expired signup link' }, { status: 400 });
     }
-    if (!signupLink.campus.signupOpen) {
+    if (signupLink.campus.suspended) {
       return NextResponse.json({ message: 'Signup is currently closed for this campus' }, { status: 403 });
     }
 

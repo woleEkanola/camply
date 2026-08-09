@@ -1032,6 +1032,8 @@ function RegistrationsPage() {
                       <Button
                         size="sm"
                         loading={bulkTransition.isPending && bulkTransition.variables?.ids?.length === 1 && bulkTransition.variables.ids[0] === row.id && bulkTransition.variables.action === "APPROVE"}
+                        disabled={row.campus?.suspended}
+                        title={row.campus?.suspended ? "This campus is suspended — approvals are paused." : undefined}
                         onClick={() => bulkTransition.mutate({ ids: [row.id], action: "APPROVE" })}
                       >
                         Approve

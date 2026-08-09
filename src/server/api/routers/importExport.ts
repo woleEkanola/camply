@@ -45,8 +45,7 @@ export async function fetchConfigBundle(prisma: any, organizationId: string) {
     phone: c.phone ?? undefined,
     email: c.email ?? undefined,
     campusCode: c.campusCode ?? undefined,
-    active: c.active,
-    signupOpen: c.signupOpen,
+    suspended: c.suspended,
     displayOrder: c.displayOrder,
   }));
 

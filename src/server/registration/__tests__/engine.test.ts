@@ -440,6 +440,71 @@ describe("campus registration quota (SignupLink-scoped)", () => {
   });
 });
 
+describe("campus suspension", () => {
+  async function suspendCampus() {
+    await prisma.campus.update({ where: { id: campusId }, data: { suspended: true } });
+  }
+
+  it("blocks submitRegistration with CAMPUS_CLOSED", async () => {
+    const camper = await makeCamper();
+    const draft = await engine.createDraft({ camperId: camper.id, campId, campusId, actorId: parentId });
+    await suspendCampus();
+
+    await expect(engine.submitRegistration({ registrationId: draft.id, actorId: parentId })).rejects.toBeInstanceOf(
+      RegistrationValidationError
+    );
+  });
+
+  it("blocks approveRegistration with CAMPUS_SUSPENDED, leaving the registration PENDING", async () => {
+    const pending = await makePending();
+    await suspendCampus();
+
+    await expect(
+      engine.approveRegistration({ registrationId: pending.id, actorId: adminId })
+    ).rejects.toMatchObject({ name: "RegistrationEngineError", code: "CAMPUS_SUSPENDED" });
+
+    const reloaded = await prisma.registration.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(reloaded.status).toBe("PENDING");
+  });
+
+  it("blocks endorseRegistration with CAMPUS_SUSPENDED in a TWO_STEP org", async () => {
+    await prisma.organization.update({ where: { id: orgId }, data: { approvalWorkflow: "TWO_STEP" } });
+    const pending = await makePending();
+    await suspendCampus();
+
+    await expect(
+      engine.endorseRegistration({ registrationId: pending.id, actorId: parentId })
+    ).rejects.toMatchObject({ name: "RegistrationEngineError", code: "CAMPUS_SUSPENDED" });
+  });
+
+  it("still allows reject, waitlist, and archive on a suspended campus's registration", async () => {
+    const pendingReject = await makePending();
+    const pendingWaitlist = await makePending();
+    await suspendCampus();
+
+    const rejected = await engine.rejectRegistration({ registrationId: pendingReject.id, actorId: adminId, reason: "test" });
+    expect(rejected.status).toBe("REJECTED");
+
+    // ARCHIVED is only reachable from a terminal-ish state (REJECTED/APPROVED/
+    // CANCELLED/CHECKED_IN/COMPLETED), never directly from PENDING — archive
+    // the just-rejected registration to prove archive itself isn't blocked.
+    const archived = await engine.archiveRegistration({ registrationId: rejected.id, actorId: adminId });
+    expect(archived.status).toBe("ARCHIVED");
+
+    const waitlisted = await engine.waitlistRegistration({ registrationId: pendingWaitlist.id, actorId: adminId });
+    expect(waitlisted.status).toBe("WAITLISTED");
+  });
+
+  it("does not affect an already-APPROVED registration's check-in", async () => {
+    const pending = await makePending();
+    const approved = await engine.approveRegistration({ registrationId: pending.id, actorId: adminId });
+    await suspendCampus();
+
+    const checkedIn = await engine.checkInRegistration({ registrationId: approved.id, actorId: adminId });
+    expect(checkedIn.status).toBe("CHECKED_IN");
+  });
+});
+
 describe("rejection and correction workflow", () => {
   it("rejects a pending registration with a reason", async () => {
     const camper = await makeCamper();

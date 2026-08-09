@@ -48,8 +48,6 @@ test.describe("Wizard: Back-from-Hub and Add Teen age gate", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;

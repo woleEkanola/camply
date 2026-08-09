@@ -38,8 +38,6 @@ test.describe("Parent Teen Registration", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;
