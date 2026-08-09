@@ -12,7 +12,7 @@ import type { FormFieldDTO, FormFieldType, FormFieldAudience } from "./types";
 const ALL_TYPES: { value: FormFieldType; label: string }[] = [
   { value: "TEXT", label: "Text" },
   { value: "LONG_TEXT", label: "Long Text" },
-  { value: "NUMBER", label: "Number" },
+  { value: "NUMBER", label: "Phone Number (Nigerian)" },
   { value: "DATE", label: "Date" },
   { value: "BOOLEAN", label: "Yes/No Toggle" },
   { value: "CHECKBOX", label: "Checkbox" },

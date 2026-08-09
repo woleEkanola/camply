@@ -4,6 +4,7 @@ import { Input, Textarea, Select } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import FileUpload from "@/components/file-upload";
 import { parseFieldOptions } from "@/lib/formFieldOptions";
+import { sanitizeNigerianPhoneInput } from "@/lib/phone";
 import type { FormFieldDTO } from "./types";
 
 interface DynamicFieldRendererProps {
@@ -78,15 +79,22 @@ export function DynamicFieldRenderer({ field, value, onChange, disabled, dynamic
       );
 
     case "NUMBER":
+      // NUMBER fields are used exclusively for Nigerian phone numbers in this
+      // app — rendered as `type="tel"` (not `type="number"`, which silently
+      // strips the leading 0 that every local Nigerian number starts with)
+      // and capped to a valid Nigerian length as the user types.
       return (
         <Input
           id={fieldId}
-          type="number"
+          type="tel"
+          inputMode="numeric"
+          maxLength={14}
           label={field.label}
           required={field.required}
-          helpText={field.helpText ?? undefined}
+          helpText={field.helpText ?? "Nigerian phone number, e.g. 08012345678 or +2348012345678"}
+          placeholder={field.placeholder ?? undefined}
           value={(value as string) ?? ""}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(sanitizeNigerianPhoneInput(e.target.value))}
           disabled={disabled}
           error={error}
         />
