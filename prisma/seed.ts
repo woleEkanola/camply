@@ -157,6 +157,129 @@ async function seedDeclarations(organizationId: string) {
   console.log(`\nDeclarations: ${created} created, ${updated} updated\n`);
 }
 
+// ─── Department teacher seeding (roles, hierarchy) ──────────────────────────
+// Gives every seeded Department a Head, an Assistant Head, and two Team
+// Members — wired into both the Position/PositionAssignment tree (drives the
+// Leadership tab's hierarchy view) and StaffProfile.reportsToId /
+// isDepartmentHead / isAssistantHead (drives the Departments tab's head/
+// assistant-head display). Idempotent per department: skips any department
+// that already has a head assigned.
+
+const STAFF_FIRST_NAMES = [
+  "James", "Grace", "Michael", "Sarah", "David", "Ruth", "Daniel", "Esther",
+  "Samuel", "Deborah", "Joseph", "Miriam", "Peter", "Naomi", "John", "Abigail",
+  "Paul", "Rachel", "Emmanuel", "Joy", "Victor", "Faith", "Isaac", "Comfort",
+  "Stephen", "Patience", "Andrew", "Mercy", "Timothy", "Blessing",
+];
+const STAFF_LAST_NAMES = [
+  "Okafor", "Adeyemi", "Balogun", "Chukwu", "Eze", "Fashola", "Uche", "Nwosu",
+  "Bello", "Ibrahim", "Okoro", "Adebayo", "Yusuf", "Obi", "Afolabi", "Ogunleye",
+  "Musa", "Nnamdi", "Ajayi", "Chidiebere",
+];
+
+function staffName(i: number) {
+  return {
+    firstName: STAFF_FIRST_NAMES[i % STAFF_FIRST_NAMES.length],
+    lastName: STAFF_LAST_NAMES[(i * 7) % STAFF_LAST_NAMES.length],
+  };
+}
+
+async function seedDepartmentTeachers(organizationId: string, campId: string, venueId: string) {
+  const departments = await prisma.department.findMany({
+    where: { organizationId, campId, deletedAt: null },
+    orderBy: { name: "asc" },
+  });
+
+  console.log(`\nSeeding teachers into ${departments.length} departments...\n`);
+
+  const password = await bcrypt.hash("password123", 10);
+  let personIdx = 0;
+  let created = 0, skipped = 0;
+
+  for (const dept of departments) {
+    const deptSlug = slugify(dept.name);
+
+    const existingHead = await prisma.staffProfile.findFirst({
+      where: { organizationId, campId, departmentId: dept.id, isDepartmentHead: true, deletedAt: null },
+    });
+    if (existingHead) {
+      skipped++;
+      continue;
+    }
+
+    // Root position for this department's head — no parent, so each
+    // department is its own root in orgStructure.getLeadershipTree.
+    const headPosition = await prisma.position.create({
+      data: { name: `${dept.name} Head`, campId, departmentId: dept.id, displayOrder: 0 },
+    });
+    const assistantPosition = await prisma.position.create({
+      data: { name: `${dept.name} Assistant Head`, campId, departmentId: dept.id, parentPositionId: headPosition.id, displayOrder: 1 },
+    });
+    const memberPositions = await Promise.all([1, 2].map((n) =>
+      prisma.position.create({
+        data: { name: `${dept.name} Team Member`, campId, departmentId: dept.id, parentPositionId: headPosition.id, displayOrder: 1 + n },
+      })
+    ));
+
+    const { firstName: headFirst, lastName: headLast } = staffName(personIdx++);
+    const headEmail = `head.${deptSlug}@camply.com`;
+    const headUser = await prisma.user.upsert({
+      where: { email: headEmail },
+      update: {},
+      create: { email: headEmail, password, role: "TEACHER", firstName: headFirst, lastName: headLast, active: true, organizationId },
+    });
+    const headStaff = await prisma.staffProfile.create({
+      data: {
+        userId: headUser.id, organizationId, campId, type: "TEACHER", status: "APPROVED",
+        firstName: headFirst, lastName: headLast, phone: "+234-800-0000", email: headEmail,
+        skills: ["Leadership"], departmentId: dept.id, isDepartmentHead: true,
+        assignedVenueId: venueId, approvedAt: new Date(),
+      },
+    });
+    await prisma.positionAssignment.create({ data: { positionId: headPosition.id, staffId: headStaff.id, isCurrent: true } });
+
+    const { firstName: asstFirst, lastName: asstLast } = staffName(personIdx++);
+    const asstEmail = `assistant.${deptSlug}@camply.com`;
+    const asstUser = await prisma.user.upsert({
+      where: { email: asstEmail },
+      update: {},
+      create: { email: asstEmail, password, role: "TEACHER", firstName: asstFirst, lastName: asstLast, active: true, organizationId },
+    });
+    const asstStaff = await prisma.staffProfile.create({
+      data: {
+        userId: asstUser.id, organizationId, campId, type: "TEACHER", status: "APPROVED",
+        firstName: asstFirst, lastName: asstLast, phone: "+234-800-0001", email: asstEmail,
+        skills: ["Coordination"], departmentId: dept.id, isAssistantHead: true, reportsToId: headStaff.id,
+        assignedVenueId: venueId, approvedAt: new Date(),
+      },
+    });
+    await prisma.positionAssignment.create({ data: { positionId: assistantPosition.id, staffId: asstStaff.id, isCurrent: true } });
+
+    for (let m = 0; m < memberPositions.length; m++) {
+      const { firstName, lastName } = staffName(personIdx++);
+      const memberEmail = `member${m + 1}.${deptSlug}@camply.com`;
+      const memberUser = await prisma.user.upsert({
+        where: { email: memberEmail },
+        update: {},
+        create: { email: memberEmail, password, role: "TEACHER", firstName, lastName, active: true, organizationId },
+      });
+      const memberStaff = await prisma.staffProfile.create({
+        data: {
+          userId: memberUser.id, organizationId, campId, type: "TEACHER", status: "APPROVED",
+          firstName, lastName, phone: `+234-800-00${10 + m}`, email: memberEmail,
+          skills: ["Teaching"], departmentId: dept.id, reportsToId: headStaff.id,
+          assignedVenueId: venueId, approvedAt: new Date(),
+        },
+      });
+      await prisma.positionAssignment.create({ data: { positionId: memberPositions[m].id, staffId: memberStaff.id, isCurrent: true } });
+    }
+
+    created++;
+  }
+
+  console.log(`\nDepartment teacher structure: ${created} departments seeded, ${skipped} already had a head (skipped)\n`);
+}
+
 async function main() {
   // Create a Super Admin user if it doesn't exist
   const superAdminEmail = "superadmin@camply.com";
@@ -442,6 +565,7 @@ async function main() {
   await seedCampuses(organization.id);
   await seedTribes(camp.id);
   await seedDepartments(organization.id, camp.id);
+  await seedDepartmentTeachers(organization.id, camp.id, venue.id);
   await seedDeclarations(organization.id);
 
   console.log("Seed completed");

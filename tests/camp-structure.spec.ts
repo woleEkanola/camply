@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, deleteStaffByEmail } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, deleteStaffByEmail, drawerPanel } from "./helpers";
 
-test.describe("Camp Structure Redesign", () => {
+test.describe("Camp Structure — mobile-first directory", () => {
   test.describe.configure({ mode: "serial" });
 
   const managerEmail = `e2e-cs-manager-${Date.now()}@camply.test`;
@@ -18,7 +18,7 @@ test.describe("Camp Structure Redesign", () => {
   let orgId: string;
 
   test.beforeAll(async () => {
-    const { organizationId, campId: fixtureCampId } = await getFixtureOrgContext();
+    const { organizationId, campId: fixtureCampId, campusId } = await getFixtureOrgContext();
     campId = fixtureCampId;
     orgId = organizationId;
 
@@ -33,7 +33,14 @@ test.describe("Camp Structure Redesign", () => {
     });
     departmentId = dept.id;
 
-    // 2. Create staff profiles
+    // 2. Create staff profiles.
+    // NOTE: the position-tree fixture below creates PositionAssignment rows
+    // directly via Prisma, which does NOT run hierarchySync (that only fires
+    // from the position.assignPosition/movePosition tRPC mutations — see
+    // src/server/utils/hierarchySync.ts). Camp Directory groups staff by
+    // departmentId/isDepartmentHead/isAssistantHead, so those fields have to
+    // be set explicitly here to mirror what hierarchySync would have written,
+    // or the manager lands in "Not in a department" instead of Head.
     const managerUser = await prisma.user.create({
       data: { email: managerEmail, password: "placeholder-not-used-for-login", role: "TEACHER", organizationId },
     });
@@ -49,6 +56,9 @@ test.describe("Camp Structure Redesign", () => {
         phone: "+1-555-0500",
         email: managerEmail,
         approvedAt: new Date(),
+        departmentId: dept.id,
+        isDepartmentHead: true,
+        preferredCampusId: campusId,
       },
     });
     managerId = manager.id;
@@ -65,14 +75,17 @@ test.describe("Camp Structure Redesign", () => {
         status: "APPROVED",
         firstName: "CS",
         lastName: "ReportE2E",
-        phone: "+1-555-0600",
+        phone: "+234-800-0600",
         email: reportEmail,
         approvedAt: new Date(),
+        departmentId: dept.id,
+        reportsToId: manager.id,
       },
     });
     reportId = report.id;
 
-    // 3. Create position hierarchy
+    // 3. Create position hierarchy (mirrors what hierarchySync would derive
+    // from these same names, kept in sync with the StaffProfile flags above).
     const directorPos = await prisma.position.create({
       data: { name: "Camp Director", campId, displayOrder: 1 },
     });
@@ -130,56 +143,78 @@ test.describe("Camp Structure Redesign", () => {
     await deleteStaffByEmail(reportEmail);
   });
 
-  test("leadership tab displays position hierarchy and opens department detail drawer", async ({ page }) => {
+  test("renders one merged list of collapsible department sections — no tabs", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/camp-structure");
 
-    // Check custom graph tree elements
-    await expect(page.getByText("Camp Director").first()).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText("E2E Structure Department Head").first()).toBeVisible();
-    await expect(page.getByText("CS ManagerE2E").first()).toBeVisible();
+    // The old Leadership/Directory/Departments tab strip is gone entirely.
+    await expect(page.getByRole("tab")).toHaveCount(0);
 
-    // Switch to Nested List view to place nodes comfortably inside viewport
-    await page.getByRole("button", { name: "Nested List" }).click();
+    const header = page.getByTestId(`dept-section-header-${departmentId}`);
+    await expect(header).toBeVisible({ timeout: 15000 });
+    const wasExpanded = (await header.getAttribute("aria-expanded")) === "true";
 
-    // Click department link to open operations center drawer
-    await page.getByRole("button", { name: "E2E Structure Department" }).first().click();
-
-    await expect(page.getByText("Department Operations Center").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Do the thing").first()).toBeVisible();
+    await header.click();
+    await expect(header).toHaveAttribute("aria-expanded", wasExpanded ? "false" : "true");
   });
 
-  test("directory tab allows searching and filtering of staff list", async ({ page }) => {
+  test("expanding a section reveals Head and Members chips grouped correctly", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/camp-structure");
 
-    // Switch to Directory Tab
-    await page.getByRole("tab", { name: "Directory" }).click();
+    const header = page.getByTestId(`dept-section-header-${departmentId}`);
+    await expect(header).toBeVisible({ timeout: 15000 });
+    if ((await header.getAttribute("aria-expanded")) !== "true") {
+      await header.click();
+    }
 
-    // Search by query
-    const searchInput = page.getByPlaceholder("Search staff by name or email…");
-    await expect(searchInput).toBeVisible();
-    await searchInput.fill("ManagerE2E");
+    const body = page.getByTestId(`dept-section-body-${departmentId}`);
+    await expect(body).toBeVisible();
+    await expect(body.getByText("CS ManagerE2E")).toBeVisible();
+    await expect(body.getByText("CS ReportE2E")).toBeVisible();
 
-    // Only matching profile should be visible
-    await expect(page.getByText("CS ManagerE2E").first()).toBeVisible();
-    await expect(page.getByText("CS ReportE2E")).not.toBeVisible();
+    // Manager is the Head (grouped above the "Members" label), the report is
+    // an ordinary member — assert relative order rather than exact DOM shape.
+    const bodyText = await body.innerText();
+    expect(bodyText.indexOf("CS ManagerE2E")).toBeLessThan(bodyText.indexOf("CS ReportE2E"));
   });
 
-  test("departments tab lists organization units and supports details sliding drawer", async ({ page }) => {
+  test("department overflow menu opens the Operations Center drawer", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/camp-structure");
 
-    // Switch to Departments Tab
-    await page.getByRole("tab", { name: "Departments" }).click();
+    await page.getByTestId(`dept-section-menu-${departmentId}`).click();
+    await page.getByRole("menuitem", { name: "Manage positions" }).click();
 
-    // Verify grid card details
-    await expect(page.getByText("E2E Structure Department").first()).toBeVisible();
-    
-    // Click card to open drawer
-    await page.getByText("E2E Structure Department").first().click();
+    const drawer = drawerPanel(page);
+    await expect(drawer.getByText("Department Operations Center")).toBeVisible({ timeout: 10000 });
+    await expect(drawer.getByText("E2E Structure Department").first()).toBeVisible();
+    // "Manage positions" deep-links straight to the Positions tab.
+    await expect(drawer.getByTestId("position-manager")).toBeVisible();
+  });
 
-    await expect(page.getByText("Department Operations Center").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Do the other thing").first()).toBeVisible();
+  test("search finds a person by name, expands their department, and opens the profile sheet", async ({ page }) => {
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/camp-structure");
+
+    await page.getByTestId("directory-search-input").fill("ManagerE2E");
+    const results = page.getByTestId("directory-search-results");
+    await expect(results.getByText("CS ManagerE2E")).toBeVisible({ timeout: 10000 });
+    await results.getByText("CS ManagerE2E").click();
+
+    await expect(page.getByTestId("staff-profile-sheet")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId(`dept-section-header-${departmentId}`)).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("search finds a person by phone number digits", async ({ page }) => {
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/camp-structure");
+
+    // The old orgStructure.search only matched firstName/lastName —
+    // searchDirectory additionally matches phone, so this is a net-new
+    // capability, not a regression check.
+    await page.getByTestId("directory-search-input").fill("8000600");
+    const results = page.getByTestId("directory-search-results");
+    await expect(results.getByText("CS ReportE2E")).toBeVisible({ timeout: 10000 });
   });
 });

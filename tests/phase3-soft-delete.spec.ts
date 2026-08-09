@@ -98,17 +98,12 @@ test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", 
 
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/camp-structure");
-    await page.getByRole("tab", { name: "Departments" }).click();
-    await expect(page.getByText(dept.name)).toBeVisible({ timeout: 10000 });
-
-    // Plain `div` + hasText matches every ancestor that contains this text,
-    // not just the department's own Card — .first() then grabs the grid
-    // wrapper (document order lists outer ancestors before their children),
-    // which holds every department's Delete button and trips a strict-mode
-    // violation once more than one department exists on the page. Scope to
-    // the Card's distinguishing class so it resolves to just this card.
-    const card = page.locator("div.cursor-pointer", { hasText: dept.name }).first();
-    await card.getByRole("button", { name: "Delete" }).click();
+    // Camp Structure is a single collapsible-section list now (no tabs, no
+    // Departments/Directory split) — delete lives behind each section's own
+    // overflow menu, not a card-level button.
+    await expect(page.getByTestId(`dept-section-header-${departmentId}`)).toBeVisible({ timeout: 10000 });
+    await page.getByTestId(`dept-section-menu-${departmentId}`).click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
 
     await expect

@@ -21,7 +21,21 @@ export interface DocumentZoomModalProps {
   url: string;
   fileName: string;
   fileType?: string;
+  /** Double-tap toggles between 1x and 2.5x, anchored at the tap point.
+   * Off by default — additive, doesn't affect the existing document-viewer
+   * call site (`DepartmentSidePanel`). */
+  enableDoubleTapZoom?: boolean;
+  /** A single-finger downward drag while not zoomed in (scale <= 1) fades
+   * and translates the content, dismissing on release past a threshold.
+   * Off by default for the same reason as above. */
+  enableSwipeDownDismiss?: boolean;
 }
+
+const DOUBLE_TAP_MAX_INTERVAL_MS = 300;
+const DOUBLE_TAP_MAX_DISTANCE_PX = 30;
+const DOUBLE_TAP_ZOOM_SCALE = 2.5;
+const SWIPE_DISMISS_THRESHOLD_PX = 120;
+const SWIPE_FADE_DISTANCE_PX = 300;
 
 export function DocumentZoomModal({
   isOpen,
@@ -29,6 +43,8 @@ export function DocumentZoomModal({
   url,
   fileName,
   fileType = "",
+  enableDoubleTapZoom = false,
+  enableSwipeDownDismiss = false,
 }: DocumentZoomModalProps) {
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -36,9 +52,12 @@ export function DocumentZoomModal({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [swipeDy, setSwipeDy] = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartDistRef = useRef<number | null>(null);
+  const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const swipeCandidateRef = useRef(false);
 
   // Check if file is image or PDF
   const isImage =
@@ -53,6 +72,7 @@ export function DocumentZoomModal({
     setScale(1);
     setRotation(0);
     setPosition({ x: 0, y: 0 });
+    setSwipeDy(0);
   }, []);
 
   useEffect(() => {
@@ -101,8 +121,12 @@ export function DocumentZoomModal({
         x: e.touches[0].clientX - position.x,
         y: e.touches[0].clientY - position.y,
       });
+      // A downward swipe-to-dismiss only makes sense while not zoomed in —
+      // when scale > 1 the single-finger drag is panning, unchanged.
+      swipeCandidateRef.current = enableSwipeDownDismiss && scale <= 1;
     } else if (e.touches.length === 2) {
       setIsDragging(false);
+      swipeCandidateRef.current = false;
       const dist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
@@ -113,9 +137,16 @@ export function DocumentZoomModal({
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 1 && isDragging) {
+      const dy = e.touches[0].clientY - dragStart.y;
+      if (swipeCandidateRef.current) {
+        // Only track downward movement — an upward flick just falls through
+        // to 0 rather than fighting the pan/reset logic.
+        setSwipeDy(Math.max(0, dy));
+        return;
+      }
       setPosition({
         x: e.touches[0].clientX - dragStart.x,
-        y: e.touches[0].clientY - dragStart.y,
+        y: dy,
       });
     } else if (e.touches.length === 2 && touchStartDistRef.current !== null) {
       const dist = Math.hypot(
@@ -128,9 +159,47 @@ export function DocumentZoomModal({
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (swipeCandidateRef.current && swipeDy > SWIPE_DISMISS_THRESHOLD_PX) {
+      swipeCandidateRef.current = false;
+      setIsDragging(false);
+      touchStartDistRef.current = null;
+      onClose();
+      return;
+    }
+    if (swipeCandidateRef.current) setSwipeDy(0); // spring back
+
+    if (enableDoubleTapZoom && e.changedTouches.length === 1 && !swipeCandidateRef.current) {
+      const tap = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+      const now = Date.now();
+      const last = lastTapRef.current;
+      if (last && now - last.time < DOUBLE_TAP_MAX_INTERVAL_MS && Math.hypot(tap.x - last.x, tap.y - last.y) < DOUBLE_TAP_MAX_DISTANCE_PX) {
+        lastTapRef.current = null;
+        setScale((s) => {
+          const targetScale = s > 1 ? 1 : DOUBLE_TAP_ZOOM_SCALE;
+          if (targetScale === 1) {
+            setPosition({ x: 0, y: 0 });
+          } else if (containerRef.current) {
+            // Anchor the zoom at the tap point: keep the content point under
+            // the finger fixed by solving for the new translate offset.
+            const rect = containerRef.current.getBoundingClientRect();
+            const tapFromCenter = { x: tap.x - (rect.left + rect.width / 2), y: tap.y - (rect.top + rect.height / 2) };
+            const contentOffset = { x: (tapFromCenter.x - position.x) / s, y: (tapFromCenter.y - position.y) / s };
+            setPosition({
+              x: tapFromCenter.x - contentOffset.x * targetScale,
+              y: tapFromCenter.y - contentOffset.y * targetScale,
+            });
+          }
+          return targetScale;
+        });
+      } else {
+        lastTapRef.current = { time: now, x: tap.x, y: tap.y };
+      }
+    }
+
     setIsDragging(false);
     touchStartDistRef.current = null;
+    swipeCandidateRef.current = false;
   };
 
   // Keyboard Shortcuts
@@ -170,7 +239,10 @@ export function DocumentZoomModal({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-neutral-950/85 backdrop-blur-sm" />
+          <div
+            className="fixed inset-0 bg-neutral-950/85 backdrop-blur-sm"
+            style={swipeDy > 0 ? { opacity: Math.max(0, 1 - swipeDy / SWIPE_FADE_DISTANCE_PX) } : undefined}
+          />
         </Transition.Child>
 
         <div className="fixed inset-0 overflow-hidden flex flex-col">
@@ -290,7 +362,7 @@ export function DocumentZoomModal({
             {isImage ? (
               <div
                 style={{
-                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
+                  transform: `translate(${position.x}px, ${position.y + swipeDy}px) scale(${scale}) rotate(${rotation}deg)`,
                   transition: isDragging ? "none" : "transform 0.1s ease-out",
                 }}
                 className="flex items-center justify-center max-w-full max-h-full"
