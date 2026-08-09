@@ -8,15 +8,17 @@ async function assertAdminOrOwnTribe(ctx: { prisma: any; session: any; userId: s
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (ADMIN_ROLES.includes(currentUser.role) && currentUser.organizationId === organizationId) return { admin: true };
-  if (currentUser.role === "TEACHER") {
-    const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId, organizationId, status: "APPROVED" } });
-    if (!profile) throw new TRPCError({ code: "FORBIDDEN" });
-    if (tribeId && profile.assignedTribeId !== tribeId) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "Not your assigned tribe" });
-    }
-    return { admin: false, profile };
+  // Gate on holding an approved staff profile, not on `role === "TEACHER"` —
+  // a parent who also teaches has role PARENT and would otherwise fall through
+  // to FORBIDDEN despite being a teacher. See server/auth/capabilities.ts.
+  const profile = await ctx.prisma.staffProfile.findFirst({
+    where: { userId: ctx.userId, organizationId, status: "APPROVED", deletedAt: null },
+  });
+  if (!profile) throw new TRPCError({ code: "FORBIDDEN" });
+  if (tribeId && profile.assignedTribeId !== tribeId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Not your assigned tribe" });
   }
-  throw new TRPCError({ code: "FORBIDDEN" });
+  return { admin: false, profile };
 }
 
 export const attendanceRouter = createTRPCRouter({
@@ -50,8 +52,10 @@ export const attendanceRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found in this organization" });
       }
       let tribeId = input.tribeId;
-      if (currentUser.role === "TEACHER") {
-        const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId, organizationId: input.organizationId } });
+      // Non-admins are scoped to their own assigned tribe, identified by their
+      // staff profile rather than by `role === "TEACHER"`.
+      if (!ADMIN_ROLES.includes(currentUser.role)) {
+        const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId, organizationId: input.organizationId, deletedAt: null } });
         tribeId = profile?.assignedTribeId ?? undefined;
         if (!tribeId) return [];
       }

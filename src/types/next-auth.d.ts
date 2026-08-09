@@ -1,4 +1,5 @@
 import { DefaultSession } from "next-auth";
+import type { UserCapabilities } from "@/server/auth/capabilities";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT" | "TEACHER" | "VOLUNTEER";
@@ -16,6 +17,7 @@ declare module "next-auth" {
       staffProfileId?: string;
       staffType?: "TEACHER" | "VOLUNTEER";
       staffStatus?: "APPROVED" | "PENDING" | "REJECTED";
+      capabilities?: UserCapabilities;
     } & DefaultSession["user"];
   }
 
@@ -39,5 +41,6 @@ declare module "next-auth/jwt" {
     staffProfileId?: string;
     staffType?: "TEACHER" | "VOLUNTEER";
     staffStatus?: "APPROVED" | "PENDING" | "REJECTED";
+    capabilities?: UserCapabilities;
   }
 }

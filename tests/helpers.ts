@@ -350,13 +350,33 @@ export function campusCard(page: Page, name: string | RegExp) {
 
 /** Search the campuses grid and return the matching card. */
 export async function findCampusCard(page: Page, name: string) {
-  const search = page.getByPlaceholder(/Search campuses/i);
-  if (await search.isVisible().catch(() => false)) {
-    await search.fill(name);
+  const card = campusCard(page, name).first();
+
+  // The campuses page filters client-side over a list refreshed by a
+  // fire-and-forget `void refetchCampuses()` in the create mutation's
+  // onSuccess (src/app/admin/campuses/page.tsx). A campus created moments
+  // ago can therefore be absent from the array the filter runs over, and no
+  // amount of waiting on the filtered DOM will bring it back — the component
+  // has already settled. Reloading re-queries, so retry around that rather
+  // than sitting on one long timeout.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const search = page.getByPlaceholder(/Search campuses/i);
+    if (await search.isVisible().catch(() => false)) {
+      await search.fill("");
+      await search.fill(name);
+    }
+    try {
+      await card.waitFor({ state: "visible", timeout: 6000 });
+      return card;
+    } catch {
+      if (attempt === 2) break;
+      await page.reload();
+      await page.waitForLoadState("networkidle").catch(() => {});
+    }
   }
-  const card = campusCard(page, name);
-  await card.first().waitFor({ state: "visible", timeout: 15000 });
-  return card.first();
+
+  await card.waitFor({ state: "visible", timeout: 10000 });
+  return card;
 }
 
 /**

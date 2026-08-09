@@ -29,6 +29,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Invalid or expired registration link" }, { status: 400 });
   }
 
+  // An existing account of any role may take on staff capability — a parent
+  // who also teaches is one person, not two. Their `role` is left alone (it
+  // stays their primary role / default dashboard); the StaffProfile created
+  // later by /api/staff/register is what grants the capability. See
+  // server/auth/capabilities.ts.
+  //
+  // This used to 409 with "already registered with a different account type",
+  // which forced parent-teachers to invent a second email address.
   let user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     const placeholderPassword = await hashPassword(crypto.randomBytes(32).toString("hex"));

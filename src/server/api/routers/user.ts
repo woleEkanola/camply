@@ -414,7 +414,12 @@ export const userRouter = createTRPCRouter({
         data: updateData,
       });
 
-      if (user.role === "TEACHER" || user.role === "VOLUNTEER") {
+      // Mirror profile fields for anyone who has a staff profile, not just
+      // users whose primary role is TEACHER/VOLUNTEER — a parent who also
+      // teaches would otherwise have their name/phone drift out of sync with
+      // their staff record. The updateMany below is already scoped by userId
+      // and no-ops when there are no profiles.
+      {
         const staffProfileUpdate: any = {};
         if (input.firstName !== undefined) staffProfileUpdate.firstName = input.firstName;
         if (input.lastName !== undefined) staffProfileUpdate.lastName = input.lastName;

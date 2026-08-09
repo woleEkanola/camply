@@ -7,6 +7,7 @@ import { normalizeEmail } from "../../lib/email";
 import { rateLimit, clearRateLimit } from "../rateLimit";
 import { MAX_OTP_ATTEMPTS, normalizeOtp, otpEqual } from "../otp";
 import { type NextAuthOptions } from "next-auth";
+import { getUserCapabilities, EMPTY_CAPABILITIES, type UserCapabilities } from "./capabilities";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT" | "TEACHER" | "VOLUNTEER";
@@ -164,13 +165,13 @@ export const authOptions: NextAuthOptions = {
           },
         });
         token.managedCampuses = dbUser?.managedCampuses?.map((c: { id: string }) => c.id) || [];
-
         const staff = dbUser?.staffProfiles?.[0];
         if (staff) {
           token.staffProfileId = staff.id;
           token.staffType = staff.type as "TEACHER" | "VOLUNTEER";
           token.staffStatus = staff.status as "APPROVED" | "PENDING" | "REJECTED";
         }
+        token.capabilities = await getUserCapabilities(user.id);
       }
       return token;
     },
@@ -183,6 +184,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).staffProfileId = token.staffProfileId as string | undefined;
         (session.user as any).staffType = token.staffType as "TEACHER" | "VOLUNTEER" | undefined;
         (session.user as any).staffStatus = token.staffStatus as "APPROVED" | "PENDING" | "REJECTED" | undefined;
+        session.user.capabilities = (token.capabilities as UserCapabilities) ?? EMPTY_CAPABILITIES;
       }
       return session;
     },

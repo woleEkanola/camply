@@ -31,7 +31,13 @@ export async function POST(req: NextRequest) {
       if (token && role !== "PARENT") {
         return NextResponse.json({ existingUser: true, message: "An account with this email already exists. Please log in to continue." }, { status: 200 });
       }
-      return NextResponse.json({ message: "An account with this email already exists. Please log in instead." }, { status: 400 });
+      return NextResponse.json(
+        {
+          message:
+            "You already have a Camply account with this email. Please log in — you can join as a teacher or volunteer from there.",
+        },
+        { status: 400 }
+      );
     }
 
     // Generate email verification token

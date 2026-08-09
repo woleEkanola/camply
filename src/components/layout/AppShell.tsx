@@ -10,7 +10,8 @@ import { cn } from "@/lib/cn";
 import NotificationBell from "@/components/NotificationBell";
 import { ExportCenterTray } from "@/components/export/ExportCenterTray";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
-import { getNavGroups, getBottomNavItems, type Role } from "./navConfig";
+import { getNavGroups, getBottomNavItems, type Role, type AppArea } from "./navConfig";
+import { ContextSwitcher } from "./ContextSwitcher";
 import { CommandPalette } from "./CommandPalette";
 import { BottomNav } from "./BottomNav";
 import { Menu, Transition } from "@headlessui/react";
@@ -18,7 +19,7 @@ import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
 import { RoleSwitcher } from "./RoleSwitcher";
 
 export interface AppShellProps {
-  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer";
+  area: AppArea;
   children: React.ReactNode;
 }
 
@@ -250,6 +251,7 @@ export default function AppShell({ area, children }: AppShellProps) {
           </button>
           <div className="flex items-center gap-2">
             <RoleSwitcher />
+            <ContextSwitcher capabilities={session?.user?.capabilities} currentArea={area} />
             <ExportCenterTray />
             <NotificationBell />
             <ThemeToggle />

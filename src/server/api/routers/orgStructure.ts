@@ -3,15 +3,26 @@ import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { staffChipSelect, toStaffChip, type StaffChip, type DepartmentGroup, type CampDirectoryResult } from "./_shared/staffChip";
 import { STAFF_PRESENCE_STATIONS, STAFF_CHECK_IN_STATION } from "../../../lib/staffPresence";
+import { hasStaffCapability } from "../../auth/capabilities";
+
+const STAFF_MODULE_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
 /** Rejects PARENT outright — Camp Structure is a staff/admin-only module. */
-function assertStaffModuleAccess(ctx: { session: any }) {
+async function assertStaffModuleAccess(ctx: { session: any; userId: string }) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (currentUser.role === "PARENT") throw new TRPCError({ code: "FORBIDDEN", message: "Not available for this account type" });
-  return currentUser;
+  // Staff modules are for people with staff capability. Gate on that, not on
+  // `role !== "PARENT"`: a parent who also teaches keeps role PARENT and would
+  // otherwise be locked out of modules they legitimately belong to — while a
+  // parent with no staff profile must still be refused.
+  // See server/auth/capabilities.ts.
+  if (STAFF_MODULE_ADMIN_ROLES.includes(currentUser.role)) return currentUser;
+  if (await hasStaffCapability(ctx.userId, { organizationId: currentUser.organizationId ?? undefined })) {
+    return currentUser;
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Not available for this account type" });
 }
 
 function assertOrgAccess(currentUser: { role: string; organizationId?: string | null }, organizationId: string) {
@@ -21,11 +32,56 @@ function assertOrgAccess(currentUser: { role: string; organizationId?: string | 
 }
 
 export const orgStructureRouter = createTRPCRouter({
+  // ─── Leadership tree ────────────────────────────────────────────────────
+  getLeadershipTree: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = await assertStaffModuleAccess(ctx);
+      assertOrgAccess(currentUser, input.organizationId);
+
+      const positions = await ctx.prisma.position.findMany({
+        where: { campId: input.campId, deletedAt: null },
+        include: {
+          department: true,
+          assignments: {
+            where: { isCurrent: true },
+            include: {
+              staff: {
+                include: {
+                  user: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      });
+
+      // Build hierarchical tree structure of positions
+      type PositionNode = typeof positions[number] & { children: PositionNode[] };
+      const nodeMap = new Map<string, PositionNode>();
+
+      for (const pos of positions) {
+        nodeMap.set(pos.id, { ...pos, children: [] });
+      }
+
+      const roots: PositionNode[] = [];
+
+      for (const node of nodeMap.values()) {
+        if (node.parentPositionId && nodeMap.has(node.parentPositionId)) {
+          nodeMap.get(node.parentPositionId)!.children.push(node);
+        } else {
+          roots.push(node);
+        }
+      }
+
+      return roots;
+    }),
   // ─── Department structure ──────────────────────────────────────────────
   getDepartmentStructure: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
       const departments = await ctx.prisma.department.findMany({
@@ -63,7 +119,7 @@ export const orgStructureRouter = createTRPCRouter({
   getTribeStructure: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
       const tribes = await ctx.prisma.tribe.findMany({
@@ -110,9 +166,11 @@ export const orgStructureRouter = createTRPCRouter({
   getMyPosition: protectedProcedure
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
 
-      if (currentUser.role === "TEACHER" || currentUser.role === "VOLUNTEER") {
+      // Anyone holding a staff profile has a position to show, whatever their
+      // primary role happens to be.
+      if (currentUser.role !== "SUPER_ADMIN" && currentUser.role !== "OWNER" && currentUser.role !== "ADMIN") {
         const profile = await ctx.prisma.staffProfile.findFirst({
           where: { userId: ctx.userId, campId: input.campId },
           include: {
@@ -170,6 +228,30 @@ export const orgStructureRouter = createTRPCRouter({
       return null;
     }),
 
+  // ─── Person Profile Drawer payload ──────────────────────────────────────
+  getPersonProfile: protectedProcedure
+    .input(z.object({ staffProfileId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertStaffModuleAccess(ctx);
+      const profile = await ctx.prisma.staffProfile.findUnique({
+        where: { id: input.staffProfileId },
+        include: {
+          user: true,
+          department: true,
+          assignedTribe: true,
+          assignedVenue: true,
+          assignedHostel: true,
+          assignedRoom: true,
+          reportsTo: { include: { user: true } },
+          reportsToUser: true,
+          directReports: { include: { user: true } },
+          camperAssignments: { include: { registration: { include: { camper: true } } } },
+        },
+      });
+      if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+      return profile;
+    }),
+
   // ─── Camp Directory (mobile-first redesign) ──────────────────────────────
   // Single-page replacement for the Leadership/Directory/Departments tabs:
   // one procedure returns every department pre-grouped into Head/Assistant
@@ -179,7 +261,7 @@ export const orgStructureRouter = createTRPCRouter({
   getCampDirectory: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = assertStaffModuleAccess(ctx);
+      const currentUser = await assertStaffModuleAccess(ctx);
       assertOrgAccess(currentUser, input.organizationId);
 
       const [departments, staff] = await Promise.all([

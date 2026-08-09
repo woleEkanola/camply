@@ -28,6 +28,9 @@ import {
   TrophyIcon,
 } from "@heroicons/react/24/outline";
 
+/** The authenticated areas of the app. One user may have access to several. */
+export type AppArea = "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer";
+
 export type Role =
   | "SUPER_ADMIN"
   | "OWNER"
@@ -332,7 +335,7 @@ function filterGroups(groups: NavGroup[], role: Role, volunteerCategory?: string
  * dashboard/login. */
 export function getNavGroups(
   role: Role | undefined,
-  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer",
+  area: AppArea,
   hasCampusRepAccess = false,
   volunteerCategory?: string | null
 ): NavGroup[] {
@@ -389,7 +392,7 @@ export function getNavGroups(
  */
 export function getBottomNavItems(
   role: Role | undefined,
-  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer",
+  area: AppArea,
   hasCampusRepAccess = false,
   volunteerCategory?: string | null
 ): NavItem[] {

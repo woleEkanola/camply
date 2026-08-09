@@ -683,8 +683,11 @@ export const registrationRouter = createTRPCRouter({
               reps: { some: { id: currentUser.id } },
             },
           })) ||
-        (currentUser.role === "PARENT" &&
-          registration.camperId &&
+        // Ownership, not `role === "PARENT"`. A parent who is also a teacher
+        // has role TEACHER (or vice versa) but is still the parent of this
+        // camper — gating on the role scalar locked them out of their own
+        // child's registration. Mirrors server/registration/access.ts:29.
+        (registration.camperId &&
           (await ctx.prisma.camper.findFirst({
             where: {
               id: registration.camperId,

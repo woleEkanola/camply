@@ -70,6 +70,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Registration for this camp is not currently open" }, { status: 403 });
     }
 
+    // Only existence is required. The role-equality check that used to be here
+    // rejected any user whose primary role differed from the link type, which
+    // blocked parents from ever becoming teachers — and it was redundant as a
+    // security control: the getServerSession check above already proves the
+    // caller owns this email, which is what stops profiles being attached to
+    // someone else's account.
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       return NextResponse.json({ message: "Please verify your email or log in first" }, { status: 400 });
