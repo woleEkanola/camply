@@ -86,6 +86,24 @@ test.describe("Admin: staff approval and assignment", () => {
         { timeout: 10000 }
       )
       .toEqual({ assignedVenueId: venueId, departmentId, isDepartmentHead: true });
+
+    await page.getByTestId("resend-approval-email-button").click();
+    const resendDialog = page.getByRole("dialog", { name: "Resend approval email" });
+    await expect(resendDialog).toContainText(email);
+    await expect(resendDialog).toContainText("will not change the teacher's approval or assignments");
+    await resendDialog.getByRole("button", { name: "Cancel" }).click();
+
+    await page.goto("/admin/teachers");
+    await page.getByRole("button", { name: "List", exact: true }).click();
+    await page.getByPlaceholder("Search by name, email or phone...").fill(email);
+    const selectedRow = page.locator("tr", { hasText: email });
+    await expect(selectedRow).toBeVisible();
+    await selectedRow.getByRole("checkbox", { name: "Select row" }).check();
+    await page.getByRole("button", { name: "Email", exact: true }).click();
+
+    const bulkDialog = page.getByRole("dialog", { name: "Send teacher approval emails" });
+    await expect(bulkDialog).toContainText("only to the 1 explicitly selected profile");
+    await bulkDialog.getByRole("button", { name: "Cancel" }).click();
   });
 
   test("owner can reject a pending volunteer with a reason", async ({ page }) => {

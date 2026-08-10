@@ -9,6 +9,8 @@ test.describe("Global Search & Profile Deep-Linking", () => {
   let organizationId: string;
   let campusId: string;
   let camperId: string;
+  let teacherUserId: string;
+  let teacherProfileId: string;
 
   test.beforeAll(async () => {
     const ctx = await getFixtureOrgContext();
@@ -49,10 +51,39 @@ test.describe("Global Search & Profile Deep-Linking", () => {
       },
     });
     camperId = camper.id;
+
+    const teacher = await prisma.user.create({
+      data: {
+        email: `searchteacher-${stamp}@test.com`,
+        password: hashed,
+        role: "TEACHER",
+        organizationId,
+        active: true,
+        firstName: "TeacherSearch",
+        lastName: "Profile",
+      },
+    });
+    teacherUserId = teacher.id;
+    const profile = await prisma.staffProfile.create({
+      data: {
+        userId: teacher.id,
+        organizationId,
+        campId: ctx.campId,
+        type: "TEACHER",
+        status: "PENDING",
+        firstName: "TeacherSearch",
+        lastName: "Profile",
+        email: teacher.email,
+        phone: "08000000000",
+      },
+    });
+    teacherProfileId = profile.id;
   });
 
   test.afterAll(async () => {
     await prisma.camper.deleteMany({ where: { id: camperId } });
+    await prisma.staffProfile.deleteMany({ where: { id: teacherProfileId } });
+    await prisma.user.deleteMany({ where: { id: teacherUserId } });
     await prisma.user.deleteMany({ where: { email: { in: [adminEmail, `searchparent-${stamp}@test.com`] } } });
   });
 
@@ -85,5 +116,19 @@ test.describe("Global Search & Profile Deep-Linking", () => {
 
     // The drawer should auto-open showing the camper's name as its title
     await expect(page.getByText("ZeldaSearch Test").first()).toBeVisible({ timeout: 15000 });
+  });
+
+  test("staff search result opens the matching teacher profile instead of a 404", async ({ page }) => {
+    await loginWithPassword(page, adminEmail, adminPassword);
+    await page.goto("/admin");
+    await page.getByRole("button", { name: /Search/i }).first().click();
+    await page.getByPlaceholder("Search campers, registrations, staff, pages...").fill("TeacherSearch");
+
+    const result = page.getByRole("option", { name: /TeacherSearch Profile/i });
+    await expect(result).toBeVisible({ timeout: 8000 });
+    await result.click();
+
+    await expect(page).toHaveURL(new RegExp(`/admin/teachers/${teacherProfileId}$`));
+    await expect(page.getByText("PENDING", { exact: true }).first()).toBeVisible({ timeout: 10000 });
   });
 });

@@ -1404,6 +1404,7 @@ model Hostel {
   name           String // e.g. "Male Hostel A"
   gender         String? // MALE | FEMALE | MIXED
   rooms          Room[]
+  floors         HostelFloor[]
   staffAssigned  StaffProfile[] @relation("AssignedStaffHostel")
   deletedAt      DateTime?
   createdAt      DateTime       @default(now())
@@ -1415,12 +1416,35 @@ model Hostel {
   @@index([deletedAt])
 }
 
+model HostelFloor {
+  id              String   @id @default(cuid())
+  hostel          Hostel   @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  hostelId        String
+  name            String
+  code            String?
+  level           Int      @default(0)
+  roomNumberStart Int?
+  displayOrder    Int      @default(0)
+  rooms           Room[]
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([hostelId, displayOrder])
+  @@index([deletedAt])
+}
+
 model Room {
   id            String         @id @default(cuid())
   hostel        Hostel         @relation(fields: [hostelId], references: [id], onDelete: Cascade)
   hostelId      String
+  floor         HostelFloor? @relation(fields: [floorId], references: [id], onDelete: SetNull)
+  floorId       String?
   name          String // e.g. "Room 12"
   capacity      Int?
+  roomType      RoomType      @default(STANDARD)
+  locationLabel String?
+  displayOrder  Int           @default(0)
   beds          Bed[]
   registrations Registration[]
   staffAssigned StaffProfile[] @relation("AssignedStaffRoom")
@@ -1431,7 +1455,14 @@ model Room {
   // Partial unique index (WHERE "deletedAt" IS NULL) — Room_hostelId_name_key,
   // added by prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([hostelId, name])
+  @@index([floorId, displayOrder])
   @@index([deletedAt])
+}
+
+enum RoomType {
+  STANDARD
+  SPECIAL
+  COMMON
 }
 
 model Bed {

@@ -16,9 +16,22 @@ export const accommodationRouter = createTRPCRouter({
       return ctx.prisma.hostel.findMany({
         where: { venueId: input.venueId, deletedAt: null },
         include: {
+          floors: { where: { deletedAt: null }, orderBy: [{ displayOrder: "asc" }, { level: "asc" }] },
           rooms: {
             where: { deletedAt: null },
-            include: { beds: { where: { deletedAt: null }, include: { registration: { include: { camper: true } } } } },
+            include: {
+              floor: true,
+              staffAssigned: {
+                where: { status: "APPROVED" },
+                include: { assignedTribe: true, positionAssignments: { where: { isCurrent: true }, include: { position: true } } },
+              },
+              beds: {
+                where: { deletedAt: null },
+                include: { registration: { include: { camper: true } }, staffProfile: true },
+                orderBy: { label: "asc" },
+              },
+            },
+            orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
           },
         },
         orderBy: { name: "asc" },
@@ -93,6 +106,60 @@ export const accommodationRouter = createTRPCRouter({
       return ctx.prisma.room.create({ data: input });
     }),
 
+  createFloor: protectedProcedure
+    .input(z.object({ hostelId: z.string(), name: z.string().min(1), code: z.string().optional(), level: z.number().int(), displayOrder: z.number().int().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const hostel = await ctx.prisma.hostel.findUnique({ where: { id: input.hostelId } });
+      if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, hostel.organizationId);
+      return ctx.prisma.hostelFloor.create({ data: input });
+    }),
+
+  createHostelStructure: protectedProcedure
+    .input(z.object({
+      hostelId: z.string(),
+      floors: z.array(z.object({
+        name: z.string().min(1), code: z.string().optional(), level: z.number().int(),
+        roomPrefix: z.string().min(1), startNumber: z.number().int().min(0), roomCount: z.number().int().min(1).max(100),
+        bedsPerRoom: z.number().int().min(0).max(50),
+      })).min(1).max(20),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const hostel = await ctx.prisma.hostel.findUnique({ where: { id: input.hostelId } });
+      if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, hostel.organizationId);
+
+      const requestedNames = input.floors.flatMap((floor) => Array.from({ length: floor.roomCount }, (_, i) => `${floor.roomPrefix}${floor.startNumber + i}`));
+      if (new Set(requestedNames.map((n) => n.toLowerCase())).size !== requestedNames.length) {
+        throw new TRPCError({ code: "CONFLICT", message: "The preview contains duplicate room names." });
+      }
+      const conflicts = await ctx.prisma.room.findMany({ where: { hostelId: input.hostelId, deletedAt: null, name: { in: requestedNames } }, select: { name: true } });
+      if (conflicts.length) throw new TRPCError({ code: "CONFLICT", message: `Room name already exists: ${conflicts.map((r) => r.name).join(", ")}` });
+
+      return ctx.prisma.$transaction(async (tx) => {
+        let roomsCreated = 0;
+        let bedsCreated = 0;
+        for (const [floorIndex, floorInput] of input.floors.entries()) {
+          const floor = await tx.hostelFloor.create({ data: {
+            hostelId: input.hostelId, name: floorInput.name, code: floorInput.code || null,
+            level: floorInput.level, roomNumberStart: floorInput.startNumber, displayOrder: floorIndex,
+          } });
+          for (let i = 0; i < floorInput.roomCount; i += 1) {
+            const room = await tx.room.create({ data: {
+              hostelId: input.hostelId, floorId: floor.id, name: `${floorInput.roomPrefix}${floorInput.startNumber + i}`,
+              capacity: floorInput.bedsPerRoom || null, displayOrder: i,
+            } });
+            roomsCreated += 1;
+            if (floorInput.bedsPerRoom) {
+              await tx.bed.createMany({ data: Array.from({ length: floorInput.bedsPerRoom }, (_, bedIndex) => ({ roomId: room.id, label: `Bed ${bedIndex + 1}` })) });
+              bedsCreated += floorInput.bedsPerRoom;
+            }
+          }
+        }
+        return { floorsCreated: input.floors.length, roomsCreated, bedsCreated };
+      }, { timeout: 30000 });
+    }),
+
   // Bulk room creation — up to 50 rooms in a single transaction
   createRooms: protectedProcedure
     .input(z.object({
@@ -100,17 +167,21 @@ export const accommodationRouter = createTRPCRouter({
       rooms: z.array(z.object({
         name: z.string().min(1),
         capacity: z.number().int().min(1).optional(),
+        floorId: z.string().optional(),
+        roomType: z.enum(["STANDARD", "SPECIAL", "COMMON"]).optional(),
+        locationLabel: z.string().optional(),
+        beds: z.number().int().min(0).max(50).optional(),
       })).min(1).max(50),
     }))
     .mutation(async ({ ctx, input }) => {
       const hostel = await ctx.prisma.hostel.findUnique({ where: { id: input.hostelId } });
       if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, hostel.organizationId);
-      return ctx.prisma.$transaction(
-        input.rooms.map((room) =>
-          ctx.prisma.room.create({ data: { hostelId: input.hostelId, ...room } })
-        )
-      );
+      return ctx.prisma.$transaction(async (tx) => Promise.all(input.rooms.map(async ({ beds, ...room }) => {
+        const created = await tx.room.create({ data: { hostelId: input.hostelId, ...room } });
+        if (beds) await tx.bed.createMany({ data: Array.from({ length: beds }, (_, i) => ({ roomId: created.id, label: `Bed ${i + 1}` })) });
+        return created;
+      })));
     }),
 
   updateRoom: protectedProcedure
@@ -190,6 +261,56 @@ export const accommodationRouter = createTRPCRouter({
       );
     }),
 
+  bulkAdjustBeds: protectedProcedure
+    .input(z.object({
+      hostelId: z.string(), roomIds: z.array(z.string()).optional(), floorId: z.string().nullable().optional(),
+      roomTypes: z.array(z.enum(["STANDARD", "SPECIAL", "COMMON"])).default(["STANDARD"]),
+      action: z.enum(["ADD", "REMOVE"]), countPerRoom: z.number().int().min(1).max(20),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const hostel = await ctx.prisma.hostel.findUnique({ where: { id: input.hostelId } });
+      if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, hostel.organizationId);
+      const rooms = await ctx.prisma.room.findMany({
+        where: {
+          hostelId: input.hostelId, deletedAt: null, roomType: { in: input.roomTypes },
+          ...(input.roomIds?.length ? { id: { in: input.roomIds } } : {}),
+          ...(input.floorId !== undefined ? { floorId: input.floorId } : {}),
+        },
+        include: { beds: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } } },
+      });
+      if (!rooms.length) throw new TRPCError({ code: "BAD_REQUEST", message: "No eligible rooms match this selection." });
+
+      return ctx.prisma.$transaction(async (tx) => {
+        let bedsChanged = 0;
+        const skipped: { roomId: string; roomName: string; reason: string }[] = [];
+        for (const room of rooms) {
+          if (input.action === "ADD") {
+            const used = new Set(room.beds.map((bed) => bed.label.toLowerCase()));
+            const data: { roomId: string; label: string }[] = [];
+            let candidate = 1;
+            while (data.length < input.countPerRoom) {
+              const label = `Bed ${candidate++}`;
+              if (!used.has(label.toLowerCase())) data.push({ roomId: room.id, label });
+            }
+            await tx.bed.createMany({ data });
+            await tx.room.update({ where: { id: room.id }, data: { capacity: room.beds.length + data.length } });
+            bedsChanged += data.length;
+          } else {
+            const removable = room.beds.filter((bed) => !bed.registrationId && !bed.staffProfileId && bed.status === "AVAILABLE").reverse().slice(0, input.countPerRoom);
+            if (removable.length < input.countPerRoom) {
+              skipped.push({ roomId: room.id, roomName: room.name, reason: `Only ${removable.length} available unoccupied bed(s)` });
+              continue;
+            }
+            await tx.bed.updateMany({ where: { id: { in: removable.map((bed) => bed.id) } }, data: { deletedAt: new Date() } });
+            await tx.room.update({ where: { id: room.id }, data: { capacity: Math.max(0, room.beds.length - removable.length) || null } });
+            bedsChanged += removable.length;
+          }
+        }
+        return { roomsMatched: rooms.length, roomsChanged: rooms.length - skipped.length, bedsChanged, skipped };
+      }, { timeout: 30000 });
+    }),
+
   updateBed: protectedProcedure
     .input(z.object({ id: z.string(), label: z.string().optional(), status: z.enum(["AVAILABLE", "OCCUPIED", "MAINTENANCE"]).optional() }))
     .mutation(async ({ ctx, input }) => {
@@ -208,8 +329,8 @@ export const accommodationRouter = createTRPCRouter({
       const bed = await ctx.prisma.bed.findUnique({ where: { id: input.id }, include: { room: { include: { hostel: true } } } });
       if (!bed || bed.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, bed.room.hostel.organizationId);
-      if (bed.registrationId) {
-        throw new TRPCError({ code: "CONFLICT", message: "Cannot delete this bed: it is currently occupied. Unassign the camper first." });
+      if (bed.registrationId || bed.staffProfileId) {
+        throw new TRPCError({ code: "CONFLICT", message: "Cannot delete this bed: it is currently occupied. Unassign its camper or staff member first." });
       }
       return ctx.prisma.bed.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),

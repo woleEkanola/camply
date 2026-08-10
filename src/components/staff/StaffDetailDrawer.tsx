@@ -285,9 +285,7 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
 
   const accommodationTab = (
     <div className="space-y-4">
-      {profile.type !== "TEACHER" ? (
-        <p className="text-sm text-neutral-500">Hostel/room assignment is only available for teachers.</p>
-      ) : !profile.assignedVenueId ? (
+      {!profile.assignedVenueId ? (
         <p className="text-sm text-neutral-500">Assign a venue first to pick a hostel.</p>
       ) : (
         <>

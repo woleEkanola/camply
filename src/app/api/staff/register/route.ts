@@ -62,12 +62,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const link = await prisma.staffSignupLink.findUnique({ where: { token }, include: { camp: true } });
+    const link = await prisma.staffSignupLink.findUnique({
+      where: { token },
+      include: { camp: { include: { organization: { select: { activeCampId: true } } } } },
+    });
     if (!link || !link.active) {
       return NextResponse.json({ message: "Invalid or expired registration link" }, { status: 400 });
     }
     if (!link.camp.active) {
       return NextResponse.json({ message: "Registration for this camp is not currently open" }, { status: 403 });
+    }
+    if (link.camp.organization.activeCampId !== link.campId) {
+      return NextResponse.json(
+        { message: "This registration link belongs to a previous camp. Please ask an administrator for the current teacher registration link." },
+        { status: 409 }
+      );
     }
 
     // Only existence is required. The role-equality check that used to be here

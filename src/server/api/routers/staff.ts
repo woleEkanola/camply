@@ -208,12 +208,38 @@ export const staffRouter = createTRPCRouter({
         ctx.prisma.staffProfile.count({ where }),
       ]);
 
+      const approvalDeliveries = items.length
+        ? await ctx.prisma.emailRecipient.findMany({
+            where: {
+              userId: { in: items.map((item) => item.userId) },
+              deliverySource: "STAFF_APPROVED",
+            },
+            select: { userId: true, deliveryStatus: true, sentAt: true, createdAt: true },
+            orderBy: { createdAt: "desc" },
+          })
+        : [];
+      const latestApprovalDelivery = new Map<string, (typeof approvalDeliveries)[number]>();
+      for (const delivery of approvalDeliveries) {
+        if (!latestApprovalDelivery.has(delivery.userId)) latestApprovalDelivery.set(delivery.userId, delivery);
+      }
+
       let nextCursor: string | undefined;
       if (items.length > input.limit) {
         const next = items.pop();
         nextCursor = next?.id;
       }
-      return { items, nextCursor, totalCount };
+      return {
+        items: items.map((item) => {
+          const delivery = latestApprovalDelivery.get(item.userId);
+          return {
+            ...item,
+            approvalEmailStatus: delivery?.deliveryStatus ?? "NOT_RECORDED",
+            approvalEmailSentAt: delivery?.sentAt ?? null,
+          };
+        }),
+        nextCursor,
+        totalCount,
+      };
     }),
 
   getById: protectedProcedure
@@ -366,6 +392,90 @@ export const staffRouter = createTRPCRouter({
         await ensureStaffQrToken(ctx.prisma, profile.id);
       }
       return { count: input.ids.length };
+    }),
+
+  resendApprovalEmails: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()).min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      const profiles = await ctx.prisma.staffProfile.findMany({
+        where: { id: { in: input.ids }, deletedAt: null },
+        include: {
+          camp: { select: { name: true, organization: { select: { slug: true } } } },
+        },
+      });
+
+      for (const profile of profiles) {
+        await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+      }
+
+      const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+      const seenEmails = new Set<string>();
+      const results: Array<{
+        id: string;
+        name: string;
+        email: string | null;
+        outcome: "SENT" | "FAILED" | "SKIPPED";
+        reason?: string;
+      }> = [];
+
+      for (const id of input.ids) {
+        const profile = byId.get(id);
+        if (!profile) {
+          results.push({ id, name: "Unknown profile", email: null, outcome: "SKIPPED", reason: "Profile was not found." });
+          continue;
+        }
+
+        const name = `${profile.firstName} ${profile.lastName}`.trim();
+        if (profile.type !== "TEACHER") {
+          results.push({ id, name, email: profile.email, outcome: "SKIPPED", reason: "Only teacher approval emails can be sent here." });
+          continue;
+        }
+        if (profile.status !== "APPROVED") {
+          results.push({ id, name, email: profile.email, outcome: "SKIPPED", reason: `Teacher is ${profile.status.toLowerCase()}, not approved.` });
+          continue;
+        }
+
+        const email = normalizeEmail(profile.email);
+        if (!email) {
+          results.push({ id, name, email: null, outcome: "SKIPPED", reason: "Teacher has no email address." });
+          continue;
+        }
+        if (seenEmails.has(email)) {
+          results.push({ id, name, email, outcome: "SKIPPED", reason: "Duplicate email in this selection." });
+          continue;
+        }
+        seenEmails.add(email);
+
+        try {
+          const dashboardUrl = `${process.env.NEXTAUTH_URL ?? ""}/teacher`;
+          await sendStaffApprovedEmail({
+            to: email,
+            name: profile.firstName || name,
+            campName: profile.camp.name,
+            type: "TEACHER",
+            dashboardUrl,
+            orgSlug: profile.camp.organization.slug ?? undefined,
+            organizationId: profile.organizationId,
+          });
+          results.push({ id, name, email, outcome: "SENT" });
+        } catch (error) {
+          results.push({
+            id,
+            name,
+            email,
+            outcome: "FAILED",
+            reason: error instanceof Error ? error.message : "Email provider rejected the message.",
+          });
+        }
+      }
+
+      return {
+        requested: input.ids.length,
+        sent: results.filter((result) => result.outcome === "SENT").length,
+        failed: results.filter((result) => result.outcome === "FAILED").length,
+        skipped: results.filter((result) => result.outcome === "SKIPPED").length,
+        results,
+      };
     }),
 
   // Org-admin-only: invalidates a lost/compromised staff ID card by issuing
@@ -562,9 +672,12 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      if (profile.type !== "TEACHER") throw new TRPCError({ code: "BAD_REQUEST", message: "Only teachers can be assigned a hostel" });
       await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
-      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedHostelId: input.hostelId } });
+      if (input.hostelId) {
+        const hostel = await ctx.prisma.hostel.findFirst({ where: { id: input.hostelId, organizationId: profile.organizationId, deletedAt: null } });
+        if (!hostel) throw new TRPCError({ code: "BAD_REQUEST", message: "Hostel does not belong to this organization." });
+      }
+      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedHostelId: input.hostelId, ...(!input.hostelId ? { assignedRoomId: null } : {}) } });
     }),
 
   assignRoom: protectedProcedure
@@ -572,9 +685,11 @@ export const staffRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-      if (profile.type !== "TEACHER") throw new TRPCError({ code: "BAD_REQUEST", message: "Only teachers can be assigned a room" });
       await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
-      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedRoomId: input.roomId } });
+      if (!input.roomId) return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedRoomId: null } });
+      const room = await ctx.prisma.room.findFirst({ where: { id: input.roomId, deletedAt: null, hostel: { organizationId: profile.organizationId, deletedAt: null } }, include: { hostel: true } });
+      if (!room) throw new TRPCError({ code: "BAD_REQUEST", message: "Room does not belong to this organization." });
+      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { assignedRoomId: room.id, assignedHostelId: room.hostelId } });
     }),
 
   // ─── Narrow operational camper lookup for staff (no admin data leakage) ─

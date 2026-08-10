@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
 import ParentProfilesAccordion from "./ParentProfilesAccordion";
@@ -17,7 +18,7 @@ export enum UserRole {
   OWNER = "OWNER",
   ADMIN = "ADMIN",
   CAMPUS_REPRESENTATIVE = "CAMPUS_REPRESENTATIVE",
-  PARENT = "PARENT"
+  PARENT = "PARENT",
 }
 
 type User = {
@@ -30,6 +31,7 @@ type User = {
   organizationId?: string | null;
   active?: boolean;
   managedCampuses?: { id: string; name: string }[];
+  staffProfiles?: { id: string; type: "TEACHER" | "VOLUNTEER"; status: string }[];
 };
 
 type Campus = {
@@ -53,6 +55,7 @@ interface UserFormData {
 }
 
 export default function UserManagement({ organizationId }: { organizationId: string }) {
+  const router = useRouter();
   const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
   const [campuses, setCampuses] = useState<Campus[]>([]);
@@ -391,15 +394,24 @@ export default function UserManagement({ organizationId }: { organizationId: str
   ];
 
   const staffActions = (user: User) => {
-    if (!canManageUser(user.role)) return null;
+    const profile = user.staffProfiles?.[0];
+    if (!canManageUser(user.role) && !profile) return null;
     return (
       <div className="flex justify-end gap-3 text-sm">
-        <button onClick={() => handleEditUser(user)} className="text-accent-700 hover:underline">
-          Edit
-        </button>
-        <button onClick={() => handleDeleteUser(user)} className="text-danger-600 hover:underline">
-          Delete
-        </button>
+        {profile && (
+          <button
+            onClick={() => router.push(`/admin/${profile.type === "TEACHER" ? "teachers" : "volunteers"}/${profile.id}`)}
+            className="text-accent-700 hover:underline"
+          >
+            Manage profile
+          </button>
+        )}
+        {canManageUser(user.role) && (
+          <button onClick={() => handleEditUser(user)} className="text-accent-700 hover:underline">Edit account</button>
+        )}
+        {canManageUser(user.role) && (
+          <button onClick={() => handleDeleteUser(user)} className="text-danger-600 hover:underline">Delete</button>
+        )}
       </div>
     );
   };

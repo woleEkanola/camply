@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import {
   ArrowLeftIcon,
   PrinterIcon,
+  EnvelopeIcon,
 } from "@heroicons/react/24/outline";
 
 export interface StaffWorkspaceTab {
@@ -33,6 +34,8 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
   const utils = api.useUtils();
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [resendOpen, setResendOpen] = useState(false);
+  const [resendResult, setResendResult] = useState<string | null>(null);
   const approve = api.staff.approve.useMutation({
     onSuccess: () => {
       utils.staff.getById.invalidate({ id: staffId });
@@ -47,6 +50,13 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
       utils.staff.getById.invalidate({ id: staffId });
       utils.staff.adminList.invalidate();
       utils.staff.stats.invalidate();
+    },
+  });
+  const resendApprovalEmail = api.staff.resendApprovalEmails.useMutation({
+    onSuccess: (result) => {
+      setResendResult(`${result.sent} sent, ${result.failed} failed, ${result.skipped} skipped.`);
+      utils.staff.getById.invalidate({ id: staffId });
+      utils.staff.adminList.invalidate();
     },
   });
   const { data: profile, isLoading } = api.staff.getById.useQuery({ id: staffId });
@@ -93,15 +103,28 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
             </div>
           )}
           {profile.status === "APPROVED" && (
-            <Button
-              size="sm"
-              variant="secondary"
-              data-testid="print-badge-button"
-              icon={<PrinterIcon className="h-4 w-4" />}
-              onClick={() => window.open(`/api/staff/${staffId}/id-card.pdf`, "_blank")}
-            >
-              Print Badge
-            </Button>
+            <div className="flex items-center gap-2">
+              {profile.type === "TEACHER" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-testid="resend-approval-email-button"
+                  icon={<EnvelopeIcon className="h-4 w-4" />}
+                  onClick={() => { setResendResult(null); setResendOpen(true); }}
+                >
+                  Resend approval email
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="secondary"
+                data-testid="print-badge-button"
+                icon={<PrinterIcon className="h-4 w-4" />}
+                onClick={() => window.open(`/api/staff/${staffId}/id-card.pdf`, "_blank")}
+              >
+                Print Badge
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -193,6 +216,22 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setRejectOpen(false)}>Cancel</Button>
             <Button variant="danger" loading={reject.isPending} disabled={!rejectReason.trim()} onClick={() => reject.mutate({ id: staffId, reason: rejectReason.trim() })}>Reject</Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={resendOpen} onClose={() => setResendOpen(false)} title="Resend approval email" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-neutral-600">
+            Send the approval message again to <strong>{profile.email}</strong>? This will not change the teacher&apos;s approval or assignments.
+          </p>
+          {resendResult && <div data-testid="approval-email-result" className="rounded-lg bg-surface-raised p-3 text-sm">{resendResult}</div>}
+          {resendApprovalEmail.error && <div className="rounded-lg bg-danger-50 p-3 text-sm text-danger-700">{resendApprovalEmail.error.message}</div>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setResendOpen(false)}>{resendResult ? "Close" : "Cancel"}</Button>
+            {!resendResult && (
+              <Button loading={resendApprovalEmail.isPending} onClick={() => resendApprovalEmail.mutate({ ids: [staffId] })}>Send email</Button>
+            )}
           </div>
         </div>
       </Dialog>

@@ -84,22 +84,35 @@ export async function sendStaffApprovedEmail(params: {
     }
   }
 
-  await getResend().emails.send({
-    from: finalFrom,
-    to: params.to,
-    subject: finalSubject,
-    html: finalHtml,
-    replyTo: finalReplyTo,
-  });
-
   let staffUserId: string | undefined;
   let staffOrgId: string | null | undefined;
   try { const u = await prisma.user.findUnique({ where: { email: normalizeEmail(params.to) }, select: { id: true, organizationId: true } }); staffUserId = u?.id; staffOrgId = u?.organizationId; } catch {}
-  await logDelivery({
-    prisma, email: params.to, userId: staffUserId ?? "", organizationId: staffOrgId ?? null,
-    recipientType: params.type === "TEACHER" ? "TEACHER" : "VOLUNTEER",
-    deliverySource: "STAFF_APPROVED", subject: finalSubject, deliveryStatus: "SENT",
-  });
+
+  try {
+    const result = await getResend().emails.send({
+      from: finalFrom,
+      to: params.to,
+      subject: finalSubject,
+      html: finalHtml,
+      replyTo: finalReplyTo,
+    });
+    if (result.error) throw new Error(result.error.message);
+
+    await logDelivery({
+      prisma, email: params.to, userId: staffUserId ?? "", organizationId: staffOrgId ?? null,
+      recipientType: params.type === "TEACHER" ? "TEACHER" : "VOLUNTEER",
+      deliverySource: "STAFF_APPROVED", subject: finalSubject, deliveryStatus: "SENT",
+      providerMessageId: result.data?.id,
+    });
+  } catch (error) {
+    await logDelivery({
+      prisma, email: params.to, userId: staffUserId ?? "", organizationId: staffOrgId ?? null,
+      recipientType: params.type === "TEACHER" ? "TEACHER" : "VOLUNTEER",
+      deliverySource: "STAFF_APPROVED", subject: finalSubject, deliveryStatus: "FAILED",
+      failedReason: error instanceof Error ? error.message : "Unknown email delivery error",
+    });
+    throw error;
+  }
 }
 
 export async function sendStaffRejectedEmail(params: {

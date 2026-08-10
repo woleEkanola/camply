@@ -100,6 +100,7 @@ export const userRouter = createTRPCRouter({
             },
             include: {
               managedCampuses: true,
+              staffProfiles: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
             },
             orderBy: {
               createdAt: 'desc',
@@ -120,6 +121,7 @@ export const userRouter = createTRPCRouter({
             },
             include: {
               managedCampuses: true,
+              staffProfiles: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
             },
             orderBy: {
               createdAt: 'desc',
@@ -140,6 +142,7 @@ export const userRouter = createTRPCRouter({
             },
             include: {
               managedCampuses: true,
+              staffProfiles: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
             },
             orderBy: {
               createdAt: 'desc',
@@ -162,6 +165,7 @@ export const userRouter = createTRPCRouter({
           },
           include: {
             managedCampuses: true,
+            staffProfiles: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
           },
           orderBy: {
             createdAt: 'desc',

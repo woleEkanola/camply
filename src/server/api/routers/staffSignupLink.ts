@@ -271,6 +271,12 @@ export const staffSignupLinkRouter = createTRPCRouter({
       if (!link.camp.active) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Registration for this camp is not currently open" });
       }
+      if (link.camp.organization.activeCampId !== link.campId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This registration link belongs to a previous camp. Please ask an administrator for the current registration link.",
+        });
+      }
 
       // Fire-and-forget click log
       void ctx.prisma.staffSignupLinkClick.create({
