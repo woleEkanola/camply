@@ -333,7 +333,11 @@ export default function AppShell({ area, children }: AppShellProps) {
       </div>
 
       <div className="no-print">
-        <BottomNav items={bottomNavItems} onMoreClick={() => setMobileOpen(true)} />
+        <BottomNav
+          items={bottomNavItems}
+          onMoreClick={() => setMobileOpen(true)}
+          showMore={area !== "admin" && area !== "teacher"}
+        />
         <CommandPalette area={area} />
       </div>
     </div>

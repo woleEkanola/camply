@@ -19,6 +19,7 @@ export interface DepartmentSectionProps {
   onManagePositions: () => void;
   onSiteIds: Set<string>;
   highlightId: string | null;
+  readOnly?: boolean;
 }
 
 function RoleGroup({
@@ -67,6 +68,7 @@ export function DepartmentSection({
   onManagePositions,
   onSiteIds,
   highlightId,
+  readOnly = false,
 }: DepartmentSectionProps) {
   const headerId = `cs-dept-header-${group.id}`;
   const bodyId = `cs-dept-body-${group.id}`;
@@ -108,7 +110,7 @@ export function DepartmentSection({
           />
         </button>
 
-        <Menu as="div" className="relative shrink-0 pr-2">
+        {!readOnly && <Menu as="div" className="relative shrink-0 pr-2">
           <Menu.Button
             aria-label={`${group.name} department options`}
             data-testid={`dept-section-menu-${group.id}`}
@@ -183,7 +185,7 @@ export function DepartmentSection({
               </Menu.Item>
             </Menu.Items>
           </Transition>
-        </Menu>
+        </Menu>}
       </div>
 
       {expanded && (
@@ -192,7 +194,7 @@ export function DepartmentSection({
             <p className="px-3 py-4 text-sm text-txt-muted">No staff assigned yet.</p>
           ) : (
             <>
-              {group.heads.length === 0 && (
+              {group.heads.length === 0 && !readOnly && (
                 <button
                   type="button"
                   onClick={onManagePositions}

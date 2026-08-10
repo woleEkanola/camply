@@ -73,11 +73,22 @@ export interface NavGroup {
  * mechanism (dispatch is by area, not role), so this const is spread into
  * each group individually rather than declared once centrally. */
 const LEADERBOARD_ITEM: NavItem = { name: "Leaderboard", href: "/leaderboard", icon: TrophyIcon };
+const ADMIN_CAMP_CONTACT_ITEM: NavItem = {
+  name: "Camp Contact",
+  href: "/admin/camp-structure",
+  icon: Squares2X2Icon,
+  roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
+};
+const TEACHER_CAMP_CONTACT_ITEM: NavItem = {
+  name: "Camp Contact",
+  href: "/teacher/camp-contact",
+  icon: Squares2X2Icon,
+};
 
 const ADMIN_GROUPS: NavGroup[] = [
   {
     name: "Dashboard",
-    items: [{ name: "Dashboard", href: "/admin", icon: HomeIcon }, LEADERBOARD_ITEM],
+    items: [{ name: "Dashboard", href: "/admin", icon: HomeIcon }, LEADERBOARD_ITEM, ADMIN_CAMP_CONTACT_ITEM],
   },
   {
     name: "Registration",
@@ -123,12 +134,6 @@ const ADMIN_GROUPS: NavGroup[] = [
   {
     name: "Camp Management",
     items: [
-      {
-        name: "Camp Structure",
-        href: "/admin/camp-structure",
-        icon: Squares2X2Icon,
-        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
-      },
       {
         name: "Tribes",
         href: "/admin/tribes",
@@ -277,6 +282,7 @@ const TEACHER_GROUPS: NavGroup[] = [
       { name: "Dashboard", href: "/teacher", icon: HomeIcon },
       { name: "My Position", href: "/teacher/my-position", icon: MapIcon },
       LEADERBOARD_ITEM,
+      TEACHER_CAMP_CONTACT_ITEM,
     ],
   },
   {
@@ -402,18 +408,18 @@ export function getBottomNavItems(
     case "admin":
       return [
         { name: "Dashboard", href: "/admin", icon: HomeIcon },
-        { name: "Registrations", href: "/admin/registrations", icon: ClipboardDocumentListIcon },
-        // Centered item — check-in/check-out are unified into one QR Scan
-        // page; the station (including Checkout) is switched in-page.
+        { name: "Contact", href: "/admin/camp-structure", icon: Squares2X2Icon },
         { name: "QR Scan", href: "/admin/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/admin/campers", icon: UserGroupIcon },
+        LEADERBOARD_ITEM,
       ];
     case "teacher":
       return [
-        { name: "Home", href: "/teacher", icon: HomeIcon },
-        { name: "Registrations", href: "/teacher/registrations", icon: ClipboardDocumentListIcon },
+        { name: "Dashboard", href: "/teacher", icon: HomeIcon },
+        { name: "Contact", href: "/teacher/camp-contact", icon: Squares2X2Icon },
         { name: "QR Scan", href: "/teacher/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
+        { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
       ];
     case "volunteer":
       if (hasCampusRepAccess) {

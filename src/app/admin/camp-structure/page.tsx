@@ -30,7 +30,7 @@ export default function CampStructurePage() {
 
   return (
     <AppShell area="admin">
-      <PageHeader title="Camp Structure" description={activeCamp ? `For ${activeCamp.name}` : undefined} />
+      <PageHeader title="Camp Contact" description={activeCamp ? `Directory and reporting structure for ${activeCamp.name}` : undefined} />
 
       {!campId ? (
         <EmptyState title="No active camp" description="Set an active camp before managing camp structure." />

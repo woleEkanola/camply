@@ -107,16 +107,18 @@ function PositionCard({
   compact = false,
   selected,
   invalidDrop,
+  readOnly = false,
   onSelect,
 }: {
   node: OrganogramNode;
   compact?: boolean;
   selected?: boolean;
   invalidDrop?: boolean;
+  readOnly?: boolean;
   onSelect: (node: OrganogramNode) => void;
 }) {
-  const draggable = useDraggable({ id: node.id, data: { node } });
-  const droppable = useDroppable({ id: node.id, data: { node }, disabled: invalidDrop });
+  const draggable = useDraggable({ id: node.id, data: { node }, disabled: readOnly });
+  const droppable = useDroppable({ id: node.id, data: { node }, disabled: readOnly || invalidDrop });
   const setRef = (element: HTMLElement | null) => {
     draggable.setNodeRef(element);
     droppable.setNodeRef(element);
@@ -156,7 +158,7 @@ function PositionCard({
             </div>
           )}
         </button>
-        <DragHandle listeners={draggable.listeners} attributes={draggable.attributes} />
+        {!readOnly && <DragHandle listeners={draggable.listeners} attributes={draggable.attributes} />}
       </div>
     </article>
   );
@@ -167,12 +169,14 @@ function ChartBranch({
   activeDragId,
   invalidDropIds,
   selectedId,
+  readOnly,
   onSelect,
 }: {
   node: OrganogramNode;
   activeDragId: string | null;
   invalidDropIds: Set<string>;
   selectedId: string | null;
+  readOnly: boolean;
   onSelect: (node: OrganogramNode) => void;
 }) {
   return (
@@ -181,6 +185,7 @@ function ChartBranch({
         node={node}
         selected={node.id === selectedId}
         invalidDrop={invalidDropIds.has(node.id)}
+        readOnly={readOnly}
         onSelect={onSelect}
       />
       {node.children.length > 0 && (
@@ -189,7 +194,7 @@ function ChartBranch({
           <div className="relative flex items-start gap-8 px-3 before:absolute before:left-[calc(0.75rem+7rem)] before:right-[calc(0.75rem+7rem)] before:top-0 before:border-t-2 before:border-border-default">
             {node.children.map((child) => (
               <div key={child.id} className="relative pt-6 before:absolute before:left-1/2 before:top-0 before:h-6 before:border-l-2 before:border-border-default">
-                <ChartBranch node={child} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedId} onSelect={onSelect} />
+                <ChartBranch node={child} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedId} readOnly={readOnly} onSelect={onSelect} />
               </div>
             ))}
           </div>
@@ -206,6 +211,7 @@ function NestedBranch({
   activeDragId,
   invalidDropIds,
   selectedId,
+  readOnly,
   onToggle,
   onSelect,
 }: {
@@ -215,6 +221,7 @@ function NestedBranch({
   activeDragId: string | null;
   invalidDropIds: Set<string>;
   selectedId: string | null;
+  readOnly: boolean;
   onToggle: (id: string) => void;
   onSelect: (node: OrganogramNode) => void;
 }) {
@@ -237,6 +244,7 @@ function NestedBranch({
             compact
             selected={node.id === selectedId}
             invalidDrop={invalidDropIds.has(node.id)}
+            readOnly={readOnly}
             onSelect={onSelect}
           />
         </div>
@@ -252,6 +260,7 @@ function NestedBranch({
               activeDragId={activeDragId}
               invalidDropIds={invalidDropIds}
               selectedId={selectedId}
+              readOnly={readOnly}
               onToggle={onToggle}
               onSelect={onSelect}
             />
@@ -262,10 +271,13 @@ function NestedBranch({
   );
 }
 
-export function CampOrganogram({ organizationId, campId }: { organizationId: string; campId: string }) {
+export function CampOrganogram({ organizationId, campId, readOnly = false }: { organizationId: string; campId: string; readOnly?: boolean }) {
   const utils = api.useUtils();
   const { data: hierarchy = [], isLoading } = api.position.getHierarchy.useQuery({ campId });
-  const { data: reportingOptions } = api.staff.listReportsToOptions.useQuery({ organizationId, campId });
+  const { data: reportingOptions } = api.staff.listReportsToOptions.useQuery(
+    { organizationId, campId },
+    { enabled: !readOnly }
+  );
   const nodes = hierarchy as OrganogramNode[];
   const flat = useMemo(() => flattenTree(nodes), [nodes]);
   const byId = useMemo(() => new Map(flat.map((node) => [node.id, node])), [flat]);
@@ -510,13 +522,20 @@ export function CampOrganogram({ organizationId, campId }: { organizationId: str
   if (isLoading) return <div className="rounded-2xl border border-border-default bg-surface p-10 text-center text-sm text-txt-muted">Loading organogram…</div>;
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveDragId(null)}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={readOnly ? undefined : handleDragStart}
+      onDragEnd={readOnly ? undefined : handleDragEnd}
+      onDragCancel={readOnly ? undefined : () => setActiveDragId(null)}
+    >
       <section className="space-y-4" data-testid="camp-organogram">
         <div className="rounded-2xl border border-border-default bg-surface p-3 shadow-xs sm:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-bold text-txt-primary">Camp Organogram</h2>
-              <p className="text-xs text-txt-secondary">Drag a position onto another to change who it reports to.</p>
+              <p className="text-xs text-txt-secondary">
+                {readOnly ? "View the reporting structure and select a position for details." : "Drag a position onto another to change who it reports to."}
+              </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <label className="relative min-w-0 sm:w-72">
@@ -537,7 +556,7 @@ export function CampOrganogram({ organizationId, campId }: { organizationId: str
                   <Bars3Icon className="h-4 w-4" /> Nested
                 </button>
               </div>
-              <Button size="sm" onClick={() => setCreateParent("root")} icon={<PlusIcon className="h-4 w-4" />}>Add top-level role</Button>
+              {!readOnly && <Button size="sm" onClick={() => setCreateParent("root")} icon={<PlusIcon className="h-4 w-4" />}>Add top-level role</Button>}
             </div>
           </div>
         </div>
@@ -555,7 +574,9 @@ export function CampOrganogram({ organizationId, campId }: { organizationId: str
         {nodes.length > 1 && !query.trim() && (
           <div className="rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900">
             <span className="font-semibold">{nodes.length} top-level branches.</span>{" "}
-            Drag department heads under a Camp Commandant, Deputy, or other leadership role to build one connected chain.
+            {readOnly
+              ? "These branches have not yet been joined into one reporting chain."
+              : "Drag department heads under a Camp Commandant, Deputy, or other leadership role to build one connected chain."}
           </div>
         )}
 
@@ -564,7 +585,7 @@ export function CampOrganogram({ organizationId, campId }: { organizationId: str
             <ArrowsPointingOutIcon className="mx-auto h-10 w-10 text-txt-muted" />
             <h3 className="mt-3 font-semibold text-txt-primary">Start your camp hierarchy</h3>
             <p className="mx-auto mt-1 max-w-md text-sm text-txt-secondary">Create the highest role first, then add or drag other positions underneath it.</p>
-            <Button className="mt-5" onClick={() => setCreateParent("root")}>Create first role</Button>
+            {!readOnly && <Button className="mt-5" onClick={() => setCreateParent("root")}>Create first role</Button>}
           </div>
         ) : visibleRoots.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border-default bg-surface px-6 py-12 text-center text-sm text-txt-muted">No positions match “{query}”.</div>
@@ -591,9 +612,9 @@ export function CampOrganogram({ organizationId, campId }: { organizationId: str
                   onPointerCancel={handleChartPointerEnd}
                 >
                   <div ref={chartContentRef} className="min-w-max origin-top-left" style={{ zoom }}>
-                    <RootDropZone active={!!activeDragId} />
+                    {!readOnly && <RootDropZone active={!!activeDragId} />}
                     <div className="flex min-w-max items-start justify-center gap-14">
-                      {visibleRoots.map((root) => <ChartBranch key={root.id} node={root} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} onSelect={setSelectedNode} />)}
+                      {visibleRoots.map((root) => <ChartBranch key={root.id} node={root} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} onSelect={setSelectedNode} />)}
                     </div>
                   </div>
                 </div>
@@ -604,9 +625,9 @@ export function CampOrganogram({ organizationId, campId }: { organizationId: str
                   <button type="button" className="font-medium text-accent-700 hover:underline" onClick={() => setExpanded(new Set(flat.map((node) => node.id)))}>Expand all</button>
                   <button type="button" className="font-medium text-accent-700 hover:underline" onClick={() => setExpanded(new Set())}>Collapse all</button>
                 </div>
-                <RootDropZone active={!!activeDragId} />
+                {!readOnly && <RootDropZone active={!!activeDragId} />}
                 {visibleRoots.map((root) => (
-                  <NestedBranch key={root.id} node={root} depth={0} expanded={nestedExpanded} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} onToggle={(id) => setExpanded((current) => { const next = new Set(current ?? []); next.has(id) ? next.delete(id) : next.add(id); return next; })} onSelect={setSelectedNode} />
+                  <NestedBranch key={root.id} node={root} depth={0} expanded={nestedExpanded} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} onToggle={(id) => setExpanded((current) => { const next = new Set(current ?? []); next.has(id) ? next.delete(id) : next.add(id); return next; })} onSelect={setSelectedNode} />
                 ))}
               </div>
             )}
@@ -614,7 +635,7 @@ export function CampOrganogram({ organizationId, campId }: { organizationId: str
         )}
       </section>
 
-      <DragOverlay>{activeDraggedNode ? <div className="rotate-1 opacity-95"><PositionCardPreview node={activeDraggedNode} /></div> : null}</DragOverlay>
+      {!readOnly && <DragOverlay>{activeDraggedNode ? <div className="rotate-1 opacity-95"><PositionCardPreview node={activeDraggedNode} /></div> : null}</DragOverlay>}
 
       <Dialog open={!!selectedCurrent} onClose={() => setSelectedNode(null)} title={selectedCurrent?.name ?? "Position"} size="sm">
         {selectedCurrent && (
@@ -626,12 +647,12 @@ export function CampOrganogram({ organizationId, campId }: { organizationId: str
                 <div><div className="font-semibold text-txt-primary">{occupantName(selectedCurrent)}</div><div className="text-xs text-txt-secondary">{selectedCurrent.department?.name ?? "Camp leadership"}</div></div>
               </div>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
+            {!readOnly && <div className="grid gap-2 sm:grid-cols-2">
               <Button variant="secondary" onClick={() => { setMoveParentId(selectedCurrent.parentPositionId ?? ""); setMoveRequest({ id: selectedCurrent.id, parentPositionId: selectedCurrent.parentPositionId }); setSelectedNode(null); }}>Move under…</Button>
               <Button variant="secondary" icon={<UserPlusIcon className="h-4 w-4" />} onClick={() => { setAssignTargetId(selectedCurrent.id); setAssignOpen(true); setSelectedNode(null); }}>{selectedCurrent.assignments.length ? "Replace holder" : "Assign person"}</Button>
               <Button variant="secondary" onClick={() => { setCreateParent(selectedCurrent); setPositionName(""); setSelectedNode(null); }}>Add child role</Button>
               {selectedCurrent.assignments[0] && <Button variant="danger" loading={unassignPosition.isPending} onClick={() => unassignPosition.mutate({ positionId: selectedCurrent.id, staffId: selectedCurrent.assignments[0].staff.id })}>Mark vacant</Button>}
-            </div>
+            </div>}
           </div>
         )}
       </Dialog>

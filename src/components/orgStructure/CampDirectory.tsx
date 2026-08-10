@@ -21,6 +21,7 @@ const HIGHLIGHT_DURATION_MS = 2200;
 export interface CampDirectoryProps {
   organizationId: string;
   campId: string;
+  readOnly?: boolean;
 }
 
 const AUTO_EXPAND_MAX_STAFF = 40;
@@ -30,7 +31,7 @@ function expansionStorageKey(campId: string) {
   return `camply.campStructure.expanded.${campId}`;
 }
 
-export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
+export function CampDirectory({ organizationId, campId, readOnly = false }: CampDirectoryProps) {
   const utils = api.useUtils();
 
   const { data, isLoading } = api.orgStructure.getCampDirectory.useQuery({ organizationId, campId });
@@ -175,7 +176,7 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 rounded-xl border border-border-default bg-surface-raised p-1" role="tablist" aria-label="Camp structure view">
+      <div className="grid grid-cols-2 rounded-xl border border-border-default bg-surface-raised p-1" role="tablist" aria-label="Camp contact view">
         <button
           type="button"
           role="tab"
@@ -197,7 +198,7 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
       </div>
 
       {structureView === "organogram" ? (
-        <CampOrganogram organizationId={organizationId} campId={campId} />
+        <CampOrganogram organizationId={organizationId} campId={campId} readOnly={readOnly} />
       ) : (
       <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -210,9 +211,11 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
             onSelectPosition={selectPosition}
           />
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)} className="shrink-0">
-          + Add Department
-        </Button>
+        {!readOnly && (
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="shrink-0">
+            + Add Department
+          </Button>
+        )}
       </div>
 
       {data.departments.length === 0 ? (
@@ -233,6 +236,7 @@ export function CampDirectory({ organizationId, campId }: CampDirectoryProps) {
               onManagePositions={() => setSidePanelDeptId(group.id)}
               onSiteIds={onSiteIds}
               highlightId={highlightId}
+              readOnly={readOnly}
             />
           ))}
 
