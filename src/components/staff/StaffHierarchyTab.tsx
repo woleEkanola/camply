@@ -2,7 +2,6 @@
 
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/Button";
 import { UserIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 
 interface StaffHierarchyTabProps {
@@ -11,11 +10,10 @@ interface StaffHierarchyTabProps {
 
 export function StaffHierarchyTab({ staffId }: StaffHierarchyTabProps) {
   const { data: profile } = api.staff.getById.useQuery({ id: staffId });
-  const { data: orgStaffData } = api.staff.adminList.useQuery(
-    { organizationId: profile?.organizationId ?? "", campId: profile?.campId ?? "", type: profile?.type ?? "TEACHER", limit: 500 },
+  const { data: reportingOptions } = api.staff.listReportsToOptions.useQuery(
+    { organizationId: profile?.organizationId ?? "", campId: profile?.campId ?? "", excludeStaffId: staffId },
     { enabled: !!profile?.organizationId && !!profile?.campId }
   );
-  const orgStaff = orgStaffData?.items ?? [];
 
   const utils = api.useUtils();
   const updateReportsTo = api.staff.assignReportsTo.useMutation({
@@ -26,8 +24,6 @@ export function StaffHierarchyTab({ staffId }: StaffHierarchyTabProps) {
 
   if (!profile) return null;
 
-  const reportingOptions = orgStaff.filter((s: any) => s.id !== staffId);
-
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div className="rounded-2xl border border-border-default bg-surface p-5 shadow-xs">
@@ -36,19 +32,39 @@ export function StaffHierarchyTab({ staffId }: StaffHierarchyTabProps) {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Reports To</h2>
         </div>
         <div className="flex flex-col gap-3 rounded-xl bg-surface-raised p-4">
-          <span className={cn("text-sm font-medium", profile.reportsTo ? "text-neutral-900" : "text-neutral-500")}>
-            {profile.reportsTo ? `${profile.reportsTo.firstName} ${profile.reportsTo.lastName}` : "No manager assigned"}
+          <span className={cn("text-sm font-medium", profile.reportsTo || profile.reportsToUser ? "text-neutral-900" : "text-neutral-500")}>
+            {profile.reportsTo
+              ? `${profile.reportsTo.firstName} ${profile.reportsTo.lastName}`
+              : profile.reportsToUser
+                ? `${profile.reportsToUser.firstName ?? ""} ${profile.reportsToUser.lastName ?? ""}`.trim() || profile.reportsToUser.email
+                : "No manager assigned"}
           </span>
           <select
             className="rounded-lg border-neutral-300 text-sm"
-            value={profile.reportsToId || ""}
-            onChange={(e) => updateReportsTo.mutate({ id: staffId, reportsToId: e.target.value || null })}
+            aria-label="Reports To"
+            value={profile.reportsToId ? `staff:${profile.reportsToId}` : profile.reportsToUserId ? `user:${profile.reportsToUserId}` : ""}
+            onChange={(e) => {
+              const [kind, id] = e.target.value.split(":");
+              updateReportsTo.mutate({
+                id: staffId,
+                reportsToId: kind === "staff" && id ? id : null,
+                reportsToUserId: kind === "user" && id ? id : null,
+              });
+            }}
           >
             <option value="">— No manager —</option>
-            {reportingOptions.map((s: any) => (
-              <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>
+            {reportingOptions?.leaders.map((leader) => (
+              <option key={`user:${leader.id}`} value={`user:${leader.id}`}>
+                {`${leader.firstName ?? ""} ${leader.lastName ?? ""}`.trim() || leader.email} ({leader.role === "OWNER" ? "Camp Director" : leader.role === "ADMIN" ? "Camp Administrator" : "Campus Representative"})
+              </option>
+            ))}
+            {reportingOptions?.staff.map((staff) => (
+              <option key={`staff:${staff.id}`} value={`staff:${staff.id}`}>
+                {staff.firstName} {staff.lastName} ({staff.type})
+              </option>
             ))}
           </select>
+          {updateReportsTo.isError && <p className="text-xs text-danger-600">{updateReportsTo.error.message}</p>}
         </div>
       </div>
 

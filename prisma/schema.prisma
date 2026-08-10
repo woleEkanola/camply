@@ -1289,6 +1289,12 @@ model AttendanceSession {
   tribeId     String?
   name        String
   date        DateTime
+  startsAt    DateTime?
+  lateAfterMinutes Int      @default(0)
+  status      String        @default("OPEN") // DRAFT | OPEN | CLOSED | CANCELLED
+  closedAt    DateTime?
+  closedById  String?
+  allowVolunteerAccess Boolean @default(false)
   createdById String
   records     AttendanceRecord[]
   createdAt   DateTime           @default(now())
@@ -1305,6 +1311,7 @@ model AttendanceSession {
   @@index([campId, date])
   @@index([tribeId, date])
   @@index([scoredSessionId])
+  @@index([status, date])
 }
 
 model AttendanceRecord {
@@ -1314,6 +1321,12 @@ model AttendanceRecord {
   registration   Registration      @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   registrationId String
   status         String // PRESENT | ABSENT | LATE
+  source         String            @default("MANUAL") // QR | SEARCH | MANUAL | OFFLINE
+  markedAt       DateTime          @default(now())
+  updatedById    String?
+  notes          String?
+  scoreVersion   Int               @default(0)
+  scoreEventId   String?
   recordedById   String
   recordedAt     DateTime          @default(now())
 
@@ -1321,6 +1334,7 @@ model AttendanceRecord {
   // Additive: the unique index above leads with sessionId, wrong column for
   // "all attendance records for this registration" lookups.
   @@index([registrationId])
+  @@index([scoreEventId])
 }
 
 model IncidentReport {

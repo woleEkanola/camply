@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const PORT = process.env.PORT ?? "3001";
 const BASE_URL = `http://localhost:${PORT}`;
+const RUN_CAMP_SIMULATION = process.env.RUN_CAMP_SIMULATION === "1";
 
 export default defineConfig({
   testDir: "./tests",
@@ -35,7 +36,16 @@ export default defineConfig({
     // files, run only under "Mobile Chrome" below — most existing specs
     // assume desktop layout (e.g. clicking a <tr> that's `hidden` below
     // `md` via Table's dual-render) and would fail en masse if run here too.
-    { name: "chromium", testIgnore: /mobile-.*\.spec\.ts$/, use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      // The camp simulation mutates a large, purpose-seeded dataset and is not
+      // part of the normal regression suite. Opt in explicitly when required:
+      // RUN_CAMP_SIMULATION=1 npx playwright test tests/camp-simulation.spec.ts
+      testIgnore: RUN_CAMP_SIMULATION
+        ? /mobile-.*\.spec\.ts$/
+        : [/mobile-.*\.spec\.ts$/, /camp-simulation\.spec\.ts$/],
+      use: { ...devices["Desktop Chrome"] },
+    },
     {
       name: "Mobile Chrome",
       testMatch: /mobile-.*\.spec\.ts$/,

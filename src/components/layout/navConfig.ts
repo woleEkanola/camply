@@ -304,6 +304,7 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     name: "Operations",
     items: [
       { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
+      { name: "Attendance", href: "/volunteer/attendance", icon: ClipboardDocumentCheckIcon },
       { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
       { name: "Medical", href: "/volunteer/medical", icon: HeartIcon, volunteerCategory: "Medical" },
       { name: "Meals", href: "/volunteer/meals", icon: CakeIcon, volunteerCategory: "Kitchen" },

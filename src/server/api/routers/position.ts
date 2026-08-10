@@ -83,6 +83,14 @@ export const positionRouter = createTRPCRouter({
       await assertStaffAccess(ctx);
       await assertCanManageCamp(ctx, input.campId);
 
+      if (input.parentPositionId) {
+        const parent = await ctx.prisma.position.findFirst({
+          where: { id: input.parentPositionId, campId: input.campId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!parent) throw new TRPCError({ code: "BAD_REQUEST", message: "The selected parent position is not in this camp." });
+      }
+
       return ctx.prisma.position.create({
         data: {
           campId: input.campId,
@@ -147,15 +155,23 @@ export const positionRouter = createTRPCRouter({
         }
 
         // Walk up from target parent to check for cycles
+        const targetParent = await ctx.prisma.position.findFirst({
+          where: { id: input.parentPositionId, campId: position.campId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!targetParent) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "The selected parent position is not in this camp." });
+        }
+
         let currentParentId: string | null = input.parentPositionId;
         while (currentParentId) {
+          if (currentParentId === input.id) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Moving this position would create a reporting cycle." });
+          }
           const parentNode: { parentPositionId: string | null } | null = await ctx.prisma.position.findUnique({
             where: { id: currentParentId },
             select: { parentPositionId: true },
           });
-          if (parentNode?.parentPositionId === input.id) {
-            throw new TRPCError({ code: "BAD_REQUEST", message: "Moving this position would create a reporting cycle." });
-          }
           currentParentId = parentNode?.parentPositionId ?? null;
         }
       }
@@ -183,11 +199,17 @@ export const positionRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       if (input.orders.length === 0) return { success: true };
 
-      const firstPos = await ctx.prisma.position.findUnique({
-        where: { id: input.orders[0].id },
-      });
+      const orderedIds = input.orders.map((order) => order.id);
+      if (new Set(orderedIds).size !== orderedIds.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Each position can only appear once." });
+      }
+      const positions = await ctx.prisma.position.findMany({ where: { id: { in: orderedIds }, deletedAt: null } });
+      const firstPos = positions[0];
       if (!firstPos) throw new TRPCError({ code: "NOT_FOUND" });
       await assertCanManageCamp(ctx, firstPos.campId);
+      if (positions.length !== orderedIds.length || positions.some((candidate) => candidate.campId !== firstPos.campId)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Positions must belong to the same camp." });
+      }
 
       await ctx.prisma.$transaction(
         input.orders.map((o) =>
@@ -218,6 +240,8 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.staffId },
       });
       if (!staff || staff.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (staff.campId !== position.campId) throw new TRPCError({ code: "BAD_REQUEST", message: "Staff and position must belong to the same camp." });
+      if (staff.status !== "APPROVED") throw new TRPCError({ code: "BAD_REQUEST", message: "Only approved staff can hold a position." });
 
       const currentUser = ctx.session!.user;
 

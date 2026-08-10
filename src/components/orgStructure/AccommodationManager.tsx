@@ -103,13 +103,15 @@ function BulkRoomDialog({
   return (
     <Dialog open onClose={onClose} title={`Add Rooms — ${hostelName}`}>
       {/* Mode tabs */}
-      <div className="mb-5 flex gap-1 rounded-lg bg-neutral-100 p-1">
+      <div className="mb-5 flex gap-1 rounded-lg bg-surface-raised p-1">
         {(["numbered", "custom"] as BulkMode[]).map((m) => (
           <button
             key={m}
             onClick={() => { setMode(m); setError(""); }}
             className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-              mode === m ? "bg-white shadow text-neutral-900" : "text-neutral-500 hover:text-neutral-700"
+              mode === m
+                ? "bg-surface shadow-sm ring-1 ring-border-default text-txt-primary"
+                : "text-txt-secondary hover:bg-surface-hover hover:text-txt-primary"
             }`}
           >
             {m === "numbered" ? "🔢 Numbered Sequence" : "✏️ Custom Names"}
@@ -157,11 +159,11 @@ function BulkRoomDialog({
       ) : (
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Room names <span className="text-neutral-400">(one per line, or comma-separated)</span>
+            <label className="mb-1.5 block text-sm font-medium text-txt-secondary">
+              Room names <span className="text-txt-muted">(one per line, or comma-separated)</span>
             </label>
             <textarea
-              className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+              className="w-full rounded-lg border border-input-border bg-input-bg px-3 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
               rows={6}
               placeholder={"Room A1\nRoom A2\nRoom B1\nRoom B2\n\n— or —\n\nRoom A1, Room A2, Room B1"}
               value={customText}
@@ -195,8 +197,8 @@ function BulkRoomDialog({
 
       {/* Live preview */}
       {preview.length > 0 && (
-        <div className="mt-4 rounded-lg bg-neutral-50 p-3">
-          <p className="mb-2 text-xs font-medium text-neutral-500 uppercase tracking-wide">
+        <div className="mt-4 rounded-lg border border-border-subtle bg-surface-raised p-3">
+          <p className="mb-2 text-xs font-medium text-txt-secondary uppercase tracking-wide">
             Preview — {previewCount} room{previewCount !== 1 ? "s" : ""} will be created
             {capacity && `, each with capacity ${capacity}`}
           </p>
@@ -310,13 +312,15 @@ function BulkBedDialog({
   return (
     <Dialog open onClose={onClose} title={`Add Beds — ${roomName}`}>
       {/* Mode tabs */}
-      <div className="mb-5 flex gap-1 rounded-lg bg-neutral-100 p-1">
+      <div className="mb-5 flex gap-1 rounded-lg bg-surface-raised p-1">
         {(["numbered", "custom"] as BulkMode[]).map((m) => (
           <button
             key={m}
             onClick={() => { setMode(m); setError(""); }}
             className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-              mode === m ? "bg-white shadow text-neutral-900" : "text-neutral-500 hover:text-neutral-700"
+              mode === m
+                ? "bg-surface shadow-sm ring-1 ring-border-default text-txt-primary"
+                : "text-txt-secondary hover:bg-surface-hover hover:text-txt-primary"
             }`}
           >
             {m === "numbered" ? "🔢 Numbered Sequence" : "✏️ Custom Labels"}
@@ -352,11 +356,11 @@ function BulkBedDialog({
         </div>
       ) : (
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Bed labels <span className="text-neutral-400">(one per line, or comma-separated)</span>
+          <label className="mb-1.5 block text-sm font-medium text-txt-secondary">
+            Bed labels <span className="text-txt-muted">(one per line, or comma-separated)</span>
           </label>
           <textarea
-            className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+            className="w-full rounded-lg border border-input-border bg-input-bg px-3 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
             rows={6}
             placeholder={"Bed 1\nBed 2\nBed 3\nBed 4\n\n— or —\n\nBed 1, Bed 2, Bed 3"}
             value={customText}
@@ -367,8 +371,8 @@ function BulkBedDialog({
 
       {/* Live preview */}
       {preview.length > 0 && (
-        <div className="mt-4 rounded-lg bg-neutral-50 p-3">
-          <p className="mb-2 text-xs font-medium text-neutral-500 uppercase tracking-wide">
+        <div className="mt-4 rounded-lg border border-border-subtle bg-surface-raised p-3">
+          <p className="mb-2 text-xs font-medium text-txt-secondary uppercase tracking-wide">
             Preview — {previewCount} bed{previewCount !== 1 ? "s" : ""} will be created
           </p>
           <div className="flex flex-wrap gap-1.5">

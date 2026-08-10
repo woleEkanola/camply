@@ -353,6 +353,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                   variant="secondary"
                   size="sm"
                   className="w-full justify-center whitespace-nowrap sm:w-auto"
+                  disabled={!campId}
                   loading={autoAssignToTribes.isPending}
                   onClick={() => { if (window.confirm("Auto assign all teachers to tribes based on gender & quota?")) autoAssignToTribes.mutate({ organizationId, campId }); }}
                 >
@@ -362,6 +363,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                   variant="secondary"
                   size="sm"
                   className="w-full justify-center whitespace-nowrap sm:w-auto"
+                  disabled={!campId}
                   loading={autoAssignToDepartments.isPending}
                   onClick={() => { if (window.confirm("Auto assign all teachers to departments with gender-mixed leaders?")) autoAssignToDepartments.mutate({ organizationId, campId }); }}
                 >

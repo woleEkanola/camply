@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { api } from "@/utils/trpc";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { buttonClassName } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { OverviewTab } from "@/components/leaderboard/OverviewTab";
 import { TribesTab } from "@/components/leaderboard/TribesTab";
@@ -29,6 +31,12 @@ export default function LeaderboardPage() {
   const organizationId = session?.user?.organizationId as string | undefined;
   const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId: organizationId! }, { enabled: !!organizationId });
   const campId = activeCamp?.id;
+  const role = session?.user?.role as string | undefined;
+  const isOrgManager = !!role && ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role);
+  const { data: canManageCamp } = api.leaderboard.canManageCamp.useQuery(
+    { campId: campId! },
+    { enabled: !isOrgManager && !!campId }
+  );
 
   if (status === "loading") {
     return (
@@ -39,17 +47,30 @@ export default function LeaderboardPage() {
   }
   if (!session?.user) return null;
 
-  const role = session.user.role as string;
-  const area = leaderboardArea(role);
+  const resolvedRole = session.user.role as string;
+  const area = leaderboardArea(resolvedRole);
 
-  const isManager = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role);
+  const isManager = isOrgManager || !!canManageCamp;
 
   const labels = ["Overview", "Tribes", "Campers", "Teachers", "Campuses", "Achievements", "History", "Rules"];
 
   return (
     <AppShell area={area}>
       <div className="mx-auto max-w-6xl space-y-6 pb-12">
-        <PageHeader title="Leaderboard" description="Camp-wide scoring, standings, and achievements." />
+        <PageHeader
+          title="Leaderboard"
+          description="Camp-wide scoring, standings, and achievements."
+          actions={
+            isManager ? (
+              <Link
+                href="/leaderboard/admin?tab=settings"
+                className={buttonClassName({ variant: "primary" })}
+              >
+                Manage &amp; Share Leaderboard
+              </Link>
+            ) : undefined
+          }
+        />
 
         {!campId ? (
           <div className="rounded-lg border border-dashed border-neutral-300 px-6 py-12 text-center text-sm text-txt-secondary">
@@ -83,7 +104,7 @@ export default function LeaderboardPage() {
               ))}
             </div>
             <div className="mt-4">
-              {tabIndex === 0 && <OverviewTab campId={campId} role={role} />}
+              {tabIndex === 0 && <OverviewTab campId={campId} role={resolvedRole} />}
               {tabIndex === 1 && <TribesTab campId={campId} canManage={isManager} />}
               {tabIndex === 2 && <CampersTab campId={campId} />}
               {tabIndex === 3 && <TeachersTab campId={campId} />}

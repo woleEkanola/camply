@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
@@ -28,6 +28,14 @@ export default function LeaderboardAdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [tabIndex, setTabIndex] = useState(0);
+
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    const requestedIndex = SUB_TABS.findIndex(
+      (label) => label.toLowerCase().replaceAll(" ", "-") === requestedTab?.toLowerCase()
+    );
+    if (requestedIndex >= 0) setTabIndex(requestedIndex);
+  }, []);
 
   const organizationId = session?.user?.organizationId as string | undefined;
   const { data: activeCamp, isLoading: activeCampLoading } = api.camp.getActiveCamp.useQuery(

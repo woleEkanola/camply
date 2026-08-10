@@ -52,8 +52,11 @@ test.describe("Leaderboard admin area", () => {
 
   test("settings: enabling public + generating a link creates a working token, and rotating kills it", async ({ page }) => {
     await loginWithPassword(page, "admin@camply.com", "password123");
-    await page.goto("/leaderboard/admin");
-    await page.getByRole("tab", { name: "Settings" }).click();
+    await page.goto("/leaderboard");
+    await page.getByRole("link", { name: "Manage & Share Leaderboard" }).click();
+    await expect(page).toHaveURL(/\/leaderboard\/admin\?tab=settings$/);
+    await expect(page.getByRole("tab", { name: "Settings" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Public Leaderboard", { exact: true })).toBeVisible();
 
     // Assert the write landed, not that a toast appeared — see
     // expectSettingsSaved's comment in helpers.ts. This test raises the same

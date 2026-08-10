@@ -30,7 +30,7 @@ export function ScannerControls({
           type="button"
           onClick={onToggleTorch}
           className={`absolute left-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/10 backdrop-blur transition-colors ${
-            torchOn ? "bg-white text-black" : "bg-black/60 text-white hover:bg-black/70"
+            torchOn ? "theme-static-white bg-white text-black" : "bg-black/60 text-white hover:bg-black/70"
           }`}
           aria-label={torchOn ? "Turn off flashlight" : "Turn on flashlight"}
           aria-pressed={torchOn}

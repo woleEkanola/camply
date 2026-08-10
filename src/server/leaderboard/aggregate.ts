@@ -216,12 +216,13 @@ async function computeDerivedStats(tx: Tx, campId: string, timezone: string): Pr
     // ScoreEvent for, vs. every ScoredSession scheduled up to today for
     // that subject's scope (camp-wide, or this specific tribe/subject).
     const attendance: Array<{ subjectId: string; attended: bigint; prompt: bigint }> = await tx.$queryRawUnsafe(
-      `SELECT "${column}" AS "subjectId",
-              COUNT(DISTINCT "scoredSessionId") AS "attended",
-              COUNT(DISTINCT "scoredSessionId") FILTER (WHERE "points" > 0) AS "prompt"
-       FROM "ScoreEvent"
-       WHERE "campId" = $1 AND "${column}" IS NOT NULL AND "scoredSessionId" IS NOT NULL
-       GROUP BY "${column}"`,
+      `SELECT e."${column}" AS "subjectId",
+              COUNT(DISTINCT e."scoredSessionId") AS "attended",
+              COUNT(DISTINCT e."scoredSessionId") FILTER (WHERE e."points" > 0) AS "prompt"
+       FROM "ScoreEvent" e
+       WHERE e."campId" = $1 AND e."${column}" IS NOT NULL AND e."scoredSessionId" IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM "ScoreEvent" reversal WHERE reversal."reversesEventId" = e."id")
+       GROUP BY e."${column}"`,
       campId
     );
 

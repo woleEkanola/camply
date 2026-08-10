@@ -110,7 +110,7 @@ test.describe("Accommodation: Auto Assign Rooms & Beds", () => {
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Auto Assign Rooms & Beds" }).click();
 
-    await expect(page.getByText(/assigned/i)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/^\d+ assigned(?:,|\.)/i)).toBeVisible({ timeout: 15000 });
 
     const updatedReg = await prisma.registration.findUniqueOrThrow({ where: { id: registrationId! } });
     expect(updatedReg.roomId).toBe(maleRoomId);

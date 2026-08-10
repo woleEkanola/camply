@@ -7,9 +7,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StaffGate } from "@/components/staff/StaffGate";
 import { AttendanceWorkspace } from "@/components/staff/shared/AttendanceWorkspace";
 
-export default function TeacherAttendancePage() {
+export default function VolunteerAttendancePage() {
   const router = useRouter();
   const { data: session } = useSession({ required: true, onUnauthenticated: () => router.push("/login") });
   const organizationId = (session?.user as any)?.organizationId ?? "";
-  return <AppShell area="teacher"><PageHeader title="Attendance" /><StaffGate>{(profile) => <AttendanceWorkspace profile={profile} organizationId={organizationId} />}</StaffGate></AppShell>;
+  return <AppShell area="volunteer"><PageHeader title="Attendance" /><StaffGate>{(profile) => <AttendanceWorkspace profile={profile} organizationId={organizationId} />}</StaffGate></AppShell>;
 }

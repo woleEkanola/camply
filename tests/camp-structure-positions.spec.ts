@@ -145,4 +145,89 @@ test.describe("Camp Structure — position management (Positions tab)", () => {
       .poll(async () => (await prisma.position.findUniqueOrThrow({ where: { id: volPositionId } })).parentPositionId, { timeout: 10000 })
       .toBeNull();
   });
+
+  test("camp-wide Organogram renders the connected tree and drag-to-reparent persists", async ({ page }) => {
+    await prisma.position.update({ where: { id: volPositionId }, data: { parentPositionId: null } });
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/camp-structure");
+    await page.getByRole("tab", { name: "Organogram" }).click();
+
+    const organogram = page.getByTestId("camp-organogram");
+    await expect(organogram).toBeVisible();
+    await expect(page.getByTestId("organogram-chart-view")).toBeVisible();
+    const zoomLevel = page.getByTestId("organogram-zoom-level");
+    await expect(zoomLevel).toHaveText("100%");
+    await page.getByTestId("organogram-chart-view").hover();
+    await page.mouse.wheel(0, -400);
+    await expect.poll(async () => Number((await zoomLevel.textContent())?.replace("%", ""))).toBeGreaterThan(100);
+    await page.getByRole("button", { name: "100%" }).click();
+    await expect(zoomLevel).toHaveText("100%");
+    await expect(page.getByTestId(`organogram-position-${directorPositionId}`)).toContainText("Camp Director");
+    await expect(page.getByTestId(`organogram-position-${headPositionId}`)).toContainText(deptName);
+
+    // Large simulation camps can have dozens of independent roots. Search
+    // keeps the branch under test together and exercises the real admin
+    // workflow for focusing a crowded chart before editing it.
+    await page.getByPlaceholder("Find a role or person").fill(deptName);
+
+    const sourceHandle = page.getByTestId(`organogram-position-${volPositionId}`).getByRole("button", { name: "Drag position" });
+    const target = page.getByTestId(`organogram-position-${headPositionId}`);
+    const sourceBox = await sourceHandle.boundingBox();
+    const targetBox = await target.boundingBox();
+    expect(sourceBox).not.toBeNull();
+    expect(targetBox).not.toBeNull();
+
+    await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 12 });
+    await page.mouse.up();
+
+    const moveDialog = page.getByTestId("dialog-panel");
+    await expect(moveDialog).toBeVisible();
+    await expect(moveDialog.getByText("Move position", { exact: true })).toBeVisible();
+    await expect(moveDialog.getByLabel("Reports to")).toHaveValue(headPositionId);
+    await moveDialog.getByRole("button", { name: "Confirm move" }).click();
+
+    await expect.poll(async () => (await prisma.position.findUniqueOrThrow({ where: { id: volPositionId } })).parentPositionId).toBe(headPositionId);
+    await expect(page.getByText("Hierarchy updated.")).toBeVisible();
+  });
+
+  test("mobile Organogram defaults to a properly nested, editable hierarchy", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/camp-structure");
+    await page.getByRole("tab", { name: "Organogram" }).click();
+
+    await expect(page.getByTestId("organogram-nested-view")).toBeVisible();
+    await expect(page.getByTestId(`organogram-position-${directorPositionId}`)).toBeVisible();
+    await expect(page.getByTestId(`organogram-position-${headPositionId}`)).toBeVisible();
+    await expect(page.getByTestId(`organogram-position-${volPositionId}`)).toBeVisible();
+
+    // The nested tree is the mobile default, while the chart remains fully
+    // touch-zoomable when selected. Synthetic pointer events let this test
+    // exercise two simultaneous touch points in Chromium.
+    await page.getByRole("button", { name: "Chart", exact: true }).click();
+    const chart = page.getByTestId("organogram-chart-view");
+    await expect(chart).toBeVisible();
+    await chart.evaluate((element) => {
+      const emit = (type: string, pointerId: number, clientX: number, clientY: number, isPrimary = false) =>
+        element.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId, pointerType: "touch", clientX, clientY, isPrimary }));
+      emit("pointerdown", 1, 130, 300, true);
+      emit("pointerdown", 2, 260, 300);
+      emit("pointermove", 1, 90, 300, true);
+      emit("pointermove", 2, 300, 300);
+      emit("pointerup", 1, 90, 300, true);
+      emit("pointerup", 2, 300, 300);
+    });
+    const zoomLevel = page.getByTestId("organogram-zoom-level");
+    await expect.poll(async () => Number((await zoomLevel.textContent())?.replace("%", ""))).toBeGreaterThan(100);
+    await page.getByRole("button", { name: "Nested", exact: true }).click();
+
+    await page.getByTestId(`organogram-position-${volPositionId}`).getByRole("button").first().click();
+    const positionDialog = page.getByTestId("dialog-panel");
+    await expect(positionDialog).toBeVisible();
+    await expect(positionDialog.getByText(new RegExp(deptName)).first()).toBeVisible();
+    await expect(positionDialog.getByRole("button", { name: "Move under…" })).toBeVisible();
+    await expect(positionDialog.getByRole("button", { name: /Assign person|Replace holder/ })).toBeVisible();
+  });
 });

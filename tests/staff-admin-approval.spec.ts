@@ -5,6 +5,7 @@ test.describe("Admin: staff approval and assignment", () => {
   test.describe.configure({ mode: "serial" });
 
   const email = `e2e-approve-${Date.now()}@camply.test`;
+  let staffId: string;
   let departmentId: string;
   let venueId: string;
 
@@ -14,7 +15,7 @@ test.describe("Admin: staff approval and assignment", () => {
     const user = await prisma.user.create({
       data: { email, password: "placeholder-not-used-for-login", role: "TEACHER", organizationId },
     });
-    await prisma.staffProfile.create({
+    const staff = await prisma.staffProfile.create({
       data: {
         userId: user.id,
         organizationId,
@@ -27,6 +28,7 @@ test.describe("Admin: staff approval and assignment", () => {
         email,
       },
     });
+    staffId = staff.id;
 
     // A department fixture — this org has no seeded departments by default,
     // and department assignment is worth covering independently of whatever
@@ -104,6 +106,26 @@ test.describe("Admin: staff approval and assignment", () => {
     const bulkDialog = page.getByRole("dialog", { name: "Send teacher approval emails" });
     await expect(bulkDialog).toContainText("only to the 1 explicitly selected profile");
     await bulkDialog.getByRole("button", { name: "Cancel" }).click();
+  });
+
+  test("teacher hierarchy loads its complete manager options without an adminList validation error", async ({ page }) => {
+    const consoleErrors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/users");
+    const teacherRow = page.locator("tr", { hasText: email });
+    await expect(teacherRow).toBeVisible();
+    await teacherRow.getByRole("button", { name: "Manage profile" }).click();
+    await expect(page).toHaveURL(new RegExp(`/admin/teachers/${staffId}$`));
+    await page.getByRole("tab", { name: "Hierarchy" }).click();
+
+    const reportsTo = page.getByLabel("Reports To");
+    await expect(reportsTo).toBeVisible();
+    await expect.poll(async () => reportsTo.locator("option").count()).toBeGreaterThan(1);
+    expect(consoleErrors.filter((message) => message.includes("staff.adminList"))).toEqual([]);
   });
 
   test("owner can reject a pending volunteer with a reason", async ({ page }) => {
