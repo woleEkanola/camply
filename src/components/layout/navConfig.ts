@@ -106,6 +106,12 @@ const ADMIN_GROUPS: NavGroup[] = [
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
       },
       {
+        name: "Camp Points",
+        href: "/admin/points",
+        icon: ClipboardDocumentCheckIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
         name: "Reports",
         href: "/admin/reports",
         icon: ChartBarIcon,
@@ -263,12 +269,27 @@ const PARENT_GROUPS: NavGroup[] = [
 const CAMPUS_REP_GROUPS: NavGroup[] = [
   {
     name: "Registration",
+    items: [{ name: "Registrations", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon }],
+  },
+  {
+    name: "Dashboard",
     items: [
-      { name: "Registrations", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon },
-      { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
+      { name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon },
+      { name: "My Assignment", href: "/campus-rep-dashboard/my-position", icon: MapIcon },
+      LEADERBOARD_ITEM,
+      { name: "Camp Contact", href: "/campus-rep-dashboard/camp-contact", icon: Squares2X2Icon },
     ],
   },
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }, LEADERBOARD_ITEM] },
+  {
+    name: "Operations",
+    items: [
+      { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
+      { name: "Camp Points", href: "/campus-rep-dashboard/points", icon: ClipboardDocumentCheckIcon },
+      { name: "QR Scan", href: "/campus-rep-dashboard/qr-scan", icon: QrCodeIcon },
+      { name: "Inbox", href: "/campus-rep-dashboard/inbox", icon: MegaphoneIcon },
+      { name: "Incidents", href: "/campus-rep-dashboard/incidents", icon: ExclamationTriangleIcon },
+    ],
+  },
 ];
 
 const SUPER_ADMIN_GROUPS: NavGroup[] = [
@@ -289,7 +310,7 @@ const TEACHER_GROUPS: NavGroup[] = [
     name: "Operations",
     items: [
       { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
-      { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
+      { name: "Camp Points", href: "/teacher/points", icon: ClipboardDocumentCheckIcon },
       { name: "QR Scan", href: "/teacher/qr-scan", icon: QrCodeIcon },
       { name: "Inbox", href: "/teacher/inbox", icon: MegaphoneIcon },
       { name: "Incidents", href: "/teacher/incidents", icon: ExclamationTriangleIcon },
@@ -310,7 +331,7 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     name: "Operations",
     items: [
       { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
-      { name: "Attendance", href: "/volunteer/attendance", icon: ClipboardDocumentCheckIcon },
+      { name: "Camp Points", href: "/volunteer/points", icon: ClipboardDocumentCheckIcon },
       { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
       { name: "Medical", href: "/volunteer/medical", icon: HeartIcon, volunteerCategory: "Medical" },
       { name: "Meals", href: "/volunteer/meals", icon: CakeIcon, volunteerCategory: "Kitchen" },
@@ -419,7 +440,7 @@ export function getBottomNavItems(
         { name: "Contact", href: "/teacher/camp-contact", icon: Squares2X2Icon },
         { name: "QR Scan", href: "/teacher/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
-        { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
+        { name: "Points", href: "/teacher/points", icon: ClipboardDocumentCheckIcon },
       ];
     case "volunteer":
       if (hasCampusRepAccess) {
@@ -434,6 +455,7 @@ export function getBottomNavItems(
         { name: "Home", href: "/volunteer", icon: HomeIcon },
         { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
+        { name: "Points", href: "/volunteer/points", icon: ClipboardDocumentCheckIcon },
       ];
       if (volunteerCategory === "Kitchen") {
         volunteerBottom.push({ name: "Meals", href: "/volunteer/meals", icon: CakeIcon });
@@ -446,9 +468,11 @@ export function getBottomNavItems(
     case "campus-rep":
       return [
         { name: "Home", href: "/campus-rep-dashboard", icon: HomeIcon },
-        { name: "Registrations", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon },
-        { name: "QR Scan", href: "/teacher/qr-scan", icon: QrCodeIcon },
+        { name: "Contact", href: "/campus-rep-dashboard/camp-contact", icon: Squares2X2Icon },
+        { name: "QR", href: "/campus-rep-dashboard/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
+        { name: "Points", href: "/campus-rep-dashboard/points", icon: ClipboardDocumentCheckIcon },
+        { name: "Regs", href: "/campus-rep-dashboard/registrations", icon: ClipboardDocumentListIcon },
       ];
     case "dashboard":
     case "super-admin":

@@ -15,7 +15,7 @@ export default function VolunteerQrScanPage() {
     <AppShell area="volunteer">
       <StaffGate>
         {(profile) => (
-          <ScanCenterShell organizationId={organizationId} homeCampusId={profile.preferredCampusId ?? undefined} />
+          <ScanCenterShell organizationId={organizationId} homeCampusId={profile.preferredCampusId ?? undefined} pointsHref="/volunteer/points" />
         )}
       </StaffGate>
     </AppShell>

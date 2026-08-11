@@ -23,6 +23,8 @@ type PositionNode = {
   departmentId: string | null;
   parentPositionId: string | null;
   displayOrder: number;
+  grantsManageCamp: boolean;
+  grantsAwardPoints: boolean;
   department: { id: string; name: string } | null;
   assignments: { id: string; staff: { id: string; firstName: string; lastName: string; photoUrl: string | null } }[];
   children: PositionNode[];
@@ -89,6 +91,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
     onError,
   });
   const reorderPositions = api.position.reorderPositions.useMutation({ onSuccess: invalidate, onError });
+  const updatePosition = api.position.update.useMutation({ onSuccess: invalidate, onError });
 
   // limit: 100 (the max adminList allows) — its default of 25 silently
   // truncated this picker on a camp with more staff than that, hiding real
@@ -182,6 +185,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
 
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-txt-primary truncate">{node.name}</div>
+            {node.grantsAwardPoints && <div className="mt-0.5 text-[11px] font-medium text-accent-600">Can award camper points</div>}
             {occupants.length === 0 ? (
               <div className="text-xs text-txt-muted">Vacant</div>
             ) : (
@@ -237,6 +241,17 @@ export function PositionManager({ organizationId, campId, departmentId, departme
                   {({ active }) => (
                     <button type="button" onClick={() => setMoveTarget(node)} className={cn("flex w-full min-h-[44px] items-center px-3 text-left", active && "bg-surface-raised")}>
                       Move…
+                    </button>
+                  )}
+                </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      type="button"
+                      onClick={() => updatePosition.mutate({ id: node.id, grantsAwardPoints: !node.grantsAwardPoints })}
+                      className={cn("flex w-full min-h-[44px] items-center px-3 text-left", active && "bg-surface-raised")}
+                    >
+                      {node.grantsAwardPoints ? "Remove point access" : "Allow point awards"}
                     </button>
                   )}
                 </Menu.Item>

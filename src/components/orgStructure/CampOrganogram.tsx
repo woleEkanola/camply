@@ -50,6 +50,7 @@ export type OrganogramNode = {
   parentPositionId: string | null;
   displayOrder: number;
   grantsManageCamp: boolean;
+  grantsAwardPoints: boolean;
   department: { id: string; name: string } | null;
   assignments: { id: string; staff: StaffOccupant }[];
   children: OrganogramNode[];

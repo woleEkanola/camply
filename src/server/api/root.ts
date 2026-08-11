@@ -37,6 +37,7 @@ import { leaderboardRouter } from "./routers/leaderboard";
 import { searchRouter } from "./routers/search";
 import { pushRouter } from "./routers/push";
 import { platformBrandingRouter } from "./routers/platformBranding";
+import { campPointsRouter } from "./routers/campPoints";
 
 /**
  * This is the primary router for your server.
@@ -81,6 +82,7 @@ export const appRouter = createTRPCRouter({
   search: searchRouter,
   push: pushRouter,
   platformBranding: platformBrandingRouter,
+  campPoints: campPointsRouter,
   // booking: bookingRouter, // removed because booking router file was deleted
   // eventType: eventTypeRouter, // removed because eventType router file was deleted
   // schedule: scheduleRouter, // removed because schedule router file was deleted

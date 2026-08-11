@@ -892,9 +892,15 @@ model ScoredSession {
 
   stationId  String?
   tribeId    String?
+  campusId   String?
   scope      String  @default("CAMP") // CAMP | TRIBE | CAMPUS
   categoryId String
   ruleId     String?
+  // Point-station batches reuse ScoredSession so ScoreEvent.scoredSessionId
+  // remains the single session link for attendance, scheduled scans, and
+  // human-led QR awards. Null on legacy/scheduled sessions.
+  awardPoints Int?
+  createdById String?
   status     String  @default("SCHEDULED") // SCHEDULED | ACTIVE | CLOSED | CANCELLED
 
   createdAt DateTime @default(now())
@@ -902,6 +908,7 @@ model ScoredSession {
 
   @@index([campId, date])
   @@index([campId, status])
+  @@index([createdById, status])
 }
 
 // The award carries a subjectKey ("T:<id>" / "C:<id>" / "S:<id>") rather
@@ -1287,6 +1294,9 @@ model AttendanceSession {
   venueId     String?
   tribe       Tribe?             @relation(fields: [tribeId], references: [id])
   tribeId     String?
+  // Scalar-only on purpose: Campus already has a large relation surface and
+  // attendance only needs an indexed scope discriminator.
+  campusId    String?
   name        String
   date        DateTime
   startsAt    DateTime?
@@ -1310,6 +1320,7 @@ model AttendanceSession {
   // Additive: this model previously had zero indexes.
   @@index([campId, date])
   @@index([tribeId, date])
+  @@index([campusId, date])
   @@index([scoredSessionId])
   @@index([status, date])
 }
@@ -1575,6 +1586,10 @@ model Position {
   // without needing an ADMIN/OWNER/SUPER_ADMIN role. Defaults false, so
   // every existing Position row is unaffected.
   grantsManageCamp Boolean              @default(false)
+  // Narrower than grantsManageCamp: intended for Tribe Heads and Assistant
+  // Tribe Heads who may award campers in their assigned tribe without gaining
+  // leaderboard settings, structure, or other camp-admin powers.
+  grantsAwardPoints Boolean             @default(false)
   deletedAt        DateTime?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt

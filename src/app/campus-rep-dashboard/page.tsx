@@ -20,6 +20,8 @@ import {
   CheckCircleIcon,
   ArrowRightIcon,
   ExclamationTriangleIcon,
+  ClipboardDocumentCheckIcon,
+  Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 
 export default function CampusRepDashboard() {
@@ -181,7 +183,7 @@ export default function CampusRepDashboard() {
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-txt-secondary">
             Quick Actions
           </h3>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {/* Review Registrations */}
             <button
               type="button"
@@ -240,7 +242,7 @@ export default function CampusRepDashboard() {
             {/* QR Scanner */}
             <button
               type="button"
-              onClick={() => router.push("/teacher/qr-scan")}
+              onClick={() => router.push("/campus-rep-dashboard/qr-scan")}
               className="group flex flex-col justify-between rounded-2xl border border-border-default bg-surface p-5 text-left transition-all duration-200 hover:border-neutral-700 hover:bg-surface-hover active:scale-[0.98] shadow-2xs"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-500/15 text-accent-400 border border-accent-500/30 group-hover:scale-105 transition-transform">
@@ -255,6 +257,14 @@ export default function CampusRepDashboard() {
                   Scan teenager badges for check-in & station validation.
                 </div>
               </div>
+            </button>
+            <button type="button" onClick={() => router.push("/campus-rep-dashboard/points")} className="group flex flex-col justify-between rounded-2xl border border-border-default bg-surface p-5 text-left transition hover:border-accent-500 hover:bg-surface-hover active:scale-[0.98] shadow-2xs">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-500"><ClipboardDocumentCheckIcon className="h-7 w-7" /></div>
+              <div className="mt-4"><div className="flex items-center justify-between text-base font-extrabold text-txt-primary"><span>Camp Points</span><ArrowRightIcon className="h-4 w-4" /></div><div className="mt-0.5 text-xs text-txt-secondary">Take attendance and open point stations.</div></div>
+            </button>
+            <button type="button" onClick={() => router.push("/campus-rep-dashboard/camp-contact")} className="group flex flex-col justify-between rounded-2xl border border-border-default bg-surface p-5 text-left transition hover:border-purple-500 hover:bg-surface-hover active:scale-[0.98] shadow-2xs">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-purple-500/30 bg-purple-500/15 text-purple-500"><Squares2X2Icon className="h-7 w-7" /></div>
+              <div className="mt-4"><div className="flex items-center justify-between text-base font-extrabold text-txt-primary"><span>Camp Contact</span><ArrowRightIcon className="h-4 w-4" /></div><div className="mt-0.5 text-xs text-txt-secondary">Find camp leaders, teachers, and volunteers.</div></div>
             </button>
           </div>
         </div>

@@ -48,6 +48,7 @@ export function ScanCenterShell({
   organizationId,
   defaultStationId,
   homeCampusId,
+  pointsHref,
 }: {
   organizationId: string;
   defaultStationId?: string;
@@ -55,6 +56,9 @@ export function ScanCenterShell({
    * StaffProfile.preferredCampusId) — pre-highlighted in the Pickup Point
    * campus picker. Admins have no personal campus and omit this. */
   homeCampusId?: string;
+  /** Opens the role-appropriate Camp Points workspace without mixing point
+   * awards into operational arrival, meal, medical, or checkout scans. */
+  pointsHref?: string;
 }) {
   const router = useRouter();
   useSession({ required: true, onUnauthenticated: () => router.push("/login") });
@@ -583,6 +587,11 @@ export function ScanCenterShell({
             {offlineScanner.isOnline ? "Online" : `Offline · ${offlineScanner.offlineQueueCount} waiting`}
           </Badge>
         </button>
+        {pointsHref && (
+          <Button variant="secondary" size="sm" onClick={() => router.push(pointsHref)}>
+            Award Camp Points
+          </Button>
+        )}
       </div>
 
       <OfflineSheet

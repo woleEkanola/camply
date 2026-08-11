@@ -17,6 +17,11 @@ export function RulesTab({ campId }: { campId: string }) {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-accent-500/25 bg-accent-500/5 p-4 text-sm text-txt-secondary">
+        <h3 className="font-semibold text-txt-primary">Points and weighted rank are different</h3>
+        <p className="mt-1"><strong>Points</strong> are real awards recorded in score history. A <strong>weighted score</strong> can also use attendance, promptness, participation, and achievements to order campers or campuses.</p>
+        <p className="mt-2">Achievements are badges by default and do not secretly add points. Rebuild only recalculates existing results; Reset starts a new visible scoring period without deleting history.</p>
+      </div>
       <div>
         <h3 className="mb-2 text-sm font-semibold text-txt-secondary">Score Categories</h3>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

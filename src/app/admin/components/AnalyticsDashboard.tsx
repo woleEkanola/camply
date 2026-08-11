@@ -13,6 +13,7 @@ import {
   AcademicCapIcon,
   BuildingOffice2Icon,
   ClipboardDocumentListIcon,
+  ClipboardDocumentCheckIcon,
   CalendarIcon,
   CheckCircleIcon,
   UserPlusIcon,
@@ -346,7 +347,7 @@ export default function AnalyticsDashboard() {
       {/* ─── Section 3: Quick Actions ─── */}
       <div>
         <h2 className="mb-4 text-lg font-semibold text-txt-primary">Quick Actions</h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <Link
             href="/admin/registrations"
             data-testid="quick-action-registrations"
@@ -431,6 +432,24 @@ export default function AnalyticsDashboard() {
               Manage
               <br />
               Campuses
+            </p>
+            <div className="mt-auto flex items-center gap-1 pt-3">
+              <ArrowRightIcon className="h-4 w-4 text-txt-muted transition group-hover:translate-x-0.5 group-hover:text-accent-500" />
+            </div>
+          </Link>
+
+          <Link
+            href="/admin/points"
+            data-testid="quick-action-camp-points"
+            className="group flex min-h-[120px] flex-col rounded-xl border border-border-default bg-surface p-4 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
+          >
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-accent-500/20 bg-accent-500/10 text-accent-500">
+              <ClipboardDocumentCheckIcon className="h-4 w-4" />
+            </div>
+            <p className="text-sm font-semibold leading-tight text-txt-primary">
+              Award
+              <br />
+              Camp Points
             </p>
             <div className="mt-auto flex items-center gap-1 pt-3">
               <ArrowRightIcon className="h-4 w-4 text-txt-muted transition group-hover:translate-x-0.5 group-hover:text-accent-500" />

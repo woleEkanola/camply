@@ -109,6 +109,7 @@ export const positionRouter = createTRPCRouter({
       name: z.string().min(1).optional(),
       status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
       grantsManageCamp: z.boolean().optional(),
+      grantsAwardPoints: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const position = await ctx.prisma.position.findUnique({
@@ -123,7 +124,7 @@ export const positionRouter = createTRPCRouter({
       // also toggle grantsManageCamp, a Camp Head could grant the flag to
       // arbitrary other positions (or keep it after being reassigned) —
       // unbounded privilege escalation. Only a true org admin may change it.
-      if (input.grantsManageCamp !== undefined) {
+      if (input.grantsManageCamp !== undefined || input.grantsAwardPoints !== undefined) {
         const camp = await ctx.prisma.camp.findUnique({ where: { id: position.campId } });
         await assertOrgAdmin(ctx, camp!.organizationId);
       }
