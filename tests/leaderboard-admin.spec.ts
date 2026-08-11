@@ -76,7 +76,8 @@ test.describe("Leaderboard admin area", () => {
     const rotateDialog = page.getByTestId("dialog-panel");
     await expect(rotateDialog).toBeVisible();
     await rotateDialog.getByRole("button", { name: "Rotate", exact: true }).click();
-    await expect(page.getByText("Public link rotated")).toBeVisible();
+    // Two responsive toast regions can briefly contain the same message.
+    await expect(page.getByText("Public link rotated").first()).toBeVisible();
     await expect(rotateDialog).not.toBeVisible();
 
     const settings2 = await prisma.leaderboardSettings.findFirstOrThrow({ where: { campId } });

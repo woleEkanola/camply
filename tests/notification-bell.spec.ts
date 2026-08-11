@@ -48,7 +48,7 @@ test.describe("Notification bell: mark-all-read badge + outside-click close", ()
 
     const unreadBefore = await prisma.notification.count({ where: { userId, readAt: null } });
     expect(unreadBefore).toBeGreaterThanOrEqual(2);
-    await expect(bellButton.locator("span")).toHaveText(String(unreadBefore), { timeout: 10000 });
+    await expect(bellButton.locator("span")).toHaveText(unreadBefore > 9 ? "9+" : String(unreadBefore), { timeout: 10000 });
 
     await bellButton.click();
     await expect(page.getByText(title1)).toBeVisible({ timeout: 5000 });

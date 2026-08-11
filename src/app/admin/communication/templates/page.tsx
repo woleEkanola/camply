@@ -700,6 +700,7 @@ export default function TemplatesPage() {
               {filteredTemplates.map((t) => (
                 <button
                   key={t.id}
+                  data-template-id={t.id}
                   type="button"
                   onClick={() => {
                     setSelectedId(t.id);

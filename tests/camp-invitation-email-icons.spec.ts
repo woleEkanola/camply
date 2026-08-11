@@ -96,7 +96,7 @@ test.describe("Camp Invitation certificate — icons and A4 fit", () => {
       await page.goto("/admin/communication/templates");
       await expect(page.locator("h1")).toContainText("Email Templates");
 
-      const campInvitationBtn = page.locator('button:has-text("Camp Invitation")');
+      const campInvitationBtn = page.locator(`[data-template-id="${templateId}"]`);
       await expect(campInvitationBtn).toBeVisible({ timeout: 15000 });
       await campInvitationBtn.click();
 
@@ -112,7 +112,7 @@ test.describe("Camp Invitation certificate — icons and A4 fit", () => {
       // components, so it carries icons too, and polling on those settled on
       // the wrong template's render.
       await expect
-        .poll(async () => ((await previewFrame.getAttribute("srcdoc")) ?? "").includes("Your Registration Journey"), {
+        .poll(async () => ((await previewFrame.getAttribute("srcdoc")) ?? "").includes("Important Check-in Info"), {
           timeout: 20000,
         })
         .toBe(true);

@@ -34,7 +34,7 @@ test.describe("Bottom tab nav — mobile", () => {
     await expect(nav.getByRole("link", { name: "Contact" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "QR Scan" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Campers" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Attendance" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Points" })).toBeVisible();
     await expect(nav.getByRole("button", { name: "More" })).toHaveCount(0);
 
     await nav.getByRole("link", { name: "Contact" }).click();

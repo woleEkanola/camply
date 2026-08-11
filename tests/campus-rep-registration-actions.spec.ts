@@ -78,8 +78,7 @@ test.describe("Campus Rep Registration Actions & StatCard E2E Test", () => {
   });
 
   test("Campus Rep recommending a camper disables Reject button and updates Stat Cards", async ({ page }) => {
-    // Log in as teacher@camply.com (Campus Rep)
-    await loginWithPassword(page, "teacher@camply.com", "password123");
+    await loginWithPassword(page, "campusrep@camply.com", "password123");
     await page.goto("/campus-rep-dashboard/registrations");
 
     await page.waitForSelector("text=Registrations", { timeout: 15000 });

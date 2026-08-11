@@ -337,9 +337,10 @@ export async function loginWithPassword(page: Page, email: string, password: str
  * against `<tr>` rows must flip to list view first.
  */
 export async function switchRegistrationsToListView(page: Page) {
-  const listBtn = page.getByText("List View");
+  const listBtn = page.locator("button:visible", { hasText: /^List View$/ }).first();
   if (await listBtn.isVisible().catch(() => false)) {
     await listBtn.click();
+    await expect(page.locator("table:visible").first()).toBeVisible({ timeout: 10000 });
   }
 }
 

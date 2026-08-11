@@ -64,8 +64,7 @@ test.describe("Teacher & Campus Rep Dashboards Redesign E2E Test", () => {
   });
 
   test("2. Campus Rep logs in and views redesigned Campus Management Hub", async ({ page }) => {
-    // Log in as teacher@camply.com (Campus Rep)
-    await loginWithPassword(page, "teacher@camply.com", "password123");
+    await loginWithPassword(page, "campusrep@camply.com", "password123");
     await page.goto("/campus-rep-dashboard");
 
     await page.waitForSelector("text=Campus Management Hub", { timeout: 15000 });
