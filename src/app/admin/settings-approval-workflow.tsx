@@ -45,14 +45,14 @@ export default function ApprovalWorkflowSettings({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-bold text-neutral-900">Approval Workflow</h3>
-        <p className="text-sm text-neutral-500">
+        <h3 className="text-lg font-bold text-txt-primary">Approval Workflow</h3>
+        <p className="text-sm text-txt-secondary">
           Control how camper registrations get approved.
         </p>
       </div>
 
       <div className="space-y-3">
-        <label className="flex items-start gap-3 rounded-lg border border-neutral-200 p-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50">
+        <label className="flex items-start gap-3 rounded-lg border border-border-default bg-surface p-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50">
           <input
             type="radio"
             name="approvalWorkflow"
@@ -61,13 +61,13 @@ export default function ApprovalWorkflowSettings({
             onChange={() => setApprovalWorkflow("SINGLE_STEP")}
           />
           <span>
-            <span className="block text-sm font-semibold text-neutral-900">Single-step</span>
-            <span className="block text-sm text-neutral-500">
+            <span className="block text-sm font-semibold text-txt-primary">Single-step</span>
+            <span className="block text-sm text-txt-secondary">
               A campus representative's approval is final — the acceptance email sends immediately.
             </span>
           </span>
         </label>
-        <label className="flex items-start gap-3 rounded-lg border border-neutral-200 p-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50">
+        <label className="flex items-start gap-3 rounded-lg border border-border-default bg-surface p-3 cursor-pointer has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50">
           <input
             type="radio"
             name="approvalWorkflow"
@@ -76,8 +76,8 @@ export default function ApprovalWorkflowSettings({
             onChange={() => setApprovalWorkflow("TWO_STEP")}
           />
           <span>
-            <span className="block text-sm font-semibold text-neutral-900">Two-step</span>
-            <span className="block text-sm text-neutral-500">
+            <span className="block text-sm font-semibold text-txt-primary">Two-step</span>
+            <span className="block text-sm text-txt-secondary">
               A campus representative endorses a registration; an organization admin must then give
               final approval. Only final approval sends the acceptance email. Admins may still
               approve directly without an endorsement as an override.

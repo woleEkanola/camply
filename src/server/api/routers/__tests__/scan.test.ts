@@ -106,6 +106,42 @@ afterAll(async () => {
 });
 
 describe("scanRouter - processScan", () => {
+  it("reports when offline camper data is current or behind", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const current = await caller.scan.getOfflineSyncStatus({
+      organizationId: orgId,
+      lastSyncedAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(current.hasServerChanges).toBe(false);
+
+    const behind = await caller.scan.getOfflineSyncStatus({
+      organizationId: orgId,
+      lastSyncedAt: "2000-01-01T00:00:00.000Z",
+    });
+    expect(behind.hasServerChanges).toBe(true);
+    expect(behind.changedRecordCount).toBeGreaterThan(0);
+
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: { status: "REJECTED" },
+    });
+    const delta = await caller.scan.getDeltaSyncData({
+      organizationId: orgId,
+      lastSyncedAt: "2000-01-01T00:00:00.000Z",
+      profile: "FULL",
+      scope: "ENTIRE_CAMP",
+    });
+    expect(delta.deletedRegistrationIds).toContain(registrationId);
+    expect(delta.updatedCampers).toHaveLength(0);
+  });
+
   it("processes standard arrival check-in successfully and updates state", async () => {
     const caller = appRouter.createCaller({
       prisma,

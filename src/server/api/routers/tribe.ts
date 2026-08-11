@@ -2,7 +2,12 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import * as tribeEngine from "../../tribe/engine";
-import { assertOrgAdminOrCampusRep, assertCanManageCamp } from "../trpc/scoping";
+import { assertOrgAdminOrCampusRep as assertScopedOrgAccess, assertCanManageCamp as assertScopedCampAccess } from "../trpc/scoping";
+
+const assertOrgAdminOrCampusRep = (ctx: any, organizationId: string, campusId?: string | null) =>
+  assertScopedOrgAccess(ctx, organizationId, campusId, "TRIBES");
+const assertCanManageCamp = (ctx: any, campId: string) =>
+  assertScopedCampAccess(ctx, campId, "TRIBES");
 import { assertReportsAccess } from "./scan";
 import { recordScoreEvent } from "../../leaderboard/record";
 

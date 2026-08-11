@@ -51,6 +51,7 @@ export type OrganogramNode = {
   displayOrder: number;
   grantsManageCamp: boolean;
   grantsAwardPoints: boolean;
+  leadershipRole: "COMMANDANT" | "ASSISTANT_COMMANDANT" | null;
   department: { id: string; name: string } | null;
   assignments: { id: string; staff: StaffOccupant }[];
   children: OrganogramNode[];
@@ -84,8 +85,10 @@ function descendantIds(node: OrganogramNode) {
 }
 
 function occupantName(node: OrganogramNode) {
-  const person = node.assignments[0]?.staff;
-  return person ? `${person.preferredName || person.firstName} ${person.lastName}`.trim() : "Vacant";
+  if (node.assignments.length === 0) return "Vacant";
+  return node.assignments
+    .map(({ staff }) => `${staff.preferredName || staff.firstName} ${staff.lastName}`.trim())
+    .join(", ");
 }
 
 function DragHandle({ listeners, attributes }: { listeners: DraggableSyntheticListeners; attributes: DraggableAttributes }) {
@@ -118,7 +121,8 @@ function PositionCard({
   readOnly?: boolean;
   onSelect: (node: OrganogramNode) => void;
 }) {
-  const draggable = useDraggable({ id: node.id, data: { node }, disabled: readOnly });
+  const protectedLeadership = Boolean(node.leadershipRole);
+  const draggable = useDraggable({ id: node.id, data: { node }, disabled: readOnly || protectedLeadership });
   const droppable = useDroppable({ id: node.id, data: { node }, disabled: readOnly || invalidDrop });
   const setRef = (element: HTMLElement | null) => {
     draggable.setNodeRef(element);
@@ -138,7 +142,9 @@ function PositionCard({
         selected ? "border-accent-500 ring-2 ring-accent-200" : "border-elevated-border",
         droppable.isOver && !invalidDrop && "border-accent-500 bg-accent-50 ring-2 ring-accent-200",
         invalidDrop && droppable.isOver && "border-danger-500 bg-danger-50",
-        draggable.isDragging && "z-30 opacity-30"
+        draggable.isDragging && "z-30 opacity-30",
+        node.leadershipRole === "COMMANDANT" && "border-accent-500 bg-accent-50",
+        node.leadershipRole === "ASSISTANT_COMMANDANT" && "border-accent-300",
       )}
     >
       <div className="flex items-start gap-2">
@@ -159,7 +165,7 @@ function PositionCard({
             </div>
           )}
         </button>
-        {!readOnly && <DragHandle listeners={draggable.listeners} attributes={draggable.attributes} />}
+        {!readOnly && !protectedLeadership && <DragHandle listeners={draggable.listeners} attributes={draggable.attributes} />}
       </div>
     </article>
   );
@@ -368,6 +374,10 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
   }
 
   function requestMove(id: string, parentPositionId: string | null) {
+    if (byId.get(id)?.leadershipRole) {
+      setFeedback({ message: "Camp Command positions stay fixed at the top of the hierarchy." });
+      return;
+    }
     if (isInvalidParent(id, parentPositionId)) {
       setFeedback({ message: "A position cannot report to itself or one of its descendants." });
       return;
@@ -648,12 +658,15 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
                 <div><div className="font-semibold text-txt-primary">{occupantName(selectedCurrent)}</div><div className="text-xs text-txt-secondary">{selectedCurrent.department?.name ?? "Camp leadership"}</div></div>
               </div>
             </div>
-            {!readOnly && <div className="grid gap-2 sm:grid-cols-2">
+            {!readOnly && !selectedCurrent.leadershipRole && <div className="grid gap-2 sm:grid-cols-2">
               <Button variant="secondary" onClick={() => { setMoveParentId(selectedCurrent.parentPositionId ?? ""); setMoveRequest({ id: selectedCurrent.id, parentPositionId: selectedCurrent.parentPositionId }); setSelectedNode(null); }}>Move under…</Button>
               <Button variant="secondary" icon={<UserPlusIcon className="h-4 w-4" />} onClick={() => { setAssignTargetId(selectedCurrent.id); setAssignOpen(true); setSelectedNode(null); }}>{selectedCurrent.assignments.length ? "Replace holder" : "Assign person"}</Button>
               <Button variant="secondary" onClick={() => { setCreateParent(selectedCurrent); setPositionName(""); setSelectedNode(null); }}>Add child role</Button>
               {selectedCurrent.assignments[0] && <Button variant="danger" loading={unassignPosition.isPending} onClick={() => unassignPosition.mutate({ positionId: selectedCurrent.id, staffId: selectedCurrent.assignments[0].staff.id })}>Mark vacant</Button>}
             </div>}
+            {!readOnly && selectedCurrent.leadershipRole && (
+              <p className="rounded-lg bg-surface-raised px-3 py-2 text-xs text-txt-secondary">Appointments and access for this protected role are managed in Settings → Camp Command.</p>
+            )}
           </div>
         )}
       </Dialog>

@@ -896,7 +896,13 @@ export const scanRouter = createTRPCRouter({
       };
 
       if (lastSyncDate && !isNaN(lastSyncDate.getTime())) {
-        whereClause.updatedAt = { gte: lastSyncDate };
+        // A camper profile can change without touching its Registration row.
+        // Include both timestamps so an incremental refresh does not leave
+        // names, photos, medical details, or contact data stale offline.
+        whereClause.OR = [
+          { updatedAt: { gte: lastSyncDate } },
+          { camper: { updatedAt: { gte: lastSyncDate } } },
+        ];
       }
 
       if (input.campusIds && input.campusIds.length > 0 && input.scope === "SELECTED_CAMPUSES") {
@@ -978,20 +984,65 @@ export const scanRouter = createTRPCRouter({
 
       let deletedRegistrationIds: string[] = [];
       if (lastSyncDate && !isNaN(lastSyncDate.getTime())) {
-        const deletedRegs = await ctx.prisma.registration.findMany({
+        const removedRegs = await ctx.prisma.registration.findMany({
           where: {
             campId,
-            deletedAt: { gte: lastSyncDate },
+            OR: [
+              { deletedAt: { gte: lastSyncDate } },
+              {
+                updatedAt: { gte: lastSyncDate },
+                status: { notIn: ["APPROVED", "CHECKED_IN"] },
+              },
+            ],
           },
           select: { id: true },
         });
-        deletedRegistrationIds = deletedRegs.map((d: any) => d.id);
+        deletedRegistrationIds = removedRegs.map((d: any) => d.id);
       }
 
       return {
         updatedCampers,
         deletedRegistrationIds,
         serverSyncTimestamp,
+      };
+    }),
+
+  getOfflineSyncStatus: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        lastSyncedAt: z.string().nullable(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+
+      const lastSyncDate = input.lastSyncedAt ? new Date(input.lastSyncedAt) : null;
+      if (!lastSyncDate || isNaN(lastSyncDate.getTime())) {
+        return { hasServerChanges: true, changedRecordCount: 0 };
+      }
+
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { activeCampId: true },
+      });
+      if (!org?.activeCampId) {
+        return { hasServerChanges: false, changedRecordCount: 0 };
+      }
+
+      const changedRecordCount = await ctx.prisma.registration.count({
+        where: {
+          campId: org.activeCampId,
+          OR: [
+            { updatedAt: { gt: lastSyncDate } },
+            { camper: { updatedAt: { gt: lastSyncDate } } },
+          ],
+        },
+      });
+
+      return {
+        hasServerChanges: changedRecordCount > 0,
+        changedRecordCount,
       };
     }),
 

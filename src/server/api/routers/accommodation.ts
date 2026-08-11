@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { assertOrgAdmin } from "../trpc/scoping";
+import { assertOrgAdminOrCommand } from "../trpc/scoping";
+
+const assertOrgAdmin = (ctx: any, organizationId: string) =>
+  assertOrgAdminOrCommand(ctx, organizationId, "ACCOMMODATION");
 import * as accommodationEngine from "../../accommodation/engine";
 
 // Hostel/Room/Bed management is admin-only: Campus Representatives do not

@@ -183,6 +183,11 @@ export const orgStructureRouter = createTRPCRouter({
             reportsToUser: true,
             directReports: { include: { user: true } },
             camperAssignments: true,
+            positionAssignments: {
+              where: { isCurrent: true },
+              include: { position: true },
+              orderBy: { startDate: "desc" },
+            },
           },
         });
         if (!profile) return null;
@@ -193,8 +198,9 @@ export const orgStructureRouter = createTRPCRouter({
             ? `${profile.reportsToUser.firstName ?? ""} ${profile.reportsToUser.lastName ?? ""}`.trim() || profile.reportsToUser.email
             : null;
 
-        let title: string | null = null;
-        if (profile.isDepartmentHead) title = "Department Head";
+        const leadershipAssignment = profile.positionAssignments.find((assignment) => assignment.position.leadershipRole);
+        let title: string | null = leadershipAssignment?.position.name ?? null;
+        if (!title && profile.isDepartmentHead) title = "Department Head";
         else if (profile.isCampMonitor) title = "Camp Monitor";
         else if (profile.isAssistantMonitor) title = "Assistant Camp Monitor";
 

@@ -13,6 +13,7 @@ import { ThemeSettingsCard } from "@/components/theme/ThemeSettingsCard";
 const AgeRangeSettings = dynamic(() => import("../settings-age-range"), { ssr: false });
 const OrgProfileSettings = dynamic(() => import("../settings-org-profile"), { ssr: false });
 const ApprovalWorkflowSettings = dynamic(() => import("../settings-approval-workflow"), { ssr: false });
+const CampCommandSettings = dynamic(() => import("../settings-camp-command"), { ssr: false });
 
 export default function AdminSettingsPage() {
   const { data: session } = useSession();
@@ -31,6 +32,10 @@ export default function AdminSettingsPage() {
   );
 
   const isLoading = isSettingsLoading || isOrgLoading;
+  const { data: activeCamp } = api.camp.getActiveCamp.useQuery(
+    { organizationId },
+    { enabled: !!organizationId }
+  );
 
   // Memoize initial values to avoid prop changes after mount
   const initialName = orgData?.name || "";
@@ -90,6 +95,14 @@ export default function AdminSettingsPage() {
 
         {/* Theme & Appearance Card */}
         <ThemeSettingsCard />
+
+        {activeCamp && ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(session?.user?.role ?? "") && (
+          <Card>
+            <CardBody>
+              <CampCommandSettings campId={activeCamp.id} />
+            </CardBody>
+          </Card>
+        )}
       </div>
     </AppShell>
   );

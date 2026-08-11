@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { getCampCommandAccess } from "../auth/campCommand";
 
 const ORG_ADMIN_ROLES = new Set(["SUPER_ADMIN", "OWNER", "ADMIN"]);
 
@@ -30,9 +31,13 @@ export async function getCampPointsAccess(
   });
   if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found." });
 
+  const commandAccess = user.organizationId === camp.organizationId
+    ? await getCampCommandAccess(ctx, campId)
+    : null;
   const isAdmin =
     user.role === "SUPER_ADMIN" ||
-    (ORG_ADMIN_ROLES.has(user.role) && user.organizationId === camp.organizationId);
+    (ORG_ADMIN_ROLES.has(user.role) && user.organizationId === camp.organizationId) ||
+    Boolean(commandAccess?.permissions.includes("CAMP_POINTS"));
 
   const [staffProfile, managedCampuses] = await Promise.all([
     ctx.prisma.staffProfile.findFirst({

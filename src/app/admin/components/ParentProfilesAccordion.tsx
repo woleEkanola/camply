@@ -15,6 +15,7 @@ interface Parent {
 
 interface ParentProfilesAccordionProps {
   users: Parent[];
+  onCorrectEmail?: (user: Parent) => void;
 }
 
 const calculateAge = (dobString: string | Date | null | undefined): string => {
@@ -29,7 +30,7 @@ const calculateAge = (dobString: string | Date | null | undefined): string => {
   return `${age} yrs`;
 };
 
-export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = ({ users }) => {
+export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = ({ users, onCorrectEmail }) => {
   const [openUserId, setOpenUserId] = useState<string | null>(null);
 
   return (
@@ -49,6 +50,11 @@ export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = (
             <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-txt-secondary">
               Campers
             </th>
+            {onCorrectEmail && (
+              <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-txt-secondary">
+                Actions
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-200">
@@ -81,10 +87,24 @@ export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = (
                     {user.camperCount}
                   </Badge>
                 </td>
+                {onCorrectEmail && (
+                  <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
+                    <button
+                      type="button"
+                      className="font-medium text-accent-700 hover:underline"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onCorrectEmail(user);
+                      }}
+                    >
+                      Correct email
+                    </button>
+                  </td>
+                )}
               </tr>
               {openUserId === user.id && (
                 <tr>
-                  <td colSpan={4} className="bg-neutral-50/70 p-4 border-b border-border-default">
+                  <td colSpan={onCorrectEmail ? 5 : 4} className="bg-neutral-50/70 p-4 border-b border-border-default">
                     <ProfilesList userId={user.id} />
                   </td>
                 </tr>
@@ -93,7 +113,7 @@ export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = (
           ))}
           {users.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-8 text-center text-sm text-txt-muted">
+              <td colSpan={onCorrectEmail ? 5 : 4} className="py-8 text-center text-sm text-txt-muted">
                 No parent accounts found.
               </td>
             </tr>

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
+import { assertOrgAdminOrCommand } from "../trpc/scoping";
 
 export const organizationRouter = createTRPCRouter({
   // Create a new organization (Super Admin only)
@@ -132,9 +133,7 @@ export const organizationRouter = createTRPCRouter({
       if (!user || !user.organizationId || user.organizationId !== input.organizationId) {
         throw new Error("Not authorized");
       }
-      if (!["ADMIN", "OWNER", "SUPER_ADMIN"].includes(user.role)) {
-        throw new Error("Not authorized");
-      }
+      await assertOrgAdminOrCommand(ctx, input.organizationId, "CAMP_SETTINGS");
 
       // Fetch the current organization to merge JSON settings
       const currentOrg = await prisma.organization.findUnique({

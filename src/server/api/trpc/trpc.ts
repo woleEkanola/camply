@@ -34,6 +34,13 @@ const isAuthed = t.middleware(({ ctx, next }) => {
     });
   }
 
+  if (ctx.session.user.reauthRequired) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Your account email changed. Please sign in again with the new address.",
+    });
+  }
+
   return next({
     ctx: {
       // Keep all original context properties

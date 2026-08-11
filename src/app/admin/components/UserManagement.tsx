@@ -12,6 +12,7 @@ import { Table, type Column } from "@/components/ui/Table";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input, Select } from "@/components/ui/Input";
 import { Tabs } from "@/components/ui/Tabs";
+import { CorrectEmailDialog, type CorrectEmailTarget } from "@/components/users/CorrectEmailDialog";
 
 export enum UserRole {
   SUPER_ADMIN = "SUPER_ADMIN",
@@ -64,6 +65,7 @@ export default function UserManagement({ organizationId }: { organizationId: str
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [emailCorrectionTarget, setEmailCorrectionTarget] = useState<CorrectEmailTarget | null>(null);
   
   // Fetch PARENTs with camper counts for the Accounts tab
   const { data: parents, isLoading: loadingParents, error: parentsError, refetch: refetchParents } = api.user.getParentsWithCamperCounts.useQuery(
@@ -263,7 +265,16 @@ export default function UserManagement({ organizationId }: { organizationId: str
     if (isEditingUser && currentUserId) {
       updateUserMutation.mutate({
         id: currentUserId,
-        data: payload,
+        data: {
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          phone: payload.phone,
+          role: payload.role,
+          active: payload.active,
+          password: payload.password,
+          organizationId: payload.organizationId,
+          managedCampuses: payload.managedCampuses,
+        },
       });
     } else {
       if (!userForm.password) {
@@ -395,7 +406,9 @@ export default function UserManagement({ organizationId }: { organizationId: str
 
   const staffActions = (user: User) => {
     const profile = user.staffProfiles?.[0];
-    if (!canManageUser(user.role) && !profile) return null;
+    const canCorrectEmail = (session?.user?.role === UserRole.OWNER || session?.user?.role === UserRole.ADMIN)
+      && (["PARENT", "TEACHER", "VOLUNTEER", "CAMPUS_REPRESENTATIVE"].includes(user.role as string));
+    if (!canManageUser(user.role) && !profile && !canCorrectEmail) return null;
     return (
       <div className="flex justify-end gap-3 text-sm">
         {profile && (
@@ -408,6 +421,11 @@ export default function UserManagement({ organizationId }: { organizationId: str
         )}
         {canManageUser(user.role) && (
           <button onClick={() => handleEditUser(user)} className="text-accent-700 hover:underline">Edit account</button>
+        )}
+        {canCorrectEmail && (
+          <button onClick={() => setEmailCorrectionTarget(user)} className="text-accent-700 hover:underline">
+            Correct email
+          </button>
         )}
         {canManageUser(user.role) && (
           <button onClick={() => handleDeleteUser(user)} className="text-danger-600 hover:underline">Delete</button>
@@ -448,7 +466,10 @@ export default function UserManagement({ organizationId }: { organizationId: str
         {loadingParents ? (
           <div className="p-8 text-center text-sm text-txt-secondary">Loading accounts...</div>
         ) : (
-          <ParentProfilesAccordion users={parents || []} />
+          <ParentProfilesAccordion
+            users={parents || []}
+            onCorrectEmail={session?.user?.role === UserRole.OWNER || session?.user?.role === UserRole.ADMIN ? setEmailCorrectionTarget : undefined}
+          />
         )}
       </CardBody>
     </Card>
@@ -500,6 +521,8 @@ export default function UserManagement({ organizationId }: { organizationId: str
               value={userForm.email}
               onChange={handleInputChange}
               required
+              disabled={isEditingUser}
+              helpText={isEditingUser ? "Use the dedicated Correct Email action to change this safely." : undefined}
               placeholder="e.g. admin@camply.com"
             />
             <Input
@@ -620,6 +643,17 @@ export default function UserManagement({ organizationId }: { organizationId: str
           </div>
         </form>
       </Dialog>
+
+      <CorrectEmailDialog
+        target={emailCorrectionTarget}
+        onClose={() => setEmailCorrectionTarget(null)}
+        onSuccess={(message) => {
+          setSuccess(message);
+          setError("");
+          void refetchUsers();
+          void refetchParents();
+        }}
+      />
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
         <p className="text-sm text-txt-secondary">

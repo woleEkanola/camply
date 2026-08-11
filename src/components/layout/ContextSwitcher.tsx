@@ -31,6 +31,14 @@ export function ContextSwitcher({
 
   const options: ContextOption[] = [];
   if (capabilities.orgAdmin) options.push({ label: "Admin", href: "/admin", area: "admin" });
+  if (!capabilities.orgAdmin && (capabilities.campCommand?.length ?? 0) > 0) {
+    const commandRole = capabilities.campCommand[0]?.role;
+    options.push({
+      label: commandRole === "COMMANDANT" ? "Camp Commandant" : "Assistant Commandant",
+      href: "/admin",
+      area: "admin",
+    });
+  }
   if (capabilities.campusRep)
     options.push({ label: "Campus Rep", href: "/campus-rep-dashboard", area: "campus-rep" });
   if (capabilities.staff.includes("TEACHER"))

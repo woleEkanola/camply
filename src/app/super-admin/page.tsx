@@ -12,6 +12,7 @@ import { Input, Select } from "@/components/ui/Input";
 import { Table, type Column } from "@/components/ui/Table";
 import { Dialog } from "@/components/ui/Dialog";
 import { Badge } from "@/components/ui/Badge";
+import { CorrectEmailDialog, type CorrectEmailTarget } from "@/components/users/CorrectEmailDialog";
 import { 
   BuildingOfficeIcon, 
   UsersIcon, 
@@ -21,7 +22,8 @@ import {
   XCircleIcon,
   KeyIcon,
   TrashIcon,
-  EyeIcon
+  EyeIcon,
+  PencilSquareIcon
 } from "@heroicons/react/24/outline";
 
 export default function SuperAdminDashboard() {
@@ -53,6 +55,7 @@ export default function SuperAdminDashboard() {
   
   const [selectedUserForDelete, setSelectedUserForDelete] = useState<any>(null);
   const [isUserDeleteOpen, setIsUserDeleteOpen] = useState(false);
+  const [emailCorrectionTarget, setEmailCorrectionTarget] = useState<CorrectEmailTarget | null>(null);
 
   // Trash states
   const [trashOrgFilter, setTrashOrgFilter] = useState("");
@@ -853,6 +856,15 @@ export default function SuperAdminDashboard() {
                       }}
                       title="Override Password"
                     />
+                    {["PARENT", "TEACHER", "VOLUNTEER", "CAMPUS_REPRESENTATIVE"].includes(u.role) && u.id !== session?.user.id && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={<PencilSquareIcon className="h-4 w-4" />}
+                        onClick={() => setEmailCorrectionTarget(u)}
+                        title="Correct Email Address"
+                      />
+                    )}
                     {u.id !== session?.user.id && (
                       <Button
                         variant="danger"
@@ -1120,6 +1132,16 @@ export default function SuperAdminDashboard() {
       </Dialog>
 
       {/* User Details Dialog */}
+      <CorrectEmailDialog
+        target={emailCorrectionTarget}
+        onClose={() => setEmailCorrectionTarget(null)}
+        onSuccess={(message) => {
+          setSuccess(message);
+          setError("");
+          void refetchAllUsers();
+        }}
+      />
+
       <Dialog
         open={isUserDetailsOpen}
         onClose={() => {

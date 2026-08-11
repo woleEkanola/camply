@@ -6,9 +6,13 @@ import { normalizeEmail } from "../../../lib/email";
 import { isCompleteNigerianPhone } from "../../../lib/phone";
 import { assertSameOrg } from "../trpc/scoping";
 import { hashPassword } from "../../../lib/auth";
+import { TRPCError } from "@trpc/server";
+import { sendEmailCorrectionEmails } from "../../email/sendEmailCorrectionEmails";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
-type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT";
+type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE" | "PARENT" | "TEACHER" | "VOLUNTEER";
+
+const correctableEmailRoles: UserRole[] = ["PARENT", "TEACHER", "VOLUNTEER", "CAMPUS_REPRESENTATIVE"];
 
 export const userRouter = createTRPCRouter({
   // Only a SUPER_ADMIN may enumerate every user across all organizations; any
@@ -647,7 +651,6 @@ export const userRouter = createTRPCRouter({
       z.object({
         id: z.string(),
         data: z.object({
-          email: z.string().email().optional(),
           firstName: z.string().min(1, "First name is required").optional(),
           lastName: z.string().min(1, "Last name is required").optional(),
           phone: z.string().optional(),
@@ -705,7 +708,6 @@ export const userRouter = createTRPCRouter({
 
       // Prepare data for update
       type UpdateData = {
-        email?: string;
         firstName?: string;
         lastName?: string;
         phone?: string;
@@ -726,11 +728,6 @@ export const userRouter = createTRPCRouter({
       // Hash the password if provided
       if (updateData.password) {
         updateData.password = await hashPassword(updateData.password);
-      }
-
-      // Normalize email if provided
-      if (updateData.email) {
-        updateData.email = normalizeEmail(updateData.email);
       }
 
       // Update the user
@@ -793,6 +790,108 @@ export const userRouter = createTRPCRouter({
       }
 
       return updatedUser;
+    }),
+
+  correctEmail: protectedProcedure
+    .input(z.object({
+      userId: z.string().min(1),
+      newEmail: z.string().trim().email("Enter a valid email address"),
+      reason: z.string().trim().min(5, "Please give a short reason").max(500),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const actor = ctx.session!.user;
+      if (actor.role !== "OWNER" && actor.role !== "ADMIN" && actor.role !== "SUPER_ADMIN") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only an Owner, Admin, or Super Admin can correct email addresses" });
+      }
+      if (actor.id === input.userId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot change your own email address here" });
+      }
+
+      const target = await ctx.prisma.user.findUnique({
+        where: { id: input.userId },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          role: true,
+          organizationId: true,
+          deletedAt: true,
+        },
+      });
+      if (!target || target.deletedAt) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      if (!target.organizationId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This user is not linked to an organization" });
+      }
+      if (actor.role !== "SUPER_ADMIN" && target.organizationId !== actor.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Owners and Admins can only correct users in their own organization" });
+      }
+      if (!correctableEmailRoles.includes(target.role as UserRole)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Email correction is not available for privileged accounts" });
+      }
+
+      const oldEmail = normalizeEmail(target.email);
+      const newEmail = normalizeEmail(input.newEmail);
+      if (newEmail === oldEmail) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "The new email is the same as the current email" });
+      }
+
+      const occupied = await ctx.prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } });
+      if (occupied) {
+        throw new TRPCError({ code: "CONFLICT", message: "That email address is already registered" });
+      }
+
+      await ctx.prisma.$transaction(async (tx) => {
+        await tx.user.update({ where: { id: target.id }, data: { email: newEmail } });
+        await tx.staffProfile.updateMany({ where: { userId: target.id }, data: { email: newEmail } });
+        await tx.oTP.deleteMany({ where: { email: { in: [oldEmail, newEmail] } } });
+        await tx.auditLog.create({
+          data: {
+            organizationId: target.organizationId!,
+            actorId: actor.id,
+            action: "USER_EMAIL_CORRECTED",
+            previousValue: { email: oldEmail },
+            newValue: { email: newEmail },
+            reason: input.reason.trim(),
+            subjectType: "USER",
+            subjectId: target.id,
+          },
+        });
+        await tx.notification.create({
+          data: {
+            organizationId: target.organizationId!,
+            userId: target.id,
+            channel: "IN_APP",
+            title: "Your email address was changed",
+            body: `Your Camply sign-in email is now ${newEmail}. Please sign in again with the new address.`,
+            status: "SENT",
+            link: "/login?reason=email-changed",
+          },
+        });
+      });
+
+      let delivery = { oldAddressNotified: false, newAddressNotified: false };
+      try {
+        delivery = await sendEmailCorrectionEmails({
+          oldEmail,
+          newEmail,
+          firstName: target.firstName,
+          organizationId: target.organizationId,
+        });
+      } catch (error) {
+        console.error("Email correction notifications failed", error);
+      }
+
+      return {
+        success: true,
+        oldEmail,
+        newEmail,
+        ...delivery,
+        warning: delivery.oldAddressNotified && delivery.newAddressNotified
+          ? null
+          : "The address was corrected, but one or both notification emails could not be sent.",
+      };
     }),
 
   delete: protectedProcedure

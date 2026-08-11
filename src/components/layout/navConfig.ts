@@ -27,6 +27,7 @@ import {
   ChartBarIcon,
   TrophyIcon,
 } from "@heroicons/react/24/outline";
+import { permissionForAdminPath } from "@/lib/campCommand";
 
 /** The authenticated areas of the app. One user may have access to several. */
 export type AppArea = "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer";
@@ -353,6 +354,18 @@ function filterGroups(groups: NavGroup[], role: Role, volunteerCategory?: string
     .filter((group) => group.items.length > 0);
 }
 
+function filterCampCommandGroups(groups: NavGroup[], permissions: readonly string[]): NavGroup[] {
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        const required = permissionForAdminPath(item.href);
+        return required !== null && permissions.includes(required);
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
 /** Returns the grouped nav for the shell the given role actually lands in.
  * `/admin/*` is shared by SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE today.
  *
@@ -365,13 +378,16 @@ export function getNavGroups(
   role: Role | undefined,
   area: AppArea,
   hasCampusRepAccess = false,
-  volunteerCategory?: string | null
+  volunteerCategory?: string | null,
+  campCommandPermissions: readonly string[] = []
 ): NavGroup[] {
   if (!role) return [];
   let groups: NavGroup[];
   switch (area) {
     case "admin":
-      groups = filterGroups(ADMIN_GROUPS, role, volunteerCategory);
+      groups = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)
+        ? filterGroups(ADMIN_GROUPS, role, volunteerCategory)
+        : filterCampCommandGroups(ADMIN_GROUPS, campCommandPermissions);
       break;
     case "dashboard":
       groups = PARENT_GROUPS;
@@ -422,18 +438,25 @@ export function getBottomNavItems(
   role: Role | undefined,
   area: AppArea,
   hasCampusRepAccess = false,
-  volunteerCategory?: string | null
+  volunteerCategory?: string | null,
+  campCommandPermissions: readonly string[] = []
 ): NavItem[] {
   if (!role) return [];
   switch (area) {
     case "admin":
-      return [
+      const adminBottom = [
         { name: "Dashboard", href: "/admin", icon: HomeIcon },
         { name: "Contact", href: "/admin/camp-structure", icon: Squares2X2Icon },
         { name: "QR Scan", href: "/admin/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/admin/campers", icon: UserGroupIcon },
         LEADERBOARD_ITEM,
       ];
+      return ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)
+        ? adminBottom
+        : adminBottom.filter((item) => {
+            const required = permissionForAdminPath(item.href);
+            return required !== null && campCommandPermissions.includes(required);
+          });
     case "teacher":
       return [
         { name: "Dashboard", href: "/teacher", icon: HomeIcon },

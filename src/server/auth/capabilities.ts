@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { getCampCommandAccess, type ResolvedCampCommandAccess } from "./campCommand";
 
 /**
  * What a user can actually *do*, as opposed to the single `User.role` scalar
@@ -27,6 +28,8 @@ export interface UserCapabilities {
   orgAdmin: boolean;
   /** Scoped to specific campuses. */
   campusRep: boolean;
+  /** Active per-camp command appointments. Authorization is still rechecked server-side. */
+  campCommand: ResolvedCampCommandAccess[];
 }
 
 export const EMPTY_CAPABILITIES: UserCapabilities = {
@@ -34,6 +37,7 @@ export const EMPTY_CAPABILITIES: UserCapabilities = {
   staff: [],
   orgAdmin: false,
   campusRep: false,
+  campCommand: [],
 };
 
 /**
@@ -69,11 +73,30 @@ export async function getUserCapabilities(userId: string): Promise<UserCapabilit
     staff.add(user.role);
   }
 
+  const commandCampIds = await prisma.positionAssignment.findMany({
+    where: {
+      isCurrent: true,
+      OR: [{ endDate: null }, { endDate: { gte: new Date() } }],
+      staff: { userId, type: "TEACHER", status: "APPROVED", deletedAt: null },
+      position: { leadershipRole: { in: ["COMMANDANT", "ASSISTANT_COMMANDANT"] }, deletedAt: null, status: "ACTIVE" },
+    },
+    select: { position: { select: { campId: true } } },
+    distinct: ["positionId"],
+  });
+  const campCommand = (
+    await Promise.all(
+      commandCampIds.map(({ position }) =>
+        getCampCommandAccess({ prisma, session: { user: { id: userId } }, userId }, position.campId, userId)
+      )
+    )
+  ).filter((access): access is ResolvedCampCommandAccess => Boolean(access));
+
   return {
     parent: user.role === "PARENT" || user.campers.length > 0,
     staff: [...staff],
     orgAdmin: user.role === "OWNER" || user.role === "ADMIN" || user.role === "SUPER_ADMIN",
     campusRep: user.managedCampuses.length > 0,
+    campCommand,
   };
 }
 
@@ -114,5 +137,5 @@ export async function hasStaffCapability(
 
 /** True when the user has more than one place they could reasonably land. */
 export function hasMultipleContexts(c: UserCapabilities): boolean {
-  return [c.parent, c.staff.length > 0, c.orgAdmin, c.campusRep].filter(Boolean).length > 1;
+  return [c.parent, c.staff.length > 0, c.orgAdmin, c.campusRep, c.campCommand.length > 0].filter(Boolean).length > 1;
 }

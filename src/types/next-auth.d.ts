@@ -18,6 +18,7 @@ declare module "next-auth" {
       staffType?: "TEACHER" | "VOLUNTEER";
       staffStatus?: "APPROVED" | "PENDING" | "REJECTED";
       capabilities?: UserCapabilities;
+      reauthRequired?: boolean;
     } & DefaultSession["user"];
   }
 
@@ -42,5 +43,6 @@ declare module "next-auth/jwt" {
     staffType?: "TEACHER" | "VOLUNTEER";
     staffStatus?: "APPROVED" | "PENDING" | "REJECTED";
     capabilities?: UserCapabilities;
+    reauthRequired?: boolean;
   }
 }

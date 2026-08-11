@@ -2,10 +2,16 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { hasStaffCapability } from "../../auth/capabilities";
+import { assertOrgAdminOrCommand } from "../trpc/scoping";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
 async function assertOrgAdmin(ctx: { session: any }, organizationId: string) {
+  try {
+    return await assertOrgAdminOrCommand(ctx as any, organizationId, "CAMP_STRUCTURE");
+  } catch {
+    // Preserve the original role-specific error below for non-command users.
+  }
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
   // Departments are org-wide (not centre-scoped) — LOCATION_ADMIN gets read-only, not write access.
@@ -69,6 +75,7 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department is managed automatically." });
       await assertOrgAdmin(ctx, dept.organizationId);
       const { id, ...data } = input;
       return ctx.prisma.department.update({ where: { id }, data });
@@ -82,6 +89,7 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be deleted." });
       await assertOrgAdmin(ctx, dept.organizationId);
       return ctx.prisma.department.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
@@ -91,6 +99,7 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department is managed automatically." });
       await assertOrgAdmin(ctx, dept.organizationId);
       return ctx.prisma.department.update({ where: { id: input.id }, data: { responsibilities: input.responsibilities } });
     }),
@@ -101,6 +110,7 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const sourceDept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!sourceDept || sourceDept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (sourceDept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be duplicated." });
       await assertOrgAdmin(ctx, sourceDept.organizationId);
 
       const currentUser = ctx.session!.user;
@@ -179,6 +189,9 @@ export const departmentRouter = createTRPCRouter({
       if (!sourceDept || sourceDept.deletedAt || !targetDept || targetDept.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Source or Target department not found." });
       }
+      if (sourceDept.systemKey === "CAMP_COMMAND" || targetDept.systemKey === "CAMP_COMMAND") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be merged." });
+      }
       await assertOrgAdmin(ctx, sourceDept.organizationId);
 
       const currentUser = ctx.session!.user;
@@ -228,6 +241,7 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be archived." });
       await assertOrgAdmin(ctx, dept.organizationId);
 
       const currentUser = ctx.session!.user;

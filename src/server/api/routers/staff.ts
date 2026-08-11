@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { assertOrgAdmin, assertOrgAdminOrCampusRep } from "../trpc/scoping";
+import { assertOrgAdminOrCommand, assertOrgAdminOrCampusRep as assertScopedOrgAccess } from "../trpc/scoping";
+
+const assertOrgAdminOrCampusRep = (ctx: any, organizationId: string, campusId?: string | null) =>
+  assertScopedOrgAccess(ctx, organizationId, campusId, "STAFF");
+const assertOrgAdmin = (ctx: any, organizationId: string) =>
+  assertOrgAdminOrCommand(ctx, organizationId, "STAFF");
 import { sendStaffApprovedEmail, sendStaffRejectedEmail } from "../../email/sendStaffEmails";
 import crypto from "crypto";
 import { normalizeEmail } from "../../../lib/email";

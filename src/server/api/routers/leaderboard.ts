@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomBytes } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/trpc";
-import { assertSameOrg, assertCanManageCamp } from "../trpc/scoping";
+import { assertSameOrg, assertCanManageCamp as assertScopedCampAccess } from "../trpc/scoping";
 import { assertReportsAccess } from "./scan";
 import { recordScoreEvent } from "../../leaderboard/record";
 import { rebuildLeaderboard } from "../../leaderboard/aggregate";
@@ -10,6 +10,9 @@ import { toPublicDto, toPublicAnnouncementDto } from "../../leaderboard/publicDt
 import { notifyAchievementAwarded } from "../../leaderboard/notify";
 import { awardCampCompletion } from "../../leaderboard/dailyOps";
 import { drainScoreQueue } from "../../leaderboard/queue";
+
+const assertCanManageCamp = (ctx: any, campId: string) =>
+  assertScopedCampAccess(ctx, campId, "LEADERBOARD");
 
 /**
  * Read gate for the whole leaderboard surface. Camp-wide standings

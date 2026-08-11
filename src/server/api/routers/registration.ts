@@ -6,7 +6,14 @@ import { transitionWithEmailControl } from "../../registration/engine";
 import { RegistrationValidationError } from "../../registration/validation";
 import { IllegalTransitionError } from "../../registration/stateMachine";
 import { runSideEffectsNow } from "../../registration/effects";
-import { assertOrgAdminOrCampusRep, assertOrgAdmin } from "../trpc/scoping";
+import { assertOrgAdminOrCampusRep as assertScopedOrgAccess, assertOrgAdmin } from "../trpc/scoping";
+import { getActiveCampCommandAccess, getCampCommandAccess } from "../../auth/campCommand";
+
+const assertOrgAdminOrCampusRep = (ctx: any, organizationId: string, campusId?: string | null) =>
+  assertScopedOrgAccess(ctx, organizationId, campusId, "REGISTRATIONS");
+
+const hasRegistrationCommandAccess = async (ctx: any, organizationId: string) =>
+  Boolean((await getActiveCampCommandAccess(ctx, organizationId))?.permissions.includes("REGISTRATIONS"));
 import { normalizeScannedQRToken } from "../../../lib/qr";
 
 function toTRPCError(error: unknown): TRPCError {
@@ -203,7 +210,8 @@ export const registrationRouter = createTRPCRouter({
       }
 
       // Check if user has permission to view registrations in this organization
-      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)
+        || await hasRegistrationCommandAccess(ctx, input.organizationId);
       const hasPermission =
         isOrgAdmin ||
         ((currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId);
@@ -344,7 +352,8 @@ export const registrationRouter = createTRPCRouter({
       }
 
       // Check if user has permission to view these registrations
-      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)
+        || await hasRegistrationCommandAccess(ctx, profile.organizationId);
       const isOwner = currentUser.id === profile.userId;
       const hasPermission =
         isOwner ||
@@ -628,7 +637,8 @@ export const registrationRouter = createTRPCRouter({
       const isAdmin =
         currentUser.role === "SUPER_ADMIN" ||
         currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN";
+        currentUser.role === "ADMIN" ||
+        Boolean((await getCampCommandAccess(ctx, registration.campId))?.permissions.includes("REGISTRATIONS"));
 
       const isCampusRep = !!(await ctx.prisma.campus.findFirst({
           where: {
@@ -1352,7 +1362,8 @@ export const registrationRouter = createTRPCRouter({
       }
 
       let campusFilter: Record<string, unknown> = {};
-      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)
+        || await hasRegistrationCommandAccess(ctx, input.organizationId);
       if (!isOrgAdmin && (currentUser.managedCampuses?.length ?? 0) > 0) {
         const managed = await ctx.prisma.campus.findMany({
           where: { organizationId: input.organizationId, reps: { some: { id: currentUser.id } } },
@@ -1875,7 +1886,8 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)
+        || await hasRegistrationCommandAccess(ctx, input.organizationId);
       let campusFilter: Record<string, unknown> = { organizationId: input.organizationId };
 
       if (!isAdmin) {
@@ -1967,7 +1979,8 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
+      const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)
+        || await hasRegistrationCommandAccess(ctx, input.organizationId);
       let campusFilter: Record<string, unknown> = { organizationId: input.organizationId };
 
       if (!isAdmin) {

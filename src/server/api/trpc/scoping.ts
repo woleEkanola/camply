@@ -1,4 +1,6 @@
 import { TRPCError } from "@trpc/server";
+import { getActiveCampCommandAccess, getCampCommandAccess } from "../../auth/campCommand";
+import type { CampCommandPermission } from "../../../lib/campCommand";
 
 const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
@@ -22,7 +24,11 @@ const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
  * never trusted from the JWT session claim, same discipline as
  * `assertOrgAdminOrCampusRep`'s campus-rep check.
  */
-export async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
+export async function assertCanManageCamp(
+  ctx: { prisma: any; session: any },
+  campId: string,
+  commandPermission: CampCommandPermission = "CAMP_STRUCTURE"
+) {
   const camp = await ctx.prisma.camp.findUnique({ where: { id: campId } });
   if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
   try {
@@ -31,6 +37,8 @@ export async function assertCanManageCamp(ctx: { prisma: any; session: any }, ca
   } catch (err) {
     const user = ctx.session?.user;
     if (!user) throw err;
+    const commandAccess = await getCampCommandAccess(ctx, campId);
+    if (commandAccess?.permissions.includes(commandPermission)) return camp;
     const now = new Date();
     const campHead = await ctx.prisma.positionAssignment.findFirst({
       where: {
@@ -70,12 +78,29 @@ export function assertSameOrg(ctx: { session: any }, organizationId: string) {
 }
 
 /** Throws unless the caller is an org admin (SUPER_ADMIN/OWNER/ADMIN) for `organizationId`. */
-export async function assertOrgAdmin(ctx: { session: any }, organizationId?: string) {
+export async function assertOrgAdmin(ctx: { session: any; prisma?: any }, organizationId?: string) {
   const user = ctx.session?.user;
   if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (user.role === "SUPER_ADMIN") return user;
   if (organizationId && ORG_ADMIN_ROLES.includes(user.role) && user.organizationId === organizationId) return user;
   throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized for this organization" });
+}
+
+export async function assertOrgAdminOrCommand(
+  ctx: { session: any; prisma: any },
+  organizationId: string,
+  commandPermission: CampCommandPermission
+) {
+  try {
+    return await assertOrgAdmin(ctx, organizationId);
+  } catch (error) {
+    const user = ctx.session?.user;
+    if (user?.organizationId === organizationId) {
+      const commandAccess = await getActiveCampCommandAccess(ctx, organizationId);
+      if (commandAccess?.permissions.includes(commandPermission)) return user;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -89,11 +114,18 @@ export async function assertOrgAdmin(ctx: { session: any }, organizationId?: str
 export async function assertOrgAdminOrCampusRep(
   ctx: { prisma: any; session: any },
   organizationId: string,
-  campusId?: string | null
+  campusId?: string | null,
+  commandPermission?: CampCommandPermission
 ) {
   const user = ctx.session?.user;
   if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (ORG_ADMIN_ROLES.includes(user.role) && user.organizationId === organizationId) return user;
+  if (user.organizationId === organizationId) {
+    const commandAccess = await getActiveCampCommandAccess(ctx, organizationId);
+    if (commandPermission && commandAccess?.permissions.includes(commandPermission)) {
+      return user;
+    }
+  }
   if (user.organizationId === organizationId && campusId) {
     const managed = await ctx.prisma.campus.findFirst({
       where: { id: campusId, reps: { some: { id: user.id } } },
