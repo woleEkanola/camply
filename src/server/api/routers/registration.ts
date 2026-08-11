@@ -127,6 +127,25 @@ async function assertApproveAuthorized(
   return assertOrgAdminOrCampusRep(ctx, organizationId, campusId);
 }
 
+/**
+ * Promoting an existing waitlist entry is an explicit capacity override.
+ * Resolve the actor from the database so a stale JWT role can never grant it.
+ */
+async function canOverrideWaitlistCapacity(
+  ctx: { prisma: any; session: any },
+  organizationId: string,
+  status: string
+): Promise<boolean> {
+  if (status !== "WAITLISTED") return false;
+  const actor = await ctx.prisma.user.findFirst({
+    where: { id: ctx.session?.user?.id, deletedAt: null, active: true },
+    select: { role: true, organizationId: true },
+  });
+  if (!actor) return false;
+  return actor.role === "SUPER_ADMIN"
+    || (["OWNER", "ADMIN"].includes(actor.role) && actor.organizationId === organizationId);
+}
+
 // Check-in duty is also delegated to Registration-department volunteers, on top of admin roles.
 async function assertCanCheckIn(
   ctx: { prisma: any; session: any; userId: string },
@@ -849,10 +868,14 @@ export const registrationRouter = createTRPCRouter({
       });
       await assertApproveAuthorized(ctx, registration.campus.organizationId, registration.campusId);
       try {
+        const overrideCapacity = await canOverrideWaitlistCapacity(ctx, registration.campus.organizationId, registration.status);
         const result = await transitionWithEmailControl(
-          () => engine.approveRegistration({ registrationId: input.registrationId, actorId: currentUser.id }),
+          () => engine.approveRegistration({ registrationId: input.registrationId, actorId: currentUser.id, overrideCapacity }),
           true
         );
+        if (result.status !== "APPROVED") {
+          throw new TRPCError({ code: "CONFLICT", message: "Capacity is full. The registration was moved to the waitlist instead of being approved." });
+        }
         return result;
       } catch (error) {
         throw toTRPCError(error);
@@ -1075,9 +1098,19 @@ export const registrationRouter = createTRPCRouter({
 
         try {
           switch (input.action) {
-            case "APPROVE":
-              await transitionWithEmailControl(() => engine.approveRegistration({ registrationId: id, actorId: currentUser.id }), input.sendEmail);
+            case "APPROVE": {
+              const overrideCapacity = await canOverrideWaitlistCapacity(ctx, registration.campus.organizationId, registration.status);
+              const approvalResult = await transitionWithEmailControl(
+                () => engine.approveRegistration({ registrationId: id, actorId: currentUser.id, overrideCapacity }),
+                input.sendEmail
+              );
+              if (approvalResult.status !== "APPROVED") {
+                details.push({ id, status: "skipped", error: "Capacity is full; the registration was moved to the waitlist." });
+                skipped++;
+                continue;
+              }
               break;
+            }
             case "REJECT":
               await transitionWithEmailControl(() => engine.rejectRegistration({ registrationId: id, actorId: currentUser.id, reason: input.reason ?? "" }), input.sendEmail);
               break;
@@ -1624,9 +1657,17 @@ export const registrationRouter = createTRPCRouter({
       try {
         let result: any;
         switch (input.action) {
-          case "APPROVE":
-            result = await transitionWithEmailControl(() => engine.approveRegistration({ registrationId: input.registrationId, actorId }), input.sendEmail);
+          case "APPROVE": {
+            const overrideCapacity = await canOverrideWaitlistCapacity(ctx, registration.campus.organizationId, registration.status);
+            result = await transitionWithEmailControl(
+              () => engine.approveRegistration({ registrationId: input.registrationId, actorId, overrideCapacity }),
+              input.sendEmail
+            );
+            if (result.status !== "APPROVED") {
+              throw new TRPCError({ code: "CONFLICT", message: "Capacity is full. The registration was moved to the waitlist instead of being approved." });
+            }
             break;
+          }
           case "REJECT":
             result = await transitionWithEmailControl(() => engine.rejectRegistration({ registrationId: input.registrationId, actorId, reason: input.reason ?? "" }), input.sendEmail);
             break;

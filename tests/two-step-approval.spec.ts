@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import bcrypt from "bcryptjs";
-import { prisma, getFixtureOrgContext, loginWithPassword, relaxRequiredCustomFields, restoreRequiredCustomFields, switchRegistrationsToListView } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword, relaxRequiredCustomFields, restoreRequiredCustomFields } from "./helpers";
 
 /**
  * Exercises the two-layer registration approval workflow: with
@@ -261,13 +261,11 @@ test.describe("Two-step registration approval", () => {
   test("endorsing a registration notifies org admins in-app", async ({ page }) => {
     await loginWithPassword(page, repEmail, "password123");
     await page.goto("/campus-rep-dashboard/registrations");
-    await switchRegistrationsToListView(page);
     await page.getByPlaceholder("Name, email, or registration #").fill(parentEmailE);
 
-    const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailE}` });
-    await expect(row).toBeVisible({ timeout: 10000 });
-    await row.getByRole("button", { name: "Recommend" }).click();
-    await expect(row.getByRole("button", { name: "Awaiting Approval" })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: `E2E TwoStep Camper ${parentEmailE}` })).toBeVisible({ timeout: 10000 });
+    await page.locator("button:visible", { hasText: /^Recommend$/ }).first().click();
+    await expect(page.locator("button:visible", { hasText: /^Awaiting Approval$/ }).first()).toBeVisible({ timeout: 10000 });
 
     const admins = await prisma.user.findMany({
       where: { organizationId, role: { in: ["SUPER_ADMIN", "OWNER", "ADMIN"] }, deletedAt: null },

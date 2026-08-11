@@ -231,7 +231,7 @@ export async function submitRegistration(params: { registrationId: string; actor
 
 async function approveRegistrationInTx(
   tx: Prisma.TransactionClient,
-  params: { registrationId: string; actorId: string | null }
+  params: { registrationId: string; actorId: string | null; overrideCapacity?: boolean }
 ) {
   let registration = await tx.registration.findUniqueOrThrow({
     where: { id: params.registrationId },
@@ -255,6 +255,7 @@ async function approveRegistrationInTx(
   }
 
   assertTransition(registration.status, "APPROVED");
+  const isWaitlistCapacityOverride = registration.status === "WAITLISTED" && params.overrideCapacity === true;
 
   if (registration.campus.suspended) {
     throw new RegistrationEngineError(
@@ -312,10 +313,16 @@ async function approveRegistrationInTx(
     const approvedCount = await tx.registration.count({
       where: { venueId: registration.venue.id, status: { in: ["APPROVED", "CHECKED_IN"] }, deletedAt: null },
     });
-    if (approvedCount >= registration.venue.quota) {
+    if (approvedCount >= registration.venue.quota && !isWaitlistCapacityOverride) {
       if (registration.venue.fullBehavior === "PENDING_OK") {
         // allow over-capacity approval if explicitly configured
       } else {
+        if (registration.status === "WAITLISTED") {
+          throw new RegistrationEngineError(
+            "CAPACITY_STILL_FULL",
+            "This registration is still waitlisted because the venue is full. An organization admin can explicitly override capacity."
+          );
+        }
         const waitlisted = await tx.registration.update({
           where: { id: registration.id },
           data: { status: "WAITLISTED" },
@@ -346,7 +353,13 @@ async function approveRegistrationInTx(
     const approvedCampusCount = await tx.registration.count({
       where: { campusId: registration.campusId, campId: registration.campId, status: { in: ["APPROVED", "CHECKED_IN"] }, deletedAt: null },
     });
-    if (approvedCampusCount >= signupLink.quota) {
+    if (approvedCampusCount >= signupLink.quota && !isWaitlistCapacityOverride) {
+      if (registration.status === "WAITLISTED") {
+        throw new RegistrationEngineError(
+          "CAMPUS_QUOTA_STILL_FULL",
+          "This registration is still waitlisted because the campus quota is full. An organization admin can explicitly override capacity."
+        );
+      }
       const waitlisted = await tx.registration.update({
         where: { id: registration.id },
         data: { status: "WAITLISTED" },
@@ -393,6 +406,7 @@ async function approveRegistrationInTx(
       registrationNumber,
       qrToken,
       ...(twoStep ? { twoStepOverride: !endorsed } : {}),
+      ...(isWaitlistCapacityOverride ? { capacityOverride: true } : {}),
     },
   });
 
@@ -409,7 +423,7 @@ async function approveRegistrationInTx(
   return updated;
 }
 
-export async function approveRegistration(params: { registrationId: string; actorId: string }) {
+export async function approveRegistration(params: { registrationId: string; actorId: string; overrideCapacity?: boolean }) {
   const result = await prisma.$transaction((tx) => approveRegistrationInTx(tx, params));
   if (result.status === "APPROVED") {
     await autoAssignTribeOnApproval(result.id);

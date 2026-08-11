@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, PDFName, PDFRawStream } from "pdf-lib";
 import { renderCampIdCardPng, type CampIdCardData } from "../renderCard";
 import { generateCampIdCardSheetPdf, generateIdCardSheetPdf } from "../sheetPdf";
 
@@ -33,11 +33,16 @@ describe("generateCampIdCardSheetPdf", () => {
   });
 
   it("embeds the same PNG once (single source of truth) — buffer identity check via re-render equality", async () => {
-    const pdfBytes1 = await generateCampIdCardSheetPdf(cardPng);
-    const pdfBytes2 = await generateCampIdCardSheetPdf(cardPng);
-    // Same input PNG -> same-size PDF output (deterministic embed, not a
-    // proof of pixel content, but confirms no randomness/drift per call).
-    expect(pdfBytes1.length).toBe(pdfBytes2.length);
+    const pdfBytes = await generateCampIdCardSheetPdf(cardPng);
+    const doc = await PDFDocument.load(pdfBytes);
+    const imageStreams = doc.context.enumerateIndirectObjects().filter(([, object]) =>
+      object instanceof PDFRawStream && object.dict.get(PDFName.of("Subtype")) === PDFName.of("Image")
+    );
+
+    // A PNG contributes its image stream and may contribute one alpha-mask
+    // stream. Six separately embedded copies would create many more streams.
+    expect(imageStreams.length).toBeGreaterThan(0);
+    expect(imageStreams.length).toBeLessThanOrEqual(2);
   });
 });
 

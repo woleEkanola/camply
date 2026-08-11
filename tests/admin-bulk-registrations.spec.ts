@@ -11,6 +11,9 @@ test.describe("Admin: bulk registration actions", () => {
   let registrationId: string;
   let userId: string;
   let camperId: string;
+  let quotaOccupantCamperId: string | undefined;
+  let quotaOccupantRegistrationId: string | undefined;
+  let signupLinkId: string | undefined;
 
   test.beforeAll(async () => {
     const ctx = await getFixtureOrgContext();
@@ -61,8 +64,9 @@ test.describe("Admin: bulk registration actions", () => {
   });
 
   test.afterAll(async () => {
-    await prisma.registration.deleteMany({ where: { id: registrationId } });
-    await prisma.camper.deleteMany({ where: { id: camperId } });
+    await prisma.registration.deleteMany({ where: { id: { in: [registrationId, quotaOccupantRegistrationId].filter(Boolean) as string[] } } });
+    if (signupLinkId) await prisma.signupLink.deleteMany({ where: { id: signupLinkId } });
+    await prisma.camper.deleteMany({ where: { id: { in: [camperId, quotaOccupantCamperId].filter(Boolean) as string[] } } });
     await prisma.user.deleteMany({ where: { id: userId } });
     await prisma.campus.deleteMany({ where: { id: campusId } });
   });
@@ -85,6 +89,75 @@ test.describe("Admin: bulk registration actions", () => {
     }, { timeout: 10000 }).toBe("APPROVED");
 
     await expect(page.getByText(/Bulk action complete:/)).toBeVisible();
+  });
+
+  test("admin can promote a waitlisted registration even while the campus quota is full", async ({ page }) => {
+    const quotaOccupant = await prisma.camper.create({
+      data: {
+        name: "E2E Quota Occupant Camper",
+        userId,
+        organizationId,
+        homeCampusId: campusId,
+      },
+    });
+    quotaOccupantCamperId = quotaOccupant.id;
+    const occupantRegistration = await prisma.registration.create({
+      data: { camperId: quotaOccupant.id, campId, campusId, status: "APPROVED" },
+    });
+    quotaOccupantRegistrationId = occupantRegistration.id;
+    const signupLink = await prisma.signupLink.create({
+      data: {
+        token: `e2e-bulk-waitlist-${Date.now()}`,
+        campusId,
+        campId,
+        active: true,
+        quota: 1,
+        quotaFullBehavior: "WAITLIST",
+      },
+    });
+    signupLinkId = signupLink.id;
+    await prisma.registration.update({ where: { id: registrationId }, data: { status: "WAITLISTED" } });
+
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/registrations");
+    await switchRegistrationsToListView(page);
+    await page.getByTestId("registration-status-filter").selectOption("WAITLISTED");
+
+    const row = page.locator("tbody tr").filter({ hasText: "E2E Bulk Reg Camper" });
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.locator('input[type="checkbox"]').first().click();
+    await page.getByRole("toolbar", { name: "Bulk actions" }).getByRole("button", { name: "Approve", exact: true }).click();
+
+    await expect.poll(async () => {
+      return (await prisma.registration.findUnique({ where: { id: registrationId } }))?.status;
+    }, { timeout: 10000 }).toBe("APPROVED");
+    await expect(page.getByText("Bulk action complete: 1 succeeded.")).toBeVisible();
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { registrationId, action: "REGISTRATION_APPROVED" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect((audit?.newValue as { capacityOverride?: boolean } | null)?.capacityOverride).toBe(true);
+  });
+
+  test("admin can promote a waitlisted registration through Change Status", async ({ page }) => {
+    await prisma.registration.update({ where: { id: registrationId }, data: { status: "WAITLISTED" } });
+
+    await loginWithPassword(page, "admin@camply.com", "password123");
+    await page.goto("/admin/registrations");
+    await switchRegistrationsToListView(page);
+    await page.getByTestId("registration-status-filter").selectOption("WAITLISTED");
+
+    const row = page.locator("tbody tr").filter({ hasText: "E2E Bulk Reg Camper" });
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.click();
+    await page.getByTestId("drawer-panel").getByLabel("More options").click();
+    await page.getByTestId("drawer-panel").getByText("Change Status").click();
+    await page.getByTestId("dialog-panel").getByRole("button", { name: "Approve Registration" }).click();
+
+    await expect.poll(async () => {
+      return (await prisma.registration.findUnique({ where: { id: registrationId } }))?.status;
+    }, { timeout: 10000 }).toBe("APPROVED");
   });
 
   test("admin can bulk-archive selected registrations", async ({ page }) => {
