@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import { renderCampIdCardPng, type CampIdCardData } from "../renderCard";
-import { generateCampIdCardSheetPdf } from "../sheetPdf";
+import { generateCampIdCardSheetPdf, generateIdCardSheetPdf } from "../sheetPdf";
 
 const SAMPLE: CampIdCardData = {
   camperName: "James Adelabu",
@@ -38,5 +38,31 @@ describe("generateCampIdCardSheetPdf", () => {
     // Same input PNG -> same-size PDF output (deterministic embed, not a
     // proof of pixel content, but confirms no randomness/drift per call).
     expect(pdfBytes1.length).toBe(pdfBytes2.length);
+  });
+});
+
+describe("generateIdCardSheetPdf pagination", () => {
+  let cardPng: Buffer;
+
+  beforeAll(async () => {
+    cardPng = await renderCampIdCardPng(SAMPLE);
+  });
+
+  it.each([
+    [7, 2],
+    [12, 2],
+    [13, 3],
+    [6, 1],
+    [1, 1],
+  ])("%i cards paginate into %i A4 page(s)", async (count, expectedPages) => {
+    const pdfBytes = await generateIdCardSheetPdf(Array(count).fill(cardPng));
+    const doc = await PDFDocument.load(pdfBytes);
+    expect(doc.getPageCount()).toBe(expectedPages);
+  });
+
+  it("produces a single blank page for zero cards rather than an empty document", async () => {
+    const pdfBytes = await generateIdCardSheetPdf([]);
+    const doc = await PDFDocument.load(pdfBytes);
+    expect(doc.getPageCount()).toBe(1);
   });
 });

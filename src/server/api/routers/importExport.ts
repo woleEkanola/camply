@@ -6,78 +6,84 @@ import { importBundleSchema } from "../../../lib/import-export/schemas";
 import type { CampusRow, DepartmentRow, TribeRow } from "../../../lib/import-export/types";
 import { importCampuses, importDepartments, importTribes } from "../../importExport/importer";
 
+/**
+ * Shared with src/server/export/builders/configBundle.ts so the background
+ * export job and the legacy synchronous ExportPanel query never diverge.
+ */
+export async function fetchConfigBundle(prisma: any, organizationId: string) {
+  const org = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId } });
+
+  const campuses = await prisma.campus.findMany({
+    where: { organizationId, deletedAt: null },
+    orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+  });
+
+  const tribes = org.activeCampId
+    ? await prisma.tribe.findMany({
+        where: { campId: org.activeCampId, deletedAt: null },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      })
+    : [];
+
+  const departments = await prisma.department.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      OR: [{ campId: null }, ...(org.activeCampId ? [{ campId: org.activeCampId }] : [])],
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const campusRows: CampusRow[] = campuses.map((c: any) => ({
+    name: c.name,
+    address: c.address,
+    city: c.city,
+    country: c.country,
+    state: c.state ?? undefined,
+    zipCode: c.zipCode ?? undefined,
+    pastor: c.pastor ?? undefined,
+    phone: c.phone ?? undefined,
+    email: c.email ?? undefined,
+    campusCode: c.campusCode ?? undefined,
+    suspended: c.suspended,
+    displayOrder: c.displayOrder,
+  }));
+
+  const tribeRows: TribeRow[] = tribes.map((t: any) => ({
+    name: t.name,
+    code: t.code ?? undefined,
+    color: t.color ?? undefined,
+    description: t.description ?? undefined,
+    meaning: t.meaning ?? undefined,
+    motto: t.motto ?? undefined,
+    scripture: t.scripture ?? undefined,
+    gender: (t.gender as TribeRow["gender"]) ?? undefined,
+    ageRange: t.ageRange ?? undefined,
+    maxCapacity: t.maxCapacity ?? undefined,
+    allocationStrategy: t.allocationStrategy as TribeRow["allocationStrategy"],
+    displayOrder: t.displayOrder,
+    logoUrl: t.logoUrl ?? undefined,
+    bannerUrl: t.bannerUrl ?? undefined,
+  }));
+
+  const departmentRows: DepartmentRow[] = departments.map((d: any) => ({
+    name: d.name,
+    description: d.description ?? undefined,
+    maxCapacity: d.maxCapacity ?? undefined,
+    responsibilities: d.responsibilities.length ? d.responsibilities : undefined,
+    status: d.status as DepartmentRow["status"],
+    campScoped: d.campId != null,
+  }));
+
+  return { campuses: campusRows, tribes: tribeRows, departments: departmentRows };
+}
+
 export const importExportRouter = createTRPCRouter({
   export: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertOrgAdmin(ctx, input.organizationId);
-
-      const org = await ctx.prisma.organization.findUniqueOrThrow({ where: { id: input.organizationId } });
-
-      const campuses = await ctx.prisma.campus.findMany({
-        where: { organizationId: input.organizationId, deletedAt: null },
-        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-      });
-
-      const tribes = org.activeCampId
-        ? await ctx.prisma.tribe.findMany({
-            where: { campId: org.activeCampId, deletedAt: null },
-            orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-          })
-        : [];
-
-      const departments = await ctx.prisma.department.findMany({
-        where: {
-          organizationId: input.organizationId,
-          deletedAt: null,
-          OR: [{ campId: null }, ...(org.activeCampId ? [{ campId: org.activeCampId }] : [])],
-        },
-        orderBy: { name: "asc" },
-      });
-
-      const campusRows: CampusRow[] = campuses.map((c) => ({
-        name: c.name,
-        address: c.address,
-        city: c.city,
-        country: c.country,
-        state: c.state ?? undefined,
-        zipCode: c.zipCode ?? undefined,
-        pastor: c.pastor ?? undefined,
-        phone: c.phone ?? undefined,
-        email: c.email ?? undefined,
-        campusCode: c.campusCode ?? undefined,
-        active: c.active,
-        signupOpen: c.signupOpen,
-        displayOrder: c.displayOrder,
-      }));
-
-      const tribeRows: TribeRow[] = tribes.map((t) => ({
-        name: t.name,
-        code: t.code ?? undefined,
-        color: t.color ?? undefined,
-        description: t.description ?? undefined,
-        meaning: t.meaning ?? undefined,
-        motto: t.motto ?? undefined,
-        scripture: t.scripture ?? undefined,
-        gender: (t.gender as TribeRow["gender"]) ?? undefined,
-        ageRange: t.ageRange ?? undefined,
-        maxCapacity: t.maxCapacity ?? undefined,
-        allocationStrategy: t.allocationStrategy as TribeRow["allocationStrategy"],
-        displayOrder: t.displayOrder,
-        logoUrl: t.logoUrl ?? undefined,
-        bannerUrl: t.bannerUrl ?? undefined,
-      }));
-
-      const departmentRows: DepartmentRow[] = departments.map((d) => ({
-        name: d.name,
-        description: d.description ?? undefined,
-        maxCapacity: d.maxCapacity ?? undefined,
-        responsibilities: d.responsibilities.length ? d.responsibilities : undefined,
-        status: d.status as DepartmentRow["status"],
-        campScoped: d.campId != null,
-      }));
-
-      return { campuses: campusRows, tribes: tribeRows, departments: departmentRows };
+      return fetchConfigBundle(ctx.prisma, input.organizationId);
     }),
 
   import: protectedProcedure

@@ -3,25 +3,10 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Input";
 import { api } from "@/utils/trpc";
-import {
-  downloadBlob,
-  exportUserDataToCsv,
-  exportUserDataToXlsx,
-  toCsv,
-  toJsonBundle,
-  toMarkdown,
-  toXlsxWorkbook,
-} from "../../../../lib/import-export/serialize";
+import { downloadBlob, exportUserDataToCsv, exportUserDataToXlsx } from "../../../../lib/import-export/serialize";
+import { ExportButton } from "@/components/export/ExportButton";
 
-type ExportFormat = "json" | "xlsx" | "csv" | "md";
 type UserDataType = "ALL" | "CAMPER" | "TEACHER" | "VOLUNTEER" | "ADMIN" | "PARENT";
-
-const FORMAT_OPTIONS: { value: ExportFormat; label: string; hint: string }[] = [
-  { value: "json", label: "JSON bundle", hint: "Recommended — round-trips perfectly for re-import into another Camply account." },
-  { value: "xlsx", label: "Excel workbook (.xlsx)", hint: "One sheet per entity: Campuses, Tribes, Departments." },
-  { value: "csv", label: "CSV (per entity)", hint: "Downloads three separate files, one per entity." },
-  { value: "md", label: "Markdown (.md)", hint: "Human-readable document with a table per entity." },
-];
 
 const USER_TYPE_OPTIONS: { value: UserDataType; label: string }[] = [
   { value: "ALL", label: "All Users & Campers" },
@@ -46,12 +31,6 @@ const STATUS_OPTIONS = [
 ];
 
 export function ExportPanel({ organizationId }: { organizationId: string }) {
-  // Config export state
-  const [format, setFormat] = useState<ExportFormat>("json");
-  const [isExporting, setIsExporting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
   // User Data export state
   const [userTypeFilter, setUserTypeFilter] = useState<UserDataType>("ALL");
   const [campusFilter, setCampusFilter] = useState("");
@@ -66,11 +45,6 @@ export function ExportPanel({ organizationId }: { organizationId: string }) {
     { enabled: !!organizationId }
   );
 
-  const exportQuery = api.importExport.export.useQuery(
-    { organizationId },
-    { enabled: false, staleTime: 0 }
-  );
-
   const userDataExportQuery = api.importExport.exportUserData.useQuery(
     {
       organizationId,
@@ -80,41 +54,6 @@ export function ExportPanel({ organizationId }: { organizationId: string }) {
     },
     { enabled: false, staleTime: 0 }
   );
-
-  const handleExport = async () => {
-    setError("");
-    setSuccess("");
-    setIsExporting(true);
-    try {
-      const { data, error: fetchError } = await exportQuery.refetch();
-      if (fetchError) throw fetchError;
-      if (!data) throw new Error("No data returned from export");
-
-      const stamp = new Date().toISOString().slice(0, 10);
-
-      if (format === "json") {
-        const bundle = toJsonBundle(data);
-        downloadBlob(`camply-export-${stamp}.json`, new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" }));
-      } else if (format === "xlsx") {
-        const blob = await toXlsxWorkbook(data);
-        downloadBlob(`camply-export-${stamp}.xlsx`, blob);
-      } else if (format === "md") {
-        downloadBlob(`camply-export-${stamp}.md`, new Blob([toMarkdown(data)], { type: "text/markdown" }));
-      } else {
-        downloadBlob(`camply-campuses-${stamp}.csv`, new Blob([toCsv("campuses", data.campuses)], { type: "text/csv" }));
-        downloadBlob(`camply-tribes-${stamp}.csv`, new Blob([toCsv("tribes", data.tribes)], { type: "text/csv" }));
-        downloadBlob(`camply-departments-${stamp}.csv`, new Blob([toCsv("departments", data.departments)], { type: "text/csv" }));
-      }
-
-      setSuccess(
-        `Exported ${data.campuses.length} campus(es), ${data.tribes.length} tribe(s), ${data.departments.length} department(s).`
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Export failed");
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
   const handleUserDataExport = async () => {
     setUserDataError("");
@@ -235,31 +174,9 @@ export function ExportPanel({ organizationId }: { organizationId: string }) {
             it round-trips with zero editing.
           </p>
 
-          <div className="space-y-2">
-            {FORMAT_OPTIONS.map((opt) => (
-              <label key={opt.value} className="flex items-start gap-3 rounded-md border border-neutral-200 p-3 text-sm hover:bg-neutral-50">
-                <input
-                  type="radio"
-                  name="export-format"
-                  value={opt.value}
-                  checked={format === opt.value}
-                  onChange={() => setFormat(opt.value)}
-                  className="mt-0.5 h-4 w-4 text-accent-600 focus:ring-accent-500"
-                />
-                <span>
-                  <span className="block font-medium text-neutral-900">{opt.label}</span>
-                  <span className="block text-neutral-500">{opt.hint}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-
-          {error && <div className="rounded-md bg-danger-50 p-3 text-sm text-danger-700">{error}</div>}
-          {success && <div className="rounded-md bg-success-50 p-3 text-sm text-success-700">{success}</div>}
-
-          <Button onClick={handleExport} loading={isExporting}>
+          <ExportButton kind="CONFIG_BUNDLE" organizationId={organizationId} label="Configuration Bundle">
             Export
-          </Button>
+          </ExportButton>
         </CardBody>
       </Card>
     </div>

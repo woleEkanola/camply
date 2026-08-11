@@ -1,24 +1,25 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { hasStaffCapability } from "../../auth/capabilities";
+
+const STAFF_MODULE_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 import { syncStaffProfileFromPositions, syncPositionOccupantsAndDescendants } from "../../utils/hierarchySync";
+import { assertCanManageCamp, assertOrgAdmin } from "../trpc/scoping";
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
-
-function assertStaffAccess(ctx: { session: any }) {
+async function assertStaffAccess(ctx: { session: any; userId: string }) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (currentUser.role === "PARENT") throw new TRPCError({ code: "FORBIDDEN" });
-  return currentUser;
-}
-
-async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
-  const camp = await ctx.prisma.camp.findUnique({ where: { id: campId } });
-  if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
-  const currentUser = ctx.session?.user;
-  if (!ADMIN_ROLES.includes(currentUser.role) && currentUser.organizationId !== camp.organizationId) {
-    throw new TRPCError({ code: "FORBIDDEN" });
+  // Staff modules are for people with staff capability. Gate on that, not on
+  // `role !== "PARENT"`: a parent who also teaches keeps role PARENT and would
+  // otherwise be locked out of modules they legitimately belong to — while a
+  // parent with no staff profile must still be refused.
+  // See server/auth/capabilities.ts.
+  if (STAFF_MODULE_ADMIN_ROLES.includes(currentUser.role)) return currentUser;
+  if (await hasStaffCapability(ctx.userId, { organizationId: currentUser.organizationId ?? undefined })) {
+    return currentUser;
   }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Not available for this account type" });
 }
 
 export const positionRouter = createTRPCRouter({
@@ -26,7 +27,7 @@ export const positionRouter = createTRPCRouter({
   getHierarchy: protectedProcedure
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
-      assertStaffAccess(ctx);
+      await assertStaffAccess(ctx);
 
       const positions = await ctx.prisma.position.findMany({
         where: { campId: input.campId, deletedAt: null },
@@ -34,7 +35,15 @@ export const positionRouter = createTRPCRouter({
           department: true,
           assignments: {
             where: { isCurrent: true },
-            include: { staff: true },
+            // Enriched beyond plain scalars so the Chain of Command view
+            // (src/components/orgStructure/ChainOfCommand.tsx) can open
+            // StaffProfileSheet directly from an occupant here, with the
+            // same Campus/Tribe/Hostel/Reports-To detail it shows elsewhere.
+            include: {
+              staff: {
+                include: { preferredCampus: true, assignedTribe: true, assignedHostel: true, reportsTo: true, reportsToUser: true },
+              },
+            },
           },
         },
         orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
@@ -71,8 +80,16 @@ export const positionRouter = createTRPCRouter({
       displayOrder: z.number().int().min(0).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      assertStaffAccess(ctx);
+      await assertStaffAccess(ctx);
       await assertCanManageCamp(ctx, input.campId);
+
+      if (input.parentPositionId) {
+        const parent = await ctx.prisma.position.findFirst({
+          where: { id: input.parentPositionId, campId: input.campId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!parent) throw new TRPCError({ code: "BAD_REQUEST", message: "The selected parent position is not in this camp." });
+      }
 
       return ctx.prisma.position.create({
         data: {
@@ -91,6 +108,7 @@ export const positionRouter = createTRPCRouter({
       id: z.string(),
       name: z.string().min(1).optional(),
       status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
+      grantsManageCamp: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const position = await ctx.prisma.position.findUnique({
@@ -98,6 +116,17 @@ export const positionRouter = createTRPCRouter({
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       await assertCanManageCamp(ctx, position.campId);
+
+      // Granting/revoking the Camp Head flag itself is deliberately gated
+      // tighter than ordinary position edits: assertCanManageCamp above
+      // already lets a *current* Camp Head pass, and if that were enough to
+      // also toggle grantsManageCamp, a Camp Head could grant the flag to
+      // arbitrary other positions (or keep it after being reassigned) —
+      // unbounded privilege escalation. Only a true org admin may change it.
+      if (input.grantsManageCamp !== undefined) {
+        const camp = await ctx.prisma.camp.findUnique({ where: { id: position.campId } });
+        await assertOrgAdmin(ctx, camp!.organizationId);
+      }
 
       const { id, ...data } = input;
       return ctx.prisma.position.update({
@@ -126,15 +155,23 @@ export const positionRouter = createTRPCRouter({
         }
 
         // Walk up from target parent to check for cycles
+        const targetParent = await ctx.prisma.position.findFirst({
+          where: { id: input.parentPositionId, campId: position.campId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!targetParent) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "The selected parent position is not in this camp." });
+        }
+
         let currentParentId: string | null = input.parentPositionId;
         while (currentParentId) {
+          if (currentParentId === input.id) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Moving this position would create a reporting cycle." });
+          }
           const parentNode: { parentPositionId: string | null } | null = await ctx.prisma.position.findUnique({
             where: { id: currentParentId },
             select: { parentPositionId: true },
           });
-          if (parentNode?.parentPositionId === input.id) {
-            throw new TRPCError({ code: "BAD_REQUEST", message: "Moving this position would create a reporting cycle." });
-          }
           currentParentId = parentNode?.parentPositionId ?? null;
         }
       }
@@ -162,11 +199,17 @@ export const positionRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       if (input.orders.length === 0) return { success: true };
 
-      const firstPos = await ctx.prisma.position.findUnique({
-        where: { id: input.orders[0].id },
-      });
+      const orderedIds = input.orders.map((order) => order.id);
+      if (new Set(orderedIds).size !== orderedIds.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Each position can only appear once." });
+      }
+      const positions = await ctx.prisma.position.findMany({ where: { id: { in: orderedIds }, deletedAt: null } });
+      const firstPos = positions[0];
       if (!firstPos) throw new TRPCError({ code: "NOT_FOUND" });
       await assertCanManageCamp(ctx, firstPos.campId);
+      if (positions.length !== orderedIds.length || positions.some((candidate) => candidate.campId !== firstPos.campId)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Positions must belong to the same camp." });
+      }
 
       await ctx.prisma.$transaction(
         input.orders.map((o) =>
@@ -197,6 +240,8 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.staffId },
       });
       if (!staff || staff.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (staff.campId !== position.campId) throw new TRPCError({ code: "BAD_REQUEST", message: "Staff and position must belong to the same camp." });
+      if (staff.status !== "APPROVED") throw new TRPCError({ code: "BAD_REQUEST", message: "Only approved staff can hold a position." });
 
       const currentUser = ctx.session!.user;
 

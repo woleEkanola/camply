@@ -9,8 +9,10 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { Table, type Column } from "@/components/ui/Table";
 import { Input, Select } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 import { api } from "@/utils/trpc";
-import { CakeIcon, MapPinIcon, GiftIcon } from "@heroicons/react/24/outline";
+import { CakeIcon, MapPinIcon, GiftIcon, PrinterIcon } from "@heroicons/react/24/outline";
+import { ExportButton } from "@/components/export/ExportButton";
 
 type ArrivalStationFilter = "ALL" | "CAMP_ARRIVAL" | "HOSTEL_ARRIVAL" | "PICKUP_POINT";
 
@@ -86,12 +88,30 @@ export default function AdminReportsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <PageHeader title="Reports" description="Meals, arrivals, and collectibles for a selected day." />
-          <Input
-            type="date"
-            value={dateStr}
-            onChange={(e) => setDateStr(e.target.value)}
-            containerClassName="w-full sm:w-48"
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={dateStr}
+              onChange={(e) => setDateStr(e.target.value)}
+              containerClassName="w-full sm:w-48"
+            />
+            <Button
+              variant="secondary"
+              icon={<PrinterIcon className="h-4 w-4" />}
+              onClick={() => window.print()}
+            >
+              Print
+            </Button>
+            <ExportButton
+              kind="REPORT_OPERATIONS"
+              organizationId={organizationId}
+              label="Operations Report"
+              filters={{
+                date: dateStr,
+                stationId: arrivalFilter !== "ALL" ? arrivalFilter : undefined,
+              }}
+            />
+          </div>
         </div>
 
         {/* Meals */}

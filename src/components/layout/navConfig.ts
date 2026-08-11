@@ -25,7 +25,11 @@ import {
   DocumentTextIcon,
   PaintBrushIcon,
   ChartBarIcon,
+  TrophyIcon,
 } from "@heroicons/react/24/outline";
+
+/** The authenticated areas of the app. One user may have access to several. */
+export type AppArea = "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer";
 
 export type Role =
   | "SUPER_ADMIN"
@@ -42,6 +46,8 @@ export interface NavItem {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   /** Roles that can see this item. Omit to show to every role the shell renders for. */
   roles?: Role[];
+  /** Department category required for volunteers (e.g. Medical or Kitchen). */
+  volunteerCategory?: string;
 }
 
 export interface NavGroup {
@@ -63,10 +69,26 @@ export interface NavGroup {
  * modeled as independent siblings per the domain refactor — see
  * "Camply Domain Model Refactor.md".
  */
+/** Shared across all six area arrays below — there is no global-item
+ * mechanism (dispatch is by area, not role), so this const is spread into
+ * each group individually rather than declared once centrally. */
+const LEADERBOARD_ITEM: NavItem = { name: "Leaderboard", href: "/leaderboard", icon: TrophyIcon };
+const ADMIN_CAMP_CONTACT_ITEM: NavItem = {
+  name: "Camp Contact",
+  href: "/admin/camp-structure",
+  icon: Squares2X2Icon,
+  roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
+};
+const TEACHER_CAMP_CONTACT_ITEM: NavItem = {
+  name: "Camp Contact",
+  href: "/teacher/camp-contact",
+  icon: Squares2X2Icon,
+};
+
 const ADMIN_GROUPS: NavGroup[] = [
   {
     name: "Dashboard",
-    items: [{ name: "Dashboard", href: "/admin", icon: HomeIcon }],
+    items: [{ name: "Dashboard", href: "/admin", icon: HomeIcon }, LEADERBOARD_ITEM, ADMIN_CAMP_CONTACT_ITEM],
   },
   {
     name: "Registration",
@@ -112,12 +134,6 @@ const ADMIN_GROUPS: NavGroup[] = [
   {
     name: "Camp Management",
     items: [
-      {
-        name: "Camp Structure",
-        href: "/admin/camp-structure",
-        icon: Squares2X2Icon,
-        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
-      },
       {
         name: "Tribes",
         href: "/admin/tribes",
@@ -241,7 +257,7 @@ const ADMIN_GROUPS: NavGroup[] = [
 ];
 
 const PARENT_GROUPS: NavGroup[] = [
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/dashboard", icon: HomeIcon }] },
+  { name: "Dashboard", items: [{ name: "Dashboard", href: "/dashboard", icon: HomeIcon }, LEADERBOARD_ITEM] },
 ];
 
 const CAMPUS_REP_GROUPS: NavGroup[] = [
@@ -252,11 +268,11 @@ const CAMPUS_REP_GROUPS: NavGroup[] = [
       { name: "Campers", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
     ],
   },
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }] },
+  { name: "Dashboard", items: [{ name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon }, LEADERBOARD_ITEM] },
 ];
 
 const SUPER_ADMIN_GROUPS: NavGroup[] = [
-  { name: "Dashboard", items: [{ name: "Dashboard", href: "/super-admin", icon: HomeIcon }] },
+  { name: "Dashboard", items: [{ name: "Dashboard", href: "/super-admin", icon: HomeIcon }, LEADERBOARD_ITEM] },
 ];
 
 const TEACHER_GROUPS: NavGroup[] = [
@@ -265,6 +281,8 @@ const TEACHER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/teacher", icon: HomeIcon },
       { name: "My Position", href: "/teacher/my-position", icon: MapIcon },
+      LEADERBOARD_ITEM,
+      TEACHER_CAMP_CONTACT_ITEM,
     ],
   },
   {
@@ -285,23 +303,32 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/volunteer", icon: HomeIcon },
       { name: "My Position", href: "/volunteer/my-position", icon: MapIcon },
+      LEADERBOARD_ITEM,
     ],
   },
   {
     name: "Operations",
     items: [
       { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
+      { name: "Attendance", href: "/volunteer/attendance", icon: ClipboardDocumentCheckIcon },
       { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
-      { name: "Medical", href: "/volunteer/medical", icon: HeartIcon },
-      { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
+      { name: "Medical", href: "/volunteer/medical", icon: HeartIcon, volunteerCategory: "Medical" },
+      { name: "Meals", href: "/volunteer/meals", icon: CakeIcon, volunteerCategory: "Kitchen" },
       { name: "Incidents", href: "/volunteer/incidents", icon: ExclamationTriangleIcon },
     ],
   },
 ];
 
-function filterGroups(groups: NavGroup[], role: Role): NavGroup[] {
+function filterGroups(groups: NavGroup[], role: Role, volunteerCategory?: string | null): NavGroup[] {
   return groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || item.roles.includes(role)) }))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (item.roles && !item.roles.includes(role)) return false;
+        if (role === "VOLUNTEER" && item.volunteerCategory && item.volunteerCategory !== volunteerCategory) return false;
+        return true;
+      }),
+    }))
     .filter((group) => group.items.length > 0);
 }
 
@@ -315,14 +342,15 @@ function filterGroups(groups: NavGroup[], role: Role): NavGroup[] {
  * dashboard/login. */
 export function getNavGroups(
   role: Role | undefined,
-  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer",
-  hasCampusRepAccess = false
+  area: AppArea,
+  hasCampusRepAccess = false,
+  volunteerCategory?: string | null
 ): NavGroup[] {
   if (!role) return [];
   let groups: NavGroup[];
   switch (area) {
     case "admin":
-      groups = filterGroups(ADMIN_GROUPS, role);
+      groups = filterGroups(ADMIN_GROUPS, role, volunteerCategory);
       break;
     case "dashboard":
       groups = PARENT_GROUPS;
@@ -337,7 +365,7 @@ export function getNavGroups(
       groups = TEACHER_GROUPS;
       break;
     case "volunteer":
-      groups = VOLUNTEER_GROUPS;
+      groups = filterGroups(VOLUNTEER_GROUPS, role, volunteerCategory);
       break;
   }
   if (hasCampusRepAccess && (area === "teacher" || area === "volunteer")) {
@@ -371,26 +399,27 @@ export function getNavGroups(
  */
 export function getBottomNavItems(
   role: Role | undefined,
-  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer",
-  hasCampusRepAccess = false
+  area: AppArea,
+  hasCampusRepAccess = false,
+  volunteerCategory?: string | null
 ): NavItem[] {
   if (!role) return [];
   switch (area) {
     case "admin":
       return [
         { name: "Dashboard", href: "/admin", icon: HomeIcon },
-        { name: "Registrations", href: "/admin/registrations", icon: ClipboardDocumentListIcon },
-        // Centered item — check-in/check-out are unified into one QR Scan
-        // page; the station (including Checkout) is switched in-page.
+        { name: "Contact", href: "/admin/camp-structure", icon: Squares2X2Icon },
         { name: "QR Scan", href: "/admin/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/admin/campers", icon: UserGroupIcon },
+        LEADERBOARD_ITEM,
       ];
     case "teacher":
       return [
-        { name: "Home", href: "/teacher", icon: HomeIcon },
-        { name: "Registrations", href: "/teacher/registrations", icon: ClipboardDocumentListIcon },
+        { name: "Dashboard", href: "/teacher", icon: HomeIcon },
+        { name: "Contact", href: "/teacher/camp-contact", icon: Squares2X2Icon },
         { name: "QR Scan", href: "/teacher/qr-scan", icon: QrCodeIcon },
         { name: "Campers", href: "/teacher/campers", icon: UserGroupIcon },
+        { name: "Attendance", href: "/teacher/attendance", icon: ClipboardDocumentCheckIcon },
       ];
     case "volunteer":
       if (hasCampusRepAccess) {
@@ -401,12 +430,19 @@ export function getBottomNavItems(
           { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
         ];
       }
-      return [
+      const volunteerBottom: NavItem[] = [
         { name: "Home", href: "/volunteer", icon: HomeIcon },
-        { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
         { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
-        { name: "Meals", href: "/volunteer/meals", icon: CakeIcon },
+        { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
       ];
+      if (volunteerCategory === "Kitchen") {
+        volunteerBottom.push({ name: "Meals", href: "/volunteer/meals", icon: CakeIcon });
+      } else if (volunteerCategory === "Medical") {
+        volunteerBottom.push({ name: "Medical", href: "/volunteer/medical", icon: HeartIcon });
+      } else {
+        volunteerBottom.push({ name: "Incidents", href: "/volunteer/incidents", icon: ExclamationTriangleIcon });
+      }
+      return volunteerBottom;
     case "campus-rep":
       return [
         { name: "Home", href: "/campus-rep-dashboard", icon: HomeIcon },

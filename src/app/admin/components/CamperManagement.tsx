@@ -17,7 +17,7 @@ import { Textarea, Select } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
-import { downloadBlob, exportUserDataToXlsx } from "@/lib/import-export/serialize";
+import { ExportMenuButton } from "@/components/export/ExportMenuButton";
 
 // UserRole is not exported from @prisma/client after downgrade. Define locally to match schema.
 export type UserRole = "SUPER_ADMIN" | "OWNER" | "ADMIN" | "CAMPUS_REPRESENTATIVE";
@@ -124,7 +124,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<"REJECT_REG" | "DELETE" | null>(null);
   const [bulkReason, setBulkReason] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "thumbnail" | "card">("list");
+  const [viewMode, setViewMode] = useState<"card" | "thumbnail" | "list">("card");
 
   const openCamperParam = searchParams.get("openCamper") || searchParams.get("camperId") || searchParams.get("open") || searchParams.get("id");
   const queryParam = searchParams.get("q");
@@ -155,34 +155,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     setCursor(undefined);
     setAllCampers([]);
   }, [debouncedSearchTerm, campusFilter, statusFilter, genderFilter, tribeFilter, campId]);
-
-  const [isExportingData, setIsExportingData] = useState(false);
-  const exportUserDataQuery = api.importExport.exportUserData.useQuery(
-    {
-      organizationId,
-      userType: "CAMPER",
-      campusId: campusFilter !== "all" ? campusFilter : undefined,
-      status: statusFilter || undefined,
-      campId: campId || undefined,
-      search: debouncedSearchTerm || undefined,
-    },
-    { enabled: false, staleTime: 0 }
-  );
-
-  const handleExportCampers = async () => {
-    setIsExportingData(true);
-    try {
-      const { data: exportRows } = await exportUserDataQuery.refetch();
-      if (exportRows) {
-        const blob = await exportUserDataToXlsx(exportRows);
-        downloadBlob(`camply-campers-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsExportingData(false);
-    }
-  };
 
   // Get campers
   const { data: responseData, refetch: refetchProfiles, error: profilesError, isLoading } = api.camper.adminList.useQuery(
@@ -411,9 +383,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         >
           Edit
         </Button>
-        <Button size="sm" variant="danger" onClick={() => openDeleteModal(profile.id)}>
-          Delete
-        </Button>
       </div>
     ) : null;
 
@@ -486,13 +455,13 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         {/* View Mode Toggle */}
         <div className="flex items-center rounded-lg bg-surface-raised p-0.5 border border-border-default shrink-0">
           <button
-            onClick={() => setViewMode("list")}
+            onClick={() => setViewMode("card")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "list" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
+              viewMode === "card" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
             )}
           >
-            List
+            Card
           </button>
           <button
             onClick={() => setViewMode("thumbnail")}
@@ -504,20 +473,37 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             Thumbnail
           </button>
           <button
-            onClick={() => setViewMode("card")}
+            onClick={() => setViewMode("list")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "card" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
+              viewMode === "list" ? "bg-surface text-txt-primary shadow-sm" : "text-txt-secondary hover:text-txt-primary"
             )}
           >
-            Card
+            List
           </button>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <Button variant="secondary" onClick={handleExportCampers} loading={isExportingData}>
-          Export Campers
-        </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <ExportMenuButton
+          organizationId={organizationId}
+          selectedIds={selectedIds}
+          filters={{
+            campusId: campusFilter !== "all" ? campusFilter : undefined,
+            status: statusFilter || undefined,
+            gender: genderFilter || undefined,
+            tribeId: tribeFilter || undefined,
+            campId: campId || undefined,
+            search: debouncedSearchTerm || undefined,
+          }}
+          options={[
+            { kind: "CAMPERS", label: "Campers", description: "Camper roster as a spreadsheet" },
+            { kind: "ID_CARDS", label: "ID Cards", description: "Printable A4 sheet of camp ID badges" },
+            { kind: "ATTENDANCE_SHEET", label: "Attendance Sheet", description: "Printable check-in sheet" },
+            ...(canManageCampers
+              ? [{ kind: "CAMPERS_MEDICAL" as const, label: "Medical Summary", description: "Allergies, conditions, and emergency contacts" }]
+              : []),
+          ]}
+        />
         <Button onClick={() => { setSelectedProfile(null); setIsModalOpen(true); }}>Add Camper</Button>
       </div>
     </div>
@@ -559,13 +545,70 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       </BulkActionBar>
 
       {/* Stats Cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard data-testid="camper-stat-total" label="Total Campers" value={statsData?.totalCount ?? 0} />
-        <StatCard data-testid="camper-stat-male" label="Male" value={statsData?.maleCount ?? 0} />
-        <StatCard data-testid="camper-stat-female" label="Female" value={statsData?.femaleCount ?? 0} />
-        <StatCard data-testid="camper-stat-in-camp" label="In Camp" value={statsData?.inCampCount ?? 0} tone="success" />
-        <StatCard data-testid="camper-stat-exited-camp" label="Exited Camp" value={statsData?.exitedCampCount ?? 0} tone="neutral" />
-        <StatCard data-testid="camper-stat-tribe" label="Assigned to Tribe" value={statsData?.assignedTribeCount ?? 0} tone="info" />
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard
+          data-testid="camper-stat-approved"
+          label="Approved"
+          value={statsData?.approvedCount ?? 0}
+          tone="success"
+          selected={statusFilter === "APPROVED" && genderFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setGenderFilter("");
+            setStatusFilter((prev) => (prev === "APPROVED" ? "" : "APPROVED"));
+          }}
+        />
+        <StatCard
+          data-testid="camper-stat-in-camp"
+          label="In Camp"
+          value={statsData?.inCampCount ?? 0}
+          tone="info"
+          selected={statusFilter === "CHECKED_IN" && genderFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setGenderFilter("");
+            setStatusFilter((prev) => (prev === "CHECKED_IN" ? "" : "CHECKED_IN"));
+          }}
+        />
+        <StatCard
+          data-testid="camper-stat-male"
+          label="Male"
+          value={statsData?.checkedInMaleCount ?? 0}
+          selected={genderFilter === "Male" && statusFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setStatusFilter("");
+            setGenderFilter((prev) => (prev === "Male" ? "" : "Male"));
+          }}
+        />
+        <StatCard
+          data-testid="camper-stat-female"
+          label="Female"
+          value={statsData?.checkedInFemaleCount ?? 0}
+          selected={genderFilter === "Female" && statusFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setStatusFilter("");
+            setGenderFilter((prev) => (prev === "Female" ? "" : "Female"));
+          }}
+        />
+        <StatCard
+          data-testid="camper-stat-exited-camp"
+          label="Exited Camp"
+          value={statsData?.exitedCampCount ?? 0}
+          tone="neutral"
+          selected={statusFilter === "COMPLETED" && genderFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setGenderFilter("");
+            setStatusFilter((prev) => (prev === "COMPLETED" ? "" : "COMPLETED"));
+          }}
+        />
       </div>
 
       {viewMode === "list" ? (
@@ -657,13 +700,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                         >
                           Edit
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => openDeleteModal(item.id)}
-                        >
-                          Delete
-                        </Button>
                       </div>
                     )}
                   </div>
@@ -752,13 +788,6 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
                           onClick={() => { setSelectedProfile(item.id); setIsModalOpen(true); }}
                         >
                           Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => openDeleteModal(item.id)}
-                        >
-                          Delete
                         </Button>
                       </div>
                     )}

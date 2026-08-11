@@ -104,10 +104,10 @@ export async function validateSubmission(
     }
   }
 
-  // Step 5: Campus gate validation (boolean gates). Venue capacity is a
-  // separate, later-assigned concept checked at approval time instead (see
+  // Step 5: Campus suspension gate. Venue capacity is a separate,
+  // later-assigned concept checked at approval time instead (see
   // engine.ts's approveRegistrationInTx/transferVenue).
-  if (!campus.active || !campus.signupOpen) {
+  if (campus.suspended) {
     failures.push({ step: "campus", code: "CAMPUS_CLOSED", message: "This campus is not currently accepting registrations." });
   }
 

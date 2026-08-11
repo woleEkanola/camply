@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toCsv, toJsonBundle, toMarkdown, toXlsxWorkbook } from "../serialize";
+import { escapeFormula, exportUserDataToCsv, toCsv, toJsonBundle, toMarkdown, toXlsxWorkbook } from "../serialize";
 import type { CampusRow, DepartmentRow, TribeRow } from "../types";
 import { EXPORT_FORMAT, EXPORT_VERSION } from "../types";
 
@@ -9,8 +9,7 @@ const campus: CampusRow = {
   city: "Lagos",
   country: "Nigeria",
   state: "Lagos State",
-  active: true,
-  signupOpen: false,
+  suspended: false,
   displayOrder: 3,
 };
 
@@ -42,7 +41,8 @@ describe("toJsonBundle", () => {
 
 describe("toCsv", () => {
   it("serializes booleans and blanks correctly", () => {
-    const csv = toCsv("campuses", [campus]);
+    const suspendedCampus: CampusRow = { ...campus, name: "Isolo Campus", suspended: true };
+    const csv = toCsv("campuses", [campus, suspendedCampus]);
     expect(csv).toContain("Lekki Campus");
     expect(csv).toContain("true");
     expect(csv).toContain("false");
@@ -67,6 +67,39 @@ describe("toMarkdown", () => {
     const md = toMarkdown({ campuses: [], tribes: [tribe], departments: [] });
     expect(md).toContain("_No campuses._");
     expect(md).toContain("_No departments._");
+  });
+});
+
+describe("escapeFormula", () => {
+  it("prefixes a straight quote onto values starting with = + - @", () => {
+    expect(escapeFormula("=SUM(A1:A9)")).toBe("'=SUM(A1:A9)");
+    expect(escapeFormula("+1234")).toBe("'+1234");
+    expect(escapeFormula("-1234")).toBe("'-1234");
+    expect(escapeFormula("@mention")).toBe("'@mention");
+  });
+
+  it("leaves ordinary values untouched", () => {
+    expect(escapeFormula("Jane Doe")).toBe("Jane Doe");
+    expect(escapeFormula("")).toBe("");
+  });
+});
+
+describe("toCsv formula-injection guard", () => {
+  it("escapes a formula-shaped cell value before it reaches the CSV", () => {
+    const csv = toCsv("departments", [{ ...department, name: "=cmd|'/c calc'!A1" }]);
+    expect(csv).toContain("'=cmd");
+  });
+});
+
+describe("exportUserDataToCsv formula-injection guard", () => {
+  it("escapes formula-shaped values in dynamic row objects", () => {
+    const csv = exportUserDataToCsv([{ "Camper Name": "=HYPERLINK(\"http://evil\")", Allergies: "-none" }]);
+    expect(csv).toContain("'=HYPERLINK");
+    expect(csv).toContain("'-none");
+  });
+
+  it("returns an empty string for no rows", () => {
+    expect(exportUserDataToCsv([])).toBe("");
   });
 });
 

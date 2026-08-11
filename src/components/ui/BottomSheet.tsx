@@ -12,6 +12,11 @@ export interface BottomSheetProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   snap?: "auto" | "full";
+  /** Override the panel's data-testid — mirrors Dialog.tsx's `testId`, needed
+   * when a second sheet/dialog can be open or mid-transition at the same
+   * time (e.g. a profile sheet plus a confirm dialog). Defaults to the
+   * standard "bottom-sheet-panel" used everywhere else. */
+  testId?: string;
 }
 
 /**
@@ -20,7 +25,7 @@ export interface BottomSheetProps {
  * scan overlays this replaces were hand-rolled `fixed inset-0` divs with
  * none of that, dismissed by a click anywhere on the backdrop.
  */
-export function BottomSheet({ open, onClose, title, children, footer, snap = "auto" }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, children, footer, snap = "auto", testId = "bottom-sheet-panel" }: BottomSheetProps) {
   return (
     <Transition show={open} as={Fragment}>
       <HeadlessDialog onClose={onClose} className="relative z-50">
@@ -47,7 +52,7 @@ export function BottomSheet({ open, onClose, title, children, footer, snap = "au
             leaveTo="opacity-0 translate-y-full md:translate-y-4 md:scale-95"
           >
             <HeadlessDialog.Panel
-              data-testid="bottom-sheet-panel"
+              data-testid={testId}
               className={cn(
                 "flex w-full flex-col bg-elevated text-txt-primary border border-elevated-border shadow-2xl",
                 "rounded-t-2xl pb-[env(safe-area-inset-bottom)] md:max-w-md md:rounded-2xl md:pb-0",

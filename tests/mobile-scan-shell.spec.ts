@@ -26,8 +26,8 @@ test.describe("Scan Center - mobile shell (tab bar, search sheet, history sheet)
 
     // Search tab opens the search sheet.
     await page.getByRole("button", { name: "Search" }).click();
-    await expect(page.getByRole("heading", { name: "Search", exact: true })).toBeVisible();
-    await expect(page.getByPlaceholder(/Name, registration number, or phone/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Search Camper Database", exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder(/Name, registration #, or phone/)).toBeVisible();
     await page.getByRole("button", { name: "Close" }).click();
     await expect(page.getByRole("heading", { name: "Search", exact: true })).not.toBeVisible();
 

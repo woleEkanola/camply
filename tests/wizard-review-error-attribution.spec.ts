@@ -52,8 +52,6 @@ test.describe("Review step attributes submit errors to the correct teen", () => 
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusId = campus.id;

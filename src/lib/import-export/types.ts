@@ -14,8 +14,7 @@ export interface CampusRow {
   phone?: string;
   email?: string;
   campusCode?: string;
-  active?: boolean;
-  signupOpen?: boolean;
+  suspended?: boolean;
   displayOrder?: number;
 }
 
@@ -92,8 +91,7 @@ export const CAMPUS_COLUMNS: { key: keyof CampusRow; required: boolean; type: st
   { key: "phone", required: false, type: "text", example: "+2348012345678" },
   { key: "email", required: false, type: "text", example: "lekki@church.org" },
   { key: "campusCode", required: false, type: "text", example: "LEK" },
-  { key: "active", required: false, type: "boolean (default true)", example: "true" },
-  { key: "signupOpen", required: false, type: "boolean (default true)", example: "true" },
+  { key: "suspended", required: false, type: "boolean (default false)", example: "false" },
   { key: "displayOrder", required: false, type: "integer (default 0)", example: "1" },
 ];
 

@@ -256,6 +256,13 @@ async function approveRegistrationInTx(
 
   assertTransition(registration.status, "APPROVED");
 
+  if (registration.campus.suspended) {
+    throw new RegistrationEngineError(
+      "CAMPUS_SUSPENDED",
+      "This campus is suspended — approvals are paused until it's reactivated."
+    );
+  }
+
   // Two-layer approval: in a TWO_STEP org, a campus rep can only endorse
   // (see endorseRegistration below) — final approval, and the acceptance
   // email it triggers, requires an org admin. An admin may still approve
@@ -425,11 +432,17 @@ export async function endorseRegistration(params: { registrationId: string; acto
   return prisma.$transaction(async (tx) => {
     const registration = await tx.registration.findUniqueOrThrow({
       where: { id: params.registrationId },
-      include: { camper: true },
+      include: { camper: true, campus: true },
     });
 
     if (registration.status !== "PENDING") {
       throw new RegistrationEngineError("NOT_PENDING", "Only a pending registration can be endorsed.");
+    }
+    if (registration.campus.suspended) {
+      throw new RegistrationEngineError(
+        "CAMPUS_SUSPENDED",
+        "This campus is suspended — recommendations are paused until it's reactivated."
+      );
     }
     const twoStep = await isTwoStepOrg(tx, registration.camper.organizationId);
     if (!twoStep) {
@@ -853,6 +866,44 @@ export async function archiveRegistration(params: { registrationId: string; acto
       action: "REGISTRATION_ARCHIVED",
       previousValue: { status: registration.status },
       newValue: { status: "ARCHIVED" },
+    });
+
+    return updated;
+  });
+}
+
+/**
+ * Marks a registration as having completed camp. `CHECKED_IN` is the only
+ * status the state machine allows to reach `COMPLETED` — a camper who was
+ * never checked in cannot have completed camp — so `assertTransition` throws
+ * `IllegalTransitionError` for anything else, and callers sweeping many
+ * registrations at once must filter or catch rather than assume.
+ *
+ * `actorId` is optional: the nightly reconcile awards completion with no
+ * acting user, and `logEvent` already treats `actorId` as optional.
+ *
+ * Enqueues no SideEffect, matching `archiveRegistration`/`checkInRegistration`
+ * — `SideEffectType` is a closed union with no completion member, so a
+ * completion email would be a deliberate separate change, not a side effect
+ * of this one.
+ */
+export async function completeRegistration(params: { registrationId: string; actorId?: string }) {
+  return prisma.$transaction(async (tx) => {
+    const registration = await tx.registration.findUniqueOrThrow({
+      where: { id: params.registrationId },
+      include: { camper: true },
+    });
+    assertTransition(registration.status, "COMPLETED");
+
+    const updated = await tx.registration.update({ where: { id: registration.id }, data: { status: "COMPLETED" } });
+
+    await logEvent(tx, {
+      organizationId: registration.camper.organizationId,
+      registrationId: registration.id,
+      actorId: params.actorId,
+      action: "REGISTRATION_COMPLETED",
+      previousValue: { status: registration.status },
+      newValue: { status: "COMPLETED" },
     });
 
     return updated;

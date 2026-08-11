@@ -7,7 +7,7 @@ import { Select } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
 import { isEndorsed } from "@/server/registration/endorsement";
 
-type Action = "APPROVE" | "REJECT" | "WAITLIST" | "REQUEST_CORRECTION" | "CANCEL" | "ARCHIVE";
+type Action = "APPROVE" | "REJECT" | "WAITLIST" | "REQUEST_CORRECTION" | "CANCEL" | "ARCHIVE" | "REVOKE_APPROVAL" | "UNDO_CHECK_IN" | "ADVANCE_FROM_REQUIRES_ACTION" | "COMPLETE";
 
 interface StatusDialogProps {
   open: boolean;
@@ -18,7 +18,7 @@ interface StatusDialogProps {
   review?: { verificationStatus?: string | null; recommendation?: string | null } | null;
 }
 
-const ACTION_OPTIONS: { value: Action; label: string }[] = [
+const BASE_ACTIONS: { value: Action; label: string }[] = [
   { value: "APPROVE", label: "Approve" },
   { value: "REJECT", label: "Reject" },
   { value: "WAITLIST", label: "Waitlist" },
@@ -28,6 +28,20 @@ const ACTION_OPTIONS: { value: Action; label: string }[] = [
 ];
 
 export function StatusDialog({ open, onClose, registration, onSubmit, isTwoStep, review }: StatusDialogProps) {
+  const status = registration?.status as string | undefined;
+  const actionOptions: { value: Action; label: string }[] = [
+    ...BASE_ACTIONS,
+    ...(status === "APPROVED" ? [{ value: "REVOKE_APPROVAL" as Action, label: "Revoke Approval" }] : []),
+    // CHECKED_IN is the only status the state machine lets reach COMPLETED,
+    // so the option only exists there.
+    ...(status === "CHECKED_IN"
+      ? [
+          { value: "UNDO_CHECK_IN" as Action, label: "Undo Check-in" },
+          { value: "COMPLETE" as Action, label: "Mark Completed" },
+        ]
+      : []),
+    ...(status === "REQUIRES_ACTION" ? [{ value: "ADVANCE_FROM_REQUIRES_ACTION" as Action, label: "Advance to Review" }] : []),
+  ];
   const [action, setAction] = useState<Action>("APPROVE");
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
@@ -46,7 +60,7 @@ export function StatusDialog({ open, onClose, registration, onSubmit, isTwoStep,
 
   const handleSubmit = () => {
     onSubmit(action, {
-      reason: action === "REJECT" || action === "CANCEL" ? reason || undefined : undefined,
+      reason: action === "REJECT" || action === "CANCEL" || action === "REVOKE_APPROVAL" ? reason || undefined : undefined,
       message: action === "REQUEST_CORRECTION" ? message : undefined,
       sendEmail: ["APPROVE", "REJECT", "WAITLIST", "REQUEST_CORRECTION"].includes(action) ? sendEmail : undefined,
     });
@@ -216,6 +230,45 @@ export function StatusDialog({ open, onClose, registration, onSubmit, isTwoStep,
           </div>
         );
 
+      case "REVOKE_APPROVAL":
+        return (
+          <div className="space-y-4">
+            <p className="text-sm text-neutral-600">
+              This will revoke the approval and move the registration back to <strong>Pending</strong>. The QR code and registration number will be cleared.
+            </p>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-neutral-700">
+                Reason
+              </label>
+              <textarea
+                className="block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                rows={2}
+                placeholder="Optional reason for revoking approval"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </div>
+          </div>
+        );
+
+      case "UNDO_CHECK_IN":
+        return (
+          <div className="space-y-4">
+            <p className="text-sm text-neutral-600">
+              This will undo the check-in and move the registration back to <strong>Approved</strong>. The check-in record will be cleared.
+            </p>
+          </div>
+        );
+
+      case "ADVANCE_FROM_REQUIRES_ACTION":
+        return (
+          <div className="space-y-4">
+            <p className="text-sm text-neutral-600">
+              This will clear the correction request and move the registration back to <strong>Pending</strong> for review.
+            </p>
+          </div>
+        );
+
       default:
         return null;
     }
@@ -238,7 +291,9 @@ export function StatusDialog({ open, onClose, registration, onSubmit, isTwoStep,
                 ? "danger"
                 : action === "CANCEL" || action === "ARCHIVE"
                   ? "secondary"
-                  : "primary"
+                  : action === "REVOKE_APPROVAL" || action === "UNDO_CHECK_IN"
+                    ? "secondary"
+                    : "primary"
             }
             disabled={isSubmitDisabled}
             onClick={handleSubmit}
@@ -253,7 +308,13 @@ export function StatusDialog({ open, onClose, registration, onSubmit, isTwoStep,
                     ? "Request Correction"
                     : action === "CANCEL"
                       ? "Cancel Registration"
-                      : "Archive Registration"}
+                      : action === "ARCHIVE"
+                        ? "Archive Registration"
+                        : action === "REVOKE_APPROVAL"
+                          ? "Revoke Approval"
+                          : action === "UNDO_CHECK_IN"
+                            ? "Undo Check-in"
+                            : "Advance to Review"}
           </Button>
         </div>
       }
@@ -264,7 +325,7 @@ export function StatusDialog({ open, onClose, registration, onSubmit, isTwoStep,
           value={action}
           onChange={(e) => setAction(e.target.value as Action)}
         >
-          {ACTION_OPTIONS.map((opt) => (
+          {actionOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>

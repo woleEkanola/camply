@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { hasStaffCapability } from "../../auth/capabilities";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
@@ -12,12 +13,18 @@ async function assertOrgAdmin(ctx: { session: any }, organizationId: string) {
   throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage departments for this organization" });
 }
 
-async function assertOrgMember(ctx: { session: any }, organizationId: string) {
+async function assertOrgMember(ctx: { session: any; userId: string }, organizationId: string) {
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (currentUser.role === "PARENT") throw new TRPCError({ code: "FORBIDDEN" });
   if (currentUser.organizationId !== organizationId) throw new TRPCError({ code: "FORBIDDEN" });
-  return currentUser;
+  // Staff modules are for people with staff capability. Gate on that, not on
+  // `role !== "PARENT"`: a parent who also teaches keeps role PARENT and would
+  // otherwise be locked out of modules they legitimately belong to — while a
+  // parent with no staff profile must still be refused.
+  // See server/auth/capabilities.ts.
+  if (ADMIN_ROLES.includes(currentUser.role) || currentUser.role === "CAMPUS_REPRESENTATIVE") return currentUser;
+  if (await hasStaffCapability(ctx.userId, { organizationId })) return currentUser;
+  throw new TRPCError({ code: "FORBIDDEN" });
 }
 
 export const departmentRouter = createTRPCRouter({
@@ -247,7 +254,9 @@ export const departmentRouter = createTRPCRouter({
   getAnnouncements: protectedProcedure
     .input(z.object({ departmentId: z.string() }))
     .query(async ({ ctx, input }) => {
-      assertOrgMember(ctx, (await ctx.prisma.department.findUniqueOrThrow({ where: { id: input.departmentId } })).organizationId);
+      // NOTE: `await` was missing here — assertOrgMember is async, so the
+      // rejection floated free and the mutation ran regardless of the check.
+      await assertOrgMember(ctx, (await ctx.prisma.department.findUniqueOrThrow({ where: { id: input.departmentId } })).organizationId);
       return ctx.prisma.departmentAnnouncement.findMany({
         where: { departmentId: input.departmentId },
         orderBy: { createdAt: "desc" },
@@ -281,7 +290,9 @@ export const departmentRouter = createTRPCRouter({
   getDocuments: protectedProcedure
     .input(z.object({ departmentId: z.string() }))
     .query(async ({ ctx, input }) => {
-      assertOrgMember(ctx, (await ctx.prisma.department.findUniqueOrThrow({ where: { id: input.departmentId } })).organizationId);
+      // NOTE: `await` was missing here — assertOrgMember is async, so the
+      // rejection floated free and the mutation ran regardless of the check.
+      await assertOrgMember(ctx, (await ctx.prisma.department.findUniqueOrThrow({ where: { id: input.departmentId } })).organizationId);
       return ctx.prisma.departmentDocument.findMany({
         where: { departmentId: input.departmentId },
         orderBy: { createdAt: "desc" },
@@ -319,7 +330,9 @@ export const departmentRouter = createTRPCRouter({
   getActivityLogs: protectedProcedure
     .input(z.object({ departmentId: z.string() }))
     .query(async ({ ctx, input }) => {
-      assertOrgMember(ctx, (await ctx.prisma.department.findUniqueOrThrow({ where: { id: input.departmentId } })).organizationId);
+      // NOTE: `await` was missing here — assertOrgMember is async, so the
+      // rejection floated free and the mutation ran regardless of the check.
+      await assertOrgMember(ctx, (await ctx.prisma.department.findUniqueOrThrow({ where: { id: input.departmentId } })).organizationId);
       return ctx.prisma.departmentActivityLog.findMany({
         where: { departmentId: input.departmentId },
         orderBy: { createdAt: "desc" },

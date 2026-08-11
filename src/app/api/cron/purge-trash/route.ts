@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { purgeExpired } from "@/server/trash/service";
+import { purgeExpiredExports } from "@/server/export/engine";
 
 /**
- * Hard-deletes anything soft-deleted more than 60 days ago (see src/server/trash/service.ts).
+ * Hard-deletes anything soft-deleted more than 60 days ago (see src/server/trash/service.ts),
+ * plus any ExportJob past its 24h expiry. ExportJob isn't a soft-delete/restore entity like
+ * TRASH_REGISTRY's members, so it's purged here directly rather than folded into purgeExpired().
  * Intended to be hit once a day by an external scheduler (Render cron job, uptime pinger).
  * Protected by a shared secret rather than user auth — not a user-facing endpoint,
  * same pattern as /api/cron/effects.
@@ -13,6 +16,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await purgeExpired();
-  return NextResponse.json(result);
+  const [trash, exports] = await Promise.all([purgeExpired(), purgeExpiredExports()]);
+  return NextResponse.json({ trash, exports });
 }

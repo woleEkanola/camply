@@ -1,23 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-
-async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
-  const currentUser = ctx.session?.user;
-  if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-
-  const camp = await ctx.prisma.camp.findUnique({ where: { id: campId } });
-  if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
-
-  const hasPermission =
-    currentUser.role === "SUPER_ADMIN" ||
-    ((currentUser.role === "OWNER" || currentUser.role === "ADMIN") && currentUser.organizationId === camp.organizationId);
-
-  if (!hasPermission) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage document requirements for this camp" });
-  }
-  return camp;
-}
+import { assertCanManageCamp } from "../trpc/scoping";
 
 const documentRequirementSchema = z.object({
   campId: z.string(),

@@ -329,7 +329,7 @@ export async function loginWithPassword(page: Page, email: string, password: str
   await emailInput(page).fill(email);
   await passwordInput(page).fill(password);
   await loginButton(page).click();
-  await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard)/, { timeout: 45000 });
+  await page.waitForURL(/\/(admin|dashboard|super-admin|campus-rep-dashboard|teacher|volunteer)/, { timeout: 45000 });
 }
 
 /**
@@ -350,13 +350,33 @@ export function campusCard(page: Page, name: string | RegExp) {
 
 /** Search the campuses grid and return the matching card. */
 export async function findCampusCard(page: Page, name: string) {
-  const search = page.getByPlaceholder(/Search campuses/i);
-  if (await search.isVisible().catch(() => false)) {
-    await search.fill(name);
+  const card = campusCard(page, name).first();
+
+  // The campuses page filters client-side over a list refreshed by a
+  // fire-and-forget `void refetchCampuses()` in the create mutation's
+  // onSuccess (src/app/admin/campuses/page.tsx). A campus created moments
+  // ago can therefore be absent from the array the filter runs over, and no
+  // amount of waiting on the filtered DOM will bring it back — the component
+  // has already settled. Reloading re-queries, so retry around that rather
+  // than sitting on one long timeout.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const search = page.getByPlaceholder(/Search campuses/i);
+    if (await search.isVisible().catch(() => false)) {
+      await search.fill("");
+      await search.fill(name);
+    }
+    try {
+      await card.waitFor({ state: "visible", timeout: 6000 });
+      return card;
+    } catch {
+      if (attempt === 2) break;
+      await page.reload();
+      await page.waitForLoadState("networkidle").catch(() => {});
+    }
   }
-  const card = campusCard(page, name);
-  await card.first().waitFor({ state: "visible", timeout: 15000 });
-  return card.first();
+
+  await card.waitFor({ state: "visible", timeout: 10000 });
+  return card;
 }
 
 /**
@@ -391,4 +411,31 @@ export async function loginWithOtp(page: Page, email: string) {
   await page.locator("#email").fill(email);
   await fillOtpGrid(page, code);
   await page.locator('button:visible', { hasText: "Verify OTP" }).click();
+}
+
+/**
+ * Waits for a leaderboard settings mutation to actually land, by polling the
+ * DB for the expected state.
+ *
+ * **Never assert on the "Settings updated." toast to prove a settings write
+ * landed.** Every mutation in `SettingsAdmin` raises that same string, and
+ * toasts linger for seconds, so a second back-to-back mutation's toast
+ * assertion matches the *first* toast and passes instantly — the test then
+ * proceeds (or ends, skipping cleanup) while the write is still in flight.
+ * That is the root cause of the long-running `leaderboard-admin.spec.ts`
+ * flake: it surfaced as a `.uncheck()` actionability failure rather than a
+ * wrong value, because `SettingsAdmin`'s optimistic update re-renders the
+ * bound input on `onSettled` invalidation.
+ *
+ * `predicate` receives the LeaderboardSettings row (or null if none exists
+ * yet) and should return true once the expected state is visible.
+ */
+export async function expectSettingsSaved(
+  campId: string,
+  predicate: (settings: any | null) => boolean,
+  timeout = 15000
+): Promise<void> {
+  await expect
+    .poll(async () => predicate(await prisma.leaderboardSettings.findFirst({ where: { campId } })), { timeout })
+    .toBe(true);
 }

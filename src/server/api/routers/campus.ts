@@ -18,8 +18,6 @@ const campusSchema = z.object({
   pastor: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
-  active: z.boolean().optional(),
-  signupOpen: z.boolean().optional(),
   campusCode: z.string().nullable().optional(),
   displayOrder: z.number().int().optional(),
   organizationId: z.string(),
@@ -113,20 +111,13 @@ export const campusRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not found" });
       }
 
-      if (user.role === "OWNER" && user.organizationId === input.organizationId) {
-        // pass
-      } else if (user.role === "CAMPUS_REPRESENTATIVE" && user.organizationId === input.organizationId) {
-        // pass - reps can list campuses in their org (scoped views handled client-side / via getById)
+      if (user.role === "SUPER_ADMIN" || user.organizationId === input.organizationId) {
+        // pass - all staff members in the organization can view campus lists
       } else {
-        const allowedPermissions = ["READ_CAMPUS", "UPDATE_CAMPUS"];
-        const userPermissions = user.permissions.map((p) => p.type);
-        const hasPermission = userPermissions.some((p) => allowedPermissions.includes(p));
-        if (!(user.role === "ADMIN" && user.organizationId === input.organizationId && hasPermission)) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "You don't have permission to view campuses for this organization",
-          });
-        }
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You don't have permission to view campuses for this organization",
+        });
       }
 
       return prisma.campus.findMany({
@@ -184,6 +175,47 @@ export const campusRouter = createTRPCRouter({
         }
         throw err;
       }
+    }),
+
+  // Halts a campus: blocks new submissions/resubmissions and blocks endorse/
+  // approve of its already-PENDING registrations (see validation.ts and
+  // engine.ts). Deliberately does NOT touch reject/waitlist/archive, and
+  // does NOT affect already-APPROVED/CHECKED_IN campers or the campus's
+  // signup link — a fully separate, independent control. Org-admin only,
+  // unlike SignupLink.deactivate which campus reps can also do.
+  suspend: protectedProcedure
+    .input(z.object({ id: z.string(), reason: z.string().max(500).optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const campus = await prisma.campus.findUnique({ where: { id: input.id } });
+      if (!campus || campus.deletedAt) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
+      }
+      const actor = await assertOrgAdmin(ctx, campus.organizationId);
+
+      return prisma.campus.update({
+        where: { id: input.id },
+        data: {
+          suspended: true,
+          suspendedAt: new Date(),
+          suspendedById: actor.id,
+          suspendedReason: input.reason ?? null,
+        },
+      });
+    }),
+
+  unsuspend: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const campus = await prisma.campus.findUnique({ where: { id: input.id } });
+      if (!campus || campus.deletedAt) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Campus not found" });
+      }
+      await assertOrgAdmin(ctx, campus.organizationId);
+
+      return prisma.campus.update({
+        where: { id: input.id },
+        data: { suspended: false, suspendedAt: null, suspendedById: null, suspendedReason: null },
+      });
     }),
 
   // Delete a campus (soft delete — recoverable from Trash for 60 days; cascades

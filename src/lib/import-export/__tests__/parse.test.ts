@@ -11,8 +11,7 @@ const campus: CampusRow = {
   country: "Nigeria",
   state: "Lagos State",
   campusCode: "LEK",
-  active: true,
-  signupOpen: false,
+  suspended: false,
   displayOrder: 3,
 };
 

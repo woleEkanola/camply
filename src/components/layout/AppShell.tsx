@@ -8,14 +8,18 @@ import { ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, UserIcon, ChevronRight
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import NotificationBell from "@/components/NotificationBell";
+import { ExportCenterTray } from "@/components/export/ExportCenterTray";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
-import { getNavGroups, getBottomNavItems, type Role } from "./navConfig";
+import { getNavGroups, getBottomNavItems, type Role, type AppArea } from "./navConfig";
+import { ContextSwitcher } from "./ContextSwitcher";
 import { CommandPalette } from "./CommandPalette";
 import { BottomNav } from "./BottomNav";
 import { Menu, Transition } from "@headlessui/react";
+import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
+import { RoleSwitcher } from "./RoleSwitcher";
 
 export interface AppShellProps {
-  area: "admin" | "dashboard" | "campus-rep" | "super-admin" | "teacher" | "volunteer";
+  area: AppArea;
   children: React.ReactNode;
 }
 
@@ -54,6 +58,10 @@ export default function AppShell({ area, children }: AppShellProps) {
     enabled: !!session?.user,
   });
 
+  const { data: staffProfile } = api.staff.getMyProfile.useQuery(undefined, {
+    enabled: !!session?.user && (session.user.role === "VOLUNTEER" || session.user.role === "TEACHER"),
+  });
+
   const organizationId = session?.user?.organizationId ?? "";
   const { data: organization } = api.organization.getById.useQuery(
     { id: organizationId },
@@ -62,8 +70,8 @@ export default function AppShell({ area, children }: AppShellProps) {
 
   const role = session?.user?.role as Role | undefined;
   const managedCampuses = (session?.user as { managedCampuses?: string[] } | undefined)?.managedCampuses ?? [];
-  const groups = getNavGroups(role, area, managedCampuses.length > 0);
-  const bottomNavItems = getBottomNavItems(role, area, managedCampuses.length > 0);
+  const groups = getNavGroups(role, area, managedCampuses.length > 0, staffProfile?.volunteerCategory);
+  const bottomNavItems = getBottomNavItems(role, area, managedCampuses.length > 0, staffProfile?.volunteerCategory);
 
   // Collapsible groups (Communication, Settings) start closed; auto-expand
   // whichever one contains the current route so the active link is never
@@ -82,6 +90,17 @@ export default function AppShell({ area, children }: AppShellProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, role]);
 
+  const platformBrandingQuery = api.platformBranding.get.useQuery();
+  const orgBrandingQuery = api.communication.brandingGet.useQuery(undefined, { enabled: area !== "super-admin" });
+
+  const displayLogo =
+    area === "super-admin"
+      ? platformBrandingQuery.data?.platformLogoUrl || "/logo.png"
+      : (orgBrandingQuery.data as any)?.masterLogoUrl ||
+        orgBrandingQuery.data?.logoUrl ||
+        platformBrandingQuery.data?.platformLogoUrl ||
+        "/logo.png";
+
   const handleLogout = async () => {
     await signOut({ redirect: false });
     router.push("/login");
@@ -90,9 +109,13 @@ export default function AppShell({ area, children }: AppShellProps) {
   const sidebarContent = (
     <>
       <div className="flex h-14 items-center justify-between px-4">
-        <span className={cn("truncate font-semibold text-txt-primary", !sidebarOpen && "hidden")}>
-          {organization?.name || "Camply"}
-        </span>
+        <Link href={area === "super-admin" ? "/super-admin" : "/"} className="flex items-center space-x-2 max-w-[160px] overflow-hidden">
+          <img
+            src={displayLogo}
+            alt={area === "super-admin" ? "Camply SaaS" : organization?.name || "Camply"}
+            className="max-h-8 max-w-full object-contain"
+          />
+        </Link>
         <button
           onClick={() => setSidebarOpen((v) => !v)}
           className="hidden rounded-md p-1.5 text-txt-muted hover:bg-surface-raised hover:text-txt-primary md:block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
@@ -177,7 +200,8 @@ export default function AppShell({ area, children }: AppShellProps) {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-2">
+      <div className="border-t border-sidebar-border p-2 space-y-1">
+        <InstallPwaButton variant="sidebar" />
         <button
           onClick={handleLogout}
           className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-fg hover:bg-surface-raised hover:text-txt-primary"
@@ -194,7 +218,7 @@ export default function AppShell({ area, children }: AppShellProps) {
       {/* Desktop sidebar */}
       <div
         className={cn(
-          "hidden md:flex md:flex-col border-r border-sidebar-border bg-sidebar-bg transition-all duration-200",
+          "no-print hidden md:flex md:flex-col border-r border-sidebar-border bg-sidebar-bg transition-all duration-200",
           sidebarOpen ? "md:w-64" : "md:w-16"
         )}
       >
@@ -203,14 +227,14 @@ export default function AppShell({ area, children }: AppShellProps) {
 
       {/* Mobile off-canvas sidebar */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="no-print fixed inset-0 z-40 md:hidden">
           <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-xs" onClick={() => setMobileOpen(false)} aria-hidden="true" />
           <div className="fixed inset-y-0 left-0 flex w-72 flex-col bg-sidebar-bg border-r border-sidebar-border shadow-xl">{sidebarContent}</div>
         </div>
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border-default bg-surface px-4 pt-[env(safe-area-inset-top)]">
+        <header className="no-print flex h-14 shrink-0 items-center justify-between border-b border-border-default bg-surface px-4 pt-[env(safe-area-inset-top)]">
           <button
             onClick={() => setMobileOpen(true)}
             className="rounded-md p-1.5 text-txt-secondary hover:bg-surface-raised md:hidden"
@@ -226,6 +250,9 @@ export default function AppShell({ area, children }: AppShellProps) {
             <kbd className="rounded border border-border-default bg-surface-raised px-1.5 py-0.5 text-xs text-txt-muted">⌘K</kbd>
           </button>
           <div className="flex items-center gap-2">
+            <RoleSwitcher />
+            <ContextSwitcher capabilities={session?.user?.capabilities} currentArea={area} />
+            <ExportCenterTray />
             <NotificationBell />
             <ThemeToggle />
             {session?.user?.email && (
@@ -277,6 +304,9 @@ export default function AppShell({ area, children }: AppShellProps) {
                       )}
                     </Menu.Item>
                     <Menu.Item>
+                      {() => <InstallPwaButton variant="menu" />}
+                    </Menu.Item>
+                    <Menu.Item>
                       {({ active }) => (
                         <button
                           onClick={handleLogout}
@@ -297,13 +327,19 @@ export default function AppShell({ area, children }: AppShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto scrollbar-hide px-6 pt-6 pb-20 md:pb-6">
+        <main id="print-area" className="flex-1 overflow-auto scrollbar-hide px-6 pt-6 pb-20 md:pb-6">
           {children}
         </main>
       </div>
 
-      <BottomNav items={bottomNavItems} onMoreClick={() => setMobileOpen(true)} />
-      <CommandPalette area={area} />
+      <div className="no-print">
+        <BottomNav
+          items={bottomNavItems}
+          onMoreClick={() => setMobileOpen(true)}
+          showMore={area !== "admin" && area !== "teacher"}
+        />
+        <CommandPalette area={area} />
+      </div>
     </div>
   );
 }

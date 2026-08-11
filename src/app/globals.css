@@ -97,6 +97,20 @@
   --status-attention-fg: #c084fc;
 }
 
+/*
+ * Legacy surface compatibility.
+ *
+ * Older screens used `bg-white` as a generic card/control surface. That is
+ * correct in light mode, but it bypasses the semantic surface palette in dark
+ * mode and can leave light text sitting on a white highlight. Keep those
+ * screens theme-aware while they are progressively moved to `bg-surface`.
+ * Components that intentionally need literal white (for example a QR canvas)
+ * can opt out with `theme-static-white`.
+ */
+.dark .bg-white:not(.theme-static-white) {
+  background-color: var(--surface-bg);
+}
+
 @theme inline {
   --color-page-bg: var(--page-bg);
   --color-page-fg: var(--page-fg);
@@ -245,6 +259,14 @@
   50% { opacity: 1; }
 }
 
+/* Leaderboard presentation mode — a brief highlight flash when a subject's
+   rank changes, so a viewer's eye catches the movement even without
+   watching the FLIP reorder animation itself. */
+@keyframes rank-highlight {
+  0% { background-color: rgba(230, 126, 34, 0.35); }
+  100% { background-color: transparent; }
+}
+
 @utility animate-fade-in {
   animation: fade-in 220ms ease-out both;
 }
@@ -257,10 +279,15 @@
   animation: scan-guide-pulse 2s ease-in-out infinite;
 }
 
+@utility animate-rank-highlight {
+  animation: rank-highlight 1.2s ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
   .animate-slide-up-in,
-  .animate-scan-guide-pulse {
+  .animate-scan-guide-pulse,
+  .animate-rank-highlight {
     animation: none !important;
   }
 
@@ -337,5 +364,21 @@ body {
   select,
   textarea {
     touch-action: manipulation;
+  }
+}
+
+/* Printable views (Reports page "Print", RegistrationDetailsDrawer's badge
+   PDF opens in a new tab instead — see handlePrintBadge). AppShell tags its
+   chrome (sidebar, header, bottom nav, command palette) with .no-print and
+   its content region with #print-area; anything not inside #print-area is
+   hidden so window.print() only outputs the report, not the whole app. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  #print-area {
+    overflow: visible !important;
+    padding: 0 !important;
   }
 }

@@ -22,6 +22,7 @@ import {
   XMarkIcon,
   MapPinIcon,
   TrashIcon,
+  EnvelopeIcon,
 } from "@heroicons/react/24/outline";
 import { api } from "@/utils/trpc";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -40,6 +41,7 @@ import { ViewModeToggle, type StaffViewMode } from "@/components/staff/ViewModeT
 import { TeacherRecruitmentPanel } from "@/components/staff/TeacherRecruitmentPanel";
 import { CampusQuotasCard } from "@/components/staff/CampusQuotasCard";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
+import { ExportMenuButton } from "@/components/export/ExportMenuButton";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 const VOLUNTEER_CATEGORIES = ["Registration", "Medical", "Kitchen", "Transport", "Security", "Media", "Logistics", "Technical", "Cleaning", "Protocol"];
@@ -96,6 +98,9 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [emailAction, setEmailAction] = useState<null | { mode: "APPROVE" | "RESEND"; ids: string[] }>(null);
+  const [sendEmailOnApprove, setSendEmailOnApprove] = useState(true);
+  const [emailActionResult, setEmailActionResult] = useState<null | { sent: number; failed: number; skipped: number }>(null);
 
   const [campusFilter, setCampusFilter] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
@@ -161,7 +166,8 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     setSelectedIds([]);
   };
 
-  const bulkApprove = api.staff.bulkApprove.useMutation({ onSuccess: invalidate });
+  const bulkApprove = api.staff.bulkApprove.useMutation();
+  const resendApprovalEmails = api.staff.resendApprovalEmails.useMutation();
   const bulkReject = api.staff.bulkReject.useMutation({ onSuccess: invalidate });
   const bulkDelete = api.staff.bulkDelete.useMutation({
     onSuccess: () => { setSuccess("Selected staff profiles deleted successfully!"); invalidate(); setTimeout(() => setSuccess(""), 5000); },
@@ -171,6 +177,36 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     onSuccess: () => { setDeleteTarget(null); setSuccess("Staff profile deleted successfully!"); invalidate(); setTimeout(() => setSuccess(""), 5000); },
     onError: (err) => { setError(err.message); setDeleteTarget(null); },
   });
+
+  const runEmailAction = async () => {
+    if (!emailAction) return;
+    setError("");
+    setEmailActionResult(null);
+    try {
+      if (emailAction.mode === "APPROVE") {
+        await bulkApprove.mutateAsync({ ids: emailAction.ids });
+        if (!sendEmailOnApprove || type !== "TEACHER") {
+          setSuccess(`Approved ${emailAction.ids.length} selected profile${emailAction.ids.length === 1 ? "" : "s"}.`);
+          setEmailAction(null);
+          invalidate();
+          return;
+        }
+      }
+
+      const result = await resendApprovalEmails.mutateAsync({ ids: emailAction.ids });
+      setEmailActionResult({ sent: result.sent, failed: result.failed, skipped: result.skipped });
+      setSuccess(`Approval email result: ${result.sent} sent, ${result.failed} failed, ${result.skipped} skipped.`);
+      invalidate();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not complete the selected action.");
+    }
+  };
+
+  const openEmailAction = (mode: "APPROVE" | "RESEND", ids = selectedIds) => {
+    setEmailAction({ mode, ids: [...ids] });
+    setEmailActionResult(null);
+    setSendEmailOnApprove(true);
+  };
   const autoAssignToTribes = api.staff.autoAssignToTribes.useMutation({
     onSuccess: () => { setSuccess("Auto assigned all teachers to tribes successfully!"); invalidate(); setTimeout(() => setSuccess(""), 5000); },
     onError: (err) => setError(err.message),
@@ -241,6 +277,21 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     // a mobile admin saw an approve button on some rows and not others with
     // no visible field explaining why.
     { header: "Status", accessor: (row) => <StatusBadge status={row.status} /> },
+    ...(type === "TEACHER"
+      ? [{
+          header: "Approval email",
+          accessor: (row: any) => {
+            const status = row.approvalEmailStatus;
+            const label = status === "NOT_RECORDED" ? "Not recorded" : status;
+            const tone = ["SENT", "DELIVERED", "OPENED", "CLICKED"].includes(status)
+              ? "text-success-700 bg-success-50"
+              : status === "FAILED" || status === "BOUNCED"
+                ? "text-danger-700 bg-danger-50"
+                : "text-neutral-600 bg-surface-raised";
+            return <span className={cn("rounded-full px-2 py-1 text-[10px] font-semibold", tone)}>{label}</span>;
+          },
+        }]
+      : []),
   ];
 
   const actions = (row: any) => (
@@ -248,7 +299,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       {row.status === "PENDING" && (
         <>
           <button
-            onClick={() => bulkApprove.mutate({ ids: [row.id] })}
+            onClick={() => openEmailAction("APPROVE", [row.id])}
             disabled={bulkApprove.isPending}
             className="rounded-md p-1.5 text-success-600 hover:bg-success-50 disabled:cursor-not-allowed disabled:opacity-50"
             title="Approve"
@@ -302,6 +353,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                   variant="secondary"
                   size="sm"
                   className="w-full justify-center whitespace-nowrap sm:w-auto"
+                  disabled={!campId}
                   loading={autoAssignToTribes.isPending}
                   onClick={() => { if (window.confirm("Auto assign all teachers to tribes based on gender & quota?")) autoAssignToTribes.mutate({ organizationId, campId }); }}
                 >
@@ -311,6 +363,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                   variant="secondary"
                   size="sm"
                   className="w-full justify-center whitespace-nowrap sm:w-auto"
+                  disabled={!campId}
                   loading={autoAssignToDepartments.isPending}
                   onClick={() => { if (window.confirm("Auto assign all teachers to departments with gender-mixed leaders?")) autoAssignToDepartments.mutate({ organizationId, campId }); }}
                 >
@@ -318,6 +371,24 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 </Button>
               </>
             )}
+            <ExportMenuButton
+              organizationId={organizationId}
+              size="sm"
+              selectedIds={selectedIds}
+              filters={{
+                campId: campId || undefined,
+                type,
+                status: statusFilter || undefined,
+                campusId: campusFilter || undefined,
+                gender: genderFilter || undefined,
+                tribeId: tribeFilter || undefined,
+                volunteerCategory: categoryFilter || undefined,
+              }}
+              options={[
+                { kind: "STAFF", label: type === "TEACHER" ? "Teachers" : "Volunteers", description: "Staff roster as a spreadsheet" },
+                { kind: "STAFF_ID_CARDS", label: "ID Cards", description: "Printable A4 sheet of staff badges" },
+              ]}
+            />
             <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto" onClick={() => setIsAddOpen(true)}>
               <PlusIcon className="mr-1 h-4 w-4" /> Add {type === "TEACHER" ? "Teacher" : "Volunteer"}
             </Button>
@@ -416,7 +487,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                     </Menu.Button>
                     <Transition as={Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100" leave="transition ease-in duration-75" leaveFrom="transform opacity-100 scale-100" leaveTo="transform opacity-0 scale-95">
                       <Menu.Items className="absolute left-0 z-10 mt-2 w-48 rounded-lg border border-border-subtle bg-surface py-1 shadow-lg">
-                        <Menu.Item>{({ active }) => <button onClick={() => bulkApprove.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><CheckIcon className="h-4 w-4 text-success-600" /> Approve</button>}</Menu.Item>
+                        <Menu.Item>{({ active }) => <button onClick={() => openEmailAction("APPROVE")} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><CheckIcon className="h-4 w-4 text-success-600" /> Approve</button>}</Menu.Item>
+                        {type === "TEACHER" && (
+                          <Menu.Item>{({ active }) => <button onClick={() => openEmailAction("RESEND")} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><EnvelopeIcon className="h-4 w-4 text-accent-600" /> Send approval email</button>}</Menu.Item>
+                        )}
                         <Menu.Item>{({ active }) => <button onClick={() => bulkReject.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><XMarkIcon className="h-4 w-4 text-danger-600" /> Reject</button>}</Menu.Item>
                         <Menu.Item>{({ active }) => <button onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><TrashIcon className="h-4 w-4 text-danger-600" /> Delete</button>}</Menu.Item>
                       </Menu.Items>
@@ -510,7 +584,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             </div>
           </div>
           <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
-            <Button size="sm" className="shrink-0" loading={bulkApprove.isPending} onClick={() => bulkApprove.mutate({ ids: selectedIds })}><CheckIcon className="mr-1 h-4 w-4" /> Approve</Button>
+            <Button size="sm" className="shrink-0" loading={bulkApprove.isPending} onClick={() => openEmailAction("APPROVE")}><CheckIcon className="mr-1 h-4 w-4" /> Approve</Button>
+            {type === "TEACHER" && (
+              <Button size="sm" variant="secondary" className="shrink-0" loading={resendApprovalEmails.isPending} onClick={() => openEmailAction("RESEND")}><EnvelopeIcon className="mr-1 h-4 w-4" /> Email</Button>
+            )}
             <Button size="sm" variant="secondary" className="shrink-0" loading={bulkReject.isPending} onClick={() => bulkReject.mutate({ ids: selectedIds })}><XMarkIcon className="mr-1 h-4 w-4" /> Reject</Button>
             <Select value={bulkVenueId} onChange={(e) => setBulkVenueId(e.target.value)} containerClassName="shrink-0" className="w-auto text-sm">
               <option value="">Assign Venue</option>
@@ -528,6 +605,56 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           <Button variant="danger" loading={deleteStaff.isPending} onClick={() => deleteTarget && deleteStaff.mutate({ id: deleteTarget.id })}>Delete</Button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={!!emailAction}
+        onClose={() => setEmailAction(null)}
+        title={emailAction?.mode === "APPROVE" ? "Approve selected profiles" : "Send teacher approval emails"}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-neutral-600">
+            This action applies only to the {emailAction?.ids.length ?? 0} explicitly selected profile{emailAction?.ids.length === 1 ? "" : "s"}.
+          </p>
+          {emailAction?.mode === "APPROVE" && type === "TEACHER" && (
+            <label className="flex items-start gap-3 rounded-lg border border-border-default bg-surface-raised p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={sendEmailOnApprove}
+                onChange={(event) => setSendEmailOnApprove(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-accent-600"
+              />
+              <span>
+                <span className="block font-semibold text-neutral-900">Send approval emails after approval</span>
+                <span className="text-neutral-500">Uncheck this to approve without sending email.</span>
+              </span>
+            </label>
+          )}
+          {emailAction?.mode === "RESEND" && (
+            <p className="rounded-lg bg-attention-50 p-3 text-xs text-attention-800">
+              Only approved teachers with an email address are eligible. Other selected profiles will be skipped.
+            </p>
+          )}
+          {emailActionResult && (
+            <div data-testid="approval-email-result" className="rounded-lg bg-surface-raised p-3 text-sm text-neutral-700">
+              {emailActionResult.sent} sent, {emailActionResult.failed} failed, {emailActionResult.skipped} skipped.
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setEmailAction(null)}>
+              {emailActionResult ? "Close" : "Cancel"}
+            </Button>
+            {!emailActionResult && (
+              <Button
+                loading={bulkApprove.isPending || resendApprovalEmails.isPending}
+                onClick={runEmailAction}
+              >
+                {emailAction?.mode === "APPROVE" ? "Approve selected" : "Send emails"}
+              </Button>
+            )}
+          </div>
         </div>
       </Dialog>
 

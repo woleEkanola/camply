@@ -8,8 +8,11 @@ async function assertKitchenStaffOrAdmin(ctx: { prisma: any; session: any; userI
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (ADMIN_ROLES.includes(currentUser.role) && currentUser.organizationId === organizationId) return;
-  if (currentUser.role === "VOLUNTEER") {
-    const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId, organizationId, status: "APPROVED" } });
+  // Any approved staff profile qualifies — not just `role === "VOLUNTEER"`.
+  // A parent who volunteers keeps role PARENT and would otherwise be refused
+  // despite holding the Kitchen category. See server/auth/capabilities.ts.
+  {
+    const profile = await ctx.prisma.staffProfile.findFirst({ where: { userId: ctx.userId, organizationId, status: "APPROVED", deletedAt: null } });
     if (profile?.volunteerCategory === "Kitchen") return;
   }
   throw new TRPCError({ code: "FORBIDDEN" });

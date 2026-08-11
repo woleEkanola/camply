@@ -120,10 +120,11 @@ test.describe("Comprehensive Recent Features E2E Verification", () => {
     await expect(bottomNav).toBeVisible({ timeout: 15000 });
 
     await expect(bottomNav.getByText("Dashboard")).toBeVisible();
-    await expect(bottomNav.getByText("Registrations")).toBeVisible();
+    await expect(bottomNav.getByText("Contact")).toBeVisible();
     await expect(bottomNav.getByText("QR Scan")).toBeVisible();
     await expect(bottomNav.getByText("Campers")).toBeVisible();
-    await expect(bottomNav.getByText("More")).toBeVisible();
+    await expect(bottomNav.getByText("Leaderboard")).toBeVisible();
+    await expect(bottomNav.getByText("More")).toHaveCount(0);
 
     // 2. Verify Card/List view toggle button in header
     const toggleBtn = page.locator("button[title*='Switch']");

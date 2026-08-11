@@ -40,8 +40,7 @@ export const campusRowSchema = z.object({
   phone: optionalText,
   email: optionalText,
   campusCode: optionalText,
-  active: boolish,
-  signupOpen: boolish,
+  suspended: boolish,
   displayOrder: coercedInt,
 });
 

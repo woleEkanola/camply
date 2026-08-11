@@ -80,7 +80,7 @@ export function CameraScanner({ onScanSuccess, onScanFailure, active }: CameraSc
           {
             fps: 15,
             qrbox: (width, height) => {
-              const size = Math.min(width, height) * 0.7;
+              const size = Math.max(50, Math.floor(Math.min(width, height) * 0.7));
               return { width: size, height: size };
             },
           },

@@ -168,6 +168,7 @@ export function MobileRegistrationCard({
   const endorsed = isTwoStep && registration.status === "PENDING" && isEndorsed(registration.review);
   // A reviewer who has already recommended this camper has nothing left to do on
   // it — the primary action becomes a non-clickable "Awaiting Approval" marker.
+  const isApproved = ["APPROVED", "CHECKED_IN", "COMPLETED"].includes(registration.status?.toUpperCase());
   const awaitingApproval = isReviewer && endorsed;
 
   const camperName = registration.camper?.name || registration.user?.name || registration.name || "Camper";
@@ -177,7 +178,7 @@ export function MobileRegistrationCard({
   const campusName = registration.campus?.name || registration.campusName || "Campus Unassigned";
   const regNumber = shortenRegistrationNumber(registration.registrationNumber);
   const updatedTime = formatRelativeTime(registration.updatedAt || registration.createdAt);
-  const relationship = registration.relationship || (registration.camper ? "Parent" : "Camper");
+  const gender = registration.camper?.gender || registration.gender;
   const age = getAgeFromDob(registration.camper?.dateOfBirth);
 
   // Dynamic Document Calculation
@@ -246,9 +247,11 @@ export function MobileRegistrationCard({
               )}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex items-center rounded-md bg-accent-500/15 border border-accent-500/30 px-2 py-0.5 text-[11px] font-semibold text-accent-400">
-                {relationship}
-              </span>
+              {gender && (
+                <span className="inline-flex items-center rounded-md bg-accent-500/15 border border-accent-500/30 px-2 py-0.5 text-[11px] font-semibold text-accent-400">
+                  {gender}
+                </span>
+              )}
               {endorsed && (
                 <span className="inline-flex items-center rounded-md bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 text-[11px] font-semibold text-sky-500">
                   Recommended
@@ -336,7 +339,26 @@ export function MobileRegistrationCard({
 
       {/* SECTION 3 — ACTIONS ROW */}
       <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        {awaitingApproval ? (
+        {isApproved ? (
+          <>
+            <button
+              type="button"
+              disabled
+              className="flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl bg-surface-raised text-txt-muted border border-border-default font-bold text-xs cursor-not-allowed pointer-events-none px-2"
+            >
+              <span>{primaryLabel}</span>
+            </button>
+            {onSecondaryAction && (
+              <button
+                type="button"
+                disabled
+                className="flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl bg-surface-raised text-txt-muted border border-border-default font-bold text-xs cursor-not-allowed pointer-events-none px-2"
+              >
+                <span>{secondaryLabel}</span>
+              </button>
+            )}
+          </>
+        ) : awaitingApproval ? (
           <button
             type="button"
             disabled
@@ -354,19 +376,29 @@ export function MobileRegistrationCard({
           </button>
         ) : null}
 
-        {onSecondaryAction && (
-          <button
-            type="button"
-            onClick={() => onSecondaryAction(registration)}
-            className={cn(
-              "flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl font-bold text-xs transition-all active:scale-98 border px-2",
-              secondaryLabel.toLowerCase().includes("correction")
-                ? "bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20"
-                : "bg-rose-500/10 text-rose-600 border-rose-500/30 hover:bg-rose-500/20"
-            )}
-          >
-            <span>{secondaryLabel}</span>
-          </button>
+        {!isApproved && onSecondaryAction && (
+          awaitingApproval ? (
+            <button
+              type="button"
+              disabled
+              className="flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl bg-surface-raised text-txt-muted border border-border-default font-bold text-xs cursor-not-allowed pointer-events-none px-2"
+            >
+              <span>{secondaryLabel}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onSecondaryAction(registration)}
+              className={cn(
+                "flex-1 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-xl font-bold text-xs transition-all active:scale-98 border px-2",
+                secondaryLabel.toLowerCase().includes("correction")
+                  ? "bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20"
+                  : "bg-rose-500/10 text-rose-600 border-rose-500/30 hover:bg-rose-500/20"
+              )}
+            >
+              <span>{secondaryLabel}</span>
+            </button>
+          )
         )}
 
         {onQuickAction && (

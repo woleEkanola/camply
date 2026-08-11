@@ -16,11 +16,13 @@ type BulkMode = "numbered" | "custom";
 function BulkRoomDialog({
   hostelId,
   hostelName,
+  floors,
   onClose,
   onSuccess,
 }: {
   hostelId: string;
   hostelName: string;
+  floors: { id: string; name: string }[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -31,6 +33,10 @@ function BulkRoomDialog({
   const [startNum, setStartNum] = useState("1");
   const [count, setCount] = useState("10");
   const [capacity, setCapacity] = useState("");
+  const [bedsPerRoom, setBedsPerRoom] = useState("");
+  const [floorId, setFloorId] = useState("");
+  const [roomType, setRoomType] = useState<"STANDARD" | "SPECIAL" | "COMMON">("STANDARD");
+  const [locationLabel, setLocationLabel] = useState("");
 
   // Custom mode
   const [customText, setCustomText] = useState("");
@@ -42,8 +48,10 @@ function BulkRoomDialog({
     onError: (err) => setError(err.message),
   });
 
-  function buildRooms(): { name: string; capacity?: number }[] | null {
+  function buildRooms(): { name: string; capacity?: number; beds?: number; floorId?: string; roomType: "STANDARD" | "SPECIAL" | "COMMON"; locationLabel?: string }[] | null {
     const cap = capacity ? parseInt(capacity) : undefined;
+    const beds = bedsPerRoom ? parseInt(bedsPerRoom) : undefined;
+    const shared = { ...(cap ? { capacity: cap } : {}), ...(beds !== undefined ? { beds } : {}), ...(floorId ? { floorId } : {}), roomType, ...(locationLabel.trim() ? { locationLabel: locationLabel.trim() } : {}) };
 
     if (mode === "numbered") {
       const n = parseInt(count);
@@ -58,7 +66,7 @@ function BulkRoomDialog({
       }
       return Array.from({ length: n }, (_, i) => ({
         name: `${prefix} ${start + i}`,
-        ...(cap ? { capacity: cap } : {}),
+        ...shared,
       }));
     }
 
@@ -75,7 +83,7 @@ function BulkRoomDialog({
       setError("Maximum 50 rooms at once.");
       return null;
     }
-    return names.map((name) => ({ name, ...(cap ? { capacity: cap } : {}) }));
+    return names.map((name) => ({ name, ...shared }));
   }
 
   const preview = (() => {
@@ -95,13 +103,15 @@ function BulkRoomDialog({
   return (
     <Dialog open onClose={onClose} title={`Add Rooms — ${hostelName}`}>
       {/* Mode tabs */}
-      <div className="mb-5 flex gap-1 rounded-lg bg-neutral-100 p-1">
+      <div className="mb-5 flex gap-1 rounded-lg bg-surface-raised p-1">
         {(["numbered", "custom"] as BulkMode[]).map((m) => (
           <button
             key={m}
             onClick={() => { setMode(m); setError(""); }}
             className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-              mode === m ? "bg-white shadow text-neutral-900" : "text-neutral-500 hover:text-neutral-700"
+              mode === m
+                ? "bg-surface shadow-sm ring-1 ring-border-default text-txt-primary"
+                : "text-txt-secondary hover:bg-surface-hover hover:text-txt-primary"
             }`}
           >
             {m === "numbered" ? "🔢 Numbered Sequence" : "✏️ Custom Names"}
@@ -144,15 +154,16 @@ function BulkRoomDialog({
             value={capacity}
             onChange={(e) => setCapacity(e.target.value)}
           />
+          <Input label="Beds created per room" type="number" min="0" max="50" placeholder="e.g. 6" value={bedsPerRoom} onChange={(e) => setBedsPerRoom(e.target.value)} />
         </div>
       ) : (
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Room names <span className="text-neutral-400">(one per line, or comma-separated)</span>
+            <label className="mb-1.5 block text-sm font-medium text-txt-secondary">
+              Room names <span className="text-txt-muted">(one per line, or comma-separated)</span>
             </label>
             <textarea
-              className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+              className="w-full rounded-lg border border-input-border bg-input-bg px-3 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
               rows={6}
               placeholder={"Room A1\nRoom A2\nRoom B1\nRoom B2\n\n— or —\n\nRoom A1, Room A2, Room B1"}
               value={customText}
@@ -167,13 +178,27 @@ function BulkRoomDialog({
             value={capacity}
             onChange={(e) => setCapacity(e.target.value)}
           />
+          <Input label="Beds created per room" type="number" min="0" max="50" placeholder="e.g. 6" value={bedsPerRoom} onChange={(e) => setBedsPerRoom(e.target.value)} />
         </div>
       )}
 
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <Select label="Floor" value={floorId} onChange={(e) => setFloorId(e.target.value)}>
+          <option value="">Unassigned floor</option>
+          {floors.map((floor) => <option key={floor.id} value={floor.id}>{floor.name}</option>)}
+        </Select>
+        <Select label="Room type" value={roomType} onChange={(e) => setRoomType(e.target.value as typeof roomType)}>
+          <option value="STANDARD">Standard accommodation</option>
+          <option value="SPECIAL">Special room</option>
+          <option value="COMMON">Common / non-sleeping room</option>
+        </Select>
+      </div>
+      {roomType !== "STANDARD" && <div className="mt-3"><Input label="Location label (optional)" placeholder="e.g. Back, Front, Annexe" value={locationLabel} onChange={(e) => setLocationLabel(e.target.value)} /></div>}
+
       {/* Live preview */}
       {preview.length > 0 && (
-        <div className="mt-4 rounded-lg bg-neutral-50 p-3">
-          <p className="mb-2 text-xs font-medium text-neutral-500 uppercase tracking-wide">
+        <div className="mt-4 rounded-lg border border-border-subtle bg-surface-raised p-3">
+          <p className="mb-2 text-xs font-medium text-txt-secondary uppercase tracking-wide">
             Preview — {previewCount} room{previewCount !== 1 ? "s" : ""} will be created
             {capacity && `, each with capacity ${capacity}`}
           </p>
@@ -287,13 +312,15 @@ function BulkBedDialog({
   return (
     <Dialog open onClose={onClose} title={`Add Beds — ${roomName}`}>
       {/* Mode tabs */}
-      <div className="mb-5 flex gap-1 rounded-lg bg-neutral-100 p-1">
+      <div className="mb-5 flex gap-1 rounded-lg bg-surface-raised p-1">
         {(["numbered", "custom"] as BulkMode[]).map((m) => (
           <button
             key={m}
             onClick={() => { setMode(m); setError(""); }}
             className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-              mode === m ? "bg-white shadow text-neutral-900" : "text-neutral-500 hover:text-neutral-700"
+              mode === m
+                ? "bg-surface shadow-sm ring-1 ring-border-default text-txt-primary"
+                : "text-txt-secondary hover:bg-surface-hover hover:text-txt-primary"
             }`}
           >
             {m === "numbered" ? "🔢 Numbered Sequence" : "✏️ Custom Labels"}
@@ -329,11 +356,11 @@ function BulkBedDialog({
         </div>
       ) : (
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Bed labels <span className="text-neutral-400">(one per line, or comma-separated)</span>
+          <label className="mb-1.5 block text-sm font-medium text-txt-secondary">
+            Bed labels <span className="text-txt-muted">(one per line, or comma-separated)</span>
           </label>
           <textarea
-            className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+            className="w-full rounded-lg border border-input-border bg-input-bg px-3 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
             rows={6}
             placeholder={"Bed 1\nBed 2\nBed 3\nBed 4\n\n— or —\n\nBed 1, Bed 2, Bed 3"}
             value={customText}
@@ -344,8 +371,8 @@ function BulkBedDialog({
 
       {/* Live preview */}
       {preview.length > 0 && (
-        <div className="mt-4 rounded-lg bg-neutral-50 p-3">
-          <p className="mb-2 text-xs font-medium text-neutral-500 uppercase tracking-wide">
+        <div className="mt-4 rounded-lg border border-border-subtle bg-surface-raised p-3">
+          <p className="mb-2 text-xs font-medium text-txt-secondary uppercase tracking-wide">
             Preview — {previewCount} bed{previewCount !== 1 ? "s" : ""} will be created
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -380,6 +407,59 @@ function BulkBedDialog({
   );
 }
 
+type FloorDraft = { name: string; code: string; level: string; roomPrefix: string; startNumber: string; roomCount: string; bedsPerRoom: string };
+
+function HostelSetupDialog({ hostel, onClose, onSuccess }: { hostel: { id: string; name: string }; onClose: () => void; onSuccess: () => void }) {
+  const [floors, setFloors] = useState<FloorDraft[]>([{ name: "Ground Floor", code: "G", level: "0", roomPrefix: "G", startNumber: "1", roomCount: "6", bedsPerRoom: "6" }]);
+  const [error, setError] = useState("");
+  const create = api.accommodation.createHostelStructure.useMutation({ onSuccess: () => { onSuccess(); onClose(); }, onError: (err) => setError(err.message) });
+  const totals = floors.reduce((acc, floor) => ({ rooms: acc.rooms + (parseInt(floor.roomCount) || 0), beds: acc.beds + (parseInt(floor.roomCount) || 0) * (parseInt(floor.bedsPerRoom) || 0) }), { rooms: 0, beds: 0 });
+  const update = (index: number, key: keyof FloorDraft, value: string) => setFloors((current) => current.map((floor, i) => i === index ? { ...floor, [key]: value } : floor));
+  return <Dialog open onClose={onClose} title={`Set up floors, rooms & beds — ${hostel.name}`}>
+    <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
+      {floors.map((floor, index) => <div key={index} className="rounded-lg border border-neutral-200 p-3">
+        <div className="mb-3 flex items-center justify-between"><strong className="text-sm">Floor {index + 1}</strong>{floors.length > 1 && <Button size="sm" variant="ghost" onClick={() => setFloors((f) => f.filter((_, i) => i !== index))}>Remove</Button>}</div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Input label="Floor name" value={floor.name} onChange={(e) => update(index, "name", e.target.value)} />
+          <Input label="Code" value={floor.code} onChange={(e) => update(index, "code", e.target.value)} />
+          <Input label="Level" type="number" value={floor.level} onChange={(e) => update(index, "level", e.target.value)} />
+          <Input label="Room prefix" value={floor.roomPrefix} onChange={(e) => update(index, "roomPrefix", e.target.value)} />
+          <Input label="Start number" type="number" min="0" value={floor.startNumber} onChange={(e) => update(index, "startNumber", e.target.value)} />
+          <Input label="Number of rooms" type="number" min="1" max="100" value={floor.roomCount} onChange={(e) => update(index, "roomCount", e.target.value)} />
+          <Input label="Beds per room" type="number" min="0" max="50" value={floor.bedsPerRoom} onChange={(e) => update(index, "bedsPerRoom", e.target.value)} />
+        </div>
+        <p className="mt-2 text-xs text-neutral-500">Preview: {floor.roomPrefix}{floor.startNumber} onward · {(parseInt(floor.roomCount) || 0) * (parseInt(floor.bedsPerRoom) || 0)} beds</p>
+      </div>)}
+      <Button size="sm" variant="secondary" onClick={() => setFloors((f) => [...f, { name: `Floor ${f.length}`, code: String(f.length), level: String(f.length), roomPrefix: String(f.length), startNumber: "1", roomCount: "6", bedsPerRoom: "6" }])}>+ Add another floor</Button>
+    </div>
+    <div className="mt-4 rounded-lg bg-neutral-50 p-3 text-sm"><strong>{totals.rooms} rooms · {totals.beds} beds</strong> will be created in one operation.</div>
+    {error && <p className="mt-3 text-sm text-danger-600">{error}</p>}
+    <div className="mt-4 flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={create.isPending} disabled={!totals.rooms} onClick={() => create.mutate({ hostelId: hostel.id, floors: floors.map((floor) => ({ name: floor.name, code: floor.code || undefined, level: parseInt(floor.level) || 0, roomPrefix: floor.roomPrefix, startNumber: parseInt(floor.startNumber) || 0, roomCount: parseInt(floor.roomCount) || 0, bedsPerRoom: parseInt(floor.bedsPerRoom) || 0 })) })}>Create structure</Button></div>
+  </Dialog>;
+}
+
+function AdjustBedsDialog({ hostel, onClose, onSuccess }: { hostel: any; onClose: () => void; onSuccess: () => void }) {
+  const [action, setAction] = useState<"ADD" | "REMOVE">("ADD");
+  const [count, setCount] = useState("1");
+  const [floorId, setFloorId] = useState("ALL");
+  const [includeSpecial, setIncludeSpecial] = useState(false);
+  const [result, setResult] = useState("");
+  const [error, setError] = useState("");
+  const eligibleRooms = hostel.rooms.filter((room: any) => (floorId === "ALL" || (floorId === "NONE" ? !room.floorId : room.floorId === floorId)) && (room.roomType === "STANDARD" || includeSpecial && room.roomType === "SPECIAL"));
+  const adjust = api.accommodation.bulkAdjustBeds.useMutation({ onSuccess: (summary) => { setResult(`${summary.bedsChanged} beds ${action === "ADD" ? "added" : "removed"} across ${summary.roomsChanged} rooms${summary.skipped.length ? `; ${summary.skipped.length} rooms skipped` : ""}.`); onSuccess(); }, onError: (err) => setError(err.message) });
+  return <Dialog open onClose={onClose} title={`Adjust beds across ${hostel.name}`}>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Select label="Action" value={action} onChange={(e) => setAction(e.target.value as "ADD" | "REMOVE")}><option value="ADD">Add beds</option><option value="REMOVE">Remove available beds</option></Select>
+      <Input label="Beds per room" type="number" min="1" max="20" value={count} onChange={(e) => setCount(e.target.value)} />
+      <Select label="Scope" value={floorId} onChange={(e) => setFloorId(e.target.value)}><option value="ALL">All floors</option><option value="NONE">Unassigned floor</option>{hostel.floors.map((floor: any) => <option key={floor.id} value={floor.id}>{floor.name}</option>)}</Select>
+      <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={includeSpecial} onChange={(e) => setIncludeSpecial(e.target.checked)} /> Include special rooms</label>
+    </div>
+    <div className="mt-4 rounded-lg bg-neutral-50 p-3 text-sm"><strong>{eligibleRooms.length} rooms</strong> selected · up to {eligibleRooms.length * (parseInt(count) || 0)} beds will be {action === "ADD" ? "added" : "removed"}. Occupied and maintenance beds are never removed.</div>
+    {result && <p className="mt-3 text-sm text-success-700">{result}</p>}{error && <p className="mt-3 text-sm text-danger-600">{error}</p>}
+    <div className="mt-4 flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Close</Button><Button loading={adjust.isPending} disabled={!eligibleRooms.length || (parseInt(count) || 0) < 1} onClick={() => { setError(""); setResult(""); adjust.mutate({ hostelId: hostel.id, floorId: floorId === "ALL" ? undefined : floorId === "NONE" ? null : floorId, roomTypes: includeSpecial ? ["STANDARD", "SPECIAL"] : ["STANDARD"], action, countPerRoom: parseInt(count) }); }}>{action === "ADD" ? "Add" : "Remove"} beds</Button></div>
+  </Dialog>;
+}
+
 // ─── Main AccommodationManager ────────────────────────────────────────────────
 
 export function AccommodationManager({ organizationId, campId }: { organizationId: string; campId: string }) {
@@ -395,6 +475,8 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
 
   // Bulk room dialog
   const [bulkRoomDialog, setBulkRoomDialog] = useState<{ hostelId: string; hostelName: string } | null>(null);
+  const [setupHostel, setSetupHostel] = useState<any>(null);
+  const [adjustHostel, setAdjustHostel] = useState<any>(null);
 
   const [bedDialog, setBedDialog] = useState<{ roomId: string; roomName: string } | null>(null);
   const [bedLabel, setBedLabel] = useState("");
@@ -516,6 +598,8 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
                     {h.gender && <Badge tone="neutral">{h.gender}</Badge>}
                   </div>
                   <div className="flex gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => setSetupHostel(h)}>Set up floors</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setAdjustHostel(h)}>Adjust beds</Button>
                     <Button
                       size="sm"
                       variant="secondary"
@@ -545,14 +629,28 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
                 {h.rooms.length === 0 ? (
                   <p className="text-sm text-neutral-500">No rooms yet. Use "Add Rooms" above.</p>
                 ) : (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {h.rooms.map((r: any) => (
+                  <div className="space-y-4">
+                    {[...h.floors, { id: null, name: "Unassigned floor" }].map((floor: any) => {
+                      const floorRooms = h.rooms.filter((room: any) => room.floorId === floor.id);
+                      if (!floorRooms.length) return null;
+                      return <section key={floor.id ?? "unassigned"}>
+                        <div className="mb-2 flex items-center justify-between border-b border-neutral-100 pb-2">
+                          <h4 className="text-sm font-semibold text-neutral-700">{floor.name}</h4>
+                          <span className="text-xs text-neutral-500">{floorRooms.length} rooms · {floorRooms.reduce((sum: number, room: any) => sum + room.beds.length, 0)} beds</span>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {floorRooms.map((r: any) => (
                       <div key={r.id} className="rounded-md border border-neutral-200 p-3">
                         <div className="mb-2 flex items-center justify-between">
-                          <span className="text-sm font-medium text-neutral-900">{r.name}</span>
+                          <span className="text-sm font-medium text-neutral-900">{r.name} {r.roomType !== "STANDARD" && <Badge tone="warning">{r.roomType}</Badge>}</span>
                           <span className="text-xs text-neutral-500">
                             {r.beds.length}{r.capacity ? `/${r.capacity}` : ""} beds
                           </span>
+                        </div>
+                        {r.locationLabel && <p className="mb-2 text-xs text-neutral-500">{r.locationLabel}</p>}
+                        <div className="mb-2 flex flex-wrap gap-1">
+                          {r.staffAssigned.map((staff: any) => <Badge key={staff.id} tone="info">{staff.preferredName || `${staff.firstName} ${staff.lastName}`}{staff.assignedTribe?.name ? ` · ${staff.assignedTribe.name}` : ""}</Badge>)}
+                          {!r.staffAssigned.length && <span className="text-xs text-neutral-400">No room staff assigned</span>}
                         </div>
                         <div className="mb-2 flex flex-wrap items-center gap-1">
                           {r.beds.map((b: any) => (
@@ -618,6 +716,9 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
                         </div>
                       </div>
                     ))}
+                        </div>
+                      </section>;
+                    })}
                   </div>
                 )}
               </CardBody>
@@ -652,10 +753,14 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
         <BulkRoomDialog
           hostelId={bulkRoomDialog.hostelId}
           hostelName={bulkRoomDialog.hostelName}
+          floors={(hostels.find((hostel: any) => hostel.id === bulkRoomDialog.hostelId) as any)?.floors ?? []}
           onClose={() => setBulkRoomDialog(null)}
           onSuccess={invalidate}
         />
       )}
+
+      {setupHostel && <HostelSetupDialog hostel={setupHostel} onClose={() => setSetupHostel(null)} onSuccess={invalidate} />}
+      {adjustHostel && <AdjustBedsDialog hostel={adjustHostel} onClose={() => setAdjustHostel(null)} onSuccess={invalidate} />}
 
       {/* ── Bulk Bed Creator ── */}
       {bulkBedDialog && (

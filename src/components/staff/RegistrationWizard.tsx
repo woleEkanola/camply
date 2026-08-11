@@ -117,11 +117,6 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
         setLoading(false);
         return;
       }
-      if (password !== confirmPassword) {
-        setError("Passwords do not match");
-        setLoading(false);
-        return;
-      }
       try {
         const res = await fetch("/api/base-user/signup", {
           method: "POST",
@@ -134,13 +129,32 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
           }),
         });
         const data = await res.json();
+
+        // Existing user path: try signing in with supplied password
+        if (data.existingUser) {
+          const loginRes = await signIn("credentials", {
+            redirect: false,
+            email,
+            password,
+          });
+
+          if (loginRes?.error) {
+            setError("You already have an account with this email. Please enter your account password to log in and proceed.");
+            setLoading(false);
+            return;
+          }
+
+          setStep("fields");
+          return;
+        }
+
         if (!res.ok) {
           setError(data.message || "Failed to create account");
           setLoading(false);
           return;
         }
 
-        // Log in immediately
+        // Log in immediately for newly created account
         const loginRes = await signIn("credentials", {
           redirect: false,
           email,

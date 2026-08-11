@@ -101,10 +101,21 @@ test.describe("Campus-rep recommend flow + filters + duplicates", () => {
     // Recommend it.
     await targetRow.getByRole("button", { name: "Recommend" }).click();
 
-    // It leaves the Pending list (endorsed rows are excluded from AWAITING_VETTING).
-    await expect(page.locator("tr", { hasText: targetName })).toHaveCount(0, { timeout: 10000 });
+    // Deliberately does NOT vanish from the current AWAITING_VETTING view —
+    // RegistrationQueue.tsx's endorseMutation.onSuccess updates the row's
+    // review state locally instead of refetching, specifically so the rep
+    // gets immediate in-place feedback (button -> "Awaiting Approval")
+    // rather than the row disappearing out from under them. It only leaves
+    // this filtered view on the next real navigation/refetch.
+    const targetRowAfterEndorse = page.locator("tr", { hasText: targetName });
+    await expect(targetRowAfterEndorse).toBeVisible();
+    await expect(targetRowAfterEndorse.getByText("Recommended")).toBeVisible();
+    const inPlaceBtn = targetRowAfterEndorse.getByRole("button", { name: "Awaiting Approval" });
+    await expect(inPlaceBtn).toBeVisible();
+    await expect(inPlaceBtn).toBeDisabled();
 
-    // In the "Awaiting" filter it reappears, now non-clickable "Awaiting Approval" + Recommended badge.
+    // Switching filters forces a real refetch — the endorsed row now
+    // correctly resolves under "Awaiting Final Approval" instead.
     await filterSelect.selectOption("REVIEW_AWAITING_FINAL");
     const awaitingRow = page.locator("tr", { hasText: targetName });
     await expect(awaitingRow).toBeVisible({ timeout: 10000 });

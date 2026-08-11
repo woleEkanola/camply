@@ -61,6 +61,8 @@ function drawCropMarks(page: import("pdf-lib").PDFPage, x: number, y: number) {
   }
 }
 
+const CARDS_PER_PAGE = COLS * ROWS; // 6
+
 /**
  * Produces an A4 sheet with 6 identical copies of one camper's ID card (2
  * cols x 3 rows), for print/cut/lamination spares. The card PNG is embedded
@@ -69,13 +71,44 @@ function drawCropMarks(page: import("pdf-lib").PDFPage, x: number, y: number) {
  * printed copy pixel-identical.
  */
 export async function generateCampIdCardSheetPdf(cardPng: Buffer): Promise<Buffer> {
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-  const image = await pdfDoc.embedPng(cardPng);
+  return generateIdCardSheetPdf(Array(CARDS_PER_PAGE).fill(cardPng));
+}
 
-  for (const { x, y } of cardPositions()) {
-    page.drawImage(image, { x, y, width: CARD_WIDTH, height: CARD_HEIGHT });
-    drawCropMarks(page, x, y);
+/**
+ * Bulk export path: lays out one card per slot (6 per A4 page), paginating
+ * as needed, rather than repeating a single card 6 times. Reuses the exact
+ * grid/crop-mark layout above so bulk sheets are pixel-identical to the
+ * single-camper spares sheet.
+ */
+export async function generateIdCardSheetPdf(cardPngs: Buffer[]): Promise<Buffer> {
+  const pdfDoc = await PDFDocument.create();
+  const positions = cardPositions();
+
+  // Embed each unique buffer once, not once per slot — generateCampIdCardSheetPdf
+  // passes the same Buffer instance 6 times, and re-embedding it per slot silently
+  // bloated the PDF (and broke the "embedded once" invariant callers rely on).
+  const embedded = new Map<Buffer, Awaited<ReturnType<typeof pdfDoc.embedPng>>>();
+  async function embedOnce(png: Buffer) {
+    const cached = embedded.get(png);
+    if (cached) return cached;
+    const image = await pdfDoc.embedPng(png);
+    embedded.set(png, image);
+    return image;
+  }
+
+  for (let i = 0; i < cardPngs.length; i += CARDS_PER_PAGE) {
+    const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    const pageCards = cardPngs.slice(i, i + CARDS_PER_PAGE);
+    for (let j = 0; j < pageCards.length; j++) {
+      const image = await embedOnce(pageCards[j]);
+      const { x, y } = positions[j];
+      page.drawImage(image, { x, y, width: CARD_WIDTH, height: CARD_HEIGHT });
+      drawCropMarks(page, x, y);
+    }
+  }
+
+  if (cardPngs.length === 0) {
+    pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   }
 
   const bytes = await pdfDoc.save();

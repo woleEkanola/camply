@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import AppShell from "@/components/layout/AppShell";
@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/Badge";
 import { isEndorsed } from "@/server/registration/endorsement";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
 import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
-import { downloadBlob, exportUserDataToXlsx } from "@/lib/import-export/serialize";
+import { ExportButton } from "@/components/export/ExportButton";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
@@ -175,6 +175,9 @@ function RegistrationsPage() {
     void utils.registration.getAdminListStats.invalidate();
   };
 
+  const invalidateRef = useRef(invalidateRegistrations);
+  invalidateRef.current = invalidateRegistrations;
+
   const bulkTransition = api.registration.bulkTransition.useMutation({
     onSuccess: (res) => {
       const msg = `Bulk action complete: ${res.succeeded} succeeded${res.skipped > 0 ? `, ${res.skipped} skipped` : ""}${res.failed > 0 ? `, ${res.failed} failed` : ""}.`;
@@ -242,6 +245,16 @@ function RegistrationsPage() {
     setAccumulatedItems([]);
   }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery, duplicatesOnly]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        invalidateRef.current();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
   const { data, isLoading } = api.registration.adminList.useQuery(
     {
       organizationId,
@@ -266,34 +279,6 @@ function RegistrationsPage() {
     },
     { enabled: !!organizationId }
   );
-
-  const [isExportingData, setIsExportingData] = useState(false);
-  const exportUserDataQuery = api.importExport.exportUserData.useQuery(
-    {
-      organizationId,
-      userType: "CAMPER",
-      campusId: filterCampus || undefined,
-      status: filterStatus || undefined,
-      campId: activeCamp?.id,
-      search: debouncedSearchQuery || undefined,
-    },
-    { enabled: false, staleTime: 0 }
-  );
-
-  const handleQuickExport = async () => {
-    setIsExportingData(true);
-    try {
-      const { data: exportRows } = await exportUserDataQuery.refetch();
-      if (exportRows) {
-        const blob = await exportUserDataToXlsx(exportRows);
-        downloadBlob(`camply-registrations-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsExportingData(false);
-    }
-  };
 
   useEffect(() => {
     if (data?.items) {
@@ -556,9 +541,19 @@ function RegistrationsPage() {
         title="Registrations"
         description={activeCamp ? `For ${activeCamp.name}` : undefined}
         actions={
-          <Button variant="secondary" onClick={handleQuickExport} loading={isExportingData}>
-            Export Excel
-          </Button>
+          <ExportButton
+            kind="CAMPERS"
+            organizationId={organizationId}
+            label="Registrations"
+            filters={{
+              campusId: filterCampus || undefined,
+              status: filterStatus || undefined,
+              campId: activeCamp?.id,
+              search: debouncedSearchQuery || undefined,
+            }}
+          >
+            Export
+          </ExportButton>
         }
       />
 
@@ -1028,11 +1023,17 @@ function RegistrationsPage() {
               }
               actions={(row) => (
                 <div className="flex flex-wrap justify-end gap-2">
-                  {row.status === "PENDING" && (
+                  {row.status === "PENDING" && isTwoStep && !isEndorsed(row.review) ? (
+                    <Button size="sm" variant="secondary" disabled>
+                      Awaiting Vetting
+                    </Button>
+                  ) : row.status === "PENDING" ? (
                     <>
                       <Button
                         size="sm"
                         loading={bulkTransition.isPending && bulkTransition.variables?.ids?.length === 1 && bulkTransition.variables.ids[0] === row.id && bulkTransition.variables.action === "APPROVE"}
+                        disabled={row.campus?.suspended}
+                        title={row.campus?.suspended ? "This campus is suspended — approvals are paused." : undefined}
                         onClick={() => bulkTransition.mutate({ ids: [row.id], action: "APPROVE" })}
                       >
                         Approve
@@ -1045,7 +1046,16 @@ function RegistrationsPage() {
                         Reject
                       </Button>
                     </>
-                  )}
+                  ) : ["APPROVED", "CHECKED_IN", "COMPLETED"].includes(row.status?.toUpperCase()) ? (
+                    <>
+                      <Button size="sm" variant="secondary" disabled>
+                        Approve
+                      </Button>
+                      <Button size="sm" variant="secondary" disabled>
+                        Reject
+                      </Button>
+                    </>
+                  ) : null}
                   <Button
                     size="sm"
                     variant="danger"

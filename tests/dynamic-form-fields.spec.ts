@@ -150,4 +150,49 @@ test.describe("Dynamic admin-driven registration fields + document validation", 
     // Cleanup
     await prisma.formField.deleteMany({ where: { id: field.id } });
   });
+
+  test("NUMBER-type custom field is capped to a valid Nigerian phone length", async ({ page }) => {
+    const { organizationId } = await getFixtureOrgContext();
+    await ensureFormFields("CAMPER");
+
+    const stamp = Date.now();
+    const field = await prisma.formField.create({
+      data: {
+        organizationId,
+        name: `dashboard_phone_${stamp}`,
+        source: "CUSTOM",
+        type: "NUMBER",
+        label: "Dashboard Phone Field",
+        systemKey: `dashboard_phone_${stamp}`,
+        audience: "CAMPER",
+        visible: true,
+        required: false,
+        sortOrder: 999,
+      },
+    });
+
+    try {
+      await loginWithPassword(page, "owner@camply.com", "password123");
+      await page.goto("/dashboard/profiles/new");
+      await expect(page.getByRole("heading", { name: "Create Camper" })).toBeVisible({ timeout: 10000 });
+
+      const phoneInput = page.getByLabel("Dashboard Phone Field").first();
+      await expect(phoneInput).toBeVisible({ timeout: 5000 });
+
+      // Leading zero must survive — a plain <input type="number"> would
+      // silently strip it, which is exactly the bug this field type avoids.
+      await phoneInput.fill("0801234");
+      await expect(phoneInput).toHaveValue("0801234");
+
+      // Local format caps at 11 digits.
+      await phoneInput.fill("080123456789999");
+      await expect(phoneInput).toHaveValue("08012345678");
+
+      // International format caps at 14 characters (+234 + 10 digits).
+      await phoneInput.fill("+234801234567890000");
+      await expect(phoneInput).toHaveValue("+2348012345678");
+    } finally {
+      await prisma.formField.deleteMany({ where: { id: field.id } });
+    }
+  });
 });

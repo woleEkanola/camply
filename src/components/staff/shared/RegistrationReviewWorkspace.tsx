@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { api } from "@/utils/trpc";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { DocumentDownloadLink } from "@/components/documents/DocumentDownloadLink";
 import { Textarea, Select } from "@/components/ui/Input";
 import { DocumentViewerDrawer } from "./DocumentViewerDrawer";
 import { AuditTimeline } from "./AuditTimeline";
@@ -25,7 +26,6 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   XCircleIcon,
-  ArrowDownTrayIcon,
   EyeIcon,
   PencilIcon,
   CheckIcon,
@@ -425,15 +425,7 @@ export function RegistrationReviewWorkspace({
                               >
                                 Preview
                               </Button>
-                              <a
-                                href={foundDoc.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-1.5 text-txt-muted hover:text-neutral-800 rounded-lg hover:bg-surface-raised transition"
-                                title="Download Document"
-                              >
-                                <ArrowDownTrayIcon className="h-4 w-4" />
-                              </a>
+                              <DocumentDownloadLink url={foundDoc.url} variant="icon-light" iconClassName="h-4 w-4" />
                             </div>
                           </div>
                         );
@@ -558,36 +550,72 @@ export function RegistrationReviewWorkspace({
       </div>
 
       {/* 6. STICKY BOTTOM REVIEW ACTIONS BAR */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border-default bg-surface/95 px-4 py-3.5 backdrop-blur shadow-2xl">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-          {/* Reject Button */}
-          <Button
-            className="flex-1 max-w-[200px] border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 justify-center text-sm font-bold"
-            onClick={() => setRejectDialogOpen(true)}
-          >
-            <XMarkIcon className="mr-1.5 h-4 w-4 text-rose-600" />
-            Reject
-          </Button>
+      {(() => {
+        const isApproved = ["APPROVED", "CHECKED_IN", "COMPLETED"].includes(registration?.status?.toUpperCase());
+        return (
+          <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border-default bg-surface/95 px-4 py-3.5 backdrop-blur shadow-2xl">
+            <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+              {isApproved ? (
+                <>
+                  <Button
+                    disabled
+                    variant="secondary"
+                    className="flex-1 max-w-[200px] justify-center text-sm font-bold opacity-60 cursor-not-allowed"
+                  >
+                    <XMarkIcon className="mr-1.5 h-4 w-4 text-txt-muted" />
+                    Reject
+                  </Button>
+                  <Button
+                    disabled
+                    variant="secondary"
+                    className="flex-1 max-w-[240px] justify-center text-sm font-bold opacity-60 cursor-not-allowed"
+                  >
+                    <PencilIcon className="mr-1.5 h-4 w-4 text-txt-muted" />
+                    Request Correction
+                  </Button>
+                  <Button
+                    disabled
+                    variant="secondary"
+                    className="flex-1 max-w-[240px] justify-center text-sm font-bold opacity-60 cursor-not-allowed"
+                  >
+                    <CheckIcon className="mr-1.5 h-4 w-4 text-txt-muted" />
+                    Approve
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {/* Reject Button */}
+                  <Button
+                    className="flex-1 max-w-[200px] border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 justify-center text-sm font-bold"
+                    onClick={() => setRejectDialogOpen(true)}
+                  >
+                    <XMarkIcon className="mr-1.5 h-4 w-4 text-rose-600" />
+                    Reject
+                  </Button>
 
-          {/* Request Correction Button */}
-          <Button
-            className="flex-1 max-w-[240px] border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 justify-center text-sm font-bold"
-            onClick={() => setCorrectionDialogOpen(true)}
-          >
-            <PencilIcon className="mr-1.5 h-4 w-4 text-amber-600" />
-            Request Correction
-          </Button>
+                  {/* Request Correction Button */}
+                  <Button
+                    className="flex-1 max-w-[240px] border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 justify-center text-sm font-bold"
+                    onClick={() => setCorrectionDialogOpen(true)}
+                  >
+                    <PencilIcon className="mr-1.5 h-4 w-4 text-amber-600" />
+                    Request Correction
+                  </Button>
 
-          {/* Approve Button */}
-          <Button
-            className="flex-1 max-w-[240px] bg-emerald-600 text-white hover:bg-emerald-700 justify-center text-sm font-bold shadow-md shadow-emerald-600/20"
-            onClick={() => setApproveDialogOpen(true)}
-          >
-            <CheckIcon className="mr-1.5 h-4 w-4" />
-            Approve
-          </Button>
-        </div>
-      </div>
+                  {/* Approve Button */}
+                  <Button
+                    className="flex-1 max-w-[240px] bg-emerald-600 text-white hover:bg-emerald-700 justify-center text-sm font-bold shadow-md shadow-emerald-600/20"
+                    onClick={() => setApproveDialogOpen(true)}
+                  >
+                    <CheckIcon className="mr-1.5 h-4 w-4" />
+                    Approve
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* DECISION DIALOGS */}
       <ApproveDecisionDialog

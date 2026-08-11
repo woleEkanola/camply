@@ -121,9 +121,12 @@ function defaultOrganizationBranding(organizationId: string) {
     id: "",
     organizationId,
     logoUrl: null,
-    primaryColor: "#E67E22",
+    masterLogoUrl: null,
+    emailLogoUrl: null,
+    idCardLogoUrl: null,
+    primaryColor: "#0D9488",
     accentColor: "#E67E22",
-    buttonColor: "#E67E22",
+    buttonColor: "#0D9488",
     headerImageUrl: null,
     senderName: null,
     footerText: null,
@@ -496,6 +499,9 @@ export const communicationRouter = createTRPCRouter({
     .input(
       z.object({
         logoUrl: z.string().nullable().optional(),
+        masterLogoUrl: z.string().nullable().optional(),
+        emailLogoUrl: z.string().nullable().optional(),
+        idCardLogoUrl: z.string().nullable().optional(),
         senderName: z.string().nullable().optional(),
         primaryColor: z.string().optional(),
         accentColor: z.string().optional(),
@@ -508,7 +514,6 @@ export const communicationRouter = createTRPCRouter({
         facebookUrl: z.string().nullable().optional(),
         instagramUrl: z.string().nullable().optional(),
         address: z.string().nullable().optional(),
-        // Camp Invitation certificate email fields (Phase 2 email redesign)
         tagline: z.string().nullable().optional(),
         supportTitle: z.string().nullable().optional(),
         supportDescription: z.string().nullable().optional(),
@@ -516,22 +521,23 @@ export const communicationRouter = createTRPCRouter({
         phone: z.string().nullable().optional(),
         xUrl: z.string().nullable().optional(),
         linkedinUrl: z.string().nullable().optional(),
-        nextSteps: z
-          .array(z.object({ icon: z.string(), title: z.string(), description: z.string() }))
-          .nullable()
-          .optional(),
+        nextSteps: z.any().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx);
       const oid = orgId(ctx);
       const { nextSteps, ...rest } = input;
+      const dataToSave = {
+        ...rest,
+        ...(input.masterLogoUrl !== undefined && !input.logoUrl ? { logoUrl: input.masterLogoUrl } : {}),
+      };
       const nextStepsValue =
         nextSteps === null ? Prisma.JsonNull : nextSteps === undefined ? undefined : nextSteps;
       return ctx.prisma.organizationBranding.upsert({
         where: { organizationId: oid },
-        update: { ...rest, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
-        create: { organizationId: oid, ...rest, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
+        update: { ...dataToSave, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
+        create: { organizationId: oid, ...dataToSave, ...(nextStepsValue !== undefined ? { nextSteps: nextStepsValue } : {}) },
       });
     }),
 
@@ -871,10 +877,13 @@ export const communicationRouter = createTRPCRouter({
         branding: z
           .object({
             logoUrl: z.string().nullable().optional(),
-        senderName: z.string().nullable().optional(),
-            primaryColor: z.string().default("#E67E22"),
+            masterLogoUrl: z.string().nullable().optional(),
+            emailLogoUrl: z.string().nullable().optional(),
+            idCardLogoUrl: z.string().nullable().optional(),
+            senderName: z.string().nullable().optional(),
+            primaryColor: z.string().default("#0D9488"),
             accentColor: z.string().default("#E67E22"),
-            buttonColor: z.string().default("#E67E22"),
+            buttonColor: z.string().default("#0D9488"),
             headerImageUrl: z.string().nullable().optional(),
             footerText: z.string().nullable().optional(),
             supportEmail: z.string().nullable().optional(),
@@ -898,11 +907,16 @@ export const communicationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       const variables = getSampleData();
+      const resolvedLogo =
+        input.branding?.emailLogoUrl ||
+        input.branding?.masterLogoUrl ||
+        input.branding?.logoUrl ||
+        null;
       const branding: Branding = {
-        primaryColor: input.branding?.primaryColor ?? "#E67E22",
+        primaryColor: input.branding?.primaryColor ?? "#0D9488",
         accentColor: input.branding?.accentColor ?? "#E67E22",
-        buttonColor: input.branding?.buttonColor ?? "#E67E22",
-        logoUrl: input.branding?.logoUrl ?? null,
+        buttonColor: input.branding?.buttonColor ?? "#0D9488",
+        logoUrl: resolvedLogo,
         senderName: (input.branding as any)?.senderName ?? null,
         headerImageUrl: input.branding?.headerImageUrl ?? null,
         footerText: input.branding?.footerText ?? null,

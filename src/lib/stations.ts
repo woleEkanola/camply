@@ -7,7 +7,9 @@ import {
   HeartIcon,
   BookOpenIcon,
   GiftIcon,
+  UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { STAFF_CHECK_IN_STATION, STAFF_CHECKOUT_STATION } from "./staffPresence";
 
 export type StationId =
   | "IDENTITY_LOOKUP"
@@ -20,7 +22,9 @@ export type StationId =
   | "COLLECTIBLES"
   | "CHECKOUT"
   | "EMERGENCY_LOOKUP"
-  | "CUSTOM";
+  | "CUSTOM"
+  | "STAFF_CHECK_IN"
+  | "STAFF_CHECKOUT";
 
 export type StatKey =
   | "SERVED"
@@ -202,6 +206,30 @@ export const STATIONS: Record<StationId, StationDef> = {
     allowsUndo: true,
     isLookup: false,
   },
+  STAFF_CHECK_IN: {
+    id: "STAFF_CHECK_IN",
+    name: STAFF_CHECK_IN_STATION,
+    verb: "Checking In Staff",
+    successVerb: "Checked In",
+    duplicateVerb: "Already Checked In",
+    theme: { bg: "#0369a1", bgStrong: "#075985", fg: "#f0f9ff", ring: "#7dd3fc", tint: "rgba(3,105,161,0.12)" },
+    icon: UserGroupIcon,
+    stats: ["SCANS_TODAY"],
+    allowsUndo: false,
+    isLookup: false,
+  },
+  STAFF_CHECKOUT: {
+    id: "STAFF_CHECKOUT",
+    name: STAFF_CHECKOUT_STATION,
+    verb: "Checking Out Staff",
+    successVerb: "Checked Out",
+    duplicateVerb: "Already Checked Out",
+    theme: { bg: "#a16207", bgStrong: "#854d0e", fg: "#fefce8", ring: "#fde047", tint: "rgba(161,98,7,0.12)" },
+    icon: UserGroupIcon,
+    stats: ["SCANS_TODAY"],
+    allowsUndo: false,
+    isLookup: false,
+  },
 };
 
 /** Identity Lookup first — it is the safe, read-only default; the sheet
@@ -218,6 +246,8 @@ export const STATION_ORDER: StationId[] = [
   "CHECKOUT",
   "EMERGENCY_LOOKUP",
   "CUSTOM",
+  "STAFF_CHECK_IN",
+  "STAFF_CHECKOUT",
 ];
 
 export const DEFAULT_STATION: StationId = "IDENTITY_LOOKUP";

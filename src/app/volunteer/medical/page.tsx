@@ -23,8 +23,12 @@ function VolunteerMedicalContent({ profile, organizationId }: { profile: any; or
     { enabled: !!organizationId && !!activeQuery }
   );
 
+  const isMedicalStaff = profile.volunteerCategory === "Medical";
   const utils = api.useUtils();
-  const { data: recent = [] } = api.medicalVisit.recent.useQuery({ organizationId, campId: profile.campId }, { enabled: !!organizationId });
+  const { data: recent = [] } = api.medicalVisit.recent.useQuery(
+    { organizationId, campId: profile.campId ?? "" },
+    { enabled: !!organizationId && !!profile.campId && isMedicalStaff }
+  );
   const createVisit = api.medicalVisit.create.useMutation({
     onSuccess: () => {
       setComplaint("");

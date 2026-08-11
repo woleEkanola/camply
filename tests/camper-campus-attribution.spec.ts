@@ -49,8 +49,6 @@ test.describe("Family is locked to one campus", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusAId = campusA.id;
@@ -62,8 +60,6 @@ test.describe("Family is locked to one campus", () => {
         city: "Testville",
         country: "Testland",
         organizationId,
-        active: true,
-        signupOpen: true,
       },
     });
     campusBId = campusB.id;

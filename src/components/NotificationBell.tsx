@@ -1,68 +1,317 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { notificationEngine, AppNotification, NotificationPriority } from "@/lib/notificationEngine";
+import { NotificationSettingsModal } from "./notifications/NotificationSettingsModal";
+import { useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
+import {
+  BellIcon,
+  XMarkIcon,
+  Cog6ToothIcon,
+  CheckIcon,
+  CheckCircleIcon,
+  MagnifyingGlassIcon,
+  TrashIcon,
+} from "@heroicons/react/24/outline";
+
+// DB-backed Notification rows (created by admin broadcasts, export-job
+// completions written server-side, etc. — src/server/api/routers/
+// notification.ts) get this id prefix once mapped into AppNotification
+// shape, so mark-as-read can route to the right backend (tRPC vs. the
+// client-only notificationEngine) without a second id namespace.
+const DB_ID_PREFIX = "db_";
 
 export default function NotificationBell() {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const utils = api.useUtils();
-  const { data: unreadCount } = api.notification.unreadCount.useQuery(undefined, { refetchInterval: 30000 });
-  const { data: notifications, refetch } = api.notification.listMine.useQuery(undefined, { enabled: open });
+  const { data: session } = useSession();
+  const organizationId = (session?.user as any)?.organizationId ?? "";
 
-  function onReadMutated() {
-    refetch();
-    utils.notification.unreadCount.invalidate();
-  }
-  const markRead = api.notification.markRead.useMutation({ onSuccess: onReadMutated });
-  const markAllRead = api.notification.markAllRead.useMutation({ onSuccess: onReadMutated });
+  const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [filterPriority, setFilterPriority] = useState<string>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    const unsubscribe = notificationEngine.subscribe((items) => {
+      setNotifications(items);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // This bell used to only ever show client-side (notificationEngine)
+  // notifications — admin broadcasts and other server-written Notification
+  // rows (src/server/api/routers/notification.ts's listMine/markRead/
+  // markAllRead, already used by volunteer/page.tsx and StaffTodayPanel)
+  // never appeared here at all. Merge both sources into one feed.
+  const utils = api.useUtils();
+  const { data: dbNotifications = [] } = api.notification.listMine.useQuery(undefined, {
+    enabled: !!session?.user,
+    refetchInterval: open ? 5000 : 30000,
+  });
+  const markReadMutation = api.notification.markRead.useMutation({
+    onSuccess: () => utils.notification.listMine.invalidate(),
+  });
+  const markAllReadMutation = api.notification.markAllRead.useMutation({
+    onSuccess: () => utils.notification.listMine.invalidate(),
+  });
+
+  const mappedDbNotifications: AppNotification[] = useMemo(
+    () =>
+      dbNotifications.map((n) => ({
+        id: `${DB_ID_PREFIX}${n.id}`,
+        icon: "📣",
+        title: n.title,
+        message: n.body,
+        timestamp: new Date(n.createdAt).toISOString(),
+        type: "PUSH" as const,
+        priority: "INFO" as const,
+        source: "Broadcast",
+        read: !!n.readAt,
+        // Was never passed through, so the "Open Link →" affordance never
+        // appeared for any DB-backed notification — including every
+        // leaderboard notification (src/server/leaderboard/notify.ts),
+        // which all set `link: "/leaderboard"`.
+        actionUrl: (n as any).link ?? undefined,
+      })),
+    [dbNotifications]
+  );
+
+  const allNotifications = useMemo(
+    () =>
+      [...notifications, ...mappedDbNotifications].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      ),
+    [notifications, mappedDbNotifications]
+  );
+
+  const handleMarkAsRead = (id: string) => {
+    if (id.startsWith(DB_ID_PREFIX)) {
+      markReadMutation.mutate({ id: id.slice(DB_ID_PREFIX.length) });
+    } else {
+      notificationEngine.markAsRead(id);
+    }
+  };
+
+  const handleMarkAllAsRead = () => {
+    notificationEngine.markAllAsRead();
+    if (mappedDbNotifications.some((n) => !n.read)) {
+      markAllReadMutation.mutate();
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
-    function handleOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
         setOpen(false);
       }
     }
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", handleOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
+  const unreadCount = allNotifications.filter((n) => !n.read).length;
+
+  const filteredNotifications = allNotifications.filter((n) => {
+    if (filterPriority !== "ALL" && n.priority !== filterPriority) return false;
+    if (
+      searchQuery.trim() &&
+      !n.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !n.message.toLowerCase().includes(searchQuery.toLowerCase())
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const getPriorityStripe = (priority: NotificationPriority) => {
+    switch (priority) {
+      case "CRITICAL":
+        return "border-l-4 border-l-red-600 bg-red-50/20";
+      case "WARNING":
+        return "border-l-4 border-l-amber-500 bg-amber-50/20";
+      case "SUCCESS":
+        return "border-l-4 border-l-emerald-600 bg-emerald-50/20";
+      case "INFO":
+      default:
+        return "border-l-4 border-l-teal-600 bg-teal-50/20";
+    }
+  };
+
   return (
-    <div ref={containerRef} className="relative">
-      <button onClick={() => setOpen((o) => !o)} className="relative p-2 rounded-full hover:bg-surface-raised">
-        🔔
-        {!!unreadCount && unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs rounded-full px-1.5">{unreadCount}</span>
-        )}
-      </button>
+    <>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="relative p-2 rounded-full hover:bg-surface-raised transition text-txt-secondary hover:text-txt-primary"
+          aria-label="Open Notifications"
+        >
+          <BellIcon className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <span className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-sm">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Notification Center Slide-Over Panel */}
       {open && (
-        <div className="absolute right-[-60px] sm:right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-elevated rounded-lg shadow-lg border border-elevated-border z-50 max-h-96 overflow-y-auto">
-          <div className="flex items-center justify-between p-3 border-b border-elevated-border">
-            <span className="font-medium text-sm text-txt-primary">Notifications</span>
-            <button className="text-xs text-accent-600 hover:underline" onClick={() => markAllRead.mutate()}>Mark all read</button>
-          </div>
-          {(notifications ?? []).length === 0 && <div className="p-4 text-sm text-txt-secondary">No notifications yet.</div>}
-          {(notifications ?? []).map((n) => (
-            <div
-              key={n.id}
-              className={`p-3 border-b border-border-subtle text-sm cursor-pointer ${n.readAt ? "" : "bg-surface-raised"}`}
-              onClick={() => !n.readAt && markRead.mutate({ id: n.id })}
-            >
-              <div className="font-medium text-txt-primary">{n.title}</div>
-              <div className="text-txt-secondary">{n.body}</div>
-              <div className="text-xs text-txt-muted mt-1">{new Date(n.createdAt).toLocaleString()}</div>
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div
+            className="fixed inset-0 bg-neutral-950/60 backdrop-blur-xs transition-opacity cursor-pointer"
+            onClick={() => setOpen(false)}
+            aria-label="Close Notifications Backdrop"
+          />
+
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10 pointer-events-none">
+            <div className="w-screen max-w-md bg-elevated shadow-2xl border-l border-elevated-border flex flex-col pointer-events-auto">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-elevated-border">
+                <div className="flex items-center space-x-2">
+                  <BellIcon className="h-5 w-5 text-teal-600" />
+                  <h3 className="font-bold text-base text-txt-primary">Notification Center</h3>
+                  {unreadCount > 0 && (
+                    <span className="bg-teal-100 text-teal-800 text-xs font-bold px-2 py-0.5 rounded-full">
+                      {unreadCount} new
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => setSettingsOpen(true)}
+                    className="p-2 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-raised transition-colors"
+                    title="Notification Settings"
+                    aria-label="Notification Settings"
+                  >
+                    <Cog6ToothIcon className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    className="p-2 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-raised transition-colors"
+                    title="Close Notifications"
+                    aria-label="Close Notifications"
+                  >
+                    <XMarkIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Toolbar: Search + Filter Tabs */}
+              <div className="p-3 border-b border-elevated-border space-y-2 bg-bg-surface">
+                <div className="relative">
+                  <MagnifyingGlassIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-txt-muted" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search notifications..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-border-default bg-bg-subtle focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex space-x-1 overflow-x-auto scrollbar-hide text-xs">
+                    {(["ALL", "CRITICAL", "WARNING", "SUCCESS", "INFO"] as const).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setFilterPriority(p)}
+                        className={`px-2 py-1 rounded-md font-semibold transition ${
+                          filterPriority === p
+                            ? "bg-teal-600 text-white"
+                            : "text-txt-muted hover:text-txt-primary hover:bg-bg-subtle"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex space-x-1">
+                    <button
+                      type="button"
+                      onClick={handleMarkAllAsRead}
+                      className="p-1 text-txt-muted hover:text-teal-600"
+                      title="Mark all as read"
+                    >
+                      <CheckCircleIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => notificationEngine.clearAll()}
+                      className="p-1 text-txt-muted hover:text-red-600"
+                      title="Clear history"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notification Items List */}
+              <div className="flex-1 overflow-y-auto divide-y divide-border-subtle p-2 space-y-2">
+                {filteredNotifications.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-txt-muted">
+                    No notifications matching criteria.
+                  </div>
+                ) : (
+                  filteredNotifications.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => handleMarkAsRead(item.id)}
+                      className={`p-3.5 rounded-xl transition cursor-pointer ${getPriorityStripe(
+                        item.priority
+                      )} ${item.read ? "opacity-75" : "shadow-xs font-medium"}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-lg">{item.icon}</span>
+                          <span className="font-bold text-sm text-txt-primary">{item.title}</span>
+                        </div>
+                        <span className="text-[10px] text-txt-muted">
+                          {new Date(item.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-txt-secondary mt-1.5 leading-relaxed">{item.message}</p>
+
+                      <div className="flex items-center justify-between mt-2 pt-1 text-[10px] text-txt-muted border-t border-black/5">
+                        <span>Source: {item.source}</span>
+                        {item.actionUrl && (
+                          <a
+                            href={item.actionUrl}
+                            className="text-teal-600 font-bold hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Open Link →
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          ))}
+          </div>
         </div>
       )}
-    </div>
+
+      {/* Settings Modal */}
+      <NotificationSettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        organizationId={organizationId}
+      />
+    </>
   );
 }

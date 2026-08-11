@@ -6,12 +6,8 @@ import { useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { LeadershipTab } from "@/components/orgStructure/LeadershipTab";
-import { DirectoryTab } from "@/components/orgStructure/DirectoryTab";
-import { DepartmentsTab } from "@/components/orgStructure/DepartmentsTab";
-import { CampStructureSearch } from "@/components/orgStructure/CampStructureSearch";
+import { CampDirectory } from "@/components/orgStructure/CampDirectory";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
@@ -34,30 +30,12 @@ export default function CampStructurePage() {
 
   return (
     <AppShell area="admin">
-      <PageHeader title="Camp Structure" description={activeCamp ? `For ${activeCamp.name}` : undefined} />
+      <PageHeader title="Camp Contact" description={activeCamp ? `Directory and reporting structure for ${activeCamp.name}` : undefined} />
 
       {!campId ? (
         <EmptyState title="No active camp" description="Set an active camp before managing camp structure." />
       ) : (
-        <>
-          <CampStructureSearch organizationId={organizationId} campId={campId} />
-          <Tabs
-            tabs={[
-              {
-                label: "Leadership",
-                content: <LeadershipTab organizationId={organizationId} campId={campId} />,
-              },
-              {
-                label: "Directory",
-                content: <DirectoryTab organizationId={organizationId} campId={campId} />,
-              },
-              {
-                label: "Departments",
-                content: <DepartmentsTab organizationId={organizationId} campId={campId} />,
-              },
-            ]}
-          />
-        </>
+        <CampDirectory organizationId={organizationId} campId={campId} />
       )}
     </AppShell>
   );

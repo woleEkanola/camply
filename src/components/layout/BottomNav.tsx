@@ -11,6 +11,7 @@ const AREA_ROOTS = ["/admin", "/dashboard", "/campus-rep-dashboard", "/super-adm
 export interface BottomNavProps {
   items: NavItem[];
   onMoreClick: () => void;
+  showMore?: boolean;
 }
 
 /**
@@ -21,7 +22,7 @@ export interface BottomNavProps {
  * fewer than 2 curated destinations (see getBottomNavItems) — a 1-item bar
  * adds chrome without adding navigation value over the hamburger alone.
  */
-export function BottomNav({ items, onMoreClick }: BottomNavProps) {
+export function BottomNav({ items, onMoreClick, showMore = true }: BottomNavProps) {
   const pathname = usePathname();
   if (items.length < 2) return null;
 
@@ -50,14 +51,16 @@ export function BottomNav({ items, onMoreClick }: BottomNavProps) {
           </Link>
         );
       })}
-      <button
-        type="button"
-        onClick={onMoreClick}
-        className="flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs font-medium text-txt-secondary"
-      >
-        <EllipsisHorizontalIcon className="h-6 w-6 shrink-0" aria-hidden="true" />
-        <span>More</span>
-      </button>
+      {showMore && (
+        <button
+          type="button"
+          onClick={onMoreClick}
+          className="flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs font-medium text-txt-secondary"
+        >
+          <EllipsisHorizontalIcon className="h-6 w-6 shrink-0" aria-hidden="true" />
+          <span>More</span>
+        </button>
+      )}
     </nav>
   );
 }

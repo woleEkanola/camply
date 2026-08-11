@@ -204,7 +204,13 @@ export function useScanDetector({ onDecode, paused, enabled }: UseScanDetectorOp
       setEngine("html5-qrcode");
       await instance.start(
         deviceId,
-        { fps: 15, qrbox: (w, h) => ({ width: Math.min(w, h) * 0.7, height: Math.min(w, h) * 0.7 }) },
+        {
+          fps: 15,
+          qrbox: (w, h) => {
+            const size = Math.max(50, Math.floor(Math.min(w, h) * 0.7));
+            return { width: size, height: size };
+          },
+        },
         (decodedText) => reportDecode(decodedText),
         () => {}
       );

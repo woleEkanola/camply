@@ -12,6 +12,7 @@ let parentId: string;
 let adminId: string;
 let camperId: string;
 let registrationId: string;
+let staffProfileId: string;
 
 beforeEach(async () => {
   const org = await prisma.organization.create({ data: { name: `Search Test Org ${Date.now()}-${Math.random()}` } });
@@ -80,6 +81,21 @@ beforeEach(async () => {
   });
   adminId = admin.id;
 
+  const staffProfile = await prisma.staffProfile.create({
+    data: {
+      userId: admin.id,
+      organizationId: orgId,
+      campId,
+      type: "TEACHER",
+      status: "PENDING",
+      firstName: "AdminFirst",
+      lastName: "AdminLast",
+      email: admin.email,
+      phone: "08000000000",
+    },
+  });
+  staffProfileId = staffProfile.id;
+
   const camper = await prisma.camper.create({
     data: {
       name: "SearchCamper UniqueName",
@@ -131,7 +147,14 @@ describe("searchRouter - global", () => {
       query: "AdminFirst",
       organizationId: orgId,
     });
-    expect(staffResults.some((r) => r.type === "staff" && r.userId === adminId)).toBe(true);
+    expect(staffResults).toContainEqual(
+      expect.objectContaining({
+        type: "staff",
+        userId: adminId,
+        staffProfileId,
+        href: `/admin/teachers/${staffProfileId}`,
+      })
+    );
 
     // 3. Search for campus name
     const campusResults = await caller.search.global({

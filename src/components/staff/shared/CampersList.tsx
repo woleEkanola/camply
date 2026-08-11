@@ -10,10 +10,13 @@ import { Badge } from "@/components/ui/Badge";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Select } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { StatCard } from "@/components/ui/StatCard";
 import { Card, CardBody } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CamperQuickProfileDrawer } from "@/components/staff/shared/CamperQuickProfile";
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import EditCamperModal from "@/app/admin/components/EditCamperModal";
+import { ExportButton } from "@/components/export/ExportButton";
+import { CameraIcon } from "@heroicons/react/24/outline";
 import { useSession } from "next-auth/react";
 
 function age(dob: string | Date | null | undefined) {
@@ -76,6 +79,7 @@ export function CampersList({
   const { data: session } = useSession();
   const user = session?.user;
   const isCampusRep = user?.role === "SUPER_ADMIN" || user?.role === "OWNER" || user?.role === "ADMIN" || user?.role === "CAMPUS_REPRESENTATIVE" || (user?.role === "TEACHER" && ((user as any)?.managedCampuses?.length ?? 0) > 0);
+  const isTeacherOrVolunteer = user?.role === "TEACHER" || user?.role === "VOLUNTEER";
 
   const [searchTerm, setSearchTerm] = useState("");
   const [campusFilter, setCampusFilter] = useState<string | "all">("all");
@@ -85,7 +89,9 @@ export function CampersList({
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allItems, setAllItems] = useState<StaffCamperItem[]>([]);
   const [profileCamperId, setProfileCamperId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "thumbnail" | "card">("list");
+  const [editCamperId, setEditCamperId] = useState<string | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"card" | "thumbnail" | "list">("card");
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
   const { data: campusesData } = api.campus.getByOrganization.useQuery(
@@ -113,6 +119,11 @@ export function CampersList({
     { enabled: !!organizationId }
   );
 
+  const { data: statsData } = api.camper.getAdminListStats.useQuery(
+    { organizationId, campId: campId || undefined },
+    { enabled: !!organizationId }
+  );
+
   useEffect(() => {
     setCursor(undefined);
     setAllItems([]);
@@ -132,58 +143,6 @@ export function CampersList({
     }
   }, [responseData?.items, cursor]);
 
-  const exportCsv = () => {
-    // allItems only holds the cursor pages loaded so far (limit: 50 per
-    // page, grown by "Load more") — exporting without warning silently
-    // produced a CSV of just the first page, with no indication it was
-    // partial.
-    if (responseData?.nextCursor) {
-      const proceed = window.confirm(
-        "Not all campers matching this filter have been loaded yet — this export would only include what's currently on screen. Click \"Load more\" until the full list is shown, then export again. Export the partial list anyway?"
-      );
-      if (!proceed) return;
-    }
-    const rows = allItems.map((item) => {
-      const reg = item.registrations[0];
-      return {
-        Name: item.name,
-        Gender: item.gender ?? "—",
-        Age: age(item.dateOfBirth) ?? "—",
-        Campus: item.homeCampus?.name ?? "—",
-        "Reg #": reg?.registrationNumber ?? "—",
-        Status: reg?.status ?? "—",
-        Tribe: reg?.tribe?.name ?? "—",
-        Room: reg?.room?.name ?? "—",
-        Bed: reg?.bed?.label ?? "—",
-        "Parent Email": item.user.email,
-        Allergies: item.allergies ?? "—",
-        "Medical Conditions": item.medicalConditions ?? "—",
-      };
-    });
-    if (rows.length === 0) return;
-    const headers = Object.keys(rows[0]!);
-    // A leading =, +, -, or @ makes Excel/Sheets interpret the cell as a
-    // formula rather than text — camper/parent-entered fields (name,
-    // allergies, etc.) were written to the CSV unescaped against that.
-    // Prefixing with a straight quote is the standard mitigation: it forces
-    // text interpretation without changing the visible value.
-    const escapeFormula = (v: string) => (/^[=+\-@]/.test(v) ? `'${v}` : v);
-    const csv = [
-      headers.join(","),
-      ...rows.map((row) =>
-        headers.map((h) => `"${escapeFormula(String((row as any)[h])).replace(/"/g, '""')}"`).join(",")
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `campers-${campId ?? "all"}-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   const columns: Column<StaffCamperItem>[] = useMemo(
     () => [
@@ -307,13 +266,13 @@ export function CampersList({
         {/* View Mode Toggle */}
         <div className="flex items-center rounded-lg bg-surface-raised p-0.5 border border-border-default shrink-0">
           <button
-            onClick={() => setViewMode("list")}
+            onClick={() => setViewMode("card")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "list" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "card" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
             )}
           >
-            List
+            Card
           </button>
           <button
             onClick={() => setViewMode("thumbnail")}
@@ -325,21 +284,34 @@ export function CampersList({
             Thumbnail
           </button>
           <button
-            onClick={() => setViewMode("card")}
+            onClick={() => setViewMode("list")}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
-              viewMode === "card" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+              viewMode === "list" ? "bg-surface text-neutral-800 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
             )}
           >
-            Card
+            List
           </button>
         </div>
       </div>
       {isCampusRep && (
-        <Button size="sm" variant="secondary" onClick={exportCsv} aria-label="Export CSV">
-          <ArrowDownTrayIcon className="h-4 w-4 md:mr-1" />
+        <ExportButton
+          kind="CAMPERS"
+          organizationId={organizationId}
+          label="Campers"
+          size="sm"
+          aria-label="Export CSV"
+          filters={{
+            campId,
+            campusId: campusFilter !== "all" ? campusFilter : undefined,
+            status: statusFilter || undefined,
+            gender: genderFilter || undefined,
+            tribeId: tribeFilter || undefined,
+            search: debouncedSearchTerm || undefined,
+          }}
+        >
           <span className="hidden md:inline">Export CSV</span>
-        </Button>
+        </ExportButton>
       )}
     </div>
   );
@@ -352,6 +324,71 @@ export function CampersList({
     <Card>
       <CardBody>
         {title && <h3 className="mb-4 text-lg font-medium text-neutral-900">{title}</h3>}
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <StatCard
+            data-testid="camper-stat-approved"
+            label="Approved"
+            value={statsData?.approvedCount ?? 0}
+            tone="success"
+            selected={statusFilter === "APPROVED" && genderFilter === ""}
+            onClick={() => {
+              setCursor(undefined);
+              setAllItems([]);
+              setGenderFilter("");
+              setStatusFilter((prev) => (prev === "APPROVED" ? "" : "APPROVED"));
+            }}
+          />
+          <StatCard
+            data-testid="camper-stat-in-camp"
+            label="In Camp"
+            value={statsData?.inCampCount ?? 0}
+            tone="info"
+            selected={statusFilter === "CHECKED_IN" && genderFilter === ""}
+            onClick={() => {
+              setCursor(undefined);
+              setAllItems([]);
+              setGenderFilter("");
+              setStatusFilter((prev) => (prev === "CHECKED_IN" ? "" : "CHECKED_IN"));
+            }}
+          />
+          <StatCard
+            data-testid="camper-stat-male"
+            label="Male"
+            value={statsData?.checkedInMaleCount ?? 0}
+            selected={genderFilter === "Male" && statusFilter === ""}
+            onClick={() => {
+              setCursor(undefined);
+              setAllItems([]);
+              setStatusFilter("");
+              setGenderFilter((prev) => (prev === "Male" ? "" : "Male"));
+            }}
+          />
+          <StatCard
+            data-testid="camper-stat-female"
+            label="Female"
+            value={statsData?.checkedInFemaleCount ?? 0}
+            selected={genderFilter === "Female" && statusFilter === ""}
+            onClick={() => {
+              setCursor(undefined);
+              setAllItems([]);
+              setStatusFilter("");
+              setGenderFilter((prev) => (prev === "Female" ? "" : "Female"));
+            }}
+          />
+          <StatCard
+            data-testid="camper-stat-exited-camp"
+            label="Exited Camp"
+            value={statsData?.exitedCampCount ?? 0}
+            tone="neutral"
+            selected={statusFilter === "COMPLETED" && genderFilter === ""}
+            onClick={() => {
+              setCursor(undefined);
+              setAllItems([]);
+              setGenderFilter("");
+              setStatusFilter((prev) => (prev === "COMPLETED" ? "" : "COMPLETED"));
+            }}
+          />
+        </div>
         {viewMode === "list" ? (
           <Table
             mode="controlled"
@@ -406,6 +443,19 @@ export function CampersList({
                       <div className="font-semibold text-sm text-neutral-800 truncate">{item.name}</div>
                       <div className="text-[11px] text-neutral-500 truncate">
                         {[age(item.dateOfBirth) ? `${age(item.dateOfBirth)}y` : null, item.gender].filter(Boolean).join(" · ")}
+                      </div>
+                      <div className="mt-2 flex justify-center" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setEditCamperId(item.id);
+                            setIsEditModalOpen(true);
+                          }}
+                        >
+                          <CameraIcon className="mr-1 h-3.5 w-3.5 text-accent-500" />
+                          {isTeacherOrVolunteer ? "Edit Photo" : "Edit"}
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -468,6 +518,19 @@ export function CampersList({
                           <span className="font-medium text-neutral-700 truncate block">{reg?.registrationNumber ?? "—"}</span>
                         </div>
                       </div>
+                      <div className="mt-4 pt-3 border-t border-border-subtle flex justify-end" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setEditCamperId(item.id);
+                            setIsEditModalOpen(true);
+                          }}
+                        >
+                          <CameraIcon className="mr-1 h-3.5 w-3.5 text-accent-500" />
+                          {isTeacherOrVolunteer ? "Edit Photo" : "Edit"}
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
@@ -482,6 +545,18 @@ export function CampersList({
           </div>
         )}
         <CamperQuickProfileDrawer camperId={profileCamperId} open={!!profileCamperId} onClose={() => setProfileCamperId(null)} />
+        <EditCamperModal
+          profileId={editCamperId}
+          organizationId={organizationId}
+          isOpen={isEditModalOpen}
+          photoOnly={isTeacherOrVolunteer}
+          onClose={() => setIsEditModalOpen(false)}
+          onSuccess={() => {
+            setCursor(undefined);
+            setAllItems([]);
+            void refetch();
+          }}
+        />
       </CardBody>
     </Card>
   );

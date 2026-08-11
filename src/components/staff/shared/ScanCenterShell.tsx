@@ -15,6 +15,9 @@ import { StationSheet } from "@/components/scan/StationSheet";
 import { MedicalBanner } from "@/components/scan/MedicalBanner";
 import { SearchSheet } from "@/components/scan/SearchSheet";
 import { OfflineSheet } from "@/components/scan/OfflineSheet";
+import { OfflineDownloadModal } from "@/components/scan/OfflineDownloadModal";
+import { OfflineReadinessModal } from "@/components/pwa/OfflineReadinessModal";
+import { notificationEngine } from "@/lib/notificationEngine";
 import { HistorySheet } from "@/components/scan/HistorySheet";
 import { ScanTabBar } from "@/components/scan/ScanTabBar";
 import { CampusTeachersSheet } from "@/components/scan/CampusTeachersSheet";
@@ -69,6 +72,8 @@ export function ScanCenterShell({
   const [stationSheetOpen, setStationSheetOpen] = useState(false);
   const [searchSheetOpen, setSearchSheetOpen] = useState(false);
   const [offlineSheetOpen, setOfflineSheetOpen] = useState(false);
+  const [offlineDownloadModalOpen, setOfflineDownloadModalOpen] = useState(false);
+  const [offlineReadinessModalOpen, setOfflineReadinessModalOpen] = useState(false);
   const [historySheetOpen, setHistorySheetOpen] = useState(false);
   const [campusTeachersSheetOpen, setCampusTeachersSheetOpen] = useState(false);
   const [stationLocation, setStationLocation] = useState("");
@@ -94,6 +99,10 @@ export function ScanCenterShell({
   const [medicalData, setMedicalData] = useState<any>(null);
   const [lookupData, setLookupData] = useState<any>(null);
   const [emergencyLookupData, setEmergencyLookupData] = useState<any>(null);
+  // Staff (teacher/volunteer) badge scan result — kept separate from the
+  // camper overlays above rather than reusing them, since staff scans have
+  // no camper/medical/checkout shape at all (see handleStaffScanSubmit).
+  const [staffScanData, setStaffScanData] = useState<any>(null);
 
   // Checkout details form overlay state
   const [checkoutTargetReg, setCheckoutTargetReg] = useState<any>(null);
@@ -177,6 +186,15 @@ export function ScanCenterShell({
     return () => clearTimeout(timer);
   }, [duplicateData]);
 
+  useEffect(() => {
+    if (!staffScanData) return;
+    const timer = setTimeout(() => {
+      setStaffScanData(null);
+      setScannerActive(true);
+    }, staffScanData.duplicate ? 2500 : 1500);
+    return () => clearTimeout(timer);
+  }, [staffScanData]);
+
   // Keyboard shortcut: slash key focuses search, Escape closes overlays
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -191,6 +209,7 @@ export function ScanCenterShell({
         setLookupData(null);
         setEmergencyLookupData(null);
         setCheckoutTargetReg(null);
+        setStaffScanData(null);
         // Dismissing any overlay by any means must resume scanning — this
         // was previously missed for Escape specifically, leaving the
         // camera visible but silently paused with nothing on screen to
@@ -243,8 +262,59 @@ export function ScanCenterShell({
     }
   };
 
+  const staffScanMutation = api.scan.processStaffScan.useMutation();
+
+  // Staff badge scans have their own request/response shape (no camper,
+  // no medical triage, no checkout form) and write to StaffScanEvent, not
+  // ScanEvent — kept as a fully separate path rather than folded into
+  // handleScanSubmit below, which assumes a camper Registration throughout.
+  // Deliberately does not go through useOfflineScanner — staff stations
+  // require connectivity in this build.
+  const handleStaffScanSubmit = async (payload: { qrToken?: string; query?: string }) => {
+    setScannerActive(false);
+    const targetStationName = activeStationLabel;
+    try {
+      const response = await staffScanMutation.mutateAsync({
+        organizationId,
+        qrToken: payload.qrToken,
+        query: payload.query,
+        station: targetStationName,
+        stationId: activeStation as "STAFF_CHECK_IN" | "STAFF_CHECKOUT",
+        device: deviceIdentifier || undefined,
+        location: stationLocation || undefined,
+      });
+
+      setSessionStats((prev) => ({ ...prev, scansToday: prev.scansToday + 1 }));
+
+      if (response.result === "DUPLICATE") {
+        playScanCue("duplicate");
+        vibrateForCue("duplicate");
+        setSessionStats((prev) => ({ ...prev, duplicates: prev.duplicates + 1 }));
+        setStaffScanData({ ...response, duplicate: true });
+        return;
+      }
+
+      playScanCue("success");
+      vibrateForCue("success");
+      notificationEngine.notify({
+        title: `${response.profile.firstName} ${response.profile.lastName}`.trim(),
+        message: `${response.actionPerformed} at ${targetStationName}`,
+        priority: "SUCCESS",
+        source: targetStationName,
+      });
+      setStaffScanData({ ...response, duplicate: false });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to process staff scan.");
+      setScannerActive(true);
+    }
+  };
+
   // Perform the core scan operation
   const handleScanSubmit = async (payload: { qrToken?: string; query?: string; acknowledgedMedical?: boolean; checkoutDetails?: any }) => {
+    if (activeStation === "STAFF_CHECK_IN" || activeStation === "STAFF_CHECKOUT") {
+      return handleStaffScanSubmit(payload);
+    }
+
     setScannerActive(false); // pause scanner while processing
 
     const targetStationName = activeStationLabel;
@@ -283,6 +353,12 @@ export function ScanCenterShell({
       if (response.result === "REQUIRES_MEDICAL_ACKNOWLEDGEMENT") {
         playScanCue("critical");
         vibrateForCue("critical");
+        notificationEngine.notify({
+          title: "Medical Alert",
+          message: `Critical medical flags for ${response.registration.camper.name}`,
+          priority: "CRITICAL",
+          source: targetStationName,
+        });
         setMedicalData({
           registration: response.registration,
           qrToken: payload.qrToken,
@@ -295,6 +371,12 @@ export function ScanCenterShell({
       if (response.result === "DUPLICATE") {
         playScanCue("duplicate");
         vibrateForCue("duplicate");
+        notificationEngine.notify({
+          title: "Duplicate Scan",
+          message: `${response.registration.camper.name} already processed at ${response.originalStation}`,
+          priority: "INFO",
+          source: targetStationName,
+        });
         setSessionStats((prev) => ({ ...prev, duplicates: prev.duplicates + 1 }));
         setDuplicateData({
           camperName: response.registration.camper.name,
@@ -312,6 +394,13 @@ export function ScanCenterShell({
       // C. SUCCESS SCANS
       const reg = response.registration;
       const camper = reg.camper;
+
+      notificationEngine.notify({
+        title: camper.name,
+        message: `${response.actionPerformed || "Checked In"} at ${targetStationName}`,
+        priority: "SUCCESS",
+        source: targetStationName,
+      });
 
       // Handle Lookup Station Overlay
       if (activeStation === "IDENTITY_LOOKUP") {
@@ -506,6 +595,35 @@ export function ScanCenterShell({
         isRefreshingCache={isRefreshingCache}
         onRefreshCache={handleOfflineCacheRefresh}
         lastCacheSyncTime={lastCacheSyncTime}
+        onOpenDownloadModal={() => {
+          setOfflineSheetOpen(false);
+          setOfflineDownloadModalOpen(true);
+        }}
+        onOpenReadiness={() => {
+          setOfflineSheetOpen(false);
+          setOfflineReadinessModalOpen(true);
+        }}
+      />
+
+      <OfflineDownloadModal
+        open={offlineDownloadModalOpen}
+        onClose={() => setOfflineDownloadModalOpen(false)}
+        organizationId={organizationId}
+        onSuccess={() => {
+          const timeStr = new Date().toLocaleTimeString();
+          setLastCacheSyncTime(timeStr);
+          localStorage.setItem("camply-scan-last-sync", timeStr);
+          toast.success("Offline camper database cached successfully!");
+        }}
+      />
+
+      <OfflineReadinessModal
+        open={offlineReadinessModalOpen}
+        onClose={() => setOfflineReadinessModalOpen(false)}
+        onOpenDownloadModal={() => {
+          setOfflineReadinessModalOpen(false);
+          setOfflineDownloadModalOpen(true);
+        }}
       />
 
       <SearchSheet
@@ -654,6 +772,56 @@ export function ScanCenterShell({
             {successData.medicalFlags?.length > 0 && (
               <MedicalBanner flags={successData.medicalFlags} camper={successData.camper} />
             )}
+
+            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ OVERLAY 1b: STAFF BADGE SCAN RESULT ═══ */}
+      {staffScanData && (
+        <div
+          onClick={() => {
+            setStaffScanData(null);
+            setScannerActive(true);
+          }}
+          className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 text-white cursor-pointer animate-fade-in ${
+            staffScanData.duplicate ? "bg-blue-600" : "bg-sky-700"
+          }`}
+        >
+          <div className="flex flex-col items-center max-w-lg text-center space-y-6">
+            {staffScanData.duplicate ? (
+              <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
+            ) : (
+              <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
+            )}
+
+            <div className="space-y-2">
+              <h1 className="text-4xl md:text-5xl font-black tracking-tight">
+                {staffScanData.duplicate ? STATIONS[activeStation].duplicateVerb : staffScanData.actionPerformed}
+              </h1>
+              <p className="text-2xl md:text-3xl font-bold opacity-90">
+                {`${staffScanData.profile.firstName} ${staffScanData.profile.lastName}`.trim()}
+              </p>
+              <p className="text-sm font-semibold tracking-wider opacity-75 uppercase">
+                {staffScanData.profile.type} · {staffScanData.profile.preferredCampus?.name ?? "—"}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 w-full bg-surface/10 backdrop-blur rounded-xl p-4 text-left text-sm border border-white/10">
+              {staffScanData.profile.department?.name && (
+                <div>
+                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Department</span>
+                  <span className="font-bold">{staffScanData.profile.department.name}</span>
+                </div>
+              )}
+              {staffScanData.profile.assignedTribe?.name && (
+                <div>
+                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Tribe</span>
+                  <span className="font-bold">{staffScanData.profile.assignedTribe.name}</span>
+                </div>
+              )}
+            </div>
 
             <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
           </div>

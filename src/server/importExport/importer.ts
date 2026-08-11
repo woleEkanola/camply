@@ -57,8 +57,7 @@ export async function importCampuses(
             phone: row.phone,
             email: row.email,
             campusCode: row.campusCode,
-            active: row.active,
-            signupOpen: row.signupOpen,
+            suspended: row.suspended,
             displayOrder: row.displayOrder,
           },
         });
@@ -79,8 +78,7 @@ export async function importCampuses(
             phone: row.phone,
             email: row.email,
             campusCode: row.campusCode,
-            active: row.active ?? true,
-            signupOpen: row.signupOpen ?? true,
+            suspended: row.suspended ?? false,
             displayOrder: row.displayOrder ?? 0,
           },
         });

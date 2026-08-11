@@ -14,22 +14,9 @@ export default function VolunteerQrScanPage() {
   return (
     <AppShell area="volunteer">
       <StaffGate>
-        {(profile) => {
-          if (profile.volunteerCategory !== "Registration") {
-            return (
-              <div className="max-w-md mx-auto mt-10 text-center space-y-2">
-                <p className="text-lg font-bold text-neutral-800">Access Denied</p>
-                <p className="text-sm text-neutral-500">QR Scan is only available to Registration department volunteers.</p>
-              </div>
-            );
-          }
-          // No defaultStationId: unified check-in/check-out page — a fresh
-          // session lands on the safe, read-only Identity Lookup station;
-          // the volunteer switches station from the station sheet.
-          // homeCampusId pre-highlights the volunteer's own campus in the
-          // Pickup Point picker.
-          return <ScanCenterShell organizationId={organizationId} homeCampusId={profile.preferredCampusId ?? undefined} />;
-        }}
+        {(profile) => (
+          <ScanCenterShell organizationId={organizationId} homeCampusId={profile.preferredCampusId ?? undefined} />
+        )}
       </StaffGate>
     </AppShell>
   );

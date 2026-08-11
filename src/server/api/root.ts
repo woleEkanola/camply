@@ -27,12 +27,16 @@ import { accommodationRouter } from "./routers/accommodation";
 import { orgStructureRouter } from "./routers/orgStructure";
 import { trashRouter } from "./routers/trash";
 import { importExportRouter } from "./routers/importExport";
+import { exportRouter } from "./routers/export";
 import { registrationConfigRouter } from "./routers/registrationConfig";
 import { positionRouter } from "./routers/position";
 import { communicationRouter } from "./routers/communication";
 
 import { scanRouter } from "./routers/scan";
+import { leaderboardRouter } from "./routers/leaderboard";
 import { searchRouter } from "./routers/search";
+import { pushRouter } from "./routers/push";
+import { platformBrandingRouter } from "./routers/platformBranding";
 
 /**
  * This is the primary router for your server.
@@ -68,11 +72,15 @@ export const appRouter = createTRPCRouter({
   orgStructure: orgStructureRouter,
   trash: trashRouter,
   importExport: importExportRouter,
+  export: exportRouter,
   registrationConfig: registrationConfigRouter,
   position: positionRouter,
   communication: communicationRouter,
   scan: scanRouter,
+  leaderboard: leaderboardRouter,
   search: searchRouter,
+  push: pushRouter,
+  platformBranding: platformBrandingRouter,
   // booking: bookingRouter, // removed because booking router file was deleted
   // eventType: eventTypeRouter, // removed because eventType router file was deleted
   // schedule: scheduleRouter, // removed because schedule router file was deleted

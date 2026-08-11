@@ -537,7 +537,38 @@ export async function clearTribeAssignment(params: { registrationId: string; act
 }
 
 export async function bulkAutoAssignTribes(params: { campId: string; actorId: string }) {
-  return bulkApplySuggestedTribes(params);
+  // The admin button promises a complete one-click allocation. Previously it
+  // only applied already-existing suggestions, so a fresh camp always
+  // reported "Assigned 0 of 0 campers". Build the eligible approved set,
+  // generate recommendations for that exact set, then apply them.
+  const eligible = await prisma.registration.findMany({
+    where: {
+      campId: params.campId,
+      status: "APPROVED",
+      tribeId: null,
+      deletedAt: null,
+    },
+    select: { id: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  const registrationIds = eligible.map((registration) => registration.id);
+  if (registrationIds.length === 0) return [];
+
+  const simulation = await runAllocationPipeline(prisma, params.campId, { scope: "approved" });
+  const eligibleIds = new Set(registrationIds);
+  const results: { registrationId: string; tribeId?: string; error?: string }[] = [];
+  // The pipeline maintains an in-memory population after every decision, so
+  // recommendations are balanced without re-querying the entire camp for
+  // every camper. Persist only the eligible rows selected above.
+  for (const assignment of simulation.assignments.filter((item) => eligibleIds.has(item.registrationId))) {
+    try {
+      const updated = await assignTribe({ registrationId: assignment.registrationId, tribeId: assignment.tribeId, actorId: params.actorId, method: "AUTOMATIC" });
+      results.push({ registrationId: assignment.registrationId, tribeId: updated.tribeId ?? undefined });
+    } catch (error) {
+      results.push({ registrationId: assignment.registrationId, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return results;
 }
 
 export async function lockTribeAssignment(registrationId: string, locked: boolean, actorId: string) {

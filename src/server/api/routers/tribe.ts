@@ -2,14 +2,16 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import * as tribeEngine from "../../tribe/engine";
-import { assertOrgAdmin, assertOrgAdminOrCampusRep } from "../trpc/scoping";
+import { assertOrgAdminOrCampusRep, assertCanManageCamp } from "../trpc/scoping";
+import { assertReportsAccess } from "./scan";
+import { recordScoreEvent } from "../../leaderboard/record";
 
-async function assertCanManageCamp(ctx: { prisma: any; session: any }, campId: string) {
-  const camp = await ctx.prisma.camp.findUnique({ where: { id: campId } });
-  if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
-  await assertOrgAdmin(ctx, camp.organizationId);
-  return camp;
-}
+// updatePoints predates ScoreCategory and has no category picker of its own
+// (it's a bare delta+reason form in TribeDashboardPanel) — every award through
+// it lands under the seeded "Special Recognition" category so it has
+// somewhere to go. A future admin UI can let the caller pick a category
+// without changing this constant's role as the fallback.
+const MANUAL_AWARD_FALLBACK_CATEGORY_ID = "seed-cat-special-recognition";
 
 function toTRPCError(error: unknown): TRPCError {
   if (error instanceof tribeEngine.TribeAllocationError) {
@@ -308,26 +310,61 @@ export const tribeRouter = createTRPCRouter({
       };
     }),
 
+  // Kept its exact input signature and return shape (TribeDashboardPanel
+  // needs no change) but the body now goes through recordScoreEvent — see
+  // src/server/leaderboard/record.ts. TribePointsLog is no longer written;
+  // it's frozen (expand/contract), not dropped. Also gains the deletedAt
+  // guard this procedure was missing — it used to happily award points to a
+  // soft-deleted tribe.
   updatePoints: protectedProcedure
     .input(z.object({ tribeId: z.string(), delta: z.number().int(), reason: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.tribeId } });
+      if (tribe.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Tribe not found" });
       await assertCanManageCamp(ctx, tribe.campId);
-      const [updated] = await ctx.prisma.$transaction([
-        ctx.prisma.tribe.update({ where: { id: input.tribeId }, data: { points: { increment: input.delta } } }),
-        ctx.prisma.tribePointsLog.create({
-          data: { tribeId: input.tribeId, delta: input.delta, reason: input.reason, actorId: currentUser!.id },
-        }),
-      ]);
-      return updated;
+
+      const event = await recordScoreEvent({
+        campId: tribe.campId,
+        tribeId: input.tribeId,
+        categoryId: MANUAL_AWARD_FALLBACK_CATEGORY_ID,
+        points: input.delta,
+        reason: input.reason,
+        source: "MANUAL",
+        createdById: currentUser!.id,
+      });
+      if (!event) throw new TRPCError({ code: "CONFLICT", message: "Award already recorded" });
+
+      return ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.tribeId } });
     }),
 
+  // Kept its exact input/return signature but now reads ScoreEvent, mapped
+  // back to TribePointsLog's old shape. Security fix folded in here: this
+  // procedure previously checked only that a caller was logged in, then read
+  // any tribeId — any authenticated user of ANY organization could read any
+  // tribe's points history. assertReportsAccess (org-scoped, allows
+  // SUPER_ADMIN/OWNER/ADMIN/CAMPUS_REPRESENTATIVE and approved TEACHER/
+  // VOLUNTEER staff) closes that. Only TribeDashboardPanel calls this
+  // procedure (verified — grep shows no other caller), so the fix is safe.
   pointsHistory: protectedProcedure
     .input(z.object({ tribeId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const currentUser = ctx.session?.user;
-      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
-      return ctx.prisma.tribePointsLog.findMany({ where: { tribeId: input.tribeId }, orderBy: { createdAt: "desc" }, take: 20 });
+      const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.tribeId } });
+      const camp = await ctx.prisma.camp.findUniqueOrThrow({ where: { id: tribe.campId } });
+      await assertReportsAccess(ctx, camp.organizationId);
+
+      const events = await ctx.prisma.scoreEvent.findMany({
+        where: { tribeId: input.tribeId },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      });
+      return events.map((e: any) => ({
+        id: e.id,
+        tribeId: e.tribeId,
+        delta: e.points,
+        reason: e.reason,
+        actorId: e.createdById,
+        createdAt: e.createdAt,
+      }));
     }),
 });

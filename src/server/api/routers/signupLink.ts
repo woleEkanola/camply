@@ -48,9 +48,7 @@ export const signupLinkRouter = createTRPCRouter({
       // Check if user has permission to view signup links for this organization
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        (currentUser.role === "OWNER" && currentUser.organizationId === input.organizationId) ||
-        (currentUser.role === "ADMIN" && currentUser.organizationId === input.organizationId) ||
-        (currentUser.role === "CAMPUS_REPRESENTATIVE" && currentUser.organizationId === input.organizationId);
+        currentUser.organizationId === input.organizationId;
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -218,19 +216,17 @@ export const signupLinkRouter = createTRPCRouter({
       // Check if user has permission to view signup links for this campus
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        (currentUser.role === "OWNER" && currentUser.organizationId === campus.organizationId) ||
-        (currentUser.role === "ADMIN" && currentUser.organizationId === campus.organizationId) ||
-        (currentUser.role === "CAMPUS_REPRESENTATIVE" &&
-         await ctx.prisma.campus.findFirst({
-           where: {
-             id: campus.id,
-             reps: {
-               some: {
-                 id: currentUser.id
-               }
-             }
-           }
-         }));
+        currentUser.organizationId === campus.organizationId ||
+        await ctx.prisma.campus.findFirst({
+          where: {
+            id: campus.id,
+            reps: {
+              some: {
+                id: currentUser.id
+              }
+            }
+          }
+        });
 
       if (!hasPermission) {
         throw new TRPCError({

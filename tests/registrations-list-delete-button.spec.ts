@@ -65,15 +65,17 @@ test.describe("Registrations list/card view: Delete button", () => {
 
     const pendingRow = page.locator("tr", { hasText: camperName });
     await expect(pendingRow).toBeVisible({ timeout: 10000 });
-    await expect(pendingRow.getByRole("button", { name: "Approve" })).toBeVisible();
-    await expect(pendingRow.getByRole("button", { name: "Reject" })).toBeVisible();
+    await expect(pendingRow.getByRole("button", { name: "Approve" })).toBeEnabled();
+    await expect(pendingRow.getByRole("button", { name: "Reject" })).toBeEnabled();
     await expect(pendingRow.getByRole("button", { name: "Delete" })).toBeVisible();
 
-    // Non-PENDING row: no Approve/Reject, but Delete is still there.
+    // Non-PENDING row: Approve/Reject render as disabled done-state indicators
+    // (not absent — status-aware action buttons, added after this spec was
+    // first written), but Delete is still fully available.
     const approvedRow = page.locator("tr", { hasText: approvedCamperName });
     await expect(approvedRow).toBeVisible();
-    await expect(approvedRow.getByRole("button", { name: "Approve" })).toHaveCount(0);
-    await expect(approvedRow.getByRole("button", { name: "Reject" })).toHaveCount(0);
+    await expect(approvedRow.getByRole("button", { name: "Approve" })).toBeDisabled();
+    await expect(approvedRow.getByRole("button", { name: "Reject" })).toBeDisabled();
     await expect(approvedRow.getByRole("button", { name: "Delete" })).toBeVisible();
 
     await pendingRow.getByRole("button", { name: "Delete" }).click();

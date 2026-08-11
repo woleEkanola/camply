@@ -22,8 +22,12 @@ test.describe("Campers page: Registration Status filter replaces Active/Inactive
       data: { email: `e2e-camperstatus-parent-${Date.now()}@camply.test`, password: "x", role: "PARENT", organizationId, homeCampusId: campusId },
     });
     parentUserId = parent.id;
+    // Stamped so an interrupted prior run's leftover camper (this literal
+    // name had no uniqueness suffix before) can never collide with this
+    // run's — the "tr" locators below match by substring, so this doesn't
+    // need to change.
     const camper = await prisma.camper.create({
-      data: { name: "E2E StatusFilter Camper", userId: parent.id, organizationId, homeCampusId: campusId, gender: "MALE", dateOfBirth: new Date(2013, 5, 1) },
+      data: { name: `E2E StatusFilter Camper ${Date.now()}`, userId: parent.id, organizationId, homeCampusId: campusId, gender: "MALE", dateOfBirth: new Date(2013, 5, 1) },
     });
     camperId = camper.id;
 
@@ -46,6 +50,8 @@ test.describe("Campers page: Registration Status filter replaces Active/Inactive
   test("Registration Status dropdown filters the list and no Active/Inactive column or filter remains", async ({ page }) => {
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/campers");
+    // CamperManagement defaults to Card view (no <tr>/<th> elements) — switch to List first.
+    await page.getByRole("button", { name: "List", exact: true }).click();
     await showAllRows(page);
 
     // The old Active/Inactive controls are gone (no column header is exactly "Status" — only "Registration Status" remains).

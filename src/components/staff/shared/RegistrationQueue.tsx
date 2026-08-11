@@ -46,7 +46,7 @@ interface Registration {
     photoUrl?: string | null;
     user?: { email?: string | null } | null;
   };
-  campus?: { name?: string | null } | null;
+  campus?: { name?: string | null; suspended?: boolean } | null;
   registrationNumber?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -100,6 +100,8 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
     if (isReviewer) setReviewStateFilter("AWAITING_VETTING");
   }, [org, isReviewer]);
 
+  const utils = api.useUtils();
+
   const { data: signupLink } = api.signupLink.getByCampusAndCamp.useQuery(
     { campusId },
     { enabled: !!campusId }
@@ -107,11 +109,24 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
 
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [accumulatedItems, setAccumulatedItems] = useState<any[]>([]);
+  const [endorsedIds, setEndorsedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setCursor(undefined);
     setAccumulatedItems([]);
+    setEndorsedIds(new Set());
   }, [filterStatus, reviewStateFilter, duplicatesOnly, debouncedSearchQuery]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        setEndorsedIds(new Set());
+        invalidateRef.current();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   const { data, isLoading, error, refetch } = api.registration.adminList.useQuery(
     {
@@ -160,7 +175,11 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
     setCursor(undefined);
     setAccumulatedItems([]);
     void refetch();
+    void utils.registration.getAdminListStats.invalidate();
   };
+
+  const invalidateRef = useRef(invalidateRegistrations);
+  invalidateRef.current = invalidateRegistrations;
 
   const bulkTransition = api.registration.bulkTransition.useMutation({
     onSuccess: (res) => {
@@ -191,7 +210,24 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const onMutationError = (err: { message?: string }) => setActionError(err?.message || "Action failed");
 
   const approveMutation = api.registration.approve.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
-  const endorseMutation = api.registration.endorse.useMutation({ onSuccess: onMutationSettled, onError: onMutationError });
+  const endorseMutation = api.registration.endorse.useMutation({
+    onSuccess: (_, variables) => {
+      setActionError("");
+      // Update the local review field so the button transitions to
+      // "Awaiting Approval" without a server refetch (which would filter
+      // the just-endorsed item out of the AWAITING_VETTING view).
+      setAccumulatedItems((prev) =>
+        prev.map((item) =>
+          item.id === variables.registrationId
+            ? { ...item, review: { verificationStatus: "COMPLETED", recommendation: "APPROVE" } }
+            : item,
+        ),
+      );
+      setEndorsedIds((prev) => new Set([...prev, variables.registrationId]));
+      void utils.registration.getAdminListStats.invalidate();
+    },
+    onError: onMutationError,
+  });
 
   const registrations: Registration[] = accumulatedItems.map((reg: any) => ({
     ...reg,
@@ -599,19 +635,15 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                       }}
                       onClick={(r) => setSelectedRegistrationId(r.id)}
                       primaryLabel={isReviewer ? "Recommend" : "Approve"}
-                      secondaryLabel={isReviewer ? "Request Correction" : "Reject"}
+                      secondaryLabel="Reject"
                       onPrimaryAction={(r) => {
                         if (isReviewer) endorseMutation.mutate({ registrationId: r.id });
                         else approveMutation.mutate({ registrationId: r.id });
                       }}
                       onSecondaryAction={(r) => {
-                        if (isReviewer) {
-                          setSelectedRegistrationId(r.id);
-                        } else {
-                          setSelectedIds([r.id]);
-                          setBulkAction("REJECT");
-                          setBulkReason("");
-                        }
+                        setSelectedIds([r.id]);
+                        setBulkAction("REJECT");
+                        setBulkReason("");
                       }}
                       onQuickAction={(r, action) => {
                         if (action === "EDIT" || action === "TRIBE" || action === "EMAIL") {
@@ -676,33 +708,63 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                   {row.status === "PENDING" && (
                     <>
                       {isTwoStep ? (
-                        isReviewer && isEndorsed(row.review) ? (
-                          <Button size="sm" variant="secondary" disabled>
-                            Awaiting Approval
-                          </Button>
+                        isReviewer && (isEndorsed(row.review) || endorsedIds.has(row.id)) ? (
+                          <>
+                            <Button size="sm" variant="secondary" disabled>
+                              Awaiting Approval
+                            </Button>
+                            <Button size="sm" variant="secondary" disabled>
+                              Reject
+                            </Button>
+                          </>
                         ) : (
-                          <Button
-                            size="sm"
-                            loading={endorseMutation.isPending}
-                            onClick={() => endorseMutation.mutate({ registrationId: row.id })}
-                          >
-                            Recommend
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              loading={endorseMutation.isPending}
+                              disabled={row.campus?.suspended}
+                              title={row.campus?.suspended ? "This campus is suspended — recommendations are paused." : undefined}
+                              onClick={() => endorseMutation.mutate({ registrationId: row.id })}
+                            >
+                              Recommend
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
+                            >
+                              Reject
+                            </Button>
+                          </>
                         )
                       ) : (
-                        <Button
-                          size="sm"
-                          loading={approveMutation.isPending}
-                          onClick={() => approveMutation.mutate({ registrationId: row.id })}
-                        >
-                          Approve
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            loading={approveMutation.isPending}
+                            disabled={row.campus?.suspended}
+                            title={row.campus?.suspended ? "This campus is suspended — approvals are paused." : undefined}
+                            onClick={() => approveMutation.mutate({ registrationId: row.id })}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
+                          >
+                            Reject
+                          </Button>
+                        </>
                       )}
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => { setSelectedIds([row.id]); setBulkAction("REJECT"); setBulkReason(""); }}
-                      >
+                    </>
+                  )}
+                  {["APPROVED", "CHECKED_IN", "COMPLETED"].includes(row.status?.toUpperCase()) && (
+                    <>
+                      <Button size="sm" variant="secondary" disabled>
+                        Approve
+                      </Button>
+                      <Button size="sm" variant="secondary" disabled>
                         Reject
                       </Button>
                     </>

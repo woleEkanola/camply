@@ -1,15 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/utils/trpc";
+import { offline } from "@/lib/offlineEngine";
 import {
-  enqueueScan,
   getQueuedScans,
   clearQueuedScans,
-  checkLocalDuplicate,
-  getCamperByToken,
-  searchCampersOffline,
-  cacheCampers,
   OfflineCamper,
-  initDb,
 } from "@/lib/offlineDb";
 
 export function useOfflineScanner(organizationId: string) {
@@ -19,11 +14,63 @@ export function useOfflineScanner(organizationId: string) {
 
   const processScanMutation = api.scan.processScan.useMutation();
   const syncMutation = api.scan.bulkSyncOfflineScans.useMutation();
-  
-  // Existing query to fetch approved registrations for caching
+
   const utils = api.useUtils();
 
-  // Monitor online status and sync queue when returning online
+  const updateQueueCount = useCallback(async () => {
+    try {
+      const queue = await getQueuedScans();
+      setOfflineQueueCount(queue.length);
+    } catch (err) {
+      console.warn("Failed to check queue length:", err);
+    }
+  }, []);
+
+  // Sync offline scans to the server
+  const syncOfflineQueue = useCallback(async () => {
+    if (isSyncing || typeof navigator === "undefined" || !navigator.onLine) return;
+    try {
+      const queue = await getQueuedScans();
+      if (queue.length === 0) {
+        setOfflineQueueCount(0);
+        return;
+      }
+
+      setIsSyncing(true);
+      console.log(`Syncing ${queue.length} offline scans...`);
+
+      const response = await syncMutation.mutateAsync({
+        organizationId,
+        scans: queue.map((q) => ({
+          operationId: q.operationId,
+          qrToken: q.qrToken,
+          query: q.query,
+          station: q.station,
+          stationId: q.stationId,
+          timestamp: q.timestamp,
+          device: q.deviceId,
+          location: q.location,
+          checkoutDetails: q.checkoutDetails,
+        })),
+      });
+
+      console.log("Offline sync response:", response);
+
+      const queuedIds = queue.map((q) => q.id).filter((id): id is number => id !== undefined);
+      await clearQueuedScans(queuedIds);
+      await updateQueueCount();
+
+      utils.registration.getCheckInStats.invalidate();
+      utils.scan.getOperationalStats.invalidate();
+      utils.registration.lookupForCheckIn.invalidate();
+    } catch (err) {
+      console.error("Offline sync error:", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing, organizationId, syncMutation, updateQueueCount, utils]);
+
+  // Monitor online status & setup auto-sync triggers (online, visibility, periodic interval)
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -35,120 +82,56 @@ export function useOfflineScanner(organizationId: string) {
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        syncOfflineQueue();
+      }
+    };
+
     setIsOnline(navigator.onLine);
     window.addEventListener("online", updateOnlineStatus);
     window.addEventListener("offline", updateOnlineStatus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    // Initial check of queue size
+    // Periodic 3-minute auto sync timer when online
+    const interval = setInterval(() => {
+      if (navigator.onLine) {
+        syncOfflineQueue();
+      }
+    }, 3 * 60 * 1000);
+
     updateQueueCount();
 
     return () => {
       window.removeEventListener("online", updateOnlineStatus);
       window.removeEventListener("offline", updateOnlineStatus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(interval);
     };
-  }, []);
+  }, [syncOfflineQueue, updateQueueCount]);
 
-  const updateQueueCount = async () => {
-    try {
-      const queue = await getQueuedScans();
-      setOfflineQueueCount(queue.length);
-    } catch (err) {
-      console.warn("Failed to check queue length:", err);
-    }
-  };
-
-  // Cache all approved campers into IndexedDB
+  // Delta sync / refresh campers cache into IndexedDB
   const refreshCampersCache = async () => {
     try {
-      // Fetch registrations using trpc utils
-      const regs = await utils.client.registration.getByOrganizationAndYear.query({
+      const result = await utils.scan.getDeltaSyncData.fetch({
         organizationId,
+        profile: "FULL",
+        scope: "ENTIRE_CAMP",
       });
 
-      const offlineCampers: OfflineCamper[] = (regs as any[])
-        .filter((r) => r.status === "APPROVED" || r.status === "CHECKED_IN")
-        .map((r) => {
-          const c = r.camper;
-          return {
-            registrationId: r.id,
-            camperId: c.id,
-            registrationNumber: r.registrationNumber || "REG-NUM",
-            qrToken: r.qrToken || "",
-            name: c.name || `${c.firstName || ""} ${c.lastName || ""}`.trim(),
-            photoUrl: c.photoUrl,
-            gender: c.gender,
-            dateOfBirth: c.dateOfBirth ? new Date(c.dateOfBirth).toISOString() : null,
-            allergies: c.allergies,
-            medicalConditions: c.medicalConditions,
-            medications: c.medications,
-            dietaryRestrictions: c.dietaryRestrictions,
-            emergencyContactName: c.emergencyContactName,
-            emergencyContactPhone: c.emergencyContactPhone,
-            relationship: c.relationship,
-            parentPhone: c.parentPhone,
-            teenPhone: c.teenPhone,
-            tribeName: r.tribe?.name || null,
-            hostelName: r.room?.hostel?.name || null,
-            roomName: r.room?.name || null,
-            bedLabel: r.bed?.label || null,
-            teacherName: r.teacherAssignments?.[0]?.staffProfile
-              ? `${r.teacherAssignments[0].staffProfile.firstName} ${r.teacherAssignments[0].staffProfile.lastName}`
-              : null,
-            teacherPhone: r.teacherAssignments?.[0]?.staffProfile?.phone || null,
-            campusName: r.campus?.name || null,
-          };
+      if (result && result.updatedCampers) {
+        const { mergeDeltaCampers, saveSyncMeta } = await import("@/lib/offlineDb");
+        const count = await mergeDeltaCampers(result.updatedCampers, result.deletedRegistrationIds);
+        await saveSyncMeta({
+          lastSyncedAt: result.serverSyncTimestamp,
+          profile: "FULL",
+          scope: "ENTIRE_CAMP",
+          camperCount: count,
         });
-
-      await cacheCampers(offlineCampers);
-      console.log(`Cached ${offlineCampers.length} campers offline.`);
+      }
     } catch (err) {
       console.error("Failed to populate offline campers cache:", err);
       throw err;
-    }
-  };
-
-  // Sync offline scans to the server
-  const syncOfflineQueue = async () => {
-    if (isSyncing) return;
-    try {
-      const queue = await getQueuedScans();
-      if (queue.length === 0) {
-        setOfflineQueueCount(0);
-        return;
-      }
-
-      setIsSyncing(true);
-      console.log(`Syncing ${queue.length} offline scans...`);
-      
-      const response = await syncMutation.mutateAsync({
-        organizationId,
-        scans: queue.map((q) => ({
-          qrToken: q.qrToken,
-          query: q.query,
-          station: q.station,
-          stationId: q.stationId,
-          timestamp: q.timestamp,
-          device: q.device,
-          location: q.location,
-          checkoutDetails: q.checkoutDetails,
-        })),
-      });
-
-      console.log("Offline sync response:", response);
-
-      // Clear synced scans
-      const queuedIds = queue.map((q) => q.id).filter((id): id is number => id !== undefined);
-      await clearQueuedScans(queuedIds);
-      await updateQueueCount();
-      
-      // Invalidate relevant client caches
-      utils.registration.getCheckInStats.invalidate();
-      utils.scan.getOperationalStats.invalidate();
-      utils.registration.lookupForCheckIn.invalidate();
-    } catch (err) {
-      console.error("Offline sync error:", err);
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -169,9 +152,9 @@ export function useOfflineScanner(organizationId: string) {
     };
   }) => {
     const timestamp = new Date();
+    offline.setStation(params.station);
 
     if (navigator.onLine) {
-      // ONLINE PATH: execute server processScan mutation
       return await processScanMutation.mutateAsync({
         organizationId,
         ...params,
@@ -179,13 +162,13 @@ export function useOfflineScanner(organizationId: string) {
       });
     }
 
-    // OFFLINE PATH: resolve scan locally using IndexedDB
+    // OFFLINE PATH: resolve scan locally using Offline Engine
     let camper: OfflineCamper | null = null;
 
     if (params.qrToken) {
-      camper = await getCamperByToken(params.qrToken);
+      camper = await offline.lookupQR(params.qrToken);
     } else if (params.query) {
-      const searchResults = await searchCampersOffline(params.query);
+      const searchResults = await offline.search(params.query, 1);
       camper = searchResults[0] || null;
     }
 
@@ -197,11 +180,9 @@ export function useOfflineScanner(organizationId: string) {
       );
     }
 
-    // Check for offline duplicate scan on this device
     const identifier = params.qrToken || camper.name;
-    const localDuplicate = await checkLocalDuplicate(identifier, params.station);
+    const localDuplicate = await offline.checkDuplicate(identifier, params.station);
 
-    // Format output to look like Registration object returned by server
     const mockedRegistration = {
       id: camper.registrationId,
       registrationNumber: camper.registrationNumber,
@@ -244,7 +225,6 @@ export function useOfflineScanner(organizationId: string) {
 
     const stationLower = params.station.toLowerCase();
 
-    // Checkout requires details check offline
     if (stationLower === "checkout" && !params.checkoutDetails) {
       return {
         result: "REQUIRES_CHECKOUT_DETAILS" as const,
@@ -252,14 +232,13 @@ export function useOfflineScanner(organizationId: string) {
       };
     }
 
-    // Write to offline queue
-    await enqueueScan({
+    // Queue operation with UUID operationId
+    await offline.queue({
       qrToken: camper.qrToken,
       query: params.query,
       station: params.station,
       stationId: params.stationId,
       timestamp: timestamp.toISOString(),
-      device: params.device,
       location: params.location,
       checkoutDetails: params.checkoutDetails,
     });

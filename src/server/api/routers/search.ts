@@ -12,6 +12,7 @@ export interface GlobalSearchResult {
   camperId?: string;
   registrationId?: string;
   userId?: string;
+  staffProfileId?: string;
   campusId?: string;
 }
 
@@ -86,7 +87,19 @@ export const searchRouter = createTRPCRouter({
           ],
         },
         take: input.limit,
-        select: { id: true, firstName: true, lastName: true, email: true, role: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+          staffProfiles: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true, type: true, status: true },
+          },
+        },
       });
 
       // 4. Search Campuses
@@ -138,14 +151,18 @@ export const searchRouter = createTRPCRouter({
       // Format Staff / User results
       for (const user of users) {
         const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.email;
+        const staffProfile = user.staffProfiles[0];
         results.push({
           id: `user-${user.id}`,
           type: "staff",
           title: name,
           subtitle: `${user.email} · Role: ${user.role}`,
           badge: user.role === "PARENT" ? "User" : "Staff",
-          href: `/admin/staff?openStaff=${user.id}`,
+          href: staffProfile
+            ? `/admin/${staffProfile.type === "TEACHER" ? "teachers" : "volunteers"}/${staffProfile.id}`
+            : "/admin/users",
           userId: user.id,
+          staffProfileId: staffProfile?.id,
         });
       }
 

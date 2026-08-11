@@ -27,6 +27,8 @@ import {
   ArrowTopRightOnSquareIcon,
   PlusIcon,
   BuildingOffice2Icon,
+  NoSymbolIcon,
+  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 
 const CampusDetailsPage = () => {
@@ -43,6 +45,8 @@ const CampusDetailsPage = () => {
   });
   const [accentColor, setAccentColor] = useState("#9333ea");
   const [quotaError, setQuotaError] = useState("");
+  const [isSuspendModalOpen, setIsSuspendModalOpen] = useState(false);
+  const [suspendReason, setSuspendReason] = useState("");
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -52,7 +56,7 @@ const CampusDetailsPage = () => {
   }, []);
 
 
-  const { data: campus, isLoading, error } = api.campus.getById.useQuery(
+  const { data: campus, isLoading, error, refetch: refetchCampus } = api.campus.getById.useQuery(
     { id },
     { enabled: !!id }
   );
@@ -94,6 +98,45 @@ const CampusDetailsPage = () => {
       setQuotaError(err.message);
     },
   });
+
+  const utils = api.useUtils();
+  const deactivateLinkMutation = api.signupLink.deactivate.useMutation({
+    onSuccess: () => void utils.signupLink.getByOrganization.invalidate(),
+  });
+  const reactivateLinkMutation = api.signupLink.reactivate.useMutation({
+    onSuccess: () => void utils.signupLink.getByOrganization.invalidate(),
+  });
+  const isTogglingLink = deactivateLinkMutation.isPending || reactivateLinkMutation.isPending;
+
+  const handleToggleSignupLink = () => {
+    if (!signupLink) return;
+    if (signupLink.active) {
+      deactivateLinkMutation.mutate({ id: signupLink.id });
+    } else {
+      reactivateLinkMutation.mutate({ id: signupLink.id });
+    }
+  };
+
+  const suspendCampusMutation = api.campus.suspend.useMutation({
+    onSuccess: () => {
+      setIsSuspendModalOpen(false);
+      setSuspendReason("");
+      void refetchCampus();
+    },
+  });
+  const unsuspendCampusMutation = api.campus.unsuspend.useMutation({
+    onSuccess: () => void refetchCampus(),
+  });
+  const isTogglingSuspension = suspendCampusMutation.isPending || unsuspendCampusMutation.isPending;
+
+  const handleConfirmSuspend = () => {
+    if (!campus) return;
+    suspendCampusMutation.mutate({ id: campus.id, reason: suspendReason.trim() || undefined });
+  };
+  const handleUnsuspend = () => {
+    if (!campus) return;
+    unsuspendCampusMutation.mutate({ id: campus.id });
+  };
 
   if (isLoading) {
     return (
@@ -188,8 +231,13 @@ const CampusDetailsPage = () => {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold tracking-tight text-txt-primary">{campus.name}</h1>
-              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
-                • Active
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                  !campus.suspended ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                )}
+              >
+                • {!campus.suspended ? "Active" : "Suspended"}
               </span>
             </div>
             <p className="mt-0.5 text-xs font-semibold text-txt-secondary">
@@ -202,10 +250,12 @@ const CampusDetailsPage = () => {
 
         {/* UNDERLINE TABS */}
         <div className="border-b border-border-default/80">
-          <nav className="flex space-x-6">
+          <nav className="flex space-x-6" role="tablist">
             {tabOptions.map((tab) => (
               <button
                 key={tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`pb-3 text-xs font-semibold border-b-2 transition-all ${
                   activeTab === tab.id
@@ -252,7 +302,7 @@ const CampusDetailsPage = () => {
             </div>
 
             {/* CARD 2: SIGNUP LINK */}
-            <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
+            <div data-testid="signup-link-card" className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg brand-tint text-accent-600">
@@ -261,14 +311,27 @@ const CampusDetailsPage = () => {
                   <h3 className="text-xs font-bold text-txt-primary">Signup Link</h3>
                 </div>
 
-                <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
-                  Active
-                </span>
+                {signupLink && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                      signupLink.active ? "bg-emerald-50 text-emerald-600" : "bg-neutral-100 text-neutral-500"
+                    )}
+                  >
+                    {signupLink.active ? "Active" : "Inactive"}
+                  </span>
+                )}
               </div>
 
               <p className="text-xs text-txt-secondary font-mono truncate bg-surface-raised p-2 rounded-xl">
                 {signupUrl}
               </p>
+
+              {signupLink && !signupLink.active && (
+                <p className="text-[11px] font-medium text-amber-600">
+                  This link is disabled — parents visiting it cannot register for this campus.
+                </p>
+              )}
 
               <div className="flex items-center gap-2.5 pt-1">
                 <button
@@ -289,6 +352,32 @@ const CampusDetailsPage = () => {
                   View Link Analytics
                 </button>
               </div>
+
+              {signupLink && (
+                <button
+                  type="button"
+                  onClick={handleToggleSignupLink}
+                  disabled={isTogglingLink}
+                  className={cn(
+                    "w-full inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-2xl font-semibold text-xs transition-colors disabled:opacity-50",
+                    signupLink.active
+                      ? "status-danger text-danger-600 hover:bg-danger-100"
+                      : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                  )}
+                >
+                  {signupLink.active ? (
+                    <>
+                      <NoSymbolIcon className="h-4 w-4" />
+                      {isTogglingLink ? "Disabling…" : "Disable Signup Link"}
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircleIcon className="h-4 w-4" />
+                      {isTogglingLink ? "Enabling…" : "Enable Signup Link"}
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* CARD 3: REGISTRATION CAPACITY */}
@@ -462,16 +551,68 @@ const CampusDetailsPage = () => {
 
         {/* TAB 4: SETTINGS */}
         {activeTab === "settings" && (
-          <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
-            <h3 className="text-xs font-bold text-txt-primary border-b border-border-subtle pb-2">
-              Campus Operations & Settings
-            </h3>
-            <p className="text-xs text-txt-secondary">
-              To update campus metadata, code, display order, or delete this campus, return to the main campuses overview dashboard.
-            </p>
-            <Button onClick={() => router.push("/admin/campuses")}>
-              Go to Campuses Dashboard
-            </Button>
+          <div className="space-y-4">
+            <div data-testid="campus-suspend-card" className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-txt-primary">Campus Status</h3>
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                    !campus.suspended ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                  )}
+                >
+                  {!campus.suspended ? "Active" : "Suspended"}
+                </span>
+              </div>
+
+              <p className="text-xs text-txt-secondary leading-relaxed">
+                Suspending this campus blocks new submissions plus any recommendation or approval
+                of registrations already in review — without deleting anything. Already-approved
+                or checked-in campers, and the signup link itself, are unaffected. This is separate
+                from disabling the signup link above.
+              </p>
+
+              {campus.suspended && (
+                <div className="rounded-xl bg-rose-50 p-3 text-[11px] text-rose-700 space-y-0.5">
+                  <p className="font-semibold">This campus is suspended.</p>
+                  {campus.suspendedReason && <p>Reason: {campus.suspendedReason}</p>}
+                  {campus.suspendedAt && <p>Since {new Date(campus.suspendedAt).toLocaleString()}</p>}
+                </div>
+              )}
+
+              {campus.suspended ? (
+                <Button
+                  variant="secondary"
+                  loading={isTogglingSuspension}
+                  onClick={handleUnsuspend}
+                  className="w-full justify-center"
+                >
+                  <CheckCircleIcon className="mr-1.5 h-4 w-4" />
+                  Reactivate Campus
+                </Button>
+              ) : (
+                <Button
+                  variant="danger"
+                  onClick={() => setIsSuspendModalOpen(true)}
+                  className="w-full justify-center"
+                >
+                  <NoSymbolIcon className="mr-1.5 h-4 w-4" />
+                  Suspend Campus
+                </Button>
+              )}
+            </div>
+
+            <div className="rounded-3xl border border-border-default/80 bg-surface p-5 shadow-2xs space-y-3">
+              <h3 className="text-xs font-bold text-txt-primary border-b border-border-subtle pb-2">
+                Campus Operations & Settings
+              </h3>
+              <p className="text-xs text-txt-secondary">
+                To update campus metadata, code, display order, or delete this campus, return to the main campuses overview dashboard.
+              </p>
+              <Button onClick={() => router.push("/admin/campuses")}>
+                Go to Campuses Dashboard
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -507,6 +648,32 @@ const CampusDetailsPage = () => {
           </Button>
           <Button loading={updateQuotaMutation.isPending} onClick={handleSaveQuota}>
             Save Capacity
+          </Button>
+        </div>
+      </Dialog>
+
+      {/* SUSPEND CAMPUS DIALOG */}
+      <Dialog open={isSuspendModalOpen} onClose={() => setIsSuspendModalOpen(false)} title="Suspend Campus" size="sm">
+        <p className="text-xs text-txt-secondary">
+          This blocks new submissions and pauses any recommendation or approval of{" "}
+          <span className="font-bold">{campus.name}</span>'s pending registrations. Already-approved
+          campers and the signup link are not affected. You can reactivate at any time.
+        </p>
+        <div className="mt-4">
+          <Input
+            label="Reason (optional, visible to org admins)"
+            id="suspend-reason"
+            value={suspendReason}
+            onChange={(e) => setSuspendReason(e.target.value)}
+            placeholder="e.g. Investigating a reported issue"
+          />
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setIsSuspendModalOpen(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" loading={suspendCampusMutation.isPending} onClick={handleConfirmSuspend}>
+            Suspend Campus
           </Button>
         </div>
       </Dialog>
