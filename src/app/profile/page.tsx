@@ -90,6 +90,10 @@ export default function ProfilePage() {
   
   // Navigation tabs: 'info' | 'photo' | 'security' | 'staff'
   const [activeTab, setActiveTab] = useState("info");
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "photo") setActiveTab("photo");
+  }, []);
   
   // States for notifications
   const [successMsg, setSuccessMsg] = useState<string | null>(null);

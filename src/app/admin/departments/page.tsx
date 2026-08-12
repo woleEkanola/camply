@@ -101,8 +101,8 @@ export default function DepartmentsPage() {
 
       {!camp ? <EmptyState title="No active camp" description="Set an active camp before configuring departments." /> : (
         <div className="space-y-6">
-          <div className="grid gap-3 rounded-2xl border border-neutral-200 bg-white p-4 md:grid-cols-2 xl:grid-cols-[1fr_210px_150px_170px_190px_140px]">
-            <SearchBar value={search} onChange={(event) => setSearch(event.target.value)} onClear={() => setSearch("")} placeholder="Search departments or purpose" />
+          <div className="grid gap-3 rounded-2xl border border-border-default bg-surface p-4 md:grid-cols-2 xl:grid-cols-[1fr_210px_150px_170px_190px_140px]">
+            <SearchBar value={search} onChange={(event) => setSearch(event.target.value)} onClear={() => setSearch("")} placeholder="Search departments, roles, or people" aria-label="Search departments, roles, or people" />
             <Select value={parentFilter} onChange={(event) => setParentFilter(event.target.value)}>
               <option value="">All organizational areas</option>
               {parents.map((parent) => <option key={parent.id} value={parent.id}>{parent.name}</option>)}
@@ -113,11 +113,11 @@ export default function DepartmentsPage() {
             <Input aria-label="Minimum members" type="number" min="0" placeholder="Min. members" value={minimumMembers} onChange={(event) => setMinimumMembers(event.target.value)} />
           </div>
 
-          {isLoading ? <div className="py-12 text-center text-sm text-neutral-500">Loading departments…</div> : groups.length === 0 ? (
+          {isLoading ? <div className="py-12 text-center text-sm text-txt-secondary">Loading departments…</div> : groups.length === 0 ? (
             <EmptyState title="No departments yet" description="Install the 2026 JD structure or create a department manually." />
           ) : groups.map(([group, items]) => (
             <section key={group} className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">{group}</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-txt-secondary">{group}</h2>
               <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
                 {items.map((department) => {
                   const head = department.positions.find((position: any) => position.roleKind === "HEAD")?.assignments[0]?.staff;
@@ -129,17 +129,17 @@ export default function DepartmentsPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex min-w-0 gap-3">
                               <span className="rounded-xl bg-accent-50 p-2 text-accent-700"><BuildingOffice2Icon className="h-5 w-5" /></span>
-                              <div><h3 className="font-semibold text-neutral-950">{department.name}</h3><p className="mt-1 line-clamp-2 text-xs text-neutral-500">{department.purpose || "Purpose not yet defined."}</p></div>
+                              <div><h3 className="font-semibold text-txt-primary">{department.name}</h3><p className="mt-1 line-clamp-2 text-xs text-txt-secondary">{department.purpose || "Purpose not yet defined."}</p></div>
                             </div>
                             <Badge tone={department.status === "ACTIVE" ? "success" : "neutral"}>{department.status}</Badge>
                           </div>
                           <div className="grid grid-cols-2 gap-3 text-xs">
-                            <div><span className="text-neutral-400">Leader</span><p className="font-medium text-neutral-800">{head ? `${head.firstName} ${head.lastName}` : "Vacant"}</p></div>
-                            <div><span className="text-neutral-400">Assistant</span><p className="font-medium text-neutral-800">{assistant ? `${assistant.firstName} ${assistant.lastName}` : "Vacant"}</p></div>
-                            <div><span className="text-neutral-400">People / roles</span><p className="font-medium text-neutral-800">{department._count.staff} / {department._count.positions}</p></div>
-                            <div><span className="text-neutral-400">Today</span><p className="font-medium text-neutral-800">{department.today.completed}/{department.today.total} · {department.today.completionPct}%</p></div>
+                            <div><span className="text-txt-muted">Leader</span><p className="font-medium text-txt-primary">{head ? `${head.firstName} ${head.lastName}` : "Vacant"}</p></div>
+                            <div><span className="text-txt-muted">Assistant</span><p className="font-medium text-txt-primary">{assistant ? `${assistant.firstName} ${assistant.lastName}` : "Vacant"}</p></div>
+                            <div><span className="text-txt-muted">People / roles</span><p className="font-medium text-txt-primary">{department._count.staff} / {department._count.positions}</p></div>
+                            <div><span className="text-txt-muted">Today</span><p className="font-medium text-txt-primary">{department.today.completed}/{department.today.total} · {department.today.completionPct}%</p></div>
                           </div>
-                          <div className="flex items-center justify-between border-t border-neutral-100 pt-3 text-xs"><span className="text-neutral-500">{department.today.overdue} overdue</span><span className="inline-flex items-center gap-1 font-medium text-accent-700">Open workspace <ArrowRightIcon className="h-3.5 w-3.5" /></span></div>
+                          <div className="flex items-center justify-between border-t border-border-subtle pt-3 text-xs"><span className="text-txt-secondary">{department.today.overdue} overdue</span><span className="inline-flex items-center gap-1 font-medium text-accent-700">Open workspace <ArrowRightIcon className="h-3.5 w-3.5" /></span></div>
                         </CardBody>
                       </Card>
                     </button>
@@ -153,7 +153,7 @@ export default function DepartmentsPage() {
 
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} title="Create department">
         <div className="space-y-4">
-          <p className="text-sm text-neutral-500">The department is created with dedicated leader and assistant-leader roles. Optional sections can be completed later in its workspace.</p>
+          <p className="text-sm text-txt-secondary">The department is created with dedicated leader and assistant-leader roles. Optional sections can be completed later in its workspace.</p>
           <Input label="Department name" value={name} onChange={(e) => setName(e.target.value)} />
           <Textarea label="Purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} rows={3} />
           <Select label="Reports to / parent" value={parentDepartmentId} onChange={(e) => setParentDepartmentId(e.target.value)}><option value="">No parent</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</Select>

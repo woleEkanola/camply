@@ -164,6 +164,7 @@ export async function POST(request: Request) {
           email,
           dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
           ...rest,
+          preferredDepartmentId: rest.departmentId || null,
           fieldValues: {
             create: (fieldValues || []).map((fv) => ({ value: fv.value, field: { connect: { id: fv.fieldId } } })),
           },

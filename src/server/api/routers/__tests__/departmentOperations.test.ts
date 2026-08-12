@@ -79,6 +79,11 @@ describe("JD-driven department operations", () => {
     await owner.departmentOperations.assignPerson({ positionId: hallLeadPositionId, staffId: volunteerStaffId, temporary: false });
     expect(await prisma.staffProfile.findUniqueOrThrow({ where: { id: volunteerStaffId } })).toMatchObject({ departmentId: vmdId });
 
+    for (const search of ["VMD Volunteer", `dept-volunteer-${stamp}@camply.test`, "08000000000", "Hall Environs"]) {
+      const matches = await owner.departmentOperations.list({ campId, date: "2026-08-12", includeInactive: true, search });
+      expect(matches.map((department) => department.id), search).toContain(vmdId);
+    }
+
     const volunteer = caller(volunteerUserId, "VOLUNTEER", `dept-volunteer-${stamp}@camply.test`);
     const workspace = await volunteer.departmentOperations.myDepartment({ campId, date: "2026-08-12" });
     expect(workspace?.department.name).toBe("Venue Management Department (VMD)");
@@ -100,6 +105,27 @@ describe("JD-driven department operations", () => {
     const stored = await prisma.departmentChecklistExecution.findUniqueOrThrow({ where: { id: execution.id } });
     expect(stored).toMatchObject({ taskTitle: "Check extension cables", status: "COMPLETED", completedById: volunteerUserId, note: "Ready" });
     expect((await prisma.departmentChecklistItem.findUniqueOrThrow({ where: { id: item.id } })).version).toBe(2);
+  });
+
+  it("auto-assigns only unassigned teachers, honors preferences, and falls back from full departments", async () => {
+    const owner = caller(ownerId, "OWNER", `dept-owner-${stamp}@camply.test`);
+    const registration = await prisma.department.findFirstOrThrow({ where: { campId, name: "Registration" } });
+    const medical = await prisma.department.findFirstOrThrow({ where: { campId, name: "Medical" } });
+    await prisma.department.update({ where: { id: vmdId }, data: { maxCapacity: 1 } });
+
+    const createTeacher = async (label: string, preferredDepartmentId: string | null, departmentId: string | null = null) => {
+      const user = await prisma.user.create({ data: { email: `${label}-${stamp}@camply.test`, password: "x", role: "TEACHER", organizationId } });
+      return prisma.staffProfile.create({ data: { userId: user.id, organizationId, campId, type: "TEACHER", status: "APPROVED", firstName: label, lastName: "Teacher", phone: `081${Math.floor(Math.random() * 1e8).toString().padStart(8, "0")}`, email: user.email, preferredDepartmentId, departmentId } });
+    };
+    const preferred = await createTeacher("Preferred", registration.id);
+    const overflow = await createTeacher("Overflow", vmdId);
+    const manual = await createTeacher("Manual", registration.id, medical.id);
+
+    const result = await owner.staff.autoAssignToDepartments({ organizationId, campId, strategy: "PREFERENCE" });
+    expect(result).toMatchObject({ count: 2, preferenceMatched: 1, fallbackAssigned: 1, unassigned: 0 });
+    expect(await prisma.staffProfile.findUniqueOrThrow({ where: { id: preferred.id } })).toMatchObject({ departmentId: registration.id });
+    expect((await prisma.staffProfile.findUniqueOrThrow({ where: { id: overflow.id } })).departmentId).not.toBe(vmdId);
+    expect(await prisma.staffProfile.findUniqueOrThrow({ where: { id: manual.id } })).toMatchObject({ departmentId: medical.id });
   });
 
   it("records history and department reports without deleting execution facts", async () => {

@@ -98,6 +98,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<{ url: string; name: string } | null>(null);
   const [emailAction, setEmailAction] = useState<null | { mode: "APPROVE" | "RESEND"; ids: string[] }>(null);
   const [sendEmailOnApprove, setSendEmailOnApprove] = useState(true);
   const [emailActionResult, setEmailActionResult] = useState<null | { sent: number; failed: number; skipped: number }>(null);
@@ -107,8 +108,29 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [genderFilter, setGenderFilter] = useState("");
   const [tribeFilter, setTribeFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [assignmentFilter, setAssignmentFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(50);
+  const [visibleColumnIds, setVisibleColumnIds] = useState(["campus", "preference", "department", "skills", "status", "approval-email"]);
+
+  useEffect(() => {
+    const savedPageSize = Number(localStorage.getItem(`camply-${type.toLowerCase()}-page-size`));
+    if ([10, 50, 100, 150].includes(savedPageSize)) setPageSize(savedPageSize);
+    const savedColumns = localStorage.getItem(`camply-${type.toLowerCase()}-columns`);
+    if (savedColumns) {
+      try { setVisibleColumnIds(JSON.parse(savedColumns)); } catch { /* keep defaults */ }
+    }
+  }, [type]);
+
+  useEffect(() => {
+    localStorage.setItem(`camply-${type.toLowerCase()}-page-size`, String(pageSize));
+    localStorage.setItem(`camply-${type.toLowerCase()}-columns`, JSON.stringify(visibleColumnIds));
+  }, [pageSize, type, visibleColumnIds]);
 
   const [bulkVenueId, setBulkVenueId] = useState("");
+  const [departmentAllocatorOpen, setDepartmentAllocatorOpen] = useState(false);
+  const [departmentStrategy, setDepartmentStrategy] = useState<"PREFERENCE" | "BALANCED" | "GENDER_BALANCED">("PREFERENCE");
 
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allLoadedItems, setAllLoadedItems] = useState<any[]>([]);
@@ -121,7 +143,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   useEffect(() => {
     setCursor(undefined);
     setAllLoadedItems([]);
-  }, [debouncedSearchQuery, statusFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter]);
+  }, [debouncedSearchQuery, statusFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter, departmentFilter, assignmentFilter, pageSize]);
 
   const { data: stats } = api.staff.stats.useQuery({ organizationId, campId, type }, { enabled: !!organizationId && !!campId });
   const { data, isLoading } = api.staff.adminList.useQuery(
@@ -135,8 +157,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       venueId: venueFilter || undefined,
       gender: genderFilter || undefined,
       tribeId: type === "TEACHER" ? (tribeFilter || undefined) : undefined,
+      departmentId: departmentFilter || undefined,
+      assignmentStatus: assignmentFilter ? assignmentFilter as "ASSIGNED" | "UNASSIGNED" : undefined,
       volunteerCategory: type === "VOLUNTEER" ? (categoryFilter || undefined) : undefined,
-      limit: 10,
+      limit: pageSize,
       cursor,
     },
     { enabled: !!organizationId && !!campId }
@@ -145,6 +169,11 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const { data: filterCampuses = [] } = api.campus.getAll.useQuery({ organizationId }, { enabled: !!organizationId });
   const { data: filterVenues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: !!campId });
   const { data: filterTribes = [] } = api.tribe.listByCamp.useQuery({ campId }, { enabled: !!campId && type === "TEACHER" });
+  const { data: departments = [] } = api.department.list.useQuery({ organizationId, campId }, { enabled: !!organizationId && !!campId && type === "TEACHER" });
+  const { data: departmentMetrics } = api.staff.departmentAssignmentMetrics.useQuery(
+    { organizationId, campId },
+    { enabled: !!organizationId && !!campId && type === "TEACHER" }
+  );
 
   useEffect(() => {
     if (data?.items) {
@@ -163,6 +192,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const invalidate = () => {
     utils.staff.adminList.invalidate();
     utils.staff.stats.invalidate();
+    utils.staff.departmentAssignmentMetrics.invalidate();
     setSelectedIds([]);
   };
 
@@ -212,7 +242,11 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     onError: (err) => setError(err.message),
   });
   const autoAssignToDepartments = api.staff.autoAssignToDepartments.useMutation({
-    onSuccess: () => { setSuccess("Auto assigned all teachers to departments successfully!"); invalidate(); setTimeout(() => setSuccess(""), 5000); },
+    onSuccess: (result) => { setDepartmentAllocatorOpen(false); setSuccess(`Assigned ${result.count} teacher${result.count === 1 ? "" : "s"}: ${result.preferenceMatched} preference matches, ${result.fallbackAssigned} fallbacks, ${result.unassigned} still unassigned.`); invalidate(); setTimeout(() => setSuccess(""), 8000); },
+    onError: (err) => setError(err.message),
+  });
+  const assignDepartment = api.staff.assignDepartment.useMutation({
+    onSuccess: () => invalidate(),
     onError: (err) => setError(err.message),
   });
   const bulkAssignVenue = api.staff.bulkAssignVenue.useMutation({
@@ -233,8 +267,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       accessor: (row) => (
         <div className="flex min-w-0 items-center gap-3">
           {row.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={row.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+            <button type="button" aria-label={`View ${row.firstName} ${row.lastName} photo full screen`} onClick={(event) => { event.stopPropagation(); setPhotoPreview({ url: row.photoUrl, name: `${row.firstName} ${row.lastName}` }); }} className="shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={row.photoUrl} alt={`${row.firstName} ${row.lastName}`} className="h-9 w-9 rounded-lg object-cover" />
+            </button>
           ) : (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-100 text-xs font-bold text-accent-700">
               {row.firstName?.[0]}{row.lastName?.[0]}
@@ -248,18 +284,47 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         </div>
       ),
     },
-    { header: "Campus", accessor: (row) => row.preferredCampus?.name || "—" },
+    { id: "campus", header: "Campus", hideable: true, accessor: (row) => row.preferredCampus?.name || "—" },
     {
-      header: type === "TEACHER" ? "Venue / Dept" : "Category",
+      id: "preference",
+      header: type === "TEACHER" ? "Venue / preference" : "Category",
+      hideable: true,
       accessor: (row) => (
         <div className="text-sm text-neutral-700">
           <div>{row.assignedVenue?.name || "—"}</div>
-          {type === "TEACHER" && <div className="text-xs text-txt-muted">{row.department?.name || row.volunteerCategory || "—"}</div>}
+          {type === "TEACHER" && <div className="text-xs text-txt-muted">Prefers: {row.preferredDepartment?.name || row.department?.name || "Not selected"}</div>}
         </div>
       ),
     },
+    ...(type === "TEACHER"
+      ? [{
+          id: "department",
+          header: "Department assignment",
+          hideable: true,
+          accessor: (row: any) => (
+            <div onClick={(event) => event.stopPropagation()}>
+              <Select
+                aria-label={`Assign ${row.firstName} ${row.lastName} to department`}
+                value={row.departmentId ?? ""}
+                disabled={assignDepartment.isPending}
+                onChange={(event) => assignDepartment.mutate({ id: row.id, departmentId: event.target.value || null })}
+                className="min-w-44 text-xs"
+              >
+                <option value="">Unassigned</option>
+                {departments.map((department: any) => {
+                  const allocation = departmentMetrics?.departments.find((item: any) => item.id === department.id);
+                  const full = allocation?.isFull && row.departmentId !== department.id;
+                  return <option key={department.id} value={department.id} disabled={full}>{department.name}{allocation?.maxCapacity != null ? ` (${allocation.count}/${allocation.maxCapacity})` : ""}{full ? " — Full" : ""}</option>;
+                })}
+              </Select>
+            </div>
+          ),
+        }]
+      : []),
     {
+      id: "skills",
       header: "Skills",
+      hideable: true,
       accessor: (row) => (
         <div className="flex flex-wrap gap-1">
           {(row.skills || []).slice(0, 2).map((skill: string, i: number) => (
@@ -276,10 +341,12 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     // Was mobileHidden — the Approve action below branches on row.status, so
     // a mobile admin saw an approve button on some rows and not others with
     // no visible field explaining why.
-    { header: "Status", accessor: (row) => <StatusBadge status={row.status} /> },
+    { id: "status", header: "Status", hideable: true, accessor: (row) => <StatusBadge status={row.status} /> },
     ...(type === "TEACHER"
       ? [{
+          id: "approval-email",
           header: "Approval email",
+          hideable: true,
           accessor: (row: any) => {
             const status = row.approvalEmailStatus;
             const label = status === "NOT_RECORDED" ? "Not recorded" : status;
@@ -334,7 +401,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     </div>
   );
 
-  const hasActiveFilters = campusFilter || venueFilter || genderFilter || tribeFilter || categoryFilter;
+  const hasActiveFilters = campusFilter || venueFilter || genderFilter || tribeFilter || categoryFilter || departmentFilter || assignmentFilter;
   const totalItems = data?.totalCount ?? allLoadedItems.length;
 
   return (
@@ -365,9 +432,9 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                   className="w-full justify-center whitespace-nowrap sm:w-auto"
                   disabled={!campId}
                   loading={autoAssignToDepartments.isPending}
-                  onClick={() => { if (window.confirm("Auto assign all teachers to departments with gender-mixed leaders?")) autoAssignToDepartments.mutate({ organizationId, campId }); }}
+                  onClick={() => setDepartmentAllocatorOpen(true)}
                 >
-                  Auto Assign Depts
+                  Assign Departments
                 </Button>
               </>
             )}
@@ -403,6 +470,15 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <StatCard label="Assigned" value={stats?.assigned ?? 0} icon={<UserCircleIcon className="h-5 w-5" />} tone="info" insight="With roles" />
           <StatCard label="Unassigned" value={stats?.unassigned ?? 0} icon={<UserMinusIcon className="h-5 w-5" />} tone="neutral" insight="No role yet" />
         </div>
+
+        {type === "TEACHER" && departmentMetrics && (
+          <div className="mb-6 grid gap-3 rounded-xl border border-border-default bg-surface p-4 sm:grid-cols-4">
+            <div><div className="text-xs font-semibold uppercase text-txt-muted">Department coverage</div><div className="mt-1 text-lg font-bold text-txt-primary">{departmentMetrics.assigned}/{departmentMetrics.total}</div></div>
+            <div><div className="text-xs font-semibold uppercase text-txt-muted">Preferences recorded</div><div className="mt-1 text-lg font-bold text-txt-primary">{departmentMetrics.withPreference}</div></div>
+            <div><div className="text-xs font-semibold uppercase text-txt-muted">Preference matches</div><div className="mt-1 text-lg font-bold text-txt-primary">{departmentMetrics.preferenceMatched}</div></div>
+            <div><div className="text-xs font-semibold uppercase text-txt-muted">Still unassigned</div><div className="mt-1 text-lg font-bold text-txt-primary">{departmentMetrics.unassigned}</div></div>
+          </div>
+        )}
 
         {/* Teacher Recruitment + Campus Quotas — mobile only, above the list
             (desktop sidebar copies below stay hidden on mobile to avoid duplication). */}
@@ -459,10 +535,21 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 <option value="REJECTED">Rejected</option>
                 <option value="DEACTIVATED">Deactivated</option>
               </Select>
-              <button className="inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-surface px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-surface-hover">
+              <button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} className="inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-surface px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-surface-hover">
                 <FunnelIcon className="h-4 w-4" /> Filters
               </button>
             </div>
+
+            {filtersOpen && (
+              <div className="grid gap-3 rounded-xl border border-border-default bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="teacher-advanced-filters">
+                <Select value={genderFilter} onChange={(event) => setGenderFilter(event.target.value)} aria-label="Filter by gender">
+                  <option value="">All genders</option><option value="MALE">Male</option><option value="FEMALE">Female</option>
+                </Select>
+                {type === "TEACHER" && <Select value={tribeFilter} onChange={(event) => setTribeFilter(event.target.value)} aria-label="Filter by tribe"><option value="">All tribes</option>{filterTribes.map((tribe: any) => <option key={tribe.id} value={tribe.id}>{tribe.name}</option>)}</Select>}
+                {type === "TEACHER" && <Select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)} aria-label="Filter by department"><option value="">All departments</option>{departments.map((department: any) => <option key={department.id} value={department.id}>{department.name}</option>)}</Select>}
+                {type === "TEACHER" && <Select value={assignmentFilter} onChange={(event) => setAssignmentFilter(event.target.value)} aria-label="Filter by assignment status"><option value="">Any assignment</option><option value="ASSIGNED">Assigned</option><option value="UNASSIGNED">Unassigned</option></Select>}
+              </div>
+            )}
 
             {hasActiveFilters && (
               <div className="flex items-center gap-2 text-xs">
@@ -472,7 +559,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 {genderFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{genderFilter}</span>}
                 {tribeFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{filterTribes.find((t: any) => t.id === tribeFilter)?.name}</span>}
                 {categoryFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{categoryFilter}</span>}
-                <button onClick={() => { setCampusFilter(""); setVenueFilter(""); setGenderFilter(""); setTribeFilter(""); setCategoryFilter(""); }} className="text-accent-600 hover:underline">Clear all</button>
+                <button onClick={() => { setCampusFilter(""); setVenueFilter(""); setGenderFilter(""); setTribeFilter(""); setCategoryFilter(""); setDepartmentFilter(""); setAssignmentFilter(""); }} className="text-accent-600 hover:underline">Clear all</button>
               </div>
             )}
 
@@ -499,6 +586,11 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 )}
               </div>
               <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-xs text-txt-secondary">Show
+                  <Select value={String(pageSize)} onChange={(event) => setPageSize(Number(event.target.value))} aria-label="Teachers per page" className="w-24 text-xs">
+                    {[10, 50, 100, 150].map((size) => <option key={size} value={size}>{size}</option>)}
+                  </Select>
+                </label>
                 <span className="text-xs text-neutral-500 hidden sm:inline">{totalItems} {type === "TEACHER" ? "teachers" : "volunteers"}</span>
                 <ViewModeToggle value={viewMode} onChange={setViewMode} />
               </div>
@@ -523,6 +615,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 selectable
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
+                columnVisibility={{ visibleIds: visibleColumnIds, onToggle: (id) => setVisibleColumnIds((current) => current.includes(id) ? current.filter((columnId) => columnId !== id) : [...current, id]) }}
               />
             ) : (
               <StaffCardGrid
@@ -599,6 +692,45 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         </div>
       </div>
 
+      <Dialog open={!!photoPreview} onClose={() => setPhotoPreview(null)} title={photoPreview?.name ? `${photoPreview.name} photo` : "Teacher photo"} size="lg">
+        {photoPreview && (
+          <div className="flex min-h-[60vh] items-center justify-center bg-neutral-950 p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photoPreview.url} alt={photoPreview.name} className="max-h-[75vh] max-w-full object-contain" />
+          </div>
+        )}
+      </Dialog>
+
+      <Dialog open={departmentAllocatorOpen} onClose={() => setDepartmentAllocatorOpen(false)} title="Auto-assign unassigned teachers" size="lg">
+        <div className="space-y-5">
+          <p className="text-sm text-txt-secondary">Existing manual assignments are preserved. Only approved, unassigned teachers are allocated, and full departments are skipped.</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {([
+              ["PREFERENCE", "Preference first", "Use the form choice first, then place overflow in the least-filled available department."],
+              ["BALANCED", "Balance capacity", "Prioritize the lowest quota utilization, using preference as a tie-breaker."],
+              ["GENDER_BALANCED", "Gender balance", "Reduce same-gender concentration, then balance quota utilization and preference."],
+            ] as const).map(([value, label, description]) => (
+              <button key={value} type="button" onClick={() => setDepartmentStrategy(value)} className={cn("rounded-xl border p-4 text-left", departmentStrategy === value ? "border-accent-500 bg-accent-50" : "border-border-default bg-surface hover:bg-surface-hover")}>
+                <span className="block text-sm font-semibold text-txt-primary">{label}</span>
+                <span className="mt-1 block text-xs text-txt-secondary">{description}</span>
+              </button>
+            ))}
+          </div>
+          <div className="max-h-52 overflow-y-auto rounded-lg border border-border-default">
+            {departmentMetrics?.departments.map((department: any) => (
+              <div key={department.id} className="flex items-center justify-between border-b border-border-subtle px-3 py-2 last:border-0">
+                <span className="text-sm text-txt-primary">{department.name}</span>
+                <span className={cn("text-xs font-semibold", department.isFull ? "text-danger-700" : "text-txt-muted")}>{department.maxCapacity == null ? `${department.count} / Unlimited` : `${department.count} / ${department.maxCapacity}${department.isFull ? " · Full" : ""}`}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDepartmentAllocatorOpen(false)}>Cancel</Button>
+            <Button loading={autoAssignToDepartments.isPending} disabled={!departmentMetrics?.unassigned} onClick={() => autoAssignToDepartments.mutate({ organizationId, campId, strategy: departmentStrategy })}>Assign {departmentMetrics?.unassigned ?? 0} unassigned</Button>
+          </div>
+        </div>
+      </Dialog>
+
       {/* Delete dialog */}
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Deletion" size="sm">
         <p className="text-sm text-neutral-500">Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? This action cannot be undone.</p>
@@ -656,6 +788,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             )}
           </div>
         </div>
+
       </Dialog>
 
       {/* Manual add dialog */}

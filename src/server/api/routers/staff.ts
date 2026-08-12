@@ -13,6 +13,7 @@ import { normalizeEmail } from "../../../lib/email";
 import { hashPassword } from "../../../lib/auth";
 import { isCompleteNigerianPhone } from "../../../lib/phone";
 import { ensureStaffQrToken, regenerateStaffQrToken } from "../../staff/idToken";
+import { assertDepartmentHasCapacity, DepartmentCapacityError, getDepartmentAvailability } from "../../staff/departmentCapacity";
 
 
 async function requireStaffProfile(ctx: { prisma: any; userId: string }) {
@@ -172,10 +173,11 @@ export const staffRouter = createTRPCRouter({
       gender: z.string().optional(),
       tribeId: z.string().optional(),
       departmentId: z.string().optional(),
+      assignmentStatus: z.enum(["ASSIGNED", "UNASSIGNED"]).optional(),
       volunteerCategory: z.string().optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
-      limit: z.number().min(1).max(100).default(25),
+      limit: z.number().min(1).max(200).default(25),
     }))
     .query(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
@@ -191,6 +193,8 @@ export const staffRouter = createTRPCRouter({
         ...(input.gender && { gender: input.gender }),
         ...(input.tribeId && { assignedTribeId: input.tribeId }),
         ...(input.departmentId && { departmentId: input.departmentId }),
+        ...(input.assignmentStatus === "ASSIGNED" && { departmentId: { not: null } }),
+        ...(input.assignmentStatus === "UNASSIGNED" && { departmentId: null }),
         ...(input.volunteerCategory && { volunteerCategory: input.volunteerCategory }),
         ...(input.q && {
           OR: [
@@ -205,7 +209,7 @@ export const staffRouter = createTRPCRouter({
       const [items, totalCount] = await Promise.all([
         ctx.prisma.staffProfile.findMany({
           where,
-          include: { assignedVenue: true, assignedTribe: true, preferredCampus: true },
+          include: { assignedVenue: true, assignedTribe: true, preferredCampus: true, department: true, preferredDepartment: true },
           orderBy: { createdAt: "desc" },
           take: input.limit + 1,
           ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
@@ -258,6 +262,7 @@ export const staffRouter = createTRPCRouter({
           preferredCampus: true,
           preferredTribe: true,
           department: true,
+          preferredDepartment: true,
           reportsTo: { include: { user: true } },
           reportsToUser: true,
           directReports: { include: { user: true } },
@@ -551,13 +556,19 @@ export const staffRouter = createTRPCRouter({
       const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
       if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
-      if (input.departmentId) {
-        const dept = await ctx.prisma.department.findUnique({ where: { id: input.departmentId } });
-        if (!dept || dept.organizationId !== profile.organizationId) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid department" });
-        }
+      try {
+        return await ctx.prisma.$transaction(async (tx: any) => {
+          if (input.departmentId && input.departmentId !== profile.departmentId) {
+            const dept = await tx.department.findFirst({ where: { id: input.departmentId, organizationId: profile.organizationId, campId: profile.campId, status: "ACTIVE", deletedAt: null } });
+            if (!dept) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid department" });
+            await assertDepartmentHasCapacity(tx, input.departmentId);
+          }
+          return tx.staffProfile.update({ where: { id: input.id }, data: { departmentId: input.departmentId } });
+        });
+      } catch (error) {
+        if (error instanceof DepartmentCapacityError) throw new TRPCError({ code: "CONFLICT", message: error.message });
+        throw error;
       }
-      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data: { departmentId: input.departmentId } });
     }),
 
   assignTeams: protectedProcedure
@@ -871,6 +882,7 @@ export const staffRouter = createTRPCRouter({
             // department the Form Editor's live dropdown already labeled
             // "(Full)" is a conscious override, not a race to close.
             departmentId: systemValues.departmentId || null,
+            preferredDepartmentId: systemValues.departmentId || null,
             church: systemValues.church || null,
             churchDepartment: systemValues.churchDepartment || null,
             yearsServing: systemValues.yearsServing || null,
@@ -1012,133 +1024,105 @@ export const staffRouter = createTRPCRouter({
       return { success: true, count: teachers.length };
     }),
 
-  autoAssignToDepartments: protectedProcedure
+  departmentAssignmentMetrics: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
+      const departments = await ctx.prisma.department.findMany({
+        where: { organizationId: input.organizationId, campId: input.campId, status: "ACTIVE", deletedAt: null },
+        orderBy: { name: "asc" },
+      });
+      const availability = await getDepartmentAvailability(ctx.prisma, departments.map((department: any) => department.id));
+      const teachers = await ctx.prisma.staffProfile.findMany({
+        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER", status: "APPROVED", deletedAt: null },
+        select: { departmentId: true, preferredDepartmentId: true },
+      });
+      return {
+        total: teachers.length,
+        assigned: teachers.filter((teacher: any) => teacher.departmentId).length,
+        unassigned: teachers.filter((teacher: any) => !teacher.departmentId).length,
+        preferenceMatched: teachers.filter((teacher: any) => teacher.departmentId && teacher.departmentId === teacher.preferredDepartmentId).length,
+        withPreference: teachers.filter((teacher: any) => teacher.preferredDepartmentId).length,
+        departments: departments.map((department: any) => ({ ...department, ...(availability.get(department.id) ?? { count: 0, isFull: false }) })),
+      };
+    }),
+
+  autoAssignToDepartments: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string(), strategy: z.enum(["PREFERENCE", "BALANCED", "GENDER_BALANCED"]).default("PREFERENCE") }))
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
 
       const teachers = await ctx.prisma.staffProfile.findMany({
-        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER", status: "APPROVED", deletedAt: null },
+        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER", status: "APPROVED", departmentId: null, deletedAt: null },
+        orderBy: { submittedAt: "asc" },
       });
 
       const depts = await ctx.prisma.department.findMany({
-        where: { organizationId: input.organizationId, status: "ACTIVE", deletedAt: null },
+        where: { organizationId: input.organizationId, campId: input.campId, status: "ACTIVE", deletedAt: null },
+        orderBy: { name: "asc" },
       });
 
       if (depts.length === 0) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "No active departments found." });
       }
 
-      await ctx.prisma.staffProfile.updateMany({
-        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER" },
-        data: {
-          departmentId: null,
-          isDepartmentHead: false,
-          isAssistantHead: false,
-        },
+      const availability = await getDepartmentAvailability(ctx.prisma, depts.map((department: any) => department.id));
+      const assigned = await ctx.prisma.staffProfile.findMany({
+        where: { departmentId: { in: depts.map((department: any) => department.id) }, status: { in: ["PENDING", "APPROVED"] }, deletedAt: null },
+        select: { departmentId: true, gender: true },
       });
+      const counts = new Map(depts.map((department: any) => [department.id, availability.get(department.id)?.count ?? 0]));
+      const genderCounts = new Map<string, Map<string, number>>();
+      for (const person of assigned) {
+        const gender = person.gender?.toUpperCase() || "UNSPECIFIED";
+        const byGender = genderCounts.get(person.departmentId!) ?? new Map<string, number>();
+        byGender.set(gender, (byGender.get(gender) ?? 0) + 1);
+        genderCounts.set(person.departmentId!, byGender);
+      }
 
-      const males = teachers.filter((t: any) => t.gender?.toUpperCase() === "MALE");
-      const females = teachers.filter((t: any) => t.gender?.toUpperCase() === "FEMALE");
-      const others = teachers.filter((t: any) => t.gender?.toUpperCase() !== "MALE" && t.gender?.toUpperCase() !== "FEMALE");
+      let count = 0;
+      let preferenceMatched = 0;
+      let fallbackAssigned = 0;
+      for (const teacher of teachers) {
+        const gender = teacher.gender?.toUpperCase() || "UNSPECIFIED";
+        const candidates = depts
+          .filter((department: any) => department.maxCapacity == null || (counts.get(department.id) ?? 0) < department.maxCapacity)
+          .sort((left: any, right: any) => {
+            const leftCount = counts.get(left.id) ?? 0;
+            const rightCount = counts.get(right.id) ?? 0;
+            const leftFill = left.maxCapacity ? leftCount / left.maxCapacity : leftCount / Math.max(1, teachers.length + assigned.length);
+            const rightFill = right.maxCapacity ? rightCount / right.maxCapacity : rightCount / Math.max(1, teachers.length + assigned.length);
+            if (input.strategy === "PREFERENCE") {
+              const preference = Number(right.id === teacher.preferredDepartmentId) - Number(left.id === teacher.preferredDepartmentId);
+              if (preference) return preference;
+            }
+            if (input.strategy === "GENDER_BALANCED") {
+              const genderDifference = (genderCounts.get(left.id)?.get(gender) ?? 0) - (genderCounts.get(right.id)?.get(gender) ?? 0);
+              if (genderDifference) return genderDifference;
+            }
+            return leftFill - rightFill || leftCount - rightCount || Number(right.id === teacher.preferredDepartmentId) - Number(left.id === teacher.preferredDepartmentId) || left.name.localeCompare(right.name);
+          });
 
-      const deptMales: Record<string, typeof teachers> = {};
-      const deptFemales: Record<string, typeof teachers> = {};
-      const deptOthers: Record<string, typeof teachers> = {};
-
-      depts.forEach((d: any) => {
-        deptMales[d.id] = [];
-        deptFemales[d.id] = [];
-        deptOthers[d.id] = [];
-      });
-
-      let malePtr = 0;
-      let femalePtr = 0;
-      const updates: any[] = [];
-
-      for (let i = 0; i < depts.length; i++) {
-        const dId = depts[i].id;
-        const startWithMale = i % 2 === 0;
-
-        let head: any = null;
-        let assistant: any = null;
-
-        if (startWithMale) {
-          if (malePtr < males.length) {
-            head = males[malePtr++];
-            updates.push(
-              ctx.prisma.staffProfile.update({
-                where: { id: head.id },
-                data: { departmentId: dId, isDepartmentHead: true },
-              })
-            );
-          }
-          if (femalePtr < females.length) {
-            assistant = females[femalePtr++];
-            updates.push(
-              ctx.prisma.staffProfile.update({
-                where: { id: assistant.id },
-                data: { departmentId: dId, isAssistantHead: true },
-              })
-            );
-          }
-        } else {
-          if (femalePtr < females.length) {
-            head = females[femalePtr++];
-            updates.push(
-              ctx.prisma.staffProfile.update({
-                where: { id: head.id },
-                data: { departmentId: dId, isDepartmentHead: true },
-              })
-            );
-          }
-          if (malePtr < males.length) {
-            assistant = males[malePtr++];
-            updates.push(
-              ctx.prisma.staffProfile.update({
-                where: { id: assistant.id },
-                data: { departmentId: dId, isAssistantHead: true },
-              })
-            );
+        for (const department of candidates) {
+          try {
+            await ctx.prisma.$transaction(async (tx: any) => {
+              await assertDepartmentHasCapacity(tx, department.id);
+              await tx.staffProfile.update({ where: { id: teacher.id }, data: { departmentId: department.id } });
+            });
+            counts.set(department.id, (counts.get(department.id) ?? 0) + 1);
+            const byGender = genderCounts.get(department.id) ?? new Map<string, number>();
+            byGender.set(gender, (byGender.get(gender) ?? 0) + 1);
+            genderCounts.set(department.id, byGender);
+            count++;
+            if (department.id === teacher.preferredDepartmentId) preferenceMatched++;
+            else if (teacher.preferredDepartmentId) fallbackAssigned++;
+            break;
+          } catch (error) {
+            if (!(error instanceof DepartmentCapacityError)) throw error;
           }
         }
       }
-
-      const remainingMales = males.slice(malePtr);
-      const remainingFemales = females.slice(femalePtr);
-
-      remainingMales.forEach((m: any, idx: number) => {
-        const d = depts[idx % depts.length];
-        updates.push(
-          ctx.prisma.staffProfile.update({
-            where: { id: m.id },
-            data: { departmentId: d.id },
-          })
-        );
-      });
-
-      remainingFemales.forEach((f: any, idx: number) => {
-        const d = depts[idx % depts.length];
-        updates.push(
-          ctx.prisma.staffProfile.update({
-            where: { id: f.id },
-            data: { departmentId: d.id },
-          })
-        );
-      });
-
-      others.forEach((o: any, idx: number) => {
-        const d = depts[idx % depts.length];
-        updates.push(
-          ctx.prisma.staffProfile.update({
-            where: { id: o.id },
-            data: { departmentId: d.id },
-          })
-        );
-      });
-
-      await ctx.prisma.$transaction(updates);
-      return { success: true, count: teachers.length };
+      return { success: true, count, preferenceMatched, fallbackAssigned, unassigned: teachers.length - count, strategy: input.strategy };
     }),
 });
 

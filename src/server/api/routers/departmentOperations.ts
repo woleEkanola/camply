@@ -98,12 +98,29 @@ export const departmentOperationsRouter = createTRPCRouter({
       const profile = admin ? null : await activeStaffProfileForUser(ctx.prisma, ctx.userId, input.campId);
       if (!admin && !profile) throw new TRPCError({ code: "FORBIDDEN" });
       await ensureDepartmentExecutions(ctx.prisma, { campId: input.campId, date: input.date });
+      const searchTerms = input.search?.trim().split(/\s+/).filter(Boolean) ?? [];
       const departments = await ctx.prisma.department.findMany({
         where: {
           campId: input.campId,
           deletedAt: null,
           ...(input.includeInactive ? {} : { status: "ACTIVE" }),
-          ...(input.search ? { OR: [{ name: { contains: input.search, mode: "insensitive" } }, { purpose: { contains: input.search, mode: "insensitive" } }] } : {}),
+          ...(searchTerms.length ? {
+            AND: searchTerms.map((term) => ({
+              OR: [
+                { name: { contains: term, mode: "insensitive" as const } },
+                { purpose: { contains: term, mode: "insensitive" as const } },
+                { positions: { some: { deletedAt: null, OR: [
+                  { name: { contains: term, mode: "insensitive" as const } },
+                  { assignments: { some: { isCurrent: true, staff: { deletedAt: null, OR: [
+                    { firstName: { contains: term, mode: "insensitive" as const } },
+                    { lastName: { contains: term, mode: "insensitive" as const } },
+                    { email: { contains: term, mode: "insensitive" as const } },
+                    { phone: { contains: term, mode: "insensitive" as const } },
+                  ] } } } },
+                ] } } },
+              ],
+            })),
+          } : {}),
           ...(admin ? {} : { id: profile?.departmentId ?? "__none__" }),
         },
         include: {

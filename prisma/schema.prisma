@@ -1259,12 +1259,14 @@ model StaffProfile {
   assignedTribeId String?
 
   // Camp Structure: department & position flags
-  department         Department? @relation(fields: [departmentId], references: [id])
-  departmentId       String?
-  isDepartmentHead   Boolean     @default(false)
-  isAssistantHead    Boolean     @default(false)
-  isCampMonitor      Boolean     @default(false)
-  isAssistantMonitor Boolean     @default(false)
+  department            Department? @relation(fields: [departmentId], references: [id])
+  departmentId          String?
+  preferredDepartment   Department? @relation("PreferredStaffDepartment", fields: [preferredDepartmentId], references: [id], onDelete: SetNull)
+  preferredDepartmentId String?
+  isDepartmentHead      Boolean     @default(false)
+  isAssistantHead       Boolean     @default(false)
+  isCampMonitor         Boolean     @default(false)
+  isAssistantMonitor    Boolean     @default(false)
 
   // Camp Structure: reporting hierarchy (exactly one of these two is set, enforced in the router)
   reportsTo       StaffProfile?  @relation("ReportsTo", fields: [reportsToId], references: [id])
@@ -1302,6 +1304,7 @@ model StaffProfile {
   @@index([userId, campId])
   @@index([organizationId, type, status])
   @@index([deletedAt])
+  @@index([preferredDepartmentId])
 }
 
 // Staff (teacher/volunteer) badge scan log — deliberately parallel to
@@ -1481,6 +1484,7 @@ model Department {
   checklistExecutions                  DepartmentChecklistExecution[]
   reports                              DepartmentReport[]
   staff                                StaffProfile[]
+  preferredByStaff                     StaffProfile[]                 @relation("PreferredStaffDepartment")
   deletedAt                            DateTime?
   createdAt                            DateTime                       @default(now())
   updatedAt                            DateTime                       @updatedAt
