@@ -2,7 +2,7 @@
 
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { CAMPUS_COLUMNS, DEPARTMENT_COLUMNS, TRIBE_COLUMNS, type EntityKind } from "../../../../lib/import-export/types";
+import { CAMPUS_COLUMNS, DEPARTMENT_COLUMNS, SCHEDULE_COLUMNS, TRIBE_COLUMNS, type EntityKind } from "../../../../lib/import-export/types";
 import { templateCsv, templateJson, templateMarkdown, templateXlsx } from "../../../../lib/import-export/templates";
 import { downloadBlob } from "../../../../lib/import-export/serialize";
 
@@ -10,13 +10,16 @@ const ENTITY_LABEL: Record<EntityKind, string> = {
   campuses: "Campuses",
   tribes: "Tribes",
   departments: "Departments",
+  program_schedule: "Program Schedule",
 };
 
 const COLUMNS_FOR: Record<EntityKind, { key: string; required: boolean; type: string; example: string }[]> = {
   campuses: CAMPUS_COLUMNS,
   tribes: TRIBE_COLUMNS,
   departments: DEPARTMENT_COLUMNS,
+  program_schedule: SCHEDULE_COLUMNS,
 };
+
 
 function downloadTemplate(entity: EntityKind, format: "csv" | "json" | "md") {
   const filename = `camply-${entity}-template.${format}`;

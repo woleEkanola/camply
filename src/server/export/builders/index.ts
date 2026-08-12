@@ -10,5 +10,7 @@ import "./configBundle";
 import "./staff";
 import "./staffIdCards";
 import "./leaderboardScores";
+import "./schedule";
 
 export {};
+

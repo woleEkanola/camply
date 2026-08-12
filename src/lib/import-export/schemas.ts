@@ -90,12 +90,30 @@ export const departmentRowSchema = z.object({
   campScoped: boolish,
 });
 
+export const scheduleRowSchema = z.object({
+  date: z.string().min(1, "Date is required"),
+  startTime: z.string().min(1, "Start time is required"),
+  endDate: optionalText,
+  endTime: optionalText,
+  activity: z.string().min(1, "Activity title is required"),
+  facilitator: optionalText,
+  location: optionalText,
+  type: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? undefined : String(v).toUpperCase()),
+    z.enum(["TIMED", "MILESTONE"]).optional()
+  ),
+  notes: optionalText,
+});
+
 export const importBundleSchema = z.object({
   campuses: z.array(campusRowSchema).max(500, "Maximum 500 campus rows per import").optional(),
   tribes: z.array(tribeRowSchema).max(500, "Maximum 500 tribe rows per import").optional(),
   departments: z.array(departmentRowSchema).max(500, "Maximum 500 department rows per import").optional(),
+  program_schedule: z.array(scheduleRowSchema).max(500, "Maximum 500 schedule rows per import").optional(),
 });
 
 export type CampusRowInput = z.infer<typeof campusRowSchema>;
 export type TribeRowInput = z.infer<typeof tribeRowSchema>;
 export type DepartmentRowInput = z.infer<typeof departmentRowSchema>;
+export type ScheduleRowInput = z.infer<typeof scheduleRowSchema>;
+

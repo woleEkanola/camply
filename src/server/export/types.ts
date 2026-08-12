@@ -18,6 +18,7 @@ export const EXPORT_KINDS = [
   "CONFIG_BUNDLE",
   "TEMPLATE",
   "LEADERBOARD_SCORES",
+  "PROGRAM_SCHEDULE",
 ] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];
 

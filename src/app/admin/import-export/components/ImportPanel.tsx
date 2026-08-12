@@ -14,12 +14,14 @@ const ENTITY_LABEL: Record<EntityKind, string> = {
   campuses: "Campuses",
   tribes: "Tribes",
   departments: "Departments",
+  program_schedule: "Program Schedule",
 };
 
 function rowLabel(raw: Record<string, unknown>): string {
-  const name = raw.name;
-  return typeof name === "string" && name.trim() ? name : "(no name)";
+  const name = raw.activity ?? raw.name;
+  return typeof name === "string" && name.trim() ? name : "(no title)";
 }
+
 
 export function ImportPanel({ organizationId }: { organizationId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -208,7 +210,7 @@ export function ImportPanel({ organizationId }: { organizationId: string }) {
             <CardTitle>Import results</CardTitle>
           </CardHeader>
           <CardBody className="space-y-4">
-            {(["campuses", "tribes", "departments"] as EntityKind[]).map((entity) => {
+            {(["campuses", "tribes", "departments", "program_schedule"] as EntityKind[]).map((entity) => {
               const result = importResult[entity];
               if (!result) return null;
               return (

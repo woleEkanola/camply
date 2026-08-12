@@ -13,6 +13,7 @@ export const CAMP_COMMAND_PERMISSIONS = [
   "COMMUNICATION",
   "INCIDENTS_MEDICAL",
   "CAMP_SETTINGS",
+  "SCHEDULE",
 ] as const;
 
 export type CampCommandPermission = (typeof CAMP_COMMAND_PERMISSIONS)[number];
@@ -34,6 +35,7 @@ export const CAMP_COMMAND_PERMISSION_LABELS: Record<CampCommandPermission, strin
   COMMUNICATION: "Communication",
   INCIDENTS_MEDICAL: "Incidents and medical information",
   CAMP_SETTINGS: "Camp settings",
+  SCHEDULE: "Program schedule and live management",
 };
 
 export const FULL_CAMP_COMMAND_PERMISSIONS: CampCommandPermission[] = [...CAMP_COMMAND_PERMISSIONS];
@@ -47,6 +49,7 @@ export function sanitizeCampCommandPermissions(values: readonly string[]): CampC
 }
 
 export function permissionForAdminPath(pathname: string): CampCommandPermission | null {
+  if (pathname.startsWith("/admin/schedule")) return "SCHEDULE";
   if (pathname.startsWith("/admin/registrations")) return "REGISTRATIONS";
   if (pathname.startsWith("/admin/campers")) return "CAMPERS";
   if (pathname.startsWith("/admin/teachers") || pathname.startsWith("/admin/volunteers")) return "STAFF";
@@ -70,3 +73,4 @@ export function permissionForAdminPath(pathname: string): CampCommandPermission 
   ) return null;
   return "DASHBOARD";
 }
+

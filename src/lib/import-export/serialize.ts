@@ -4,20 +4,23 @@ import {
   DEPARTMENT_COLUMNS,
   EXPORT_FORMAT,
   EXPORT_VERSION,
+  SCHEDULE_COLUMNS,
   TRIBE_COLUMNS,
   type CampusRow,
   type DepartmentRow,
   type EntityKind,
   type ExportBundle,
+  type ScheduleRow,
   type TribeRow,
 } from "./types";
 
-type AnyRow = CampusRow | TribeRow | DepartmentRow;
+type AnyRow = CampusRow | TribeRow | DepartmentRow | ScheduleRow;
 
 const COLUMNS_FOR: Record<EntityKind, { key: string }[]> = {
   campuses: CAMPUS_COLUMNS,
   tribes: TRIBE_COLUMNS,
   departments: DEPARTMENT_COLUMNS,
+  program_schedule: SCHEDULE_COLUMNS,
 };
 
 function cellValue(row: AnyRow, key: string): string {
@@ -35,7 +38,12 @@ export function escapeFormula(v: string): string {
   return /^[=+\-@]/.test(v) ? `'${v}` : v;
 }
 
-export function toJsonBundle(data: { campuses: CampusRow[]; tribes: TribeRow[]; departments: DepartmentRow[] }): ExportBundle {
+export function toJsonBundle(data: {
+  campuses?: CampusRow[];
+  tribes?: TribeRow[];
+  departments?: DepartmentRow[];
+  program_schedule?: ScheduleRow[];
+}): ExportBundle {
   return {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
@@ -43,6 +51,7 @@ export function toJsonBundle(data: { campuses: CampusRow[]; tribes: TribeRow[]; 
     campuses: data.campuses,
     tribes: data.tribes,
     departments: data.departments,
+    program_schedule: data.program_schedule,
   };
 }
 
@@ -54,9 +63,10 @@ export function toCsv(entity: EntityKind, rows: AnyRow[]): string {
 }
 
 export async function toXlsxWorkbook(data: {
-  campuses: CampusRow[];
-  tribes: TribeRow[];
-  departments: DepartmentRow[];
+  campuses?: CampusRow[];
+  tribes?: TribeRow[];
+  departments?: DepartmentRow[];
+  program_schedule?: ScheduleRow[];
 }): Promise<Blob> {
   const XLSX = await import("xlsx");
   const workbook = XLSX.utils.book_new();
@@ -69,9 +79,10 @@ export async function toXlsxWorkbook(data: {
     XLSX.utils.book_append_sheet(workbook, sheet, name);
   };
 
-  addSheet("Campuses", "campuses", data.campuses);
-  addSheet("Tribes", "tribes", data.tribes);
-  addSheet("Departments", "departments", data.departments);
+  if (data.campuses) addSheet("Campuses", "campuses", data.campuses);
+  if (data.tribes) addSheet("Tribes", "tribes", data.tribes);
+  if (data.departments) addSheet("Departments", "departments", data.departments);
+  if (data.program_schedule) addSheet("Program Schedule", "program_schedule", data.program_schedule);
 
   const arrayBuffer = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
   return new Blob([arrayBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -92,15 +103,22 @@ function markdownTable(entity: EntityKind, rows: AnyRow[]): string {
   return [headerLine, separatorLine, ...rowLines].join("\n");
 }
 
-export function toMarkdown(data: { campuses: CampusRow[]; tribes: TribeRow[]; departments: DepartmentRow[] }): string {
+export function toMarkdown(data: {
+  campuses?: CampusRow[];
+  tribes?: TribeRow[];
+  departments?: DepartmentRow[];
+  program_schedule?: ScheduleRow[];
+}): string {
   const sections = [
     `# Camply Export\n\nExported ${new Date().toISOString()}`,
-    `## Campuses\n\n${data.campuses.length ? markdownTable("campuses", data.campuses) : "_No campuses._"}`,
-    `## Tribes\n\n${data.tribes.length ? markdownTable("tribes", data.tribes) : "_No tribes._"}`,
-    `## Departments\n\n${data.departments.length ? markdownTable("departments", data.departments) : "_No departments._"}`,
-  ];
+    data.campuses ? `## Campuses\n\n${data.campuses.length ? markdownTable("campuses", data.campuses) : "_No campuses._"}` : "",
+    data.tribes ? `## Tribes\n\n${data.tribes.length ? markdownTable("tribes", data.tribes) : "_No tribes._"}` : "",
+    data.departments ? `## Departments\n\n${data.departments.length ? markdownTable("departments", data.departments) : "_No departments._"}` : "",
+    data.program_schedule ? `## Program Schedule\n\n${data.program_schedule.length ? markdownTable("program_schedule", data.program_schedule) : "_No program schedule._"}` : "",
+  ].filter(Boolean);
   return sections.join("\n\n");
 }
+
 
 export function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);

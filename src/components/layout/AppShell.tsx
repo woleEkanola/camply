@@ -20,6 +20,8 @@ import { RoleSwitcher } from "./RoleSwitcher";
 import { OfflineSetupPrompt } from "@/components/pwa/OfflineSetupPrompt";
 import { OfflineDataNavButton } from "@/components/pwa/OfflineDataNavButton";
 import { permissionForAdminPath } from "@/lib/campCommand";
+import { ScheduleAlertController } from "@/components/schedule/ScheduleAlertController";
+
 
 export interface AppShellProps {
   area: AppArea;
@@ -383,6 +385,7 @@ export default function AppShell({ area, children }: AppShellProps) {
           showMore={false}
         />
         <CommandPalette area={area} />
+        <ScheduleAlertController />
       </div>
       <OfflineSetupPrompt organizationId={organizationId} role={role} />
     </div>

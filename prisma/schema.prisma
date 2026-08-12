@@ -469,6 +469,7 @@ model Camp {
   scoredSessions         ScoredSession[]
   achievementDefinitions AchievementDefinition[]
   leaderboardSettings    LeaderboardSettings?
+  schedules              CampSchedule[]
 
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -2203,3 +2204,80 @@ model WebPushLog {
 
   @@index([organizationId, createdAt])
 }
+
+// ─── Camp Program Schedule & Live Time Management ─────────────────────────────
+
+enum ScheduleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ScheduleEventKind {
+  TIMED
+  MILESTONE
+}
+
+model CampSchedule {
+  id              String              @id @default(cuid())
+  camp            Camp                @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId          String
+  revision        Int                 @default(1)
+  status          ScheduleStatus      @default(DRAFT)
+  timezone        String              @default("Africa/Lagos")
+  reminderMinutes Int[]               @default([5, 3, 2])
+  version         Int                 @default(1)
+  sourceMetadata  Json?
+  publishMetadata Json?
+  events          CampScheduleEvent[]
+  changes         CampScheduleChange[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([campId, status])
+}
+
+model CampScheduleEvent {
+  id             String               @id @default(cuid())
+  schedule       CampSchedule         @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId     String
+  dayNumber      Int
+  eventDate      DateTime             @db.Date
+  kind           ScheduleEventKind    @default(TIMED)
+  title          String
+  facilitator    String?
+  location       String?
+  notes          String?
+  plannedStart   DateTime
+  plannedEnd     DateTime?
+  effectiveStart DateTime
+  effectiveEnd   DateTime?
+  actualStart    DateTime?
+  actualEnd      DateTime?
+  sortOrder      Int                  @default(0)
+  cancelled      Boolean              @default(false)
+  changes        CampScheduleChange[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([scheduleId, dayNumber])
+  @@index([scheduleId, sortOrder])
+}
+
+model CampScheduleChange {
+  id          String             @id @default(cuid())
+  schedule    CampSchedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId  String
+  event       CampScheduleEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  eventId     String?
+  actorId     String
+  changeType  String
+  minuteDelta Int?
+  beforeState Json?
+  afterState  Json?
+  reason      String?
+  createdAt   DateTime           @default(now())
+
+  @@index([scheduleId, createdAt])
+}
+
