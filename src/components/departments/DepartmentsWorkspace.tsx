@@ -44,10 +44,18 @@ export function DepartmentsWorkspace({ organizationId, campId, canManageAll = fa
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("view") as WorkspaceView | null;
-    if (requested && ["departments", "organogram", "contacts", "mine"].includes(requested)) setView(requested);
+    if (requested && ["departments", "organogram", "contacts", "mine"].includes(requested)) {
+      const next = staffArea && requested === "departments" ? "contacts" : requested;
+      setView(next);
+      if (next !== requested) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("view", next);
+        window.history.replaceState({}, "", url);
+      }
+    }
     const stored = window.localStorage.getItem("camply.departments.layout");
     if (stored === "cards" || stored === "list") setLayout(stored);
-  }, []);
+  }, [staffArea]);
 
   function changeView(next: WorkspaceView) {
     setView(next);
@@ -58,7 +66,7 @@ export function DepartmentsWorkspace({ organizationId, campId, canManageAll = fa
   function changeLayout(next: "cards" | "list") { setLayout(next); window.localStorage.setItem("camply.departments.layout", next); }
 
   const date = todayKey();
-  const query = api.departmentOperations.list.useQuery({ campId, date, search: search || undefined, includeInactive: canManageAll }, { enabled: !!campId && view === "departments" });
+  const query = api.departmentOperations.list.useQuery({ campId, date, search: search || undefined, includeInactive: canManageAll }, { enabled: !!campId && view === "departments" && !staffArea });
   const departments = query.data ?? [];
   const teachers = api.staff.adminList.useQuery({ organizationId, campId, type: "TEACHER", status: "APPROVED", limit: 100 }, { enabled: canManageAll && !!campId });
   const volunteers = api.staff.adminList.useQuery({ organizationId, campId, type: "VOLUNTEER", status: "APPROVED", limit: 100 }, { enabled: canManageAll && !!campId });
@@ -101,7 +109,6 @@ export function DepartmentsWorkspace({ organizationId, campId, canManageAll = fa
 
   const tabs: { id: WorkspaceView; label: string }[] = staffArea ? [
     { id: "mine", label: "My department" },
-    { id: "departments", label: "Departments" },
     { id: "contacts", label: "Contacts" },
     { id: "organogram", label: "Organogram" },
   ] : [
@@ -119,7 +126,7 @@ export function DepartmentsWorkspace({ organizationId, campId, canManageAll = fa
     {view === "contacts" && <div className="space-y-3"><div><h2 className="text-lg font-bold text-txt-primary">Camp contacts</h2><p className="text-sm text-txt-secondary">Search people, roles, departments, phone numbers, or email addresses, then call or message them.</p></div><CampDirectory organizationId={organizationId} campId={campId} readOnly initialView="directory" showViewToggle={false} /></div>}
     {view === "mine" && <MyDepartmentWorkspace embedded />}
 
-    {view === "departments" && <div className="space-y-6">
+    {view === "departments" && !staffArea && <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div><h2 className="text-lg font-bold text-txt-primary">Department directory</h2><p className="text-sm text-txt-secondary">Switch between cards and a compact list, then open the organogram or find a person.</p></div>
         <div className="flex flex-wrap gap-2">

@@ -171,7 +171,7 @@ test.describe("JD Departments and daily operations", () => {
     await page.goto("/volunteer/department");
     await expect(page).toHaveURL(/\/volunteer\/departments\?view=mine/);
     await expect(page.getByRole("tab", { name: "My department" })).toBeVisible();
-    expect(await page.getByRole("tab").allTextContents()).toEqual(["My department", "Departments", "Contacts", "Organogram"]);
+    expect(await page.getByRole("tab").allTextContents()).toEqual(["My department", "Contacts", "Organogram"]);
     await expect(page.getByRole("heading", { name: "My department" })).toBeVisible();
     await expect(page.getByText("Venue Management Department (VMD)", { exact: true })).toBeVisible();
     await expect(page.getByText("VMD Hall & Environs Lead", { exact: true }).first()).toBeVisible();
@@ -188,6 +188,19 @@ test.describe("JD Departments and daily operations", () => {
     await expect(dialog.getByText("Arrange chairs according to programme requirements.")).toBeVisible();
     await expect(dialog.getByText("Restrict access while venue setup is in progress.")).toBeVisible();
     await expect(dialog.getByText("Programme venues always ready.")).toBeVisible();
+    await dialog.getByRole("button", { name: "Close" }).click();
+
+    await page.getByRole("tab", { name: "Contacts", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Camp contacts" })).toBeVisible();
+    await expect(page.getByPlaceholder(/Search people, departments/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Department card view" })).toHaveCount(0);
+    const departmentSection = page.getByTestId("camp-directory").getByRole("button", { name: /Venue Management Department \(VMD\)/ }).first();
+    await departmentSection.click();
+    const roster = page.getByTestId(`dept-section-body-${vmdId}`);
+    await expect(roster.getByText("VMD Volunteer", { exact: true })).toBeVisible();
+    await roster.getByText("VMD Volunteer", { exact: true }).click();
+    await expect(page.getByTestId("staff-profile-sheet")).toContainText("VMD Volunteer");
+    await expect(page.getByTestId("staff-call-link")).toHaveAttribute("href", "tel:08012345678");
   });
 
   test("teacher list shows form preference and supports manual and strategy-based department assignment", async ({ page }) => {
