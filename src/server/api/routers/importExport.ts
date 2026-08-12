@@ -5,6 +5,17 @@ import { assertOrgAdmin } from "../trpc/scoping";
 import { importBundleSchema } from "../../../lib/import-export/schemas";
 import type { CampusRow, DepartmentRow, TribeRow } from "../../../lib/import-export/types";
 import { importCampuses, importDepartments, importTribes } from "../../importExport/importer";
+import { parseTimeToMinutes } from "../../../lib/import-export/validate";
+
+/** Convert a YYYY-MM-DD date string + HH:mm/AM-PM time string into a UTC Date. */
+function parseScheduleDateTime(dateStr: string, timeStr: string): Date {
+  const mins = parseTimeToMinutes(timeStr);
+  if (mins === null) throw new Error(`Invalid time string "${timeStr}"`);
+  const hours = Math.floor(mins / 60);
+  const minutes = mins % 60;
+  const dateParts = dateStr.split("-").map((p) => parseInt(p, 10));
+  return new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2], hours, minutes, 0, 0));
+}
 
 /**
  * Shared with src/server/export/builders/configBundle.ts so the background
@@ -100,10 +111,18 @@ export const importExportRouter = createTRPCRouter({
         });
       }
 
+      if (input.bundle.program_schedule?.length && !org.activeCampId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Set an active camp before importing a program schedule",
+        });
+      }
+
       const results: {
         campuses?: Awaited<ReturnType<typeof importCampuses>>;
         tribes?: Awaited<ReturnType<typeof importTribes>>;
         departments?: Awaited<ReturnType<typeof importDepartments>>;
+        program_schedule?: { created: number; updated: number; errors: { rowIndex: number; name: string; message: string }[]; warnings: { rowIndex: number; name: string; message: string }[] };
       } = {};
 
       if (input.bundle.campuses?.length) {
@@ -119,6 +138,102 @@ export const importExportRouter = createTRPCRouter({
           org.activeCampId,
           input.bundle.departments
         );
+      }
+
+      // ─── Program Schedule import ─────────────────────────────────────
+      if (input.bundle.program_schedule?.length && org.activeCampId) {
+        const campId = org.activeCampId;
+        const rows = input.bundle.program_schedule;
+        const timezone = "Africa/Lagos";
+        const errors: { rowIndex: number; name: string; message: string }[] = [];
+
+        // Build events, collecting per-row errors
+        const validEvents: {
+          dayNumber: number;
+          eventDate: Date;
+          kind: "TIMED" | "MILESTONE";
+          title: string;
+          facilitator: string | null;
+          location: string | null;
+          notes: string | null;
+          plannedStart: Date;
+          plannedEnd: Date | null;
+          effectiveStart: Date;
+          effectiveEnd: Date | null;
+          sortOrder: number;
+        }[] = [];
+
+        // Derive dayNumber from sorted unique dates
+        const uniqueDates = Array.from(new Set(rows.map((r) => r.date))).sort();
+        const dateToDayNumber = new Map<string, number>();
+        uniqueDates.forEach((dStr, idx) => dateToDayNumber.set(dStr, idx + 1));
+
+        for (let idx = 0; idx < rows.length; idx++) {
+          const r = rows[idx];
+          try {
+            const isMilestone = r.type === "MILESTONE" || (!r.endTime && !r.endDate);
+            const dayNumber = dateToDayNumber.get(r.date) ?? 1;
+            const startInstant = parseScheduleDateTime(r.date, r.startTime);
+            const endInstant = !isMilestone && r.endTime ? parseScheduleDateTime(r.endDate ?? r.date, r.endTime) : null;
+            const eventDateInstant = new Date(`${r.date}T00:00:00.000Z`);
+
+            validEvents.push({
+              dayNumber,
+              eventDate: eventDateInstant,
+              kind: isMilestone ? "MILESTONE" : "TIMED",
+              title: r.activity,
+              facilitator: r.facilitator ?? null,
+              location: r.location ?? null,
+              notes: r.notes ?? null,
+              plannedStart: startInstant,
+              plannedEnd: endInstant,
+              effectiveStart: startInstant,
+              effectiveEnd: endInstant,
+              sortOrder: idx,
+            });
+          } catch (err) {
+            errors.push({
+              rowIndex: idx,
+              name: r.activity || `Row ${idx + 1}`,
+              message: err instanceof Error ? err.message : "Invalid schedule row",
+            });
+          }
+        }
+
+        if (validEvents.length > 0) {
+          // Find highest existing revision for this camp
+          const lastSchedule = await ctx.prisma.campSchedule.findFirst({
+            where: { campId },
+            orderBy: { revision: "desc" },
+          });
+          const nextRevision = (lastSchedule?.revision ?? 0) + 1;
+
+          await ctx.prisma.campSchedule.create({
+            data: {
+              campId,
+              revision: nextRevision,
+              status: "DRAFT",
+              timezone,
+              reminderMinutes: [5, 3, 2],
+              version: 1,
+              events: { create: validEvents },
+              changes: {
+                create: {
+                  actorId: ctx.session!.user.id,
+                  changeType: "IMPORT_DRAFT",
+                  reason: `Imported draft revision ${nextRevision} with ${validEvents.length} events via Import/Export`,
+                },
+              },
+            },
+          });
+        }
+
+        results.program_schedule = {
+          created: validEvents.length,
+          updated: 0,
+          errors,
+          warnings: [],
+        };
       }
 
       return results;

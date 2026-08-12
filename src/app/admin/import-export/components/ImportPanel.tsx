@@ -45,7 +45,7 @@ export function ImportPanel({ organizationId }: { organizationId: string }) {
   });
 
   const totals = validated
-    ? (["campuses", "tribes", "departments"] as EntityKind[]).reduce(
+    ? (["campuses", "tribes", "departments", "program_schedule"] as EntityKind[]).reduce(
         (acc, entity) => {
           for (const row of validated[entity]) {
             if (row.errors.length) acc.invalid++;
@@ -102,6 +102,7 @@ export function ImportPanel({ organizationId }: { organizationId: string }) {
             <option value="campuses">Campuses</option>
             <option value="tribes">Tribes</option>
             <option value="departments">Departments</option>
+            <option value="program_schedule">Program Schedule</option>
           </Select>
 
           <div className="rounded-lg border-2 border-dashed border-neutral-300 p-8 text-center">
@@ -148,7 +149,7 @@ export function ImportPanel({ organizationId }: { organizationId: string }) {
             </span>
           </CardHeader>
           <CardBody className="space-y-6">
-            {(["campuses", "tribes", "departments"] as EntityKind[]).map((entity) => {
+            {(["campuses", "tribes", "departments", "program_schedule"] as EntityKind[]).map((entity) => {
               const rows = validated[entity];
               if (rows.length === 0) return null;
               return (
