@@ -52,7 +52,7 @@ export function permissionForAdminPath(pathname: string): CampCommandPermission 
   if (pathname.startsWith("/admin/teachers") || pathname.startsWith("/admin/volunteers")) return "STAFF";
   if (pathname.startsWith("/admin/tribes")) return "TRIBES";
   if (pathname.startsWith("/admin/accommodation") || pathname.startsWith("/admin/venues")) return "ACCOMMODATION";
-  if (pathname.startsWith("/admin/camp-structure")) return "CAMP_STRUCTURE";
+  if (pathname.startsWith("/admin/camp-structure") || pathname.startsWith("/admin/departments")) return "CAMP_STRUCTURE";
   if (pathname.startsWith("/admin/qr-scan")) return "QR_SCANNING";
   if (pathname.startsWith("/admin/points")) return "CAMP_POINTS";
   if (pathname.startsWith("/leaderboard")) return "LEADERBOARD";

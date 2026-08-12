@@ -157,7 +157,7 @@ describe("getUserCapabilities", () => {
 
   it("returns empty capabilities for an unknown user", async () => {
     const caps = await getUserCapabilities("does-not-exist");
-    expect(caps).toEqual({ parent: false, staff: [], orgAdmin: false, campusRep: false });
+    expect(caps).toEqual({ parent: false, staff: [], orgAdmin: false, campusRep: false, campCommand: [] });
   });
 });
 

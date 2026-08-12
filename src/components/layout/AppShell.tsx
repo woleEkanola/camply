@@ -112,7 +112,10 @@ export default function AppShell({ area, children }: AppShellProps) {
         platformBrandingQuery.data?.platformLogoUrl ||
         "/logo.png";
 
-  const commandOnlyAdminContext = area === "admin" && !!role && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role);
+  // Camp Command permissions narrow the admin shell only for an actual Camp
+  // Command appointment. Other established contextual grants (campus reps and
+  // Position.grantsManageCamp) continue through their existing authorization.
+  const commandOnlyAdminContext = area === "admin" && !!role && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role) && campCommandPermissions.length > 0;
   const requiredCommandPermission = pathname ? permissionForAdminPath(pathname) : "DASHBOARD";
   const commandPageAllowed = !commandOnlyAdminContext
     || (requiredCommandPermission !== null && campCommandPermissions.includes(requiredCommandPermission));

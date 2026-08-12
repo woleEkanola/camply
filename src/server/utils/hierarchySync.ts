@@ -62,9 +62,9 @@ export async function syncStaffProfileFromPositions(tx: TxClient, staffId: strin
     }
 
     // Determine leadership flags based on position naming conventions
-    if (nameLower.endsWith("head") && !nameLower.includes("assistant")) {
+    if (position.roleKind === "HEAD" || (nameLower.endsWith("head") && !nameLower.includes("assistant"))) {
       isDepartmentHead = true;
-    } else if (nameLower.endsWith("assistant head") || nameLower.includes("assistant head")) {
+    } else if (position.roleKind === "ASSISTANT_HEAD" || nameLower.endsWith("assistant head") || nameLower.includes("assistant head")) {
       isAssistantHead = true;
     }
 

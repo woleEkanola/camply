@@ -82,9 +82,10 @@ test.describe("Camp Command", () => {
     await page.getByRole("button", { name: "Set up Camp Command" }).click();
     await expect(page.getByTestId("camp-command-settings")).toBeVisible({ timeout: 20_000 });
 
-    await page.getByLabel("Teacher").selectOption(teacherStaffId);
+    await page.getByLabel("Teacher", { exact: true }).selectOption(teacherStaffId);
     await page.getByLabel("Individual access").selectOption("CUSTOM");
-    await page.locator("label", { hasText: "Registrations and approvals" }).getByRole("checkbox").check();
+    const appointmentSection = page.locator("section", { hasText: "Appoint a teacher" });
+    await appointmentSection.getByLabel("Registrations and approvals", { exact: true }).check();
     await page.getByRole("button", { name: "Appoint Camp Commandant" }).click();
 
     await expect(page.getByText("Camp Commandant appointed.")).toBeVisible({ timeout: 15_000 });

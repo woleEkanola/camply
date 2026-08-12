@@ -80,6 +80,12 @@ const ADMIN_CAMP_CONTACT_ITEM: NavItem = {
   icon: Squares2X2Icon,
   roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
 };
+const ADMIN_DEPARTMENTS_ITEM: NavItem = {
+  name: "Departments",
+  href: "/admin/departments",
+  icon: BuildingOffice2Icon,
+  roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+};
 const TEACHER_CAMP_CONTACT_ITEM: NavItem = {
   name: "Camp Contact",
   href: "/teacher/camp-contact",
@@ -89,7 +95,7 @@ const TEACHER_CAMP_CONTACT_ITEM: NavItem = {
 const ADMIN_GROUPS: NavGroup[] = [
   {
     name: "Dashboard",
-    items: [{ name: "Dashboard", href: "/admin", icon: HomeIcon }, LEADERBOARD_ITEM, ADMIN_CAMP_CONTACT_ITEM],
+    items: [{ name: "Dashboard", href: "/admin", icon: HomeIcon }, LEADERBOARD_ITEM, ADMIN_CAMP_CONTACT_ITEM, ADMIN_DEPARTMENTS_ITEM],
   },
   {
     name: "Registration",
@@ -303,6 +309,7 @@ const TEACHER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/teacher", icon: HomeIcon },
       { name: "My Position", href: "/teacher/my-position", icon: MapIcon },
+      { name: "My Department", href: "/teacher/department", icon: ClipboardDocumentCheckIcon },
       LEADERBOARD_ITEM,
       TEACHER_CAMP_CONTACT_ITEM,
     ],
@@ -325,6 +332,7 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/volunteer", icon: HomeIcon },
       { name: "My Position", href: "/volunteer/my-position", icon: MapIcon },
+      { name: "My Department", href: "/volunteer/department", icon: ClipboardDocumentCheckIcon },
       LEADERBOARD_ITEM,
     ],
   },

@@ -104,7 +104,7 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await expect(page.getByRole("heading", { name: "Choose Pickup Point" })).toBeVisible();
 
     await page.getByPlaceholder("e.g. Third Mainland Bridge Bus Stop").fill("Custom Bus Stop E2E");
-    await page.getByRole("button", { name: "Use" }).click();
+    await page.getByTestId("bottom-sheet-panel").getByRole("button", { name: "Use", exact: true }).click();
 
     await expect(page.getByRole("heading", { name: "Custom Bus Stop E2E" })).toBeVisible();
   });

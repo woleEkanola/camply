@@ -1,0 +1,2985 @@
+{
+  "document": "2026 Teen Camp Organogram & JD",
+  "version": 1,
+  "departments": [
+    {
+      "name": "Camp Board",
+      "parent": null,
+      "displayOrder": 0
+    },
+    {
+      "name": "Camp Command",
+      "parent": "Camp Board",
+      "displayOrder": 1
+    },
+    {
+      "name": "People & Programmes",
+      "parent": "Camp Command",
+      "displayOrder": 2
+    },
+    {
+      "name": "Operations",
+      "parent": "Camp Command",
+      "displayOrder": 3
+    },
+    {
+      "name": "Registration",
+      "parent": "People & Programmes",
+      "displayOrder": 10
+    },
+    {
+      "name": "Programme & Protocol",
+      "parent": "People & Programmes",
+      "displayOrder": 11
+    },
+    {
+      "name": "Prayer",
+      "parent": "People & Programmes",
+      "displayOrder": 12
+    },
+    {
+      "name": "Counselling",
+      "parent": "People & Programmes",
+      "displayOrder": 13
+    },
+    {
+      "name": "Games & Recreation",
+      "parent": "People & Programmes",
+      "displayOrder": 14
+    },
+    {
+      "name": "Food & Catering",
+      "parent": "People & Programmes",
+      "displayOrder": 15
+    },
+    {
+      "name": "Accommodation",
+      "parent": "People & Programmes",
+      "displayOrder": 16
+    },
+    {
+      "name": "Tribe Heads",
+      "parent": "People & Programmes",
+      "displayOrder": 17
+    },
+    {
+      "name": "Facilities",
+      "parent": "Operations",
+      "displayOrder": 20
+    },
+    {
+      "name": "Venue Management Department (VMD)",
+      "parent": "Operations",
+      "displayOrder": 21
+    },
+    {
+      "name": "Medical",
+      "parent": "Operations",
+      "displayOrder": 22
+    },
+    {
+      "name": "Security",
+      "parent": "Operations",
+      "displayOrder": 23
+    },
+    {
+      "name": "Transport & Logistics",
+      "parent": "Operations",
+      "displayOrder": 24
+    },
+    {
+      "name": "IT & Digital Systems",
+      "parent": "Operations",
+      "displayOrder": 25
+    },
+    {
+      "name": "Communications",
+      "parent": "Operations",
+      "displayOrder": 26
+    },
+    {
+      "name": "Media",
+      "parent": "Operations",
+      "displayOrder": 27
+    }
+  ],
+  "units": [
+    {
+      "sourceTitle": "Camp Board",
+      "departmentName": "Camp Board",
+      "positionName": "Camp Board",
+      "parentDepartmentName": null,
+      "purpose": "Provide strategic oversight, governance, accountability, and financial stewardship for the camp. The Camp Board ensures that the camp fulfils its spiritual objectives while operating safely, responsibly, and within approved budgets.",
+      "reportsTo": "Church Leadership",
+      "supervises": [],
+      "responsibilities": [
+        "Define the overall vision and objectives of the camp.",
+        "Approve the camp budget and major expenditures.",
+        "Approve camp policies, operational plans, and risk management procedures.",
+        "Appoint key camp officials.",
+        "Monitor the financial health of the camp.",
+        "Review procurement activities and ensure transparency.",
+        "Resolve major issues beyond the authority of the Camp Commandant.",
+        "Conduct the post-camp evaluation and approve recommendations for future camps."
+      ],
+      "authority": [
+        "Approve budgets and emergency expenditures above approved limits.",
+        "Appoint or replace senior camp officials.",
+        "Approve significant operational changes."
+      ],
+      "successMeasures": [],
+      "tasks": []
+    },
+    {
+      "sourceTitle": "Camp Commandant",
+      "departmentName": "Camp Command",
+      "positionName": "Camp Commandant",
+      "parentDepartmentName": "Camp Board",
+      "purpose": "Provide overall leadership for the camp and ensure every department works together to deliver a safe, spiritually impactful and well-organized camp.",
+      "reportsTo": "Camp Board",
+      "supervises": [
+        "Deputy Camp Commandant (People & Programmes)",
+        "Deputy Camp Commandant (Operations)"
+      ],
+      "responsibilities": [
+        "Lead all camp operations.",
+        "Coordinate department heads.",
+        "Conduct daily leadership meetings.",
+        "Monitor departmental performance.",
+        "Resolve interdepartmental issues.",
+        "Make operational decisions during camp.",
+        "Ensure camp objectives are achieved.",
+        "Coordinate emergency responses.",
+        "Present the final operational report to the Camp Board."
+      ],
+      "authority": [
+        "Make operational decisions.",
+        "Deploy personnel where needed.",
+        "Resolve departmental conflicts."
+      ],
+      "successMeasures": [
+        "The camp programme runs on schedule.",
+        "Departments function effectively.",
+        "Operational issues resolved promptly.",
+        "Positive camper experience."
+      ],
+      "tasks": [
+        {
+          "title": "Confirm every leadership appointment.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Approve departmental work plans.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 1
+        },
+        {
+          "title": "Conduct leadership briefing.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Schedule daily leadership meetings.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Monitor every department.",
+          "sourceGroup": "Camp Operations",
+          "routine": "DAILY",
+          "sortOrder": 4
+        },
+        {
+          "title": "Resolve escalated issues.",
+          "sourceGroup": "Camp Operations",
+          "routine": "DAILY",
+          "sortOrder": 5
+        },
+        {
+          "title": "Ensure programme stays on schedule.",
+          "sourceGroup": "Camp Operations",
+          "routine": "DAILY",
+          "sortOrder": 6
+        },
+        {
+          "title": "Conduct daily operational review.",
+          "sourceGroup": "Camp Operations",
+          "routine": "DAILY",
+          "sortOrder": 7
+        },
+        {
+          "title": "Lead final debrief.",
+          "sourceGroup": "Closing",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 8
+        },
+        {
+          "title": "Submit operational report.",
+          "sourceGroup": "Closing",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 9
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Deputy Camp Commandant (People & Programmes)",
+      "departmentName": "People & Programmes",
+      "positionName": "Deputy Camp Commandant (People & Programmes)",
+      "parentDepartmentName": "Camp Command",
+      "purpose": "Oversee every department directly responsible for the camper experience.",
+      "reportsTo": "Camp Commandant",
+      "supervises": [
+        "Programme & Protocol Lead",
+        "Registration Lead",
+        "Accommodation Lead",
+        "Prayer Coordinator",
+        "Food & Catering Lead",
+        "Games & Recreation Lead",
+        "Welfare Lead"
+      ],
+      "responsibilities": [
+        "Coordinate camper-facing departments.",
+        "Ensure programmes run according to schedule.",
+        "Resolve camper-related issues.",
+        "Supervise accommodation and registration.",
+        "Coordinate communication between programme departments.",
+        "Ensure adequate staffing for activities."
+      ],
+      "authority": [],
+      "successMeasures": [
+        "Programme delivered successfully.",
+        "Camper welfare maintained.",
+        "Activities start on time.",
+        "Registration and accommodation operate smoothly."
+      ],
+      "tasks": [
+        {
+          "title": "Confirm readiness of all programme departments.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 0
+        },
+        {
+          "title": "Review programme schedule.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 1
+        },
+        {
+          "title": "Review staffing levels.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 2
+        },
+        {
+          "title": "Coordinate teachers.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 3
+        },
+        {
+          "title": "Supervise camper welfare.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 4
+        },
+        {
+          "title": "Resolve camper issues.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 5
+        },
+        {
+          "title": "Conduct programme review each day.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 6
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Deputy Camp Commandant (Operations)",
+      "departmentName": "Operations",
+      "positionName": "Deputy Camp Commandant (Operations)",
+      "parentDepartmentName": "Camp Command",
+      "purpose": "Provide operational support for every aspect of camp infrastructure, logistics and safety.",
+      "reportsTo": "Camp Commandant",
+      "supervises": [
+        "Facilities Lead",
+        "Medical Lead",
+        "Security Lead",
+        "Transport & Logistics Lead",
+        "Audio/Visual Lead",
+        "IT & Digital Systems Lead",
+        "Communications Lead",
+        "Media Lead"
+      ],
+      "responsibilities": [
+        "Coordinate operational departments.",
+        "Ensure camp infrastructure is functional.",
+        "Monitor safety and security.",
+        "Coordinate technical support.",
+        "Oversee logistics.",
+        "Resolve operational issues."
+      ],
+      "authority": [],
+      "successMeasures": [
+        "Camp operates without major disruption.",
+        "Facilities remain functional.",
+        "Technical systems remain operational.",
+        "Safety standards maintained."
+      ],
+      "tasks": [
+        {
+          "title": "Confirm readiness of every operational department.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 0
+        },
+        {
+          "title": "Conduct venue inspection.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 1
+        },
+        {
+          "title": "Conduct safety inspection.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 2
+        },
+        {
+          "title": "Review emergency procedures.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 3
+        },
+        {
+          "title": "Review communication systems.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 4
+        },
+        {
+          "title": "Review logistics readiness.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 5
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Registration Lead",
+      "departmentName": "Registration",
+      "positionName": "Registration Lead",
+      "parentDepartmentName": "People & Programmes",
+      "purpose": "Manage the registration, check-in and check-out process while maintaining accurate camper records.",
+      "reportsTo": "Deputy Camp Commandant (People & Programmes)",
+      "supervises": [
+        "Registration Officers",
+        "Check-in Volunteers"
+      ],
+      "responsibilities": [
+        "Prepare registration stations.",
+        "Manage camper registration.",
+        "Verify required documents.",
+        "Operate the QR check-in system.",
+        "Print replacement name tags.",
+        "Maintain camper records.",
+        "Coordinate check-in and check-out.",
+        "Manage the lost-and-found station.",
+        "Produce the final camper register."
+      ],
+      "authority": [
+        "Approve or reject incomplete registrations according to camp policy.",
+        "Escalate exceptional cases to the Deputy Camp Commandant."
+      ],
+      "successMeasures": [
+        "Registration completed accurately.",
+        "Minimal waiting time.",
+        "Accurate camper records."
+      ],
+      "tasks": [
+        {
+          "title": "Export camper register.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Export emergency contacts.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 1
+        },
+        {
+          "title": "Purchase name tags.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Print replacement name tags.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Print registration lists.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 4
+        },
+        {
+          "title": "Test QR check-in.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 5
+        },
+        {
+          "title": "Prepare registration desks.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 6
+        },
+        {
+          "title": "Prepare verification desks.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 7
+        },
+        {
+          "title": "Prepare tagging desks.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 8
+        },
+        {
+          "title": "Prepare search desks.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 9
+        },
+        {
+          "title": "Prepare reception desks.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 10
+        },
+        {
+          "title": "Prepare lost-and-found station.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 11
+        },
+        {
+          "title": "Print campus maps.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 12
+        },
+        {
+          "title": "Print directional signs.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 13
+        },
+        {
+          "title": "Verify registrations.",
+          "sourceGroup": "Arrival",
+          "routine": "ARRIVAL",
+          "sortOrder": 14
+        },
+        {
+          "title": "Print replacement tags.",
+          "sourceGroup": "Arrival",
+          "routine": "ARRIVAL",
+          "sortOrder": 15
+        },
+        {
+          "title": "Resolve registration issues.",
+          "sourceGroup": "Arrival",
+          "routine": "ARRIVAL",
+          "sortOrder": 16
+        },
+        {
+          "title": "Record walk-in cases.",
+          "sourceGroup": "Arrival",
+          "routine": "ARRIVAL",
+          "sortOrder": 17
+        },
+        {
+          "title": "Coordinate check-out.",
+          "sourceGroup": "Departure",
+          "routine": "AFTER_CHECKOUT",
+          "sortOrder": 18
+        },
+        {
+          "title": "Verify camper departures.",
+          "sourceGroup": "Departure",
+          "routine": "AFTER_CHECKOUT",
+          "sortOrder": 19
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Programme & Protocol Lead",
+      "departmentName": "Programme & Protocol",
+      "positionName": "Programme & Protocol Lead",
+      "parentDepartmentName": "People & Programmes",
+      "purpose": "Coordinate and oversee the planning, scheduling, and execution of all camp programmes while ensuring invited guests are properly hosted and every session runs smoothly.",
+      "reportsTo": "Deputy Camp Commandant (People & Programmes)",
+      "supervises": [
+        "Session Moderators",
+        "Timekeepers",
+        "Guest Protocol Officers",
+        "Stage Assistants",
+        "Speaker Liaison Officers"
+      ],
+      "responsibilities": [
+        "Develop the master camp programme in collaboration with the Camp Commandant.",
+        "Prepare the detailed schedule for every camp day.",
+        "Coordinate all speakers, teachers and facilitators.",
+        "Invite guest ministers and confirm their attendance.",
+        "Coordinate transportation and accommodation for invited guests.",
+        "Prepare hospitality arrangements for guest speakers.",
+        "Ensure speakers have all required materials before their sessions.",
+        "Coordinate breakout sessions and workshops.",
+        "Assign moderators and timekeepers for every session.",
+        "Monitor adherence to the programme schedule.",
+        "Resolve programme conflicts and scheduling issues.",
+        "Ensure all presentation materials are submitted before camp.",
+        "Work closely with the Audio/Visual Lead to ensure presentations are ready.",
+        "Coordinate with the Prayer Coordinator before spiritual sessions.",
+        "Prepare contingency plans for delayed speakers or programme changes.",
+        "Conduct programme briefings with moderators and facilitators.",
+        "Ensure smooth transitions between programme segments.",
+        "Prepare the final programme report after camp."
+      ],
+      "authority": [
+        "Adjust session timings where necessary.",
+        "Reassign moderators and facilitators.",
+        "Escalate major programme changes to the Deputy Camp Commandant."
+      ],
+      "successMeasures": [
+        "Sessions begin and end on time.",
+        "Guest speakers are well coordinated.",
+        "Minimal programme disruptions.",
+        "Programme objectives successfully delivered."
+      ],
+      "tasks": [
+        {
+          "title": "Finalize master programme.",
+          "sourceGroup": "Programme",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Print programme schedules.",
+          "sourceGroup": "Programme",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 1
+        },
+        {
+          "title": "Prepare daily schedules.",
+          "sourceGroup": "Programme",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Assign moderators.",
+          "sourceGroup": "Programme",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Assign timekeepers.",
+          "sourceGroup": "Programme",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 4
+        },
+        {
+          "title": "Confirm breakout facilitators.",
+          "sourceGroup": "Programme",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 5
+        },
+        {
+          "title": "Prepare backup speakers.",
+          "sourceGroup": "Programme",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 6
+        },
+        {
+          "title": "Prepare indoor alternatives for rain.",
+          "sourceGroup": "Programme",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 7
+        },
+        {
+          "title": "Send invitations.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 8
+        },
+        {
+          "title": "Confirm attendance.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 9
+        },
+        {
+          "title": "Confirm arrival times.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 10
+        },
+        {
+          "title": "Arrange transportation.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 11
+        },
+        {
+          "title": "Arrange accommodation.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 12
+        },
+        {
+          "title": "Prepare hospitality room.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 13
+        },
+        {
+          "title": "Prepare drinking water.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 14
+        },
+        {
+          "title": "Prepare towels.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 15
+        },
+        {
+          "title": "Prepare stage fan.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 16
+        },
+        {
+          "title": "Prepare guest seating.",
+          "sourceGroup": "Guest Ministers",
+          "routine": "ONE_TIME",
+          "sortOrder": 17
+        },
+        {
+          "title": "Collect presentation slides.",
+          "sourceGroup": "Presentation",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 18
+        },
+        {
+          "title": "Verify presentation laptops.",
+          "sourceGroup": "Presentation",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 19
+        },
+        {
+          "title": "Share presentations with Audio Visual team.",
+          "sourceGroup": "Presentation",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 20
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Prayer Coordinator",
+      "departmentName": "Prayer",
+      "positionName": "Prayer Coordinator",
+      "parentDepartmentName": "People & Programmes",
+      "purpose": "Coordinate all prayer activities throughout the camp and ensure every scheduled prayer session is properly planned, staffed and executed.",
+      "reportsTo": "Deputy Camp Commandant (People & Programmes)",
+      "supervises": [
+        "Prayer Leaders",
+        "Prayer Session Coordinators",
+        "Altar Ministry Team"
+      ],
+      "responsibilities": [
+        "Develop the camp prayer schedule.",
+        "Coordinate all corporate prayer sessions.",
+        "Assign prayer leaders to each session.",
+        "Assign altar ministry teams.",
+        "Prepare prayer session outlines and materials.",
+        "Coordinate the teacher prayer chain.",
+        "Prepare prayer request cards.",
+        "Ensure prayer teams are briefed before each session.",
+        "Coordinate prayer activities within the hostels where required.",
+        "Work with the Programme Lead to ensure prayer sessions fit into the master programme.",
+        "Work with the Counselling Coordinator during altar ministry.",
+        "Ensure prayer teams are available at designated times.",
+        "Monitor prayer sessions throughout camp.",
+        "Gather feedback on prayer activities.",
+        "Submit daily prayer activity reports to the Deputy Camp Commandant."
+      ],
+      "authority": [
+        "Assign and reassign prayer team members.",
+        "Adjust prayer team deployment based on programme needs.",
+        "Request additional prayer personnel when necessary.",
+        "Escalate issues affecting prayer activities to the Deputy Camp Commandant."
+      ],
+      "successMeasures": [
+        "All scheduled prayer sessions are adequately staffed.",
+        "Prayer sessions start and end as scheduled.",
+        "Prayer teams are properly prepared.",
+        "Prayer requests are properly collected and handled.",
+        "No scheduled prayer activity is left without responsible personnel."
+      ],
+      "tasks": [
+        {
+          "title": "Prepare the camp prayer schedule.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Assign prayer leaders to every prayer session.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 1
+        },
+        {
+          "title": "Assign altar ministry teams.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Prepare prayer session materials.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Prepare prayer request cards.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 4
+        },
+        {
+          "title": "Organize the teacher prayer chain.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 5
+        },
+        {
+          "title": "Brief prayer leaders and altar ministers.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 6
+        },
+        {
+          "title": "Coordinate prayer activities with the Programme Lead.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 7
+        },
+        {
+          "title": "Coordinate prayer activities with the Counselling Coordinator.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 8
+        },
+        {
+          "title": "Confirm prayer teams are present before each session.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 9
+        },
+        {
+          "title": "Monitor prayer sessions throughout camp.",
+          "sourceGroup": "During Every Session",
+          "routine": "DURING_PROGRAMME",
+          "sortOrder": 10
+        },
+        {
+          "title": "Submit daily prayer reports.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 11
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Counselling Coordinator",
+      "departmentName": "Counselling",
+      "positionName": "Counselling Coordinator",
+      "parentDepartmentName": "People & Programmes",
+      "purpose": "Coordinate the counselling and personal support services available to campers, particularly during altar calls, prayer sessions and moments when campers require individual attention.",
+      "reportsTo": "Deputy Camp Commandant (People & Programmes)",
+      "supervises": [
+        "Prayer Counsellors",
+        "Counselling Volunteers",
+        "Follow-up Team"
+      ],
+      "responsibilities": [
+        "Recruit and assign qualified counsellors.",
+        "Prepare the counselling team before camp.",
+        "Assign counsellors to designated sessions and locations.",
+        "Brief counsellors on camp counselling procedures.",
+        "Coordinate counselling during altar ministry.",
+        "Provide a clear process for campers requesting personal support.",
+        "Coordinate the handling of salvation and rededication responses.",
+        "Ensure counselling conversations are handled confidentially.",
+        "Identify cases requiring escalation to appropriate camp leadership.",
+        "Work with the Medical Lead where a camper's concern has a medical component.",
+        "Work with the Welfare Lead where a camper requires ongoing welfare support.",
+        "Coordinate follow-up for new converts.",
+        "Maintain appropriate records of counselling responses.",
+        "Ensure sensitive cases are referred to the appropriate adult leader.",
+        "Monitor the availability of counsellors throughout camp.",
+        "Submit daily counselling reports to the Deputy Camp Commandant."
+      ],
+      "authority": [
+        "Assign counsellors to sessions and locations.",
+        "Reassign counsellors based on demand.",
+        "Request additional counsellors when needed.",
+        "Escalate serious welfare or safeguarding concerns immediately.",
+        "Refer cases to the appropriate camp department."
+      ],
+      "successMeasures": [
+        "Adequate counsellor coverage at all designated sessions.",
+        "Campers who request counselling receive timely attention.",
+        "Counselling records are properly maintained.",
+        "Sensitive matters are handled confidentially.",
+        "New converts are properly recorded and referred for follow-up.",
+        "Serious concerns are escalated appropriately."
+      ],
+      "tasks": [
+        {
+          "title": "Confirm the counselling team.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 0
+        },
+        {
+          "title": "Assign counsellors to each designated session.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 1
+        },
+        {
+          "title": "Assign counsellors to altar ministry.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 2
+        },
+        {
+          "title": "Prepare counselling guidelines.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 3
+        },
+        {
+          "title": "Brief all counsellors before camp.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 4
+        },
+        {
+          "title": "Prepare counselling forms.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 5
+        },
+        {
+          "title": "Prepare salvation and rededication response forms.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 6
+        },
+        {
+          "title": "Establish the counselling location.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 7
+        },
+        {
+          "title": "Establish the process for requesting counselling.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 8
+        },
+        {
+          "title": "Coordinate with the Prayer Coordinator for altar ministry.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 9
+        },
+        {
+          "title": "Coordinate with the Welfare Lead for ongoing camper concerns.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 10
+        },
+        {
+          "title": "Establish escalation procedures for serious cases.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 11
+        },
+        {
+          "title": "Coordinate follow-up for new converts.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 12
+        },
+        {
+          "title": "Maintain counselling records.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 13
+        },
+        {
+          "title": "Submit daily counselling reports.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 14
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Games & Recreation Lead",
+      "departmentName": "Games & Recreation",
+      "positionName": "Games & Recreation Lead",
+      "parentDepartmentName": "People & Programmes",
+      "purpose": "Plan and coordinate recreational activities that encourage teamwork, participation and healthy competition.",
+      "reportsTo": "Deputy Camp Commandant (People & Programmes)",
+      "supervises": [
+        "Sports Officials",
+        "Referees",
+        "Activity Coordinators"
+      ],
+      "responsibilities": [
+        "Develop the recreation programme.",
+        "Plan Inter-Tribe competitions.",
+        "Prepare competition rules.",
+        "Purchase required sports equipment.",
+        "Inspect all sports equipment.",
+        "Assign referees and officials.",
+        "Prepare competition schedules.",
+        "Ensure participant safety.",
+        "Coordinate opening ceremonies.",
+        "Supervise all sporting activities.",
+        "Coordinate score keeping.",
+        "Prepare prizes and awards.",
+        "Organize prize presentation.",
+        "Prepare contingency activities for bad weather.",
+        "Submit recreation report after camp."
+      ],
+      "authority": [
+        "Suspend unsafe activities.",
+        "Disqualify participants for misconduct.",
+        "Modify competition schedules."
+      ],
+      "successMeasures": [
+        "Activities completed safely.",
+        "High camper participation.",
+        "Fair competition.",
+        "Equipment properly accounted for."
+      ],
+      "tasks": [
+        {
+          "title": "Purchase sports equipment.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 0
+        },
+        {
+          "title": "Inspect equipment.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 1
+        },
+        {
+          "title": "Prepare games timetable.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 2
+        },
+        {
+          "title": "Prepare Inter-Tribe Games.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 3
+        },
+        {
+          "title": "Prepare competition rules.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 4
+        },
+        {
+          "title": "Assign referees.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 5
+        },
+        {
+          "title": "Label prizes.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 6
+        },
+        {
+          "title": "Organize prize presentation.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 7
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Food & Catering Lead",
+      "departmentName": "Food & Catering",
+      "positionName": "Food & Catering Lead",
+      "parentDepartmentName": "People & Programmes",
+      "purpose": "Ensure every camper, volunteer and guest receives safe, timely and adequate meals throughout camp.",
+      "reportsTo": "Deputy Camp Commandant (People & Programmes)",
+      "supervises": [
+        "Food Distribution Team",
+        "Queue Coordinators",
+        "Kitchen Volunteers"
+      ],
+      "responsibilities": [
+        "Develop the camp meal schedule.",
+        "Confirm menu with caterers.",
+        "Coordinate meal preparation.",
+        "Monitor food quality.",
+        "Ensure food hygiene standards.",
+        "Coordinate special diets.",
+        "Prepare allergy meal plans.",
+        "Coordinate guest meals.",
+        "Arrange drinking water stations.",
+        "Assign queue coordinators.",
+        "Monitor serving times.",
+        "Resolve catering issues.",
+        "Monitor food stock.",
+        "Prepare Gala distribution after Holy Ghost Night.",
+        "Submit food operations report."
+      ],
+      "authority": [
+        "Reject meals that fail quality standards.",
+        "Adjust serving arrangements.",
+        "Escalate supplier issues."
+      ],
+      "successMeasures": [
+        "Meals served on schedule.",
+        "Food safety maintained.",
+        "Minimal food shortages.",
+        "Positive camper feedback."
+      ],
+      "tasks": [
+        {
+          "title": "Finalize menu.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 0
+        },
+        {
+          "title": "Finalize meal schedule.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 1
+        },
+        {
+          "title": "Confirm caterers.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 2
+        },
+        {
+          "title": "Prepare allergy meals.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 3
+        },
+        {
+          "title": "Prepare guest meals.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 4
+        },
+        {
+          "title": "Arrange drinking water stations.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 5
+        },
+        {
+          "title": "Print food tags.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 6
+        },
+        {
+          "title": "Assign queue coordinators.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 7
+        },
+        {
+          "title": "Prepare Gala packs.",
+          "sourceGroup": null,
+          "routine": "ONE_TIME",
+          "sortOrder": 8
+        },
+        {
+          "title": "Monitor food hygiene.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 9
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Facilities Lead",
+      "departmentName": "Facilities",
+      "positionName": "Facilities Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Ensure all camp facilities, venues and utilities are prepared, functional, safe and well maintained before, during and after camp.",
+      "reportsTo": "Deputy Camp Commandant (Operations)",
+      "supervises": [
+        "Venue Setup Team",
+        "Maintenance Team",
+        "Sanitation Team",
+        "Facility Assistants"
+      ],
+      "responsibilities": [
+        "Prepare all camp venues before arrival.",
+        "Inspect halls, hostels and common areas.",
+        "Coordinate venue setup for every programme.",
+        "Ensure electricity and lighting are functional.",
+        "Maintain water supply throughout camp.",
+        "Coordinate repairs and maintenance.",
+        "Supervise sanitation activities.",
+        "Ensure waste bins are placed throughout camp.",
+        "Monitor cleanliness of halls and hostels.",
+        "Coordinate daily cleaning schedules.",
+        "Arrange movement of furniture and equipment.",
+        "Ensure emergency exits remain accessible.",
+        "Keep spare bulbs, tools and maintenance materials available.",
+        "Conduct daily facility inspections.",
+        "Prepare facilities for checkout and handover."
+      ],
+      "authority": [
+        "Request immediate repairs.",
+        "Restrict access to unsafe areas.",
+        "Deploy maintenance personnel as required."
+      ],
+      "successMeasures": [
+        "Clean and functional facilities.",
+        "Minimal equipment failures.",
+        "Safe environment throughout camp.",
+        "Quick response to maintenance issues."
+      ],
+      "tasks": [
+        {
+          "title": "Purchase cleaning supplies.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 0
+        },
+        {
+          "title": "Purchase toiletries.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 1
+        },
+        {
+          "title": "Purchase markers.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 2
+        },
+        {
+          "title": "Purchase paper.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 3
+        },
+        {
+          "title": "Purchase gum.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 4
+        },
+        {
+          "title": "Supply buckets.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 5
+        },
+        {
+          "title": "Place rubbish bins.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 6
+        },
+        {
+          "title": "Place dirt bags.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 7
+        },
+        {
+          "title": "Assign cleaners.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 8
+        },
+        {
+          "title": "Prepare cleaning schedule.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 9
+        },
+        {
+          "title": "Arrange pre-camp cleaning.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 10
+        },
+        {
+          "title": "Purchase spare bulbs.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 11
+        },
+        {
+          "title": "Purchase electrical supplies.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 12
+        },
+        {
+          "title": "Monitor waste disposal.",
+          "sourceGroup": "Facilities Lead",
+          "routine": "ONE_TIME",
+          "sortOrder": 13
+        }
+      ]
+    },
+    {
+      "sourceTitle": "VMD Head",
+      "departmentName": "Venue Management Department (VMD)",
+      "positionName": "VMD Head",
+      "parentDepartmentName": "Operations",
+      "purpose": "Lead the Venue Management Department by ensuring every camp venue is clean, properly arranged, fully equipped and restored after every activity.",
+      "reportsTo": "Deputy Camp Commandant (Operations)",
+      "supervises": [
+        "VMD Hall & Environs Lead",
+        "VMD Hostel Lead",
+        "VMD Food Lead"
+      ],
+      "responsibilities": [
+        "Develop the venue preparation plan for the entire camp.",
+        "Assign VMD personnel to all venues.",
+        "Coordinate venue setup before every activity.",
+        "Ensure all venues are cleaned before campers arrive.",
+        "Ensure venues are restored immediately after every programme.",
+        "Conduct routine inspections of all camp venues.",
+        "Coordinate venue turnaround between consecutive activities.",
+        "Work closely with the Programme Lead to understand venue requirements.",
+        "Work with the Audio/Visual Lead during stage setup.",
+        "Work with the Food Lead before and after meal service.",
+        "Work with the Accommodation Lead to maintain hostel readiness.",
+        "Report maintenance issues to the Facilities Lead.",
+        "Ensure cleaning supplies are available for every VMD team.",
+        "Prepare daily venue readiness reports.",
+        "Conduct final venue inspection before camp closes."
+      ],
+      "authority": [
+        "Reassign VMD personnel as needed.",
+        "Delay venue handover if minimum standards are not met.",
+        "Escalate maintenance issues requiring urgent attention."
+      ],
+      "successMeasures": [
+        "Every venue ready before scheduled activities.",
+        "Fast turnaround between programmes.",
+        "Clean venues throughout camp.",
+        "Minimal venue-related complaints."
+      ],
+      "tasks": [
+        {
+          "title": "Recruit and assign VMD personnel to all areas.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Assign VMD Hall & Environs Lead.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 1
+        },
+        {
+          "title": "Assign VMD Hostel Lead.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Assign VMD Food Lead.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Develop daily cleaning schedules.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 4
+        },
+        {
+          "title": "Develop venue setup schedules.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 5
+        },
+        {
+          "title": "Prepare venue inspection checklist.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 6
+        },
+        {
+          "title": "Conduct final inspection before camp opens.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 7
+        },
+        {
+          "title": "Prepare cleaning duty roster.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 8
+        },
+        {
+          "title": "Procure cleaning equipment and consumables.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 9
+        },
+        {
+          "title": "Prepare VMD identification tags.",
+          "sourceGroup": "Planning",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 10
+        },
+        {
+          "title": "Conduct morning inspection of every venue.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 11
+        },
+        {
+          "title": "Confirm halls are ready before the first programme.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 12
+        },
+        {
+          "title": "Confirm dining areas are ready before every meal.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 13
+        },
+        {
+          "title": "Confirm hostels are clean before campers return.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 14
+        },
+        {
+          "title": "Respond to venue requests from Programme Team.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 15
+        },
+        {
+          "title": "Respond to emergency cleaning requests.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 16
+        },
+        {
+          "title": "Conduct midday inspection.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 17
+        },
+        {
+          "title": "Recover VMD equipment.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 18
+        },
+        {
+          "title": "Inspect all venues before handover.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 19
+        },
+        {
+          "title": "Submit VMD report.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 20
+        },
+        {
+          "title": "Clean projector area.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 21
+        },
+        {
+          "title": "Clean entrances.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 22
+        },
+        {
+          "title": "Clean exits.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 23
+        },
+        {
+          "title": "Clean walkways.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 24
+        },
+        {
+          "title": "Empty all bins.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 25
+        },
+        {
+          "title": "Replace refuse bags.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 26
+        },
+        {
+          "title": "Clean breakout rooms.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 27
+        },
+        {
+          "title": "Place directional signs.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 28
+        },
+        {
+          "title": "Place waste bins around halls.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 29
+        },
+        {
+          "title": "Inspect toilets nearest the halls.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 30
+        },
+        {
+          "title": "Arrange chairs.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 31
+        },
+        {
+          "title": "Arrange front tables.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 32
+        },
+        {
+          "title": "Place reserved seating.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 33
+        },
+        {
+          "title": "Confirm stage is clean.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 34
+        },
+        {
+          "title": "Confirm hall floor is clean.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 35
+        },
+        {
+          "title": "Empty rubbish bins.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 36
+        },
+        {
+          "title": "Wipe lectern.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 37
+        },
+        {
+          "title": "Wipe tables.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 38
+        },
+        {
+          "title": "Confirm room temperature is comfortable.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 39
+        },
+        {
+          "title": "Notify Audio/Visual that hall is ready.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 40
+        },
+        {
+          "title": "Remove litter.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 41
+        },
+        {
+          "title": "Rearrange displaced chairs.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 42
+        },
+        {
+          "title": "Clean stage.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 43
+        },
+        {
+          "title": "Clean speaker area.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 44
+        },
+        {
+          "title": "Empty bins.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 45
+        },
+        {
+          "title": "Sweep floor.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 46
+        },
+        {
+          "title": "Mop where necessary.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 47
+        },
+        {
+          "title": "Prepare hall for next programme.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 48
+        },
+        {
+          "title": "Deep clean hall.",
+          "sourceGroup": "End of Day",
+          "routine": "END_OF_DAY",
+          "sortOrder": 49
+        },
+        {
+          "title": "Deep clean stage.",
+          "sourceGroup": "End of Day",
+          "routine": "END_OF_DAY",
+          "sortOrder": 50
+        },
+        {
+          "title": "Lock storage areas.",
+          "sourceGroup": "End of Day",
+          "routine": "END_OF_DAY",
+          "sortOrder": 51
+        },
+        {
+          "title": "Prepare hall for next morning.",
+          "sourceGroup": "End of Day",
+          "routine": "END_OF_DAY",
+          "sortOrder": 52
+        }
+      ]
+    },
+    {
+      "sourceTitle": "VMD Hall & Environs Lead",
+      "departmentName": "Venue Management Department (VMD)",
+      "positionName": "VMD Hall & Environs Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Ensure all halls, stages, classrooms and surrounding outdoor areas are clean, properly arranged and ready before every programme.",
+      "reportsTo": "VMD Head",
+      "supervises": [],
+      "responsibilities": [
+        "Arrange chairs according to programme requirements.",
+        "Prepare stage furniture.",
+        "Set up speaker tables.",
+        "Prepare podium and lectern.",
+        "Ensure stage area is clean before every session.",
+        "Sweep and clean hall floors before programmes.",
+        "Clean surrounding walkways and entrances.",
+        "Empty rubbish bins around programme venues.",
+        "Replenish dustbins with fresh liners.",
+        "Coordinate with Audio/Visual before opening the hall.",
+        "Reset halls after every session.",
+        "Rearrange seating for different activities.",
+        "Prepare breakout rooms before use.",
+        "Inspect halls before handing over for programmes.",
+        "Restore halls after each day's activities."
+      ],
+      "authority": [
+        "Restrict access while venue setup is in progress.",
+        "Request additional manpower from the VMD Head."
+      ],
+      "successMeasures": [
+        "Programme venues always ready.",
+        "Clean hall environment.",
+        "Efficient venue turnaround."
+      ],
+      "tasks": [
+        {
+          "title": "Arrange chairs according to the programme layout.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 0
+        },
+        {
+          "title": "Set up stage furniture.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 1
+        },
+        {
+          "title": "Set up speaker tables.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 2
+        },
+        {
+          "title": "Prepare podium and lectern.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 3
+        },
+        {
+          "title": "Clean stage before every session.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 4
+        },
+        {
+          "title": "Sweep and clean hall floors.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 5
+        },
+        {
+          "title": "Clean entrances, exits and surrounding walkways.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 6
+        },
+        {
+          "title": "Empty venue rubbish bins.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 7
+        },
+        {
+          "title": "Replace bin liners.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 8
+        },
+        {
+          "title": "Prepare breakout rooms.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 9
+        },
+        {
+          "title": "Coordinate venue readiness with Audio/Visual.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 10
+        },
+        {
+          "title": "Inspect venue before handing it over.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 11
+        },
+        {
+          "title": "Reset seating after every session.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 12
+        },
+        {
+          "title": "Clean and restore venue after each activity.",
+          "sourceGroup": "After Every Session",
+          "routine": "AFTER_PROGRAMME",
+          "sortOrder": 13
+        },
+        {
+          "title": "Request additional manpower when required.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 14
+        }
+      ]
+    },
+    {
+      "sourceTitle": "VMD Hostel Lead",
+      "departmentName": "Venue Management Department (VMD)",
+      "positionName": "VMD Hostel Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Maintain clean, organized and presentable hostels while supporting the Accommodation team throughout camp.",
+      "reportsTo": "VMD Head",
+      "supervises": [],
+      "responsibilities": [
+        "Inspect every hostel before camper arrival.",
+        "Prepare hostel rooms before occupancy.",
+        "Ensure hostel toilets are cleaned regularly.",
+        "Coordinate hostel cleaning schedules.",
+        "Empty hostel waste bins.",
+        "Replace rubbish bags.",
+        "Monitor cleanliness of corridors.",
+        "Ensure hostel entrances remain clean.",
+        "Restock hostel cleaning materials.",
+        "Coordinate room cleaning after checkout.",
+        "Support Hostel Coordinators during inspections.",
+        "Report maintenance issues to the Facilities Lead.",
+        "Prepare hostels for final handover."
+      ],
+      "authority": [
+        "Assign hostel cleaning teams.",
+        "Request additional cleaning support."
+      ],
+      "successMeasures": [
+        "Clean hostels throughout camp.",
+        "Well-maintained hostel facilities.",
+        "Positive camper feedback on accommodation."
+      ],
+      "tasks": [
+        {
+          "title": "Inspect all hostels before camper arrival.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 0
+        },
+        {
+          "title": "Clean and prepare hostel rooms.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 1
+        },
+        {
+          "title": "Clean hostel toilets and bathrooms.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 2
+        },
+        {
+          "title": "Prepare and enforce hostel cleaning schedule.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 3
+        },
+        {
+          "title": "Empty hostel waste bins.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 4
+        },
+        {
+          "title": "Replace rubbish bags.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 5
+        },
+        {
+          "title": "Clean hostel corridors.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 6
+        },
+        {
+          "title": "Clean hostel entrances and common areas.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 7
+        },
+        {
+          "title": "Restock cleaning materials.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 8
+        },
+        {
+          "title": "Support Hostel Coordinators during hostel inspections.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 9
+        },
+        {
+          "title": "Report maintenance issues to Facilities.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 10
+        },
+        {
+          "title": "Clean rooms after camper checkout.",
+          "sourceGroup": "After checkout",
+          "routine": "AFTER_CHECKOUT",
+          "sortOrder": 11
+        },
+        {
+          "title": "Conduct final hostel inspection.",
+          "sourceGroup": "After checkout",
+          "routine": "AFTER_CHECKOUT",
+          "sortOrder": 12
+        },
+        {
+          "title": "Prepare hostels for final handover.",
+          "sourceGroup": "After checkout",
+          "routine": "AFTER_CHECKOUT",
+          "sortOrder": 13
+        },
+        {
+          "title": "Request additional cleaning support when required.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 14
+        }
+      ]
+    },
+    {
+      "sourceTitle": "VMD Food Lead",
+      "departmentName": "Venue Management Department (VMD)",
+      "positionName": "VMD Food Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Prepare and maintain dining venues before, during and after every meal service while supporting the Food & Catering team.",
+      "reportsTo": "VMD Head",
+      "supervises": [],
+      "responsibilities": [
+        "Prepare dining hall before every meal.",
+        "Arrange serving tables.",
+        "Arrange eating areas.",
+        "Set up queue barriers where required.",
+        "Ensure dining area is clean before serving begins.",
+        "Monitor cleanliness throughout meal service.",
+        "Empty waste bins regularly.",
+        "Clean tables after every meal.",
+        "Sweep and mop dining areas.",
+        "Coordinate waste disposal after meals.",
+        "Work with the Food Lead to improve meal flow.",
+        "Ensure handwashing stations remain stocked.",
+        "Prepare dining venue for the next meal.",
+        "Conduct final cleanup after the last meal each day."
+      ],
+      "authority": [
+        "Delay meal service until the venue meets hygiene standards.",
+        "Request additional cleaning support when required."
+      ],
+      "successMeasures": [
+        "Clean dining environment.",
+        "Efficient meal turnover.",
+        "Hygienic serving areas.",
+        "Minimal waste accumulation."
+      ],
+      "tasks": [
+        {
+          "title": "Clean and prepare dining area before every meal.",
+          "sourceGroup": "Before meal",
+          "routine": "BEFORE_MEAL",
+          "sortOrder": 0
+        },
+        {
+          "title": "Arrange serving tables.",
+          "sourceGroup": "Before meal",
+          "routine": "BEFORE_MEAL",
+          "sortOrder": 1
+        },
+        {
+          "title": "Arrange dining tables and chairs.",
+          "sourceGroup": "Before meal",
+          "routine": "BEFORE_MEAL",
+          "sortOrder": 2
+        },
+        {
+          "title": "Set up queue barriers.",
+          "sourceGroup": "Before meal",
+          "routine": "BEFORE_MEAL",
+          "sortOrder": 3
+        },
+        {
+          "title": "Set up waste bins.",
+          "sourceGroup": "Before meal",
+          "routine": "BEFORE_MEAL",
+          "sortOrder": 4
+        },
+        {
+          "title": "Check handwashing stations.",
+          "sourceGroup": "Before meal",
+          "routine": "BEFORE_MEAL",
+          "sortOrder": 5
+        },
+        {
+          "title": "Refill soap and water at handwashing stations.",
+          "sourceGroup": "Before meal",
+          "routine": "BEFORE_MEAL",
+          "sortOrder": 6
+        },
+        {
+          "title": "Monitor dining area cleanliness during meals.",
+          "sourceGroup": "During meal",
+          "routine": "DURING_MEAL",
+          "sortOrder": 7
+        },
+        {
+          "title": "Clear food waste and overflowing bins.",
+          "sourceGroup": "During meal",
+          "routine": "DURING_MEAL",
+          "sortOrder": 8
+        },
+        {
+          "title": "Coordinate teenagers to wash plates",
+          "sourceGroup": "After meal",
+          "routine": "AFTER_MEAL",
+          "sortOrder": 9
+        },
+        {
+          "title": "Clean tables after meals.",
+          "sourceGroup": "After meal",
+          "routine": "AFTER_MEAL",
+          "sortOrder": 10
+        },
+        {
+          "title": "Sweep dining area.",
+          "sourceGroup": "After meal",
+          "routine": "AFTER_MEAL",
+          "sortOrder": 11
+        },
+        {
+          "title": "Mop dining area.",
+          "sourceGroup": "After meal",
+          "routine": "AFTER_MEAL",
+          "sortOrder": 12
+        },
+        {
+          "title": "Clean serving areas.",
+          "sourceGroup": "After meal",
+          "routine": "AFTER_MEAL",
+          "sortOrder": 13
+        },
+        {
+          "title": "Coordinate waste disposal.",
+          "sourceGroup": "After meal",
+          "routine": "AFTER_MEAL",
+          "sortOrder": 14
+        },
+        {
+          "title": "Reset dining area for the next meal.",
+          "sourceGroup": "After meal",
+          "routine": "AFTER_MEAL",
+          "sortOrder": 15
+        },
+        {
+          "title": "Conduct final dining-area cleanup each day.",
+          "sourceGroup": "After meal",
+          "routine": "AFTER_MEAL",
+          "sortOrder": 16
+        },
+        {
+          "title": "Report venue issues to the VMD Head.",
+          "sourceGroup": "After meal",
+          "routine": "AFTER_MEAL",
+          "sortOrder": 17
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Medical Lead",
+      "departmentName": "Medical",
+      "positionName": "Medical Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Provide medical care and emergency response services while promoting the health and wellbeing of everyone at camp.",
+      "reportsTo": "Deputy Camp Commandant (Operations)",
+      "supervises": [
+        "Doctors",
+        "Nurses",
+        "First Aid Officers",
+        "Medical Volunteers"
+      ],
+      "responsibilities": [
+        "Establish the camp medical station.",
+        "Maintain medical records.",
+        "Review camper medical information before camp.",
+        "Monitor campers with medical conditions.",
+        "Maintain first aid supplies.",
+        "Stock emergency medications.",
+        "Coordinate ambulance services.",
+        "Maintain contact with nearby hospitals.",
+        "Respond to medical emergencies.",
+        "Record all medical incidents.",
+        "Educate staff on emergency procedures.",
+        "Monitor hygiene practices across camp.",
+        "Prepare daily medical reports.",
+        "Prepare post-camp medical report."
+      ],
+      "authority": [
+        "Isolate campers where medically necessary.",
+        "Refer serious cases to hospital.",
+        "Recommend suspension of unsafe activities."
+      ],
+      "successMeasures": [
+        "Rapid medical response.",
+        "Well-stocked medical station.",
+        "Accurate medical documentation.",
+        "Effective emergency coordination."
+      ],
+      "tasks": [
+        {
+          "title": "Purchase medicines.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Stock first aid.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 1
+        },
+        {
+          "title": "Stock ORS.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Stock ice packs.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Prepare medical station.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 4
+        },
+        {
+          "title": "Display medical signage.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 5
+        },
+        {
+          "title": "Confirm ambulance availability.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 6
+        },
+        {
+          "title": "Confirm hospital contact.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 7
+        },
+        {
+          "title": "Maintain medical register.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 8
+        },
+        {
+          "title": "Record incidents.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 9
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Security Lead",
+      "departmentName": "Security",
+      "positionName": "Security Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Protect campers, staff, visitors and camp property by maintaining a safe and secure environment.",
+      "reportsTo": "Deputy Camp Commandant (Operations)",
+      "supervises": [
+        "Security Officers",
+        "Patrol Teams",
+        "Gate Officers"
+      ],
+      "responsibilities": [
+        "Develop the camp security plan.",
+        "Prepare security duty rosters.",
+        "Brief all security personnel.",
+        "Control access to camp.",
+        "Verify visitor authorization.",
+        "Patrol camp premises.",
+        "Secure programme venues.",
+        "Supervise overnight security.",
+        "Coordinate emergency evacuations.",
+        "Monitor crowd movement.",
+        "Secure valuable equipment.",
+        "Investigate incidents.",
+        "Maintain security logbook.",
+        "Submit daily security reports."
+      ],
+      "authority": [
+        "Remove unauthorized persons.",
+        "Suspend unsafe activities.",
+        "Escalate security threats immediately."
+      ],
+      "successMeasures": [
+        "Safe camp environment.",
+        "Effective access control.",
+        "Minimal security incidents.",
+        "Accurate incident reporting."
+      ],
+      "tasks": [
+        {
+          "title": "Prepare security roster.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 0
+        },
+        {
+          "title": "Brief security personnel.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 1
+        },
+        {
+          "title": "Assign patrol routes.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 2
+        },
+        {
+          "title": "Prepare overnight patrol.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 3
+        },
+        {
+          "title": "Restrict unauthorized access.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 4
+        },
+        {
+          "title": "Prepare evacuation procedures.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 5
+        },
+        {
+          "title": "Confirm every officer has a torchlight.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 6
+        },
+        {
+          "title": "Record security incidents.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 7
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Transport & Logistics Lead",
+      "departmentName": "Transport & Logistics",
+      "positionName": "Transport & Logistics Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Coordinate the movement of campers, officials, equipment and supplies safely and efficiently.",
+      "reportsTo": "Deputy Camp Commandant (Operations)",
+      "supervises": [
+        "Drivers",
+        "Transport Officers",
+        "Logistics Assistants"
+      ],
+      "responsibilities": [
+        "Develop transportation schedules.",
+        "Coordinate pickup centres.",
+        "Arrange return transportation.",
+        "Coordinate vehicle assignments.",
+        "Supervise loading and unloading.",
+        "Coordinate luggage movement.",
+        "Transport mattresses and equipment.",
+        "Maintain transport records.",
+        "Coordinate guest transportation.",
+        "Monitor vehicle availability.",
+        "Resolve transport issues promptly.",
+        "Prepare logistics report after camp."
+      ],
+      "authority": [
+        "Assign vehicles.",
+        "Adjust transportation schedules.",
+        "Escalate transport emergencies."
+      ],
+      "successMeasures": [
+        "On-time transportation.",
+        "Safe movement of campers.",
+        "Efficient logistics.",
+        "Minimal transport delays."
+      ],
+      "tasks": [
+        {
+          "title": "Finalize transport schedule.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Track all buses on transit",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 1
+        },
+        {
+          "title": "Confirm buses.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Confirm pickup centres.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Confirm return trips.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 4
+        },
+        {
+          "title": "Arrange mattress transportation.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 5
+        },
+        {
+          "title": "Coordinate loading and unloading.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 6
+        },
+        {
+          "title": "Supervise luggage movement.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 7
+        }
+      ]
+    },
+    {
+      "sourceTitle": "IT & Digital Systems Lead",
+      "departmentName": "IT & Digital Systems",
+      "positionName": "IT & Digital Systems Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Ensure all digital systems used during camp operate reliably and securely.",
+      "reportsTo": "Deputy Camp Commandant (Operations)",
+      "supervises": [
+        "IT Support Officers",
+        "Registration Systems Officers"
+      ],
+      "responsibilities": [
+        "Prepare registration software.",
+        "Test QR code systems.",
+        "Configure printers.",
+        "Configure laptops.",
+        "Test internet connectivity.",
+        "Back up camp data.",
+        "Back up presentations.",
+        "Maintain charging stations.",
+        "Support digital check-in.",
+        "Troubleshoot technology issues.",
+        "Maintain digital records.",
+        "Secure camp data.",
+        "Provide user support.",
+        "Prepare post-camp technology report."
+      ],
+      "authority": [
+        "Restrict access to digital systems.",
+        "Approve technical changes.",
+        "Restore systems during outages."
+      ],
+      "successMeasures": [
+        "Reliable digital systems.",
+        "Fast issue resolution.",
+        "Secure data.",
+        "Successful QR registration."
+      ],
+      "tasks": [
+        {
+          "title": "Test microphones.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 0
+        },
+        {
+          "title": "Prepare backup microphones.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 1
+        },
+        {
+          "title": "Test sound system.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 2
+        },
+        {
+          "title": "Test projectors.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 3
+        },
+        {
+          "title": "Test presentation laptops.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 4
+        },
+        {
+          "title": "Prepare extension cables.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 5
+        },
+        {
+          "title": "Prepare HDMI cables.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 6
+        },
+        {
+          "title": "Prepare adapters.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 7
+        },
+        {
+          "title": "Prepare spare batteries.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 8
+        },
+        {
+          "title": "Set up TV stage timer.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 9
+        },
+        {
+          "title": "Prepare projector.",
+          "sourceGroup": "Before Every Session",
+          "routine": "BEFORE_PROGRAMME",
+          "sortOrder": 10
+        },
+        {
+          "title": "Support every programme session.",
+          "sourceGroup": "During Every Session",
+          "routine": "DURING_PROGRAMME",
+          "sortOrder": 11
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Communications Lead",
+      "departmentName": "Communications",
+      "positionName": "Communications Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Maintain reliable communication between all departments before, during and after camp.",
+      "reportsTo": "Deputy Camp Commandant (Operations)",
+      "supervises": [
+        "Radio Operators",
+        "Communications Assistants"
+      ],
+      "responsibilities": [
+        "Assign walkie-talkies.",
+        "Establish communication channels.",
+        "Assign radio call signs.",
+        "Test communication equipment.",
+        "Maintain communication log.",
+        "Coordinate emergency communication.",
+        "Replace faulty radios.",
+        "Monitor communication discipline.",
+        "Maintain contact lists.",
+        "Support operational coordination.",
+        "Prepare communication report."
+      ],
+      "authority": [
+        "Assign communication channels.",
+        "Reallocate communication equipment.",
+        "Escalate communication failures."
+      ],
+      "successMeasures": [
+        "Reliable communication.",
+        "Fast information flow.",
+        "Minimal equipment failure.",
+        "Effective emergency coordination."
+      ],
+      "tasks": [
+        {
+          "title": "Assign walkie-talkies.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 0
+        },
+        {
+          "title": "Label radios.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 1
+        },
+        {
+          "title": "Assign radio channels.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 2
+        },
+        {
+          "title": "Assign call signs.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 3
+        },
+        {
+          "title": "Test radio communication.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 4
+        },
+        {
+          "title": "Maintain communication log.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 5
+        },
+        {
+          "title": "Replace faulty radios.",
+          "sourceGroup": "Daily Operations",
+          "routine": "DAILY",
+          "sortOrder": 6
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Media Lead",
+      "departmentName": "Media",
+      "positionName": "Media Lead",
+      "parentDepartmentName": "Operations",
+      "purpose": "Capture, preserve and communicate the story of the camp through photography, videography and approved digital content. Provide technical support for every programme session by managing audio, lighting and presentation systems.",
+      "reportsTo": "Deputy Camp Commandant (Operations)",
+      "supervises": [
+        "Photographers",
+        "Videographers",
+        "Content Editors",
+        "Sound Engineers",
+        "Lighting Operators",
+        "Projection Operators",
+        "Stage Technicians"
+      ],
+      "responsibilities": [
+        "Develop media coverage plan.",
+        "Assign photographers.",
+        "Assign videographers.",
+        "Capture major sessions.",
+        "Capture worship moments.",
+        "Capture games and activities.",
+        "Capture testimonies.",
+        "Produce daily highlights.",
+        "Back up media daily.",
+        "Organize media archive.",
+        "Coordinate with church media team.",
+        "Produce post-camp media package.",
+        "Ensure responsible use of camper images.",
+        "Set up sound equipment.",
+        "Test microphones.",
+        "Prepare backup microphones.",
+        "Operate audio systems.",
+        "Operate lighting systems.",
+        "Prepare projectors.",
+        "Prepare presentation laptops.",
+        "Display stage timer.",
+        "Coordinate technical rehearsals.",
+        "Support guest speakers.",
+        "Maintain backup equipment.",
+        "Resolve technical faults.",
+        "Coordinate with Programme Lead.",
+        "Prepare technical report after camp."
+      ],
+      "authority": [
+        "Assign media personnel.",
+        "Approve official media releases.",
+        "Prioritize coverage of major events.",
+        "Delay sessions for critical technical failures.",
+        "Replace faulty equipment.",
+        "Assign technical personnel."
+      ],
+      "successMeasures": [
+        "Complete media coverage.",
+        "Secure media archive.",
+        "High-quality photographs and videos.",
+        "Timely delivery of media content.",
+        "High-quality audio.",
+        "Reliable presentations.",
+        "Minimal technical interruptions.",
+        "Successful technical support."
+      ],
+      "tasks": [
+        {
+          "title": "Assign photographers.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Assign videographers.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 1
+        },
+        {
+          "title": "Prepare media schedule.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Prepare storage devices.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Prepare batteries.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 4
+        },
+        {
+          "title": "Prepare camera equipment.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 5
+        },
+        {
+          "title": "Cover all major sessions.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 6
+        },
+        {
+          "title": "Cover games.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 7
+        },
+        {
+          "title": "Cover worship sessions.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 8
+        },
+        {
+          "title": "Cover guest ministers.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 9
+        },
+        {
+          "title": "Back up media daily.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 10
+        },
+        {
+          "title": "Organize daily highlights.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 11
+        },
+        {
+          "title": "Archive all media.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 12
+        },
+        {
+          "title": "Produce final media package.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 13
+        },
+        {
+          "title": "Submit media report.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 14
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Hostel Coordinators",
+      "departmentName": "Accommodation",
+      "positionName": "Hostel Coordinators",
+      "parentDepartmentName": "People & Programmes",
+      "purpose": "Manage the day-to-day operations, welfare, and discipline within assigned hostels.",
+      "reportsTo": "Accommodation Lead",
+      "supervises": [
+        "Floor Supervisors",
+        "Hostel Volunteers"
+      ],
+      "responsibilities": [
+        "Receive campers into hostels.",
+        "Verify room assignments.",
+        "Conduct room inspections.",
+        "Monitor hostel cleanliness.",
+        "Supervise lights-out.",
+        "Conduct nightly roll calls.",
+        "Report maintenance issues.",
+        "Monitor camper welfare.",
+        "Resolve hostel disputes.",
+        "Enforce hostel rules.",
+        "Coordinate emergency evacuations.",
+        "Inspect rooms before checkout."
+      ],
+      "authority": [
+        "Reassign beds where necessary.",
+        "Enforce hostel rules.",
+        "Escalate disciplinary matters."
+      ],
+      "successMeasures": [
+        "Well-managed hostels.",
+        "Accurate nightly attendance.",
+        "Clean accommodation.",
+        "Safe hostel environment."
+      ],
+      "tasks": [
+        {
+          "title": "Print and paste hostel labels on doors",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Inspect assigned hostel.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 1
+        },
+        {
+          "title": "Verify room allocations.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Brief hostel volunteers.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Prepare hostel attendance register.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 4
+        },
+        {
+          "title": "Receive campers.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 5
+        },
+        {
+          "title": "Conduct room inspections.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 6
+        },
+        {
+          "title": "Conduct nightly roll calls.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 7
+        },
+        {
+          "title": "Monitor hostel discipline.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 8
+        },
+        {
+          "title": "Report maintenance issues.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 9
+        },
+        {
+          "title": "Monitor camper welfare.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 10
+        },
+        {
+          "title": "Inspect rooms after checkout.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 11
+        },
+        {
+          "title": "Report damages.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 12
+        },
+        {
+          "title": "Submit hostel report.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 13
+        }
+      ]
+    },
+    {
+      "sourceTitle": "Tribe Heads",
+      "departmentName": "Tribe Heads",
+      "positionName": "Tribe Heads",
+      "parentDepartmentName": "People & Programmes",
+      "purpose": "Provide leadership, mentorship and pastoral care for campers within an assigned tribe while promoting participation and teamwork.",
+      "reportsTo": "Deputy Camp Commandant (People & Programmes)",
+      "supervises": [
+        "Tribe Teachers",
+        "Tribe Volunteers"
+      ],
+      "responsibilities": [
+        "Welcome campers into the tribe.",
+        "Build relationships with campers.",
+        "Conduct tribe meetings.",
+        "Lead daily devotion.",
+        "Monitor attendance.",
+        "Encourage participation.",
+        "Support games and competitions.",
+        "Identify welfare concerns.",
+        "Encourage spiritual growth.",
+        "Coordinate with Hostel Coordinators.",
+        "Maintain tribe records.",
+        "Communicate announcements.",
+        "Submit daily tribe reports.",
+        "Recommend outstanding campers for recognition.",
+        "Support camper follow-up after camp.",
+        "Monitor camper wellbeing.",
+        "Respond to welfare concerns.",
+        "Coordinate care for vulnerable campers.",
+        "Prepare care packs for sick campers.",
+        "Coordinate birthday recognition.",
+        "Support homesick campers.",
+        "Liaise with parents where necessary.",
+        "Coordinate waiting area during pickup.",
+        "Work closely with Medical and Prayer teams.",
+        "Maintain welfare records.",
+        "Escalate safeguarding concerns immediately.",
+        "Prepare welfare report after camp."
+      ],
+      "authority": [
+        "Organize tribe activities.",
+        "Recommend disciplinary action.",
+        "Escalate welfare concerns.",
+        "Recommend intervention for camper welfare.",
+        "Coordinate temporary support measures."
+      ],
+      "successMeasures": [
+        "High tribe participation.",
+        "Positive camper engagement.",
+        "Accurate attendance records.",
+        "Strong teamwork and discipline.",
+        "Welfare concerns addressed promptly.",
+        "Positive camper experience.",
+        "Effective parent communication.",
+        "Accurate welfare documentation."
+      ],
+      "tasks": [
+        {
+          "title": "Meet assigned teachers.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 0
+        },
+        {
+          "title": "Review tribe roster.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 1
+        },
+        {
+          "title": "Prepare tribe identity materials.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 2
+        },
+        {
+          "title": "Plan tribe engagement activities.",
+          "sourceGroup": "Before Camp",
+          "routine": "BEFORE_CAMP",
+          "sortOrder": 3
+        },
+        {
+          "title": "Welcome campers.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 4
+        },
+        {
+          "title": "Conduct daily tribe meetings.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 5
+        },
+        {
+          "title": "Take attendance.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 6
+        },
+        {
+          "title": "Encourage participation.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 7
+        },
+        {
+          "title": "Identify welfare concerns.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 8
+        },
+        {
+          "title": "Communicate camp announcements.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 9
+        },
+        {
+          "title": "Coordinate tribe competitions.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 10
+        },
+        {
+          "title": "Mentor campers.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 11
+        },
+        {
+          "title": "Submit daily tribe reports.",
+          "sourceGroup": "During Camp",
+          "routine": "DAILY",
+          "sortOrder": 12
+        },
+        {
+          "title": "Submit tribe report.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 13
+        },
+        {
+          "title": "Submit outstanding camper recommendations.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 14
+        },
+        {
+          "title": "Submit follow-up recommendations.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 15
+        },
+        {
+          "title": "Prepare birthday recognition list.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 16
+        },
+        {
+          "title": "Prepare sick camper care packs.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 17
+        },
+        {
+          "title": "Monitor camper welfare.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 18
+        },
+        {
+          "title": "Coordinate parent enquiries.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 19
+        },
+        {
+          "title": "Prepare pickup waiting area.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 20
+        },
+        {
+          "title": "Supervise waiting campers.",
+          "sourceGroup": "After Camp",
+          "routine": "AFTER_CAMP",
+          "sortOrder": 21
+        }
+      ]
+    }
+  ]
+}
