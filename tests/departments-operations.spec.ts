@@ -139,12 +139,42 @@ test.describe("JD Departments and daily operations", () => {
     await expect(page.getByRole("button", { name: "Submit department report" })).toBeVisible();
   });
 
+  test("unified Departments hub provides cards, list, organogram, contacts, and legacy redirects", async ({ page }) => {
+    await loginWithPassword(page, ownerEmail, "password123");
+    await page.goto("/admin/departments");
+    await expect(page.getByRole("heading", { name: "Departments" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Departments", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Organogram" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Contacts" })).toBeVisible();
+
+    await page.getByRole("button", { name: "List view" }).click();
+    await expect(page.getByRole("columnheader", { name: "Department" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Venue Management Department (VMD)" })).toBeVisible();
+    await page.getByRole("button", { name: "Card view" }).click();
+    await expect(page.getByRole("button").filter({ hasText: "Venue Management Department (VMD)" })).toBeVisible();
+
+    await page.getByRole("tab", { name: "Contacts" }).click();
+    await expect(page.getByText("Camp contacts", { exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder(/Search people, departments/i)).toBeVisible();
+
+    await page.getByRole("tab", { name: "Organogram" }).click();
+    await expect(page.getByRole("button", { name: "Chart" })).toBeVisible();
+
+    await page.goto("/admin/camp-structure");
+    await expect(page).toHaveURL(/\/admin\/departments\?view=contacts/);
+    await expect(page.getByRole("tab", { name: "Contacts" })).toHaveAttribute("aria-selected", "true");
+  });
+
   test("VMD volunteer gets a mobile guide and completes today’s duties in one tap", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await loginWithPassword(page, volunteerEmail, "password123");
     await page.goto("/volunteer/department");
+    await expect(page).toHaveURL(/\/volunteer\/departments\?view=mine/);
+    await expect(page.getByRole("tab", { name: "My department" })).toBeVisible();
+    expect(await page.getByRole("tab").allTextContents()).toEqual(["My department", "Departments", "Contacts", "Organogram"]);
     await expect(page.getByRole("heading", { name: "My department" })).toBeVisible();
-    await expect(page.getByText("Venue Management Department (VMD) · VMD Hall & Environs Lead")).toBeVisible();
+    await expect(page.getByText("Venue Management Department (VMD)", { exact: true })).toBeVisible();
+    await expect(page.getByText("VMD Hall & Environs Lead", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Today’s progress")).toBeVisible();
     const duty = page.getByRole("button").filter({ hasText: "Arrange chairs according to the programme layout." });
     await expect(duty).toBeVisible();
@@ -194,7 +224,7 @@ test.describe("JD Departments and daily operations", () => {
   test("teacher dashboard links directly to upload or replace the profile photo", async ({ page }) => {
     await loginWithPassword(page, teacherEmail, "password123");
     await page.goto("/teacher");
-    await page.getByRole("button", { name: "Replace photo" }).click();
+    await page.getByRole("link", { name: "Replace photo" }).click();
     await expect(page).toHaveURL(/\/profile\?tab=photo/);
     await expect(page.getByRole("heading", { name: "Profile Photo" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Upload Image File" })).toBeVisible();

@@ -8,6 +8,7 @@ import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { TribeGrid } from "@/components/orgStructure/TribeGrid";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { TribeHub } from "@/components/tribes/TribeHub";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
@@ -35,7 +36,12 @@ export default function TribesPage() {
       {!campId ? (
         <EmptyState title="No active camp" description="Set an active camp before managing tribes." />
       ) : (
-        <TribeGrid organizationId={organizationId} campId={campId} />
+        <div className="space-y-10">
+          <TribeHub organizationId={organizationId} campId={campId} admin />
+          <section className="border-t border-border-default pt-8">
+            <TribeGrid organizationId={organizationId} campId={campId} />
+          </section>
+        </div>
       )}
     </AppShell>
   );

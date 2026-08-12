@@ -21,7 +21,7 @@ function todayKey() {
 }
 function human(value: string) { return value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
 
-export function MyDepartmentWorkspace() {
+export function MyDepartmentWorkspace({ embedded = false }: { embedded?: boolean }) {
   const { data: session } = useSession();
   const toast = useToast();
   const utils = api.useUtils();
@@ -31,6 +31,9 @@ export function MyDepartmentWorkspace() {
   const query = api.departmentOperations.myDepartment.useQuery({ campId: camp?.id ?? "", date }, { enabled: !!camp?.id });
   const data = query.data;
   const [guideOpen, setGuideOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [departmentPurpose, setDepartmentPurpose] = useState("");
+  const [departmentDescription, setDepartmentDescription] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -58,6 +61,11 @@ export function MyDepartmentWorkspace() {
     onSuccess: () => { toast.success("Checklist item updated for future duties."); setEditDuty(null); utils.departmentOperations.myDepartment.invalidate(); },
     onError: (error) => toast.error(error.message),
   });
+  const updateDepartment = api.departmentOperations.updateDepartment.useMutation({
+    onSuccess: () => { toast.success("Department details updated."); setDetailsOpen(false); utils.departmentOperations.myDepartment.invalidate(); },
+    onError: (error) => toast.error(error.message),
+  });
+  function openDetails() { if (!data) return; setDepartmentPurpose(data.department.purpose ?? ""); setDepartmentDescription(data.department.description ?? ""); setDetailsOpen(true); }
   function openEdit(duty: any) { setEditDuty(duty); setEditTitle(duty.taskTitle); setEditDescription(duty.taskDescription ?? ""); setEditDueTime(duty.dueAt ? new Date(duty.dueAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : ""); }
 
   const grouped = useMemo(() => Object.entries(Object.groupBy(data?.duties ?? [], (duty) => duty.sourceGroup || human(duty.routine))), [data?.duties]);
@@ -69,7 +77,8 @@ export function MyDepartmentWorkspace() {
   if (!data) return <EmptyState title="No department assignment" description="Ask your camp administrator to assign you to a department role." />;
 
   return <div className="pb-28">
-    <PageHeader title="My department" description={`${data.department.name} · ${data.department.positions.map((role) => role.name).join(", ") || "Member"}`} actions={<div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => setGuideOpen(true)}>Department guide</Button>{data.canAdd && <Button size="sm" onClick={() => setAddOpen(true)}><PlusIcon className="h-4 w-4" /> Add task</Button>}</div>} />
+    {!embedded && <PageHeader title="My department" description={`${data.department.name} · ${data.department.positions.map((role) => role.name).join(", ") || "Member"}`} actions={<DepartmentActions canManage={data.canManage} canAdd={data.canAdd} onGuide={() => setGuideOpen(true)} onDetails={openDetails} onAdd={() => setAddOpen(true)} />} />}
+    {embedded && <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-bold text-txt-primary">My department</h2><p className="text-sm font-semibold text-txt-primary">{data.department.name}</p><p className="text-sm text-txt-secondary">{data.department.positions.map((role) => role.name).join(", ") || "Department member"}</p></div><DepartmentActions canManage={data.canManage} canAdd={data.canAdd} onGuide={() => setGuideOpen(true)} onDetails={openDetails} onAdd={() => setAddOpen(true)} /></div>}
 
     <div className="sticky top-2 z-20 mb-5 rounded-2xl border border-accent-200 bg-surface/95 p-4 shadow-sm backdrop-blur">
       <div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-accent-700">Today’s progress</p><p className="text-2xl font-bold text-txt-primary">{completed}/{total} completed</p></div><span className="text-2xl font-bold text-accent-700">{total ? Math.round((completed / total) * 100) : 0}%</span></div>
@@ -89,9 +98,14 @@ export function MyDepartmentWorkspace() {
     })}</div>}
 
     <Dialog open={guideOpen} onClose={() => setGuideOpen(false)} title={`${data.department.name} guide`}><div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1"><GuideSection title="Purpose" values={[data.department.purpose || "Not defined"]} /><GuideSection title="Reports to" values={[data.department.parentDepartment?.name || "Camp leadership"]} /><GuideSection title="My role" values={data.department.positions.map((role) => role.name)} />{data.department.positions.map((role) => <div key={role.id} className="space-y-4 rounded-2xl bg-surface-raised p-4"><h3 className="font-semibold text-txt-primary">{role.name}</h3><GuideSection title="Purpose" values={[role.purpose || "Not defined"]} /><GuideSection title="Responsibilities" values={role.responsibilities} /><GuideSection title="Authority" values={role.authority} /><GuideSection title="Success measures" values={role.successMeasures} /></div>)}<GuideSection title="Department responsibilities" values={data.department.responsibilities} /><GuideSection title="Department authority" values={data.department.authority} /><GuideSection title="Success measures" values={data.department.successMeasures} /></div></Dialog>
+    <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Edit department details"><div className="space-y-4"><Textarea label="Purpose" value={departmentPurpose} onChange={(event) => setDepartmentPurpose(event.target.value)} rows={3} /><Textarea label="Description" value={departmentDescription} onChange={(event) => setDepartmentDescription(event.target.value)} rows={5} /><div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setDetailsOpen(false)}>Cancel</Button><Button loading={updateDepartment.isPending} onClick={() => updateDepartment.mutate({ id: data.department.id, purpose: departmentPurpose || null, description: departmentDescription || null })}>Save details</Button></div></div></Dialog>
     <Dialog open={addOpen} onClose={() => setAddOpen(false)} title="Add checklist item"><div className="space-y-4"><Input label="Task" value={title} onChange={(e) => setTitle(e.target.value)} /><Textarea label="Instructions" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} /><Select label="Routine" value={routine} onChange={(e) => setRoutine(e.target.value as any)}>{ROUTINES.map((value) => <option key={value} value={value}>{human(value)}</option>)}</Select><Input label="Due time" type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} /><div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setAddOpen(false)}>Cancel</Button><Button loading={create.isPending} disabled={!title.trim()} onClick={() => create.mutate({ departmentId: data.department.id, title, description: description || undefined, routine, assignmentType: "EVERYONE", dueTime: dueTime || null, required: true })}>Add task</Button></div></div></Dialog>
     <Dialog open={!!editDuty} onClose={() => setEditDuty(null)} title="Edit checklist item"><div className="space-y-4"><Input label="Task" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} /><Textarea label="Instructions" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} /><Input label="Due time" type="time" value={editDueTime} onChange={(e) => setEditDueTime(e.target.value)} /><p className="text-xs text-txt-secondary">Changes apply to future duties. Today’s execution remains an immutable historical snapshot.</p><div className="flex justify-between gap-2">{data.canDeactivate ? <Button variant="danger" loading={updateItem.isPending} onClick={() => updateItem.mutate({ id: editDuty.checklistItemId, active: false })}><TrashIcon className="h-4 w-4" /> Deactivate</Button> : <span />}<div className="flex gap-2"><Button variant="secondary" onClick={() => setEditDuty(null)}>Cancel</Button><Button loading={updateItem.isPending} disabled={!editTitle.trim()} onClick={() => updateItem.mutate({ id: editDuty.checklistItemId, title: editTitle, description: editDescription || null, dueTime: editDueTime || null })}>Save changes</Button></div></div></div></Dialog>
   </div>;
 }
 
 function GuideSection({ title, values }: { title: string; values: string[] }) { return <section><h4 className="text-xs font-semibold uppercase tracking-wide text-txt-muted">{title}</h4>{values.length ? <ul className="mt-2 space-y-2 text-sm leading-relaxed text-txt-primary">{values.map((value, index) => <li key={`${value}-${index}`} className="flex gap-2"><span className="text-accent-600">•</span><span>{value}</span></li>)}</ul> : <p className="mt-2 text-sm text-txt-muted">None defined</p>}</section>; }
+
+function DepartmentActions({ canManage, canAdd, onGuide, onDetails, onAdd }: { canManage: boolean; canAdd: boolean; onGuide: () => void; onDetails: () => void; onAdd: () => void }) {
+  return <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={onGuide}>Department guide</Button>{canManage && <Button size="sm" variant="secondary" onClick={onDetails}><PencilIcon className="h-4 w-4" /> Edit details</Button>}{canAdd && <Button size="sm" onClick={onAdd}><PlusIcon className="h-4 w-4" /> Add task</Button>}</div>;
+}

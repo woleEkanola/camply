@@ -1,8 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import AppShell from "@/components/layout/AppShell";
-import { MyDepartmentWorkspace } from "@/components/departments/MyDepartmentWorkspace";
-
-export default function TeacherDepartmentPage() {
-  return <AppShell area="teacher"><MyDepartmentWorkspace /></AppShell>;
+export default function LegacyTeacherDepartmentPage() {
+  redirect("/teacher/departments?view=mine");
 }

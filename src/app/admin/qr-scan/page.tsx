@@ -16,7 +16,7 @@ export default function AdminQrScanPage() {
           session lands on the safe, read-only Identity Lookup station; the
           volunteer switches to Camp Arrival, Checkout, or any other
           station from the station sheet. */}
-      <ScanCenterShell organizationId={organizationId} pointsHref="/admin/points" />
+      <ScanCenterShell organizationId={organizationId} pointsHref="/admin/tribes" />
     </AppShell>
   );
 }

@@ -6,6 +6,7 @@ import { hashPassword } from "../src/lib/auth";
 const prisma = new PrismaClient();
 
 test.describe("Volunteer Dashboard & Universal QR Scan E2E Test", () => {
+  test.setTimeout(120_000);
   let volunteerUserId: string;
   let volunteerEmail: string;
 
@@ -55,11 +56,27 @@ test.describe("Volunteer Dashboard & Universal QR Scan E2E Test", () => {
     await page.waitForSelector("text=Volunteer Dashboard", { timeout: 15000 });
 
     // Verify Welcome Greeting & Volunteer Badge
-    await expect(page.locator("text=Welcome back, Operational!")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Welcome back, Operational/ }).first()).toBeVisible();
     await expect(page.getByText("VOLUNTEER", { exact: true })).toBeVisible();
+    const photoCard = page.getByRole("link", { name: "Upload photo" });
+    const welcomeCard = page.getByRole("heading", { name: /Welcome back, Operational/ }).first();
+    const positionHeading = page.getByRole("heading", { name: "My position" });
+    await expect(photoCard).toBeVisible();
+    await expect(positionHeading).toBeVisible();
+    const [photoBox, welcomeBox, positionBox] = await Promise.all([photoCard.boundingBox(), welcomeCard.boundingBox(), positionHeading.boundingBox()]);
+    expect(photoBox!.y).toBeLessThan(welcomeBox!.y);
+    expect(welcomeBox!.y).toBeLessThan(positionBox!.y);
+
+    await page.getByRole("link", { name: /Inbox/ }).first().click();
+    await expect(page).toHaveURL(/\/volunteer\/inbox/);
+    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+    await page.goto("/volunteer");
+    await page.getByRole("link", { name: /Report an incident/ }).first().click();
+    await expect(page).toHaveURL(/\/volunteer\/incidents/);
+    await page.goto("/volunteer");
 
     // Verify Universal QR Code Scanner Quick Action card
-    const qrScanQuickCard = page.locator('button:has-text("QR Code Scanner")');
+    const qrScanQuickCard = page.getByRole("button", { name: /Primary Tool QR Code Scanner/ });
     await expect(qrScanQuickCard).toBeVisible();
 
     // Click QR Scanner Quick Action card
@@ -72,7 +89,7 @@ test.describe("Volunteer Dashboard & Universal QR Scan E2E Test", () => {
     await page.waitForSelector("text=Volunteer Dashboard", { timeout: 15000 });
 
     // Verify Emergency Contacts card
-    await expect(page.locator("text=Emergency Contacts & Support Desk")).toBeVisible();
-    await expect(page.locator("text=Camp Director")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Emergency Contacts & Support Desk/ }).first()).toBeVisible();
+    await expect(page.getByText("Camp Director", { exact: true }).first()).toBeVisible();
   });
 });

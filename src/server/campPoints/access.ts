@@ -12,6 +12,7 @@ export type CampPointsAccess = {
     id: string;
     type: "TEACHER" | "VOLUNTEER";
     assignedTribeId: string | null;
+    isTribeHead: boolean;
   };
   managedCampusIds: string[];
 };
@@ -48,7 +49,13 @@ export async function getCampPointsAccess(
         status: "APPROVED",
         deletedAt: null,
       },
-      select: { id: true, type: true, assignedTribeId: true },
+      select: {
+        id: true,
+        type: true,
+        assignedTribeId: true,
+        maleHeadOfTribes: { where: { campId, deletedAt: null }, select: { id: true }, take: 1 },
+        femaleHeadOfTribes: { where: { campId, deletedAt: null }, select: { id: true }, take: 1 },
+      },
     }),
     ctx.prisma.campus.findMany({
       where: {
@@ -78,12 +85,20 @@ export async function getCampPointsAccess(
     : null;
 
   const managedCampusIds = managedCampuses.map((campus: { id: string }) => campus.id);
+  const normalizedStaffProfile = staffProfile ? {
+    id: staffProfile.id,
+    type: staffProfile.type,
+    assignedTribeId: staffProfile.assignedTribeId,
+    isTribeHead: staffProfile.maleHeadOfTribes.length > 0 || staffProfile.femaleHeadOfTribes.length > 0,
+  } : null;
   return {
     camp,
     isAdmin,
-    canAwardPoints: isAdmin || !!pointGrant,
+    // Every approved teacher/volunteer assigned to a tribe works from the
+    // same tribe hub. Their server-side scope remains locked to that tribe.
+    canAwardPoints: isAdmin || !!pointGrant || !!normalizedStaffProfile?.assignedTribeId,
     canTakeAttendance: isAdmin || !!staffProfile || managedCampusIds.length > 0,
-    staffProfile,
+    staffProfile: normalizedStaffProfile,
     managedCampusIds,
   };
 }

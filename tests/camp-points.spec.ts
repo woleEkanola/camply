@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, fieldByLabel } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
 
 test.describe("Camp Points station", () => {
   test.describe.configure({ mode: "serial" });
@@ -61,9 +61,10 @@ test.describe("Camp Points station", () => {
 
   test("admin awards five campers together, prevents duplicates, scans, and can undo", async ({ page }) => {
     await loginWithPassword(page, "admin@camply.com", "password123");
-    await page.goto("/admin/points");
+    await page.goto("/admin/tribes");
+    await page.getByLabel("Choose tribe").selectOption(tribeId);
+    await page.getByRole("button", { name: "Points" }).click();
     await expect(page.getByTestId("camp-points-workspace")).toBeVisible({ timeout: 15_000 });
-    await fieldByLabel(page, "Award to teenagers in").selectOption(tribeId);
     await page.getByRole("button", { name: new RegExp(categoryName) }).click();
     await expect(page.getByTestId("dialog-panel")).toBeVisible();
     await page.getByRole("button", { name: "Open station" }).click();

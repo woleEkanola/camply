@@ -7,9 +7,9 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/utils/trpc";
 
-export default function DepartmentsPage() {
-  const { data: session } = useSession();
+export default function CampusRepDepartmentsPage() {
+  const { data: session } = useSession({ required: true });
   const organizationId = session?.user?.organizationId ?? "";
   const { data: camp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
-  return <AppShell area="admin"><PageHeader title="Departments" description="People, reporting lines, contacts, responsibilities, and daily operations in one place." />{camp ? <DepartmentsWorkspace organizationId={organizationId} campId={camp.id} canManageAll /> : <EmptyState title="No active camp" description="Set an active camp before configuring departments." />}</AppShell>;
+  return <AppShell area="campus-rep"><PageHeader title="Departments" description="Your team, today’s work, reporting structure, and camp contacts." />{camp ? <DepartmentsWorkspace organizationId={organizationId} campId={camp.id} staffArea /> : <EmptyState title="No active camp" description="Departments appear when a camp is active." />}</AppShell>;
 }

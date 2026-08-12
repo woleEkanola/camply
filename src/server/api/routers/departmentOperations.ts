@@ -95,8 +95,9 @@ export const departmentOperationsRouter = createTRPCRouter({
       if (!admin) {
         try { await assertCanManageCamp(ctx, input.campId, "CAMP_STRUCTURE"); admin = true; } catch { /* scoped staff view below */ }
       }
+      const campusRepresentative = ctx.session?.user?.role === "CAMPUS_REPRESENTATIVE" && ctx.session.user.organizationId === camp.organizationId;
       const profile = admin ? null : await activeStaffProfileForUser(ctx.prisma, ctx.userId, input.campId);
-      if (!admin && !profile) throw new TRPCError({ code: "FORBIDDEN" });
+      if (!admin && !campusRepresentative && !profile) throw new TRPCError({ code: "FORBIDDEN" });
       await ensureDepartmentExecutions(ctx.prisma, { campId: input.campId, date: input.date });
       const searchTerms = input.search?.trim().split(/\s+/).filter(Boolean) ?? [];
       const departments = await ctx.prisma.department.findMany({
@@ -121,7 +122,8 @@ export const departmentOperationsRouter = createTRPCRouter({
               ],
             })),
           } : {}),
-          ...(admin ? {} : { id: profile?.departmentId ?? "__none__" }),
+          // Active camp staff can browse every department. Detail writes are
+          // still protected by assertManage and department leadership checks.
         },
         include: {
           parentDepartment: { select: { id: true, name: true } },
@@ -249,7 +251,7 @@ export const departmentOperationsRouter = createTRPCRouter({
         const assignment = await tx.positionAssignment.create({ data: { positionId: position.id, staffId: input.staffId, startDate: input.startDate ? new Date(input.startDate) : new Date(), endDate: input.endDate ? new Date(input.endDate) : null, isCurrent: true, reason: input.reason } });
         await syncStaffProfileFromPositions(tx, input.staffId);
         await writeAudit(tx, { organizationId: position.camp.organizationId, actorId: ctx.userId, action: input.temporary ? "DEPARTMENT_TEMPORARY_ASSIGNMENT_CREATED" : "DEPARTMENT_PERSON_ASSIGNED", subjectType: "POSITION_ASSIGNMENT", subjectId: assignment.id, newValue: input });
-        await tx.notification.create({ data: { organizationId: position.camp.organizationId, userId: staff.userId, title: "Department role assigned", body: `You have been assigned to ${position.name}.`, link: "/teacher/department", status: "SENT" } });
+        await tx.notification.create({ data: { organizationId: position.camp.organizationId, userId: staff.userId, title: "Department role assigned", body: `You have been assigned to ${position.name}.`, link: "/teacher/departments?view=mine", status: "SENT" } });
         return assignment;
       });
     }),
@@ -284,7 +286,7 @@ export const departmentOperationsRouter = createTRPCRouter({
         const moved = await tx.positionAssignment.create({ data: { positionId: target.id, staffId: assignment.staffId, startDate: new Date(), isCurrent: true, reason: input.reason } });
         await syncStaffProfileFromPositions(tx, assignment.staffId);
         await writeAudit(tx, { organizationId: target.camp.organizationId, actorId: ctx.userId, action: "DEPARTMENT_PERSON_MOVED", subjectType: "POSITION_ASSIGNMENT", subjectId: moved.id, reason: input.reason, previousValue: { assignmentId: assignment.id, positionId: assignment.positionId }, newValue: { positionId: target.id } });
-        await tx.notification.create({ data: { organizationId: target.camp.organizationId, userId: assignment.staff.userId, title: "Department role changed", body: `You have been moved to ${target.name}.`, link: "/teacher/department", status: "SENT" } });
+        await tx.notification.create({ data: { organizationId: target.camp.organizationId, userId: assignment.staff.userId, title: "Department role changed", body: `You have been moved to ${target.name}.`, link: "/teacher/departments?view=mine", status: "SENT" } });
         return moved;
       });
     }),
@@ -302,7 +304,7 @@ export const departmentOperationsRouter = createTRPCRouter({
           : input.assignmentType === "ROLE" && input.positionId
             ? (await tx.positionAssignment.findMany({ where: { positionId: input.positionId, isCurrent: true }, select: { staff: { select: { userId: true } } } })).map((item: any) => item.staff.userId)
             : [];
-        if (userIds.length) await tx.notification.createMany({ data: [...new Set(userIds)].map((userId) => ({ organizationId: access.department.organizationId, userId, title: "Task assigned", body: `You have been assigned: ${input.title}.`, link: "/teacher/department", status: "SENT" })) });
+        if (userIds.length) await tx.notification.createMany({ data: [...new Set(userIds)].map((userId) => ({ organizationId: access.department.organizationId, userId, title: "Task assigned", body: `You have been assigned: ${input.title}.`, link: "/teacher/departments?view=mine", status: "SENT" })) });
         return item;
       });
     }),
@@ -341,7 +343,8 @@ export const departmentOperationsRouter = createTRPCRouter({
         where: { departmentId: profile.departmentId, date: dateOnly(input.date), OR: [{ assignmentType: "EVERYONE" }, { assignmentType: "PERSON", assignedStaffId: profile.id }, { assignmentType: "ROLE", positionId: { in: positionIds } }] },
         orderBy: [{ routine: "asc" }, { dueAt: "asc" }, { createdAt: "asc" }],
       });
-      return { profile, department, duties, canAdd: department.allowMembersAddChecklistItems, canEdit: department.allowMembersEditChecklistItems, canDeactivate: department.allowMembersDeactivateChecklistItems };
+      const leader = await isDepartmentLeader(ctx.prisma, ctx.userId, department.id);
+      return { profile, department, duties, canManage: leader, canAdd: leader || department.allowMembersAddChecklistItems, canEdit: leader || department.allowMembersEditChecklistItems, canDeactivate: leader || department.allowMembersDeactivateChecklistItems };
     }),
 
   updateExecution: protectedProcedure

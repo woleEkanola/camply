@@ -11,9 +11,9 @@ import { ScannerViewport } from "@/components/scan/ScannerViewport";
 
 const STATUSES = ["PRESENT", "LATE", "ABSENT", "EXCUSED"] as const;
 
-export function CampAttendancePanel({ campId, organizationId, access }: { campId: string; organizationId: string; access: any }) {
-  const [groupType, setGroupType] = useState<"TRIBE" | "CAMPUS">(access.staffProfile?.assignedTribeId ? "TRIBE" : "CAMPUS");
-  const [tribeId, setTribeId] = useState(access.staffProfile?.assignedTribeId ?? access.tribes?.[0]?.id ?? "");
+export function CampAttendancePanel({ campId, organizationId, access, lockedTribeId }: { campId: string; organizationId: string; access: any; lockedTribeId?: string }) {
+  const [groupType, setGroupType] = useState<"TRIBE" | "CAMPUS">(lockedTribeId || access.staffProfile?.assignedTribeId ? "TRIBE" : "CAMPUS");
+  const [tribeId, setTribeId] = useState(lockedTribeId ?? access.staffProfile?.assignedTribeId ?? access.tribes?.[0]?.id ?? "");
   const [campusId, setCampusId] = useState(access.managedCampusIds?.[0] ?? access.campuses?.[0]?.id ?? "");
   const [sessionName, setSessionName] = useState("");
   const [lateMinutes, setLateMinutes] = useState("10");
@@ -73,14 +73,14 @@ export function CampAttendancePanel({ campId, organizationId, access }: { campId
 
     <Card><CardBody className="space-y-4">
       <h3 className="font-semibold text-txt-primary">Start an attendance session</h3>
-      {access.isAdmin && <div className="grid gap-3 sm:grid-cols-2">
+      {access.isAdmin && !lockedTribeId && <div className="grid gap-3 sm:grid-cols-2">
         <Select id="attendance-group-type" label="Take attendance by" value={groupType} onChange={(event) => setGroupType(event.target.value as "TRIBE" | "CAMPUS")}>
           <option value="TRIBE">Tribe</option><option value="CAMPUS">Campus</option>
         </Select>
         {groupType === "TRIBE" ? <Select id="attendance-tribe" label="Tribe" value={tribeId} onChange={(event) => setTribeId(event.target.value)}><option value="">Select tribe</option>{access.tribes.map((item: any) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select>
           : <Select id="attendance-campus" label="Campus" value={campusId} onChange={(event) => setCampusId(event.target.value)}><option value="">Select campus</option>{access.campuses.map((item: any) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select>}
       </div>}
-      {!access.isAdmin && <p className="text-sm text-txt-secondary">Group: {groupType === "TRIBE" ? access.tribes?.[0]?.name : access.campuses?.[0]?.name}</p>}
+      {(!access.isAdmin || lockedTribeId) && <p className="text-sm text-txt-secondary">Group: {groupType === "TRIBE" ? access.tribes?.find((item: any) => item.id === tribeId)?.name ?? "Assigned tribe" : access.campuses?.[0]?.name}</p>}
       <div className="grid gap-3 sm:grid-cols-[1fr_150px_auto]">
         <Input label="Session name" placeholder="e.g. Morning Devotion" value={sessionName} onChange={(event) => setSessionName(event.target.value)} />
         <Input label="Late after" type="number" min="0" max="240" value={lateMinutes} onChange={(event) => setLateMinutes(event.target.value)} />

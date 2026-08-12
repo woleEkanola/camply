@@ -19,7 +19,7 @@ export default function TeacherQrScanPage() {
             the teacher switches station (Camp Arrival, Checkout, etc.)
             from the station sheet. homeCampusId pre-highlights the
             teacher's own campus in the Pickup Point picker. */}
-        {(profile: any) => <ScanCenterShell organizationId={organizationId} homeCampusId={profile.preferredCampusId ?? undefined} pointsHref="/teacher/points" />}
+        {(profile: any) => <ScanCenterShell organizationId={organizationId} homeCampusId={profile.preferredCampusId ?? undefined} pointsHref="/teacher/tribe" />}
       </StaffGate>
     </AppShell>
   );

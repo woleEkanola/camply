@@ -13,14 +13,21 @@ import { QrCodeIcon, StarIcon, ClipboardDocumentCheckIcon, ClockIcon } from "@he
 
 type Tab = "AWARD" | "ATTENDANCE" | "HISTORY";
 
-export function CampPointsWorkspace({ campId, organizationId }: { campId: string; organizationId: string }) {
+export function CampPointsWorkspace({ campId, organizationId, lockedTribeId, initialTab = "AWARD", allowedTabs, embedded = false }: {
+  campId: string;
+  organizationId: string;
+  lockedTribeId?: string;
+  initialTab?: Tab;
+  allowedTabs?: Tab[];
+  embedded?: boolean;
+}) {
   const utils = api.useUtils();
   const { data: access, isLoading } = api.campPoints.context.useQuery({ campId });
   const { data: categories = [] } = api.campPoints.categories.useQuery({ campId });
-  const [tab, setTab] = useState<Tab>("AWARD");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [category, setCategory] = useState<any>(null);
   const [awardGroupType, setAwardGroupType] = useState<"TRIBE" | "CAMPUS" | "CAMP">("TRIBE");
-  const [tribeId, setTribeId] = useState("");
+  const [tribeId, setTribeId] = useState(lockedTribeId ?? "");
   const [campusId, setCampusId] = useState("");
   const [points, setPoints] = useState("");
   const [batch, setBatch] = useState<any>(null);
@@ -32,12 +39,15 @@ export function CampPointsWorkspace({ campId, organizationId }: { campId: string
   const [lastEventId, setLastEventId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (access?.staffProfile?.assignedTribeId) setTribeId(access.staffProfile.assignedTribeId);
+    if (lockedTribeId) setTribeId(lockedTribeId);
+    else if (access?.staffProfile?.assignedTribeId) setTribeId(access.staffProfile.assignedTribeId);
     else if (access?.tribes?.length === 1) setTribeId(access.tribes[0].id);
     if (access && (!access.canAwardPoints || new URLSearchParams(window.location.search).get("tab")?.toLowerCase() === "attendance")) {
       setTab("ATTENDANCE");
     }
-  }, [access]);
+  }, [access, lockedTribeId]);
+
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
 
   const manualCategories = useMemo(() => categories.filter((item: any) => !["ATTENDANCE", "CAMP_COMPLETION"].includes(item.key.toUpperCase()) && item.kind !== "AUTO"), [categories]);
   const effectiveTribeId = batch?.tribeId ?? (awardGroupType === "TRIBE" ? tribeId : "");
@@ -65,21 +75,21 @@ export function CampPointsWorkspace({ campId, organizationId }: { campId: string
   const toggle = (id: string) => setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   return <div className="space-y-5" data-testid="camp-points-workspace">
-    <div className="rounded-2xl border border-accent-500/25 bg-gradient-to-br from-accent-500/10 to-purple-500/10 p-5">
+    {!embedded && <div className="rounded-2xl border border-accent-500/25 bg-gradient-to-br from-accent-500/10 to-purple-500/10 p-5">
       <h2 className="text-xl font-black text-txt-primary">Camp Points</h2>
       <p className="mt-1 text-sm text-txt-secondary">Award positive behaviour and activity points, or take scored attendance, from one place.</p>
-    </div>
-    <div className="flex gap-2 overflow-x-auto border-b border-border-default pb-2">
-      {access.canAwardPoints && <Button variant={tab === "AWARD" ? "primary" : "secondary"} onClick={() => setTab("AWARD")}><StarIcon className="h-4 w-4" /> Point stations</Button>}
-      <Button variant={tab === "ATTENDANCE" ? "primary" : "secondary"} onClick={() => setTab("ATTENDANCE")}><ClipboardDocumentCheckIcon className="h-4 w-4" /> Attendance</Button>
-      <Button variant={tab === "HISTORY" ? "primary" : "secondary"} onClick={() => setTab("HISTORY")}><ClockIcon className="h-4 w-4" /> History</Button>
-    </div>
+    </div>}
+    {(!allowedTabs || allowedTabs.length > 1) && <div className="flex gap-2 overflow-x-auto border-b border-border-default pb-2">
+      {access.canAwardPoints && (!allowedTabs || allowedTabs.includes("AWARD")) && <Button variant={tab === "AWARD" ? "primary" : "secondary"} onClick={() => setTab("AWARD")}><StarIcon className="h-4 w-4" /> Point stations</Button>}
+      {(!allowedTabs || allowedTabs.includes("ATTENDANCE")) && <Button variant={tab === "ATTENDANCE" ? "primary" : "secondary"} onClick={() => setTab("ATTENDANCE")}><ClipboardDocumentCheckIcon className="h-4 w-4" /> Attendance</Button>}
+      {(!allowedTabs || allowedTabs.includes("HISTORY")) && <Button variant={tab === "HISTORY" ? "primary" : "secondary"} onClick={() => setTab("HISTORY")}><ClockIcon className="h-4 w-4" /> History</Button>}
+    </div>}
     {(message || error) && <div className={`rounded-lg p-3 text-sm ${error ? "bg-danger-50 text-danger-700" : "bg-success-50 text-success-700"}`}>{error || message}<button className="ml-3 underline" onClick={() => { setMessage(""); setError(""); }}>Dismiss</button></div>}
 
-    {tab === "ATTENDANCE" && <CampAttendancePanel campId={campId} organizationId={organizationId} access={access} />}
+    {tab === "ATTENDANCE" && <CampAttendancePanel campId={campId} organizationId={organizationId} access={access} lockedTribeId={lockedTribeId} />}
 
     {tab === "AWARD" && !batch && <div className="space-y-4">
-      <div className="grid max-w-2xl gap-3 sm:grid-cols-2">{access.isAdmin && <Select id="points-group-type" label="Award by" value={awardGroupType} onChange={(event) => setAwardGroupType(event.target.value as any)}><option value="TRIBE">Tribe</option><option value="CAMPUS">Campus</option><option value="CAMP">Whole camp</option></Select>}{awardGroupType === "TRIBE" ? <Select id="points-tribe" label="Award to teenagers in" value={tribeId} onChange={(event) => setTribeId(event.target.value)} disabled={!access.isAdmin}><option value="">Select tribe</option>{access.tribes.map((tribe: any) => <option key={tribe.id} value={tribe.id}>{tribe.name}</option>)}</Select> : awardGroupType === "CAMPUS" ? <Select id="points-campus" label="Award to campus teenagers" value={campusId} onChange={(event) => setCampusId(event.target.value)}><option value="">Select campus</option>{access.campuses.map((campus: any) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}</Select> : <div className="self-end rounded-lg border border-border-default bg-surface-raised p-3 text-sm text-txt-secondary">All eligible teenagers in the active camp</div>}</div>
+      <div className="grid max-w-2xl gap-3 sm:grid-cols-2">{access.isAdmin && !lockedTribeId && <Select id="points-group-type" label="Award by" value={awardGroupType} onChange={(event) => setAwardGroupType(event.target.value as any)}><option value="TRIBE">Tribe</option><option value="CAMPUS">Campus</option><option value="CAMP">Whole camp</option></Select>}{awardGroupType === "TRIBE" ? <Select id="points-tribe" label="Award to teenagers in" value={tribeId} onChange={(event) => setTribeId(event.target.value)} disabled={!access.isAdmin || !!lockedTribeId}><option value="">Select tribe</option>{access.tribes.map((tribe: any) => <option key={tribe.id} value={tribe.id}>{tribe.name}</option>)}</Select> : awardGroupType === "CAMPUS" ? <Select id="points-campus" label="Award to campus teenagers" value={campusId} onChange={(event) => setCampusId(event.target.value)}><option value="">Select campus</option>{access.campuses.map((campus: any) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}</Select> : <div className="self-end rounded-lg border border-border-default bg-surface-raised p-3 text-sm text-txt-secondary">All eligible teenagers in the active camp</div>}</div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{manualCategories.map((item: any) => <button key={item.id} type="button" disabled={!scopeReady} onClick={() => openCategory(item)} className="group rounded-2xl border border-border-default bg-surface p-5 text-left shadow-xs transition hover:-translate-y-0.5 hover:border-accent-500 hover:shadow-md disabled:opacity-50"><div className="flex items-start justify-between"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-500/10 text-xl">{item.icon || "⭐"}</span><span className={`rounded-full px-2.5 py-1 text-sm font-bold ${item.defaultPoints < 0 ? "bg-danger-50 text-danger-700" : "bg-success-50 text-success-700"}`}>{item.defaultPoints > 0 ? "+" : ""}{item.defaultPoints}</span></div><h3 className="mt-4 font-bold text-txt-primary">{item.name}</h3><p className="mt-1 text-xs text-txt-secondary">{item.description || "Scan or select teenagers to award these points."}</p></button>)}</div>
     </div>}
 

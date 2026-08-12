@@ -439,7 +439,7 @@ export default function AnalyticsDashboard() {
           </Link>
 
           <Link
-            href="/admin/points"
+            href="/admin/tribes"
             data-testid="quick-action-camp-points"
             className="group flex min-h-[120px] flex-col rounded-xl border border-border-default bg-surface p-4 shadow-xs transition hover:border-neutral-700 hover:bg-surface-hover"
           >

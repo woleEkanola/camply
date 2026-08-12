@@ -190,7 +190,12 @@ export const orgStructureRouter = createTRPCRouter({
             },
           },
         });
-        if (!profile) return null;
+        if (!profile && currentUser.role !== "CAMPUS_REPRESENTATIVE") return null;
+
+        if (!profile) {
+          const campus = await ctx.prisma.campus.findFirst({ where: { reps: { some: { id: ctx.userId } } } });
+          return { role: "CAMPUS_REPRESENTATIVE", title: "Campus Representative", centre: campus?.name ?? null, department: null, tribe: null, reportsTo: null, directReportsCount: null, camperCount: null, hostel: null, room: null };
+        }
 
         const reportsToName = profile.reportsTo
           ? `${profile.reportsTo.firstName} ${profile.reportsTo.lastName}`
@@ -216,11 +221,6 @@ export const orgStructureRouter = createTRPCRouter({
           hostel: profile.assignedHostel?.name ?? null,
           room: profile.assignedRoom?.name ?? null,
         };
-      }
-
-      if (currentUser.role === "CAMPUS_REPRESENTATIVE") {
-        const campus = await ctx.prisma.campus.findFirst({ where: { reps: { some: { id: ctx.userId } } } });
-        return { role: "CAMPUS_REPRESENTATIVE", title: "Campus Representative", centre: campus?.name ?? null, department: null, tribe: null, reportsTo: null, directReportsCount: null, camperCount: null, hostel: null, room: null };
       }
 
       if (currentUser.role === "OWNER" || currentUser.role === "ADMIN") {

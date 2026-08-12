@@ -91,6 +91,17 @@ export const departmentRouter = createTRPCRouter({
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
       if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be deleted." });
       await assertOrgAdmin(ctx, dept.organizationId);
+      const [staffCount, assignmentCount, childCount] = await Promise.all([
+        ctx.prisma.staffProfile.count({ where: { departmentId: dept.id, deletedAt: null, status: { in: ["PENDING", "APPROVED"] } } }),
+        ctx.prisma.positionAssignment.count({ where: { isCurrent: true, position: { departmentId: dept.id, deletedAt: null } } }),
+        ctx.prisma.department.count({ where: { parentDepartmentId: dept.id, deletedAt: null } }),
+      ]);
+      if (staffCount || assignmentCount || childCount) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Move or remove this department's ${staffCount} active people, ${assignmentCount} current role assignments, and ${childCount} child departments before archiving it.`,
+        });
+      }
       return ctx.prisma.department.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 

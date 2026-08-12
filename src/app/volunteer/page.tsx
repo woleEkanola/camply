@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StaffGate } from "@/components/staff/StaffGate";
+import { StaffDashboardEssentials } from "@/components/staff/shared/StaffDashboardEssentials";
 import {
   QrCodeIcon,
   UserGroupIcon,
@@ -27,6 +28,7 @@ function VolunteerDashboardContent({ profile }: { profile: any }) {
   const router = useRouter();
   const { data: session } = useSession();
   const organizationId = session?.user?.organizationId ?? "";
+  const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
 
   const { data: notifications = [] } = api.notification.listMine.useQuery(undefined, { enabled: true });
   const { data: statsData } = api.registration.getAdminListStats.useQuery(
@@ -42,6 +44,8 @@ function VolunteerDashboardContent({ profile }: { profile: any }) {
 
   return (
     <div className="space-y-6">
+      <StaffDashboardEssentials area="volunteer" organizationId={organizationId} campId={activeCamp?.id} profile={profile} mode="photo" />
+
       {/* 1. HERO PROFILE & STATION BANNER */}
       <div className="relative overflow-hidden rounded-2xl border border-border-default bg-surface p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -76,6 +80,8 @@ function VolunteerDashboardContent({ profile }: { profile: any }) {
         </div>
       </div>
 
+      <StaffDashboardEssentials area="volunteer" organizationId={organizationId} campId={activeCamp?.id} profile={profile} mode="details" />
+
       {/* 2. PRIMARY QUICK ACTIONS GRID */}
       <div>
         <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-txt-secondary">
@@ -109,7 +115,7 @@ function VolunteerDashboardContent({ profile }: { profile: any }) {
           {/* Assigned Campers & Tribes */}
           <button
             type="button"
-            onClick={() => router.push("/volunteer/campers")}
+            onClick={() => router.push("/volunteer/tribe")}
             className="group flex flex-col justify-between rounded-2xl border border-border-default bg-surface p-5 text-left transition-all duration-200 hover:border-neutral-700 hover:bg-surface-hover active:scale-[0.98] shadow-2xs"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400 border border-sky-500/30 group-hover:scale-105 transition-transform">
@@ -117,10 +123,10 @@ function VolunteerDashboardContent({ profile }: { profile: any }) {
             </div>
             <div className="mt-4">
               <div className="text-base font-extrabold text-txt-primary group-hover:text-sky-400 transition-colors">
-                Camper Roster
+                My Tribe Hub
               </div>
               <div className="mt-0.5 text-xs text-txt-secondary">
-                View assigned teenagers, room allocations & camper details.
+                View your tribe, take attendance, and award camper points.
               </div>
             </div>
           </button>
@@ -184,7 +190,7 @@ function VolunteerDashboardContent({ profile }: { profile: any }) {
           ) : (
             <button
               type="button"
-              onClick={() => router.push("/volunteer/my-position")}
+              onClick={() => router.push("/volunteer/departments")}
               className="group flex flex-col justify-between rounded-2xl border border-border-default bg-surface p-5 text-left transition-all duration-200 hover:border-neutral-700 hover:bg-surface-hover active:scale-[0.98] shadow-2xs"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-500/15 text-purple-400 border border-purple-500/30 group-hover:scale-105 transition-transform">
@@ -192,10 +198,10 @@ function VolunteerDashboardContent({ profile }: { profile: any }) {
               </div>
               <div className="mt-4">
                 <div className="text-base font-extrabold text-txt-primary group-hover:text-purple-400 transition-colors">
-                  My Duty Position
+                  Departments
                 </div>
                 <div className="mt-0.5 text-xs text-txt-secondary">
-                  Check your assigned location, venue guidelines & schedule.
+                  Open your department, contacts, and reporting structure.
                 </div>
               </div>
             </button>

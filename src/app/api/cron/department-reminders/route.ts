@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/db";
 
 function linkFor(role: string) {
-  return role === "VOLUNTEER" ? "/volunteer/department" : "/teacher/department";
+  return role === "VOLUNTEER" ? "/volunteer/departments?view=mine" : "/teacher/departments?view=mine";
 }
 
 export async function POST(req: NextRequest) {

@@ -22,6 +22,8 @@ export interface CampDirectoryProps {
   organizationId: string;
   campId: string;
   readOnly?: boolean;
+  initialView?: "directory" | "organogram";
+  showViewToggle?: boolean;
 }
 
 const AUTO_EXPAND_MAX_STAFF = 40;
@@ -31,7 +33,7 @@ function expansionStorageKey(campId: string) {
   return `camply.campStructure.expanded.${campId}`;
 }
 
-export function CampDirectory({ organizationId, campId, readOnly = false }: CampDirectoryProps) {
+export function CampDirectory({ organizationId, campId, readOnly = false, initialView = "directory", showViewToggle = true }: CampDirectoryProps) {
   const utils = api.useUtils();
 
   const { data, isLoading } = api.orgStructure.getCampDirectory.useQuery({ organizationId, campId });
@@ -44,7 +46,7 @@ export function CampDirectory({ organizationId, campId, readOnly = false }: Camp
   const [expanded, setExpanded] = useState<Set<string> | null>(null);
   const [activeChip, setActiveChip] = useState<StaffChip | null>(null);
   const [sidePanelDeptId, setSidePanelDeptId] = useState<string | null>(null);
-  const [structureView, setStructureView] = useState<"directory" | "organogram">("directory");
+  const [structureView, setStructureView] = useState<"directory" | "organogram">(initialView);
 
   // Search-driven navigation: which id to visually pulse, and which DOM id
   // to scroll to once its section has expanded and committed to the DOM.
@@ -176,7 +178,7 @@ export function CampDirectory({ organizationId, campId, readOnly = false }: Camp
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 rounded-xl border border-border-default bg-surface-raised p-1" role="tablist" aria-label="Camp contact view">
+      {showViewToggle && <div className="grid grid-cols-2 rounded-xl border border-border-default bg-surface-raised p-1" role="tablist" aria-label="Camp contact view">
         <button
           type="button"
           role="tab"
@@ -195,7 +197,7 @@ export function CampDirectory({ organizationId, campId, readOnly = false }: Camp
         >
           Organogram
         </button>
-      </div>
+      </div>}
 
       {structureView === "organogram" ? (
         <CampOrganogram organizationId={organizationId} campId={campId} readOnly={readOnly} />

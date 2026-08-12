@@ -67,7 +67,7 @@ const COMMAND_LINKS: Partial<Record<CampCommandPermission, string>> = {
   STAFF: "/admin/teachers",
   TRIBES: "/admin/tribes",
   ACCOMMODATION: "/admin/accommodation",
-  CAMP_STRUCTURE: "/admin/camp-structure",
+  CAMP_STRUCTURE: "/admin/departments",
   QR_SCANNING: "/admin/qr-scan",
   CAMP_POINTS: "/admin/points",
   LEADERBOARD: "/leaderboard/admin",

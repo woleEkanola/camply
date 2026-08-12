@@ -592,16 +592,18 @@ model Registration {
   roomId String?
   bed    Bed?
 
-  documents          Document[]
-  auditLogs          AuditLog[]
-  notifications      Notification[]
-  review             RegistrationReview?
-  teacherAssignments TeacherCamperAssignment[]
-  attendanceRecords  AttendanceRecord[]
-  incidentReports    IncidentReport[]
-  medicalVisits      MedicalVisit[]
-  mealDistributions  MealDistribution[]
-  scanEvents         ScanEvent[]
+  documents            Document[]
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  review               RegistrationReview?
+  teacherAssignments   TeacherCamperAssignment[]
+  attendanceRecords    AttendanceRecord[]
+  incidentReports      IncidentReport[]
+  medicalVisits        MedicalVisit[]
+  mealDistributions    MealDistribution[]
+  scanEvents           ScanEvent[]
+  maleLeaderOfTribes   Tribe[]                   @relation("TribeMaleCamperLeader")
+  femaleLeaderOfTribes Tribe[]                   @relation("TribeFemaleCamperLeader")
 
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -783,6 +785,14 @@ model Tribe {
   allocationLogs         TribeAllocationLog[]
   preferredByStaff       StaffProfile[]       @relation("PreferredTribe")
   assignedStaff          StaffProfile[]       @relation("AssignedStaffTribe")
+  maleHead               StaffProfile?        @relation("TribeMaleHead", fields: [maleHeadId], references: [id], onDelete: SetNull)
+  maleHeadId             String?
+  femaleHead             StaffProfile?        @relation("TribeFemaleHead", fields: [femaleHeadId], references: [id], onDelete: SetNull)
+  femaleHeadId           String?
+  maleCamperLeader       Registration?        @relation("TribeMaleCamperLeader", fields: [maleCamperLeaderId], references: [id], onDelete: SetNull)
+  maleCamperLeaderId     String?
+  femaleCamperLeader     Registration?        @relation("TribeFemaleCamperLeader", fields: [femaleCamperLeaderId], references: [id], onDelete: SetNull)
+  femaleCamperLeaderId   String?
   attendanceSessions     AttendanceSession[]
   points                 Int                  @default(0)
   pointsLog              TribePointsLog[]
@@ -796,6 +806,10 @@ model Tribe {
   // prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([campId, name])
   @@index([campId, code])
+  @@index([maleHeadId])
+  @@index([femaleHeadId])
+  @@index([maleCamperLeaderId])
+  @@index([femaleCamperLeaderId])
   @@index([deletedAt])
 }
 
@@ -1253,10 +1267,12 @@ model StaffProfile {
   deactivatedAt   DateTime?
 
   // Assignment (post-approval)
-  assignedVenue   Venue?  @relation("AssignedStaffVenue", fields: [assignedVenueId], references: [id])
-  assignedVenueId String?
-  assignedTribe   Tribe?  @relation("AssignedStaffTribe", fields: [assignedTribeId], references: [id])
-  assignedTribeId String?
+  assignedVenue      Venue?  @relation("AssignedStaffVenue", fields: [assignedVenueId], references: [id])
+  assignedVenueId    String?
+  assignedTribe      Tribe?  @relation("AssignedStaffTribe", fields: [assignedTribeId], references: [id])
+  assignedTribeId    String?
+  maleHeadOfTribes   Tribe[] @relation("TribeMaleHead")
+  femaleHeadOfTribes Tribe[] @relation("TribeFemaleHead")
 
   // Camp Structure: department & position flags
   department            Department? @relation(fields: [departmentId], references: [id])
