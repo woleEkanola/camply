@@ -26,6 +26,7 @@ import {
   PaintBrushIcon,
   ChartBarIcon,
   TrophyIcon,
+  InboxIcon,
 } from "@heroicons/react/24/outline";
 import { permissionForAdminPath } from "@/lib/campCommand";
 
@@ -230,9 +231,12 @@ const TEACHER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/teacher", icon: HomeIcon },
       { name: "Schedule", href: "/teacher/schedule", icon: ClockIcon },
+      { name: "My Campers", href: "/teacher/campers", icon: UserGroupIcon },
+      { name: "Incidents", href: "/teacher/incidents", icon: ExclamationTriangleIcon },
+      { name: "Inbox", href: "/teacher/inbox", icon: InboxIcon },
       LEADERBOARD_ITEM,
       { name: "Departments", href: "/teacher/departments", icon: BuildingOffice2Icon },
-      { name: "My Tribe", href: "/teacher/tribe", icon: UserGroupIcon },
+      { name: "My Tribe", href: "/teacher/tribe", icon: UsersIcon },
       { name: "QR Scan", href: "/teacher/qr-scan", icon: QrCodeIcon },
     ],
   },
@@ -244,9 +248,12 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/volunteer", icon: HomeIcon },
       { name: "Schedule", href: "/volunteer/schedule", icon: ClockIcon },
+      { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
+      { name: "Incidents", href: "/volunteer/incidents", icon: ExclamationTriangleIcon },
+      { name: "Inbox", href: "/volunteer/inbox", icon: InboxIcon },
       LEADERBOARD_ITEM,
       { name: "Departments", href: "/volunteer/departments", icon: BuildingOffice2Icon },
-      { name: "My Tribe", href: "/volunteer/tribe", icon: UserGroupIcon },
+      { name: "My Tribe", href: "/volunteer/tribe", icon: UsersIcon },
       { name: "QR Scan", href: "/volunteer/qr-scan", icon: QrCodeIcon },
     ],
   },
@@ -258,9 +265,12 @@ const CAMPUS_REP_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon },
       { name: "Schedule", href: "/campus-rep-dashboard/schedule", icon: ClockIcon },
+      { name: "Campers Profile", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
+      { name: "Incidents", href: "/campus-rep-dashboard/incidents", icon: ExclamationTriangleIcon },
+      { name: "Inbox", href: "/campus-rep-dashboard/inbox", icon: InboxIcon },
       LEADERBOARD_ITEM,
       { name: "Departments", href: "/campus-rep-dashboard/departments", icon: BuildingOffice2Icon },
-      { name: "My Tribe", href: "/campus-rep-dashboard/tribe", icon: UserGroupIcon },
+      { name: "My Tribe", href: "/campus-rep-dashboard/tribe", icon: UsersIcon },
       { name: "QR Scan", href: "/campus-rep-dashboard/qr-scan", icon: QrCodeIcon },
     ],
   },
