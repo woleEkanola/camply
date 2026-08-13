@@ -225,7 +225,14 @@ test.describe("JD Departments and daily operations", () => {
     const assignment = page.getByRole("combobox", { name: "Assign Preference Teacher to department" });
     await assignment.selectOption(vmdId);
     await expect.poll(async () => (await prisma.staffProfile.findUniqueOrThrow({ where: { id: teacherId } })).departmentId).toBe(vmdId);
-    await assignment.selectOption("");
+
+    // The row above is filtered by "Unassigned" status, so it drops out of
+    // the list as soon as the assignment above lands (live query
+    // invalidation) — its <select> is gone, not just reset. Revert directly
+    // via Prisma and reload so the row (and its combobox) reappears.
+    await prisma.staffProfile.update({ where: { id: teacherId }, data: { departmentId: null } });
+    await page.reload();
+    await expect(page.getByText("Preferences recorded", { exact: true })).toBeVisible({ timeout: 60_000 });
 
     await page.getByRole("button", { name: "Assign Departments" }).click();
     await expect(page.getByRole("heading", { name: "Auto-assign unassigned teachers" })).toBeVisible();

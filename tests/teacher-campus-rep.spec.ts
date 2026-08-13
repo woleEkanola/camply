@@ -87,7 +87,7 @@ test.describe("Dual role: a Teacher can also be a Campus Rep", () => {
     await expect(page.getByRole("heading", { name: "Teacher Dashboard" })).toBeVisible({ timeout: 10000 });
 
     // Nav gained the Campus Rep's Registrations/Campers items on top of the Teacher nav.
-    const repSectionHeading = page.getByText("My Campus (Rep)");
+    const repSectionHeading = page.getByText("Campus Management");
     await expect(repSectionHeading).toBeVisible();
     await expect(page.getByRole("link", { name: "Registrations" })).toBeVisible();
 

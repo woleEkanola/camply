@@ -101,7 +101,9 @@ test.describe("Camp Command", () => {
     await loginWithPassword(page, teacherEmail, "password123");
     await expect(page.getByRole("button", { name: "Switch context" })).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "Switch context" }).click();
-    await page.getByRole("link", { name: "Camp Commandant" }).click();
+    // ContextSwitcher options are HeadlessUI Menu.Items — the cloned <Link>
+    // is exposed as role="menuitem", not "link" (same as parent-teacher-dual-role.spec.ts).
+    await page.getByRole("menuitem", { name: "Camp Commandant" }).click();
     await expect(page.getByRole("heading", { name: "Camp Commandant" })).toBeVisible({ timeout: 20_000 });
 
     await expect(page.getByRole("link", { name: "Registrations", exact: true })).toBeVisible();

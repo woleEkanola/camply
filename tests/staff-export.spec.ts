@@ -74,7 +74,7 @@ test.describe("Staff export: data spreadsheet and ID card sheet", () => {
   });
 
   test("admin can generate a Staff ID Cards PDF sheet", async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(120000);
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/teachers");
     await expect(page.getByText(teacherName).first()).toBeVisible({ timeout: 15000 });
@@ -98,7 +98,13 @@ test.describe("Staff export: data spreadsheet and ID card sheet", () => {
           });
           return job?.status;
         },
-        { timeout: 20000 }
+        // The shared fixture org has accumulated 100+ staff profiles across
+        // e2e sessions (per CLAUDE.md's known fixture-pollution note), and
+        // canvas-based ID card rendering (one PNG per profile) scales with
+        // that count — 20s was tuned for a much smaller org and is no longer
+        // realistic. Poll generously rather than re-tightening a number that
+        // will just drift stale again as more sessions accumulate fixtures.
+        { timeout: 90000 }
       )
       .toBe("DONE");
   });

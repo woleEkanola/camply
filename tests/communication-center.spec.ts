@@ -37,13 +37,16 @@ test.describe("Communication Center", () => {
 
     // Communication is a collapsible group (navConfig.ts: `collapsible: true`)
     // and starts closed unless the current route is inside it — so its items
-    // are genuinely absent from the DOM until the header is clicked.
+    // are genuinely absent from the DOM until the header is clicked. Its
+    // sub-pages (Campaigns, Audiences, Delivery Queue/Logs, Templates, Event
+    // Settings, Branding, Camp ID Card) are tabs within Email & Broadcasts /
+    // Push & Station Alerts now, not separate top-level nav links.
     await expect(nav).toContainText("Communication");
-    await expect(nav).not.toContainText("Delivery Queue");
+    await expect(nav).not.toContainText("Email & Broadcasts");
 
     await nav.getByText("Communication", { exact: true }).click();
 
-    for (const item of ["Dashboard", "Campaigns", "Audiences", "Delivery Queue", "Delivery Logs", "Templates", "Event Settings", "Branding", "Camp ID Card"]) {
+    for (const item of ["Email & Broadcasts", "Push & Station Alerts"]) {
       await expect(nav).toContainText(item);
     }
   });

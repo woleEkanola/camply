@@ -56,22 +56,22 @@ test.describe("Bottom tab nav — mobile", () => {
     await expect(page.getByRole("link", { name: "Campers" })).toBeVisible();
   });
 
-  test("volunteer sees the same five destinations", async ({ page }) => {
+  test("volunteer sees the same six destinations", async ({ page }) => {
     await loginWithPassword(page, "volunteer@camply.com", "password123");
     const nav = page.getByRole("navigation", { name: "Primary" });
-    for (const name of ["Dashboard", "Leaderboard", "QR Scan", "Departments", "My Tribe"]) await expect(nav.getByRole("link", { name })).toBeVisible();
-    await expect(nav.getByRole("link")).toHaveCount(5);
+    for (const name of ["Dashboard", "Schedule", "Leaderboard", "QR Scan", "Departments", "My Tribe"]) await expect(nav.getByRole("link", { name })).toBeVisible();
+    await expect(nav.getByRole("link")).toHaveCount(6);
     await expect(nav.getByRole("button", { name: "More" })).toHaveCount(0);
     await page.getByRole("button", { name: "Open menu" }).click();
     await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Incidents" })).toBeVisible();
   });
 
-  test("campus representative sees the same five destinations", async ({ page }) => {
+  test("campus representative sees the same six destinations", async ({ page }) => {
     await loginWithPassword(page, "campusrep@camply.com", "password123");
     const nav = page.getByRole("navigation", { name: "Primary" });
-    for (const name of ["Dashboard", "Leaderboard", "QR Scan", "Departments", "My Tribe"]) await expect(nav.getByRole("link", { name })).toBeVisible();
-    await expect(nav.getByRole("link")).toHaveCount(5);
+    for (const name of ["Dashboard", "Schedule", "Leaderboard", "QR Scan", "Departments", "My Tribe"]) await expect(nav.getByRole("link", { name })).toBeVisible();
+    await expect(nav.getByRole("link")).toHaveCount(6);
     await expect(nav.getByRole("button", { name: "More" })).toHaveCount(0);
     await page.getByRole("button", { name: "Open menu" }).click();
     await expect(page.getByRole("link", { name: "Registrations" })).toBeVisible();
