@@ -54,10 +54,10 @@ describe("generateIdCardSheetPdf pagination", () => {
   });
 
   it.each([
-    [7, 2],
-    [12, 2],
-    [13, 3],
-    [6, 1],
+    [9, 2],
+    [16, 2],
+    [17, 3],
+    [8, 1],
     [1, 1],
   ])("%i cards paginate into %i A4 page(s)", async (count, expectedPages) => {
     const pdfBytes = await generateIdCardSheetPdf(Array(count).fill(cardPng));

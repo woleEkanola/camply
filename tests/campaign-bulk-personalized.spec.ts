@@ -176,7 +176,7 @@ test.describe("Campaign: 50 approved users — personalized Camp Invitation + ID
   });
 
   // ═══ Step 4: Verify ID card sheet route for a sampled subset ═══
-  test("ID card sheet PNG route returns valid 6-card images for every registration", async ({ request }) => {
+  test("ID card sheet PNG route returns valid 8-card images for every registration", async ({ request }) => {
     const sample = Math.min(APPROVED_COUNT, 5); // Check first 5 for speed
     const qrTokens = await (prisma as any).registration.findMany({
       where: { id: { in: registrationIds } },
@@ -190,7 +190,7 @@ test.describe("Campaign: 50 approved users — personalized Camp Invitation + ID
       expect(resp.status(), `Sheet for ${camper.name}`).toBe(200);
       expect(resp.headers()["content-type"]).toBe("image/png");
       const body = await resp.body();
-      expect(body.length).toBeGreaterThan(50000); // 6-card sheet is ~100KB+
+      expect(body.length).toBeGreaterThan(50000); // 8-card sheet is comfortably over 50KB
       const pngMagic = [0x89, 0x50, 0x4e, 0x47];
       expect(Array.from(body.subarray(0, 4))).toEqual(pngMagic);
     }

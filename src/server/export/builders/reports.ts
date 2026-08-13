@@ -35,9 +35,15 @@ async function fetchReportData(ctx: { prisma: any }, organizationId: string, fil
 
 function reportRows(data: Awaited<ReturnType<typeof fetchReportData>>): Record<string, any>[] {
   const rows: Record<string, any>[] = [
-    { Section: "Meals", Item: "Breakfast", Count: data.meals.breakfast },
-    { Section: "Meals", Item: "Lunch", Count: data.meals.lunch },
-    { Section: "Meals", Item: "Dinner", Count: data.meals.dinner },
+    { Section: "Meals", Item: "Breakfast — Total", Count: data.meals.breakfast },
+    { Section: "Meals", Item: "Breakfast — Campers", Count: data.meals.camper.breakfast },
+    { Section: "Meals", Item: "Breakfast — Staff", Count: data.meals.staff.breakfast },
+    { Section: "Meals", Item: "Lunch — Total", Count: data.meals.lunch },
+    { Section: "Meals", Item: "Lunch — Campers", Count: data.meals.camper.lunch },
+    { Section: "Meals", Item: "Lunch — Staff", Count: data.meals.staff.lunch },
+    { Section: "Meals", Item: "Dinner — Total", Count: data.meals.dinner },
+    { Section: "Meals", Item: "Dinner — Campers", Count: data.meals.camper.dinner },
+    { Section: "Meals", Item: "Dinner — Staff", Count: data.meals.staff.dinner },
   ];
   for (const r of data.arrivals.rows) {
     rows.push({ Section: "Arrivals", Item: `${r.station} (${r.stationId})`, Count: r.count });

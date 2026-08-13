@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { markAttendance, AttendanceError } from "../../attendance/engine";
+import { markAttendance, markStaffAttendance, AttendanceError } from "../../attendance/engine";
 import { getCampPointsAccess, assertScope } from "../../campPoints/access";
+import { normalizeScannedQRToken } from "../../../lib/qr";
 
 async function attendanceAccess(ctx: any, campId: string, tribeId?: string | null, campusId?: string | null) {
   const access = await getCampPointsAccess(ctx, campId);
@@ -48,7 +49,8 @@ async function resolveAttendanceScoring(ctx: any, campId: string, lateAfterMinut
   return { category, rule };
 }
 
-const sessionInclude = { records: { include: { registration: { include: { camper: true } } } } } as const;
+const audienceSchema = z.enum(["CAMPER", "TEACHER", "VOLUNTEER", "ALL_STAFF"]);
+const sessionInclude = { records: { include: { registration: { include: { camper: true } } } }, staffRecords: { include: { staffProfile: true } } } as const;
 const eligibleStatus: any = { in: ["APPROVED", "CHECKED_IN", "COMPLETED"] };
 
 export const attendanceRouter = createTRPCRouter({
@@ -57,6 +59,7 @@ export const attendanceRouter = createTRPCRouter({
       campId: z.string(), organizationId: z.string(), name: z.string().min(1), date: z.date(), startsAt: z.date().optional(),
       lateAfterMinutes: z.number().int().min(0).max(240).default(10), tribeId: z.string().optional(), campusId: z.string().optional(),
       venueId: z.string().optional(), allowVolunteerAccess: z.boolean().default(false),
+      audience: audienceSchema.default("CAMPER"),
     }))
     .mutation(async ({ ctx, input }) => {
       const access = await attendanceAccess(ctx, input.campId, input.tribeId, input.campusId);
@@ -71,30 +74,37 @@ export const attendanceRouter = createTRPCRouter({
           tribeId: input.tribeId, campusId: input.campusId,
           scope: input.tribeId ? "TRIBE" : input.campusId ? "CAMPUS" : "CAMP",
           categoryId: category.id, ruleId: rule.id, createdById: ctx.userId, status: "ACTIVE",
+          subjectAudience: input.audience,
         } });
         return tx.attendanceSession.create({ data: {
           campId: input.campId, name: input.name, date: input.date, startsAt, lateAfterMinutes: input.lateAfterMinutes,
           tribeId: input.tribeId, campusId: input.campusId, venueId: input.venueId, createdById: ctx.userId,
           allowVolunteerAccess: access.staffProfile?.type === "VOLUNTEER" ? true : input.allowVolunteerAccess,
+          audience: input.audience,
           scoredSessionId: scored.id,
         } });
       });
     }),
 
   listSessions: protectedProcedure
-    .input(z.object({ organizationId: z.string(), campId: z.string(), tribeId: z.string().optional(), campusId: z.string().optional() }))
+    .input(z.object({ organizationId: z.string(), campId: z.string(), tribeId: z.string().optional(), campusId: z.string().optional(), audience: audienceSchema.optional() }))
     .query(async ({ ctx, input }) => {
       await attendanceAccess(ctx, input.campId, input.tribeId, input.campusId);
       return ctx.prisma.attendanceSession.findMany({
-        where: { campId: input.campId, ...(input.tribeId ? { tribeId: input.tribeId } : {}), ...(input.campusId ? { campusId: input.campusId } : {}) },
-        include: { records: true }, orderBy: { date: "desc" },
+        where: { campId: input.campId, ...(input.tribeId ? { tribeId: input.tribeId } : {}), ...(input.campusId ? { campusId: input.campusId } : {}), ...(input.audience ? { audience: input.audience } : {}) },
+        include: { records: true, staffRecords: true }, orderBy: { date: "desc" },
       });
     }),
 
   rosterForScope: protectedProcedure
-    .input(z.object({ campId: z.string(), tribeId: z.string().optional(), campusId: z.string().optional() }))
+    .input(z.object({ campId: z.string(), tribeId: z.string().optional(), campusId: z.string().optional(), audience: audienceSchema.default("CAMPER") }))
     .query(async ({ ctx, input }) => {
       await attendanceAccess(ctx, input.campId, input.tribeId, input.campusId);
+      if (input.audience !== "CAMPER") return ctx.prisma.staffProfile.findMany({
+        where: { campId: input.campId, status: "APPROVED", deletedAt: null, ...(input.audience === "ALL_STAFF" ? {} : { type: input.audience }), ...(input.tribeId ? { assignedTribeId: input.tribeId } : {}), ...(input.campusId ? { preferredCampusId: input.campusId } : {}) },
+        select: { id: true, firstName: true, lastName: true, preferredName: true, type: true, qrToken: true, assignedTribeId: true, preferredCampusId: true },
+        orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+      });
       return ctx.prisma.registration.findMany({
         where: { campId: input.campId, status: eligibleStatus, deletedAt: null, ...(input.tribeId ? { tribeId: input.tribeId } : {}), ...(input.campusId ? { campusId: input.campusId } : {}) },
         include: { camper: true, tribe: { select: { name: true } }, campus: { select: { name: true } } },
@@ -136,12 +146,16 @@ export const attendanceRouter = createTRPCRouter({
     }),
 
   mark: protectedProcedure
-    .input(z.object({ sessionId: z.string(), registrationId: z.string(), status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]).optional(), source: z.enum(["QR", "SEARCH", "MANUAL", "OFFLINE"]), occurredAt: z.date().optional() }))
+    .input(z.object({ sessionId: z.string(), registrationId: z.string().optional(), staffProfileId: z.string().optional(), status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]).optional(), source: z.enum(["QR", "SEARCH", "MANUAL", "OFFLINE"]), occurredAt: z.date().optional() }).refine((value) => !!value.registrationId !== !!value.staffProfileId, "Provide exactly one attendance subject."))
     .mutation(async ({ ctx, input }) => {
       const session = await ctx.prisma.attendanceSession.findUnique({ where: { id: input.sessionId } });
       if (!session) throw new TRPCError({ code: "NOT_FOUND" });
       await sessionAccess(ctx, session);
-      try { return await markAttendance({ ...input, actorId: ctx.userId }); }
+      try {
+        return input.staffProfileId
+          ? await markStaffAttendance({ sessionId: input.sessionId, staffProfileId: input.staffProfileId, status: input.status, source: input.source, occurredAt: input.occurredAt, actorId: ctx.userId })
+          : await markAttendance({ sessionId: input.sessionId, registrationId: input.registrationId!, status: input.status, source: input.source, occurredAt: input.occurredAt, actorId: ctx.userId });
+      }
       catch (error) {
         if (error instanceof AttendanceError) throw new TRPCError({ code: error.code === "CONFLICT" ? "CONFLICT" : error.code === "FORBIDDEN" ? "FORBIDDEN" : "NOT_FOUND", message: error.message });
         throw error;
@@ -157,6 +171,18 @@ export const attendanceRouter = createTRPCRouter({
       const token = input.qrToken?.trim();
       const query = input.query?.trim();
       if (!token && !query) throw new TRPCError({ code: "BAD_REQUEST", message: "Scan a QR code or enter a camper search." });
+      if (session.audience !== "CAMPER") {
+        const normalized = token ? normalizeScannedQRToken(token) : undefined;
+        const matches = await ctx.prisma.staffProfile.findMany({
+          where: { campId: session.campId, deletedAt: null, status: "APPROVED", ...(session.audience === "ALL_STAFF" ? {} : { type: session.audience as any }), ...(session.tribeId ? { assignedTribeId: session.tribeId } : {}), ...(session.campusId ? { preferredCampusId: session.campusId } : {}), OR: normalized ? [{ qrToken: normalized }, { id: normalized }] : [{ firstName: { contains: query, mode: "insensitive" } }, { lastName: { contains: query, mode: "insensitive" } }, { email: { contains: query, mode: "insensitive" } }] },
+          take: 2,
+        });
+        if (!matches.length) throw new TRPCError({ code: "NOT_FOUND", message: "No eligible staff member found for this session." });
+        if (!token && matches.length > 1) throw new TRPCError({ code: "CONFLICT", message: "More than one staff member matches. Search more specifically." });
+        const match = matches[0];
+        const record = await markStaffAttendance({ sessionId: session.id, staffProfileId: match.id, source: input.source, actorId: ctx.userId, occurredAt: input.occurredAt });
+        return { record, subject: { id: match.id, name: `${match.preferredName || match.firstName} ${match.lastName}`.trim(), type: match.type }, camper: null };
+      }
       const matches = await ctx.prisma.registration.findMany({
         where: {
           campId: session.campId, deletedAt: null, status: eligibleStatus,
@@ -171,7 +197,7 @@ export const attendanceRouter = createTRPCRouter({
       if (!token && matches.length > 1) throw new TRPCError({ code: "CONFLICT", message: "More than one camper matches. Search more specifically." });
       const match = matches[0] as any;
       const record = await markAttendance({ sessionId: session.id, registrationId: match.id, source: input.source, actorId: ctx.userId, occurredAt: input.occurredAt });
-      return { record, camper: match.camper };
+      return { record, camper: match.camper, subject: { id: match.id, name: match.camper.name, type: "CAMPER" as const } };
     }),
 
   closeSession: protectedProcedure
@@ -181,6 +207,10 @@ export const attendanceRouter = createTRPCRouter({
       if (!session) throw new TRPCError({ code: "NOT_FOUND" });
       await sessionAccess(ctx, session);
       if (input.markRemainingAbsent) {
+        if (session.audience !== "CAMPER") {
+          const staff = await ctx.prisma.staffProfile.findMany({ where: { campId: session.campId, status: "APPROVED", deletedAt: null, ...(session.audience === "ALL_STAFF" ? {} : { type: session.audience as any }), ...(session.tribeId ? { assignedTribeId: session.tribeId } : {}), ...(session.campusId ? { preferredCampusId: session.campusId } : {}), attendanceRecords: { none: { sessionId: session.id } } }, select: { id: true } });
+          for (const person of staff) await markStaffAttendance({ sessionId: session.id, staffProfileId: person.id, status: "ABSENT", source: "MANUAL", actorId: ctx.userId });
+        } else {
         const registrations = await ctx.prisma.registration.findMany({
           where: {
             campId: session.campId, ...(session.tribeId ? { tribeId: session.tribeId } : {}), ...(session.campusId ? { campusId: session.campusId } : {}),
@@ -188,6 +218,7 @@ export const attendanceRouter = createTRPCRouter({
           }, select: { id: true },
         });
         for (const registration of registrations) await markAttendance({ sessionId: session.id, registrationId: registration.id, status: "ABSENT", source: "MANUAL", actorId: ctx.userId });
+        }
       }
       await ctx.prisma.attendanceSession.update({ where: { id: session.id }, data: { status: "CLOSED", closedAt: new Date(), closedById: ctx.userId } });
       if (session.scoredSessionId) await ctx.prisma.scoredSession.update({ where: { id: session.scoredSessionId }, data: { status: "CLOSED", endsAt: new Date() } });

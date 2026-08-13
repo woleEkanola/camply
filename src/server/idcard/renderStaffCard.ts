@@ -19,7 +19,7 @@ import {
   roundRectPath,
   fitFontSize,
   truncateToFit,
-  wrapToLines,
+  fitTextBlock,
   fillTextTracked,
   drawDotGrid,
   drawChurchGlyph,
@@ -28,6 +28,10 @@ import {
   drawShieldGlyph,
   loadLogoOrNull,
   initials,
+  SHEET_COLS,
+  SHEET_ROWS,
+  SHEET_GAP,
+  SHEET_SCALE,
 } from "./cardPrimitives";
 
 export interface StaffIdCardData {
@@ -168,21 +172,11 @@ export async function renderStaffIdCardPng(data: StaffIdCardData): Promise<Buffe
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = DARK_TEXT;
-  let nameSize = 88;
-  let nameLines: string[] | null = null;
-  while (nameSize >= 26) {
-    ctx.font = `bold ${nameSize}px Inter, sans-serif`;
-    nameLines = wrapToLines(ctx, data.staffName, BODY_MAX_WIDTH, 2);
-    if (nameLines) break;
-    nameSize -= 2;
-  }
-  if (!nameLines) {
-    nameSize = 26;
-    ctx.font = `bold ${nameSize}px Inter, sans-serif`;
-    nameLines = [truncateToFit(ctx, data.staffName, BODY_MAX_WIDTH)];
-  }
+  const nameFit = fitTextBlock(ctx, data.staffName, BODY_MAX_WIDTH, { start: 88, min: 26, maxLines: 2 });
+  const nameSize = nameFit.fontSize;
+  const nameLines = nameFit.lines;
   ctx.font = `bold ${nameSize}px Inter, sans-serif`;
-  const nameLineHeight = Math.round(nameSize * 1.1);
+  const nameLineHeight = nameFit.lineHeight;
   const nameTop = nameLines.length >= 2 ? 208 : 254;
   nameLines.forEach((line, i) => {
     ctx.fillText(line, BODY_X, nameTop + i * nameLineHeight);
@@ -217,8 +211,9 @@ export async function renderStaffIdCardPng(data: StaffIdCardData): Promise<Buffe
     ctx.font = "bold 16px Inter, sans-serif";
     fillTextTracked(ctx, row.label.toUpperCase(), textX, centerY - 7, 1.4);
     ctx.fillStyle = DARK_TEXT;
-    ctx.font = "bold 23px Inter, sans-serif";
-    ctx.fillText(truncateToFit(ctx, row.value, valueMaxWidth), textX, centerY + 21);
+    const valueFit = fitTextBlock(ctx, row.value, valueMaxWidth, { start: 23, min: 17, maxLines: 1 });
+    ctx.font = `bold ${valueFit.fontSize}px Inter, sans-serif`;
+    ctx.fillText(valueFit.lines[0], textX, centerY + 21);
   }
 
   // ─── Body rows — data-driven, 2 to 4 of them depending on what's
@@ -271,10 +266,6 @@ export async function renderStaffIdCardPng(data: StaffIdCardData): Promise<Buffe
   return canvas.encode("png");
 }
 
-const SHEET_COLS = 2;
-const SHEET_ROWS = 3;
-const SHEET_GAP = 12;
-const SHEET_SCALE = 0.5;
 const SHEET_CARD_W = Math.round(CARD_WIDTH * SHEET_SCALE);
 const SHEET_CARD_H = Math.round(CARD_HEIGHT * SHEET_SCALE);
 const SHEET_W = SHEET_CARD_W * SHEET_COLS + SHEET_GAP * (SHEET_COLS + 1);

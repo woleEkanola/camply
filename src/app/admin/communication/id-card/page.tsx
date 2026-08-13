@@ -25,7 +25,7 @@ export default function IdCardSettingsPage() {
       <div className="mx-auto max-w-4xl space-y-8">
         <PageHeader
           title="Camp ID Card"
-          description="A CR80-size camper ID card with a QR code — embeddable in emails and downloadable as a 6-copy printable A4 sheet."
+          description="A CR80-size camper ID card with a QR code — embeddable in emails and downloadable as an 8-copy printable A4 sheet."
         />
 
         {isLoading ? (
@@ -93,7 +93,7 @@ export default function IdCardSettingsPage() {
                   icon={<ArrowDownTrayIcon className="h-4 w-4" />}
                   onClick={() => window.open("/api/id-card/sample-sheet.pdf", "_blank")}
                 >
-                  Download Sample Printable Sheet (A4, 6 copies)
+                  Download Sample Printable Sheet (A4, 8 copies)
                 </Button>
               </CardBody>
             </Card>

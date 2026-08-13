@@ -16,7 +16,7 @@ const SAMPLE_DATA: CampIdCardData = {
   qrToken: "SAMPLE-PREVIEW-QR",
 };
 
-/** Admin-only: downloads the sample 6-copy A4 sheet for the ID Card settings page. */
+/** Admin-only: downloads the sample 8-copy A4 sheet for the ID Card settings page. */
 export async function GET() {
   const session = await getServerSession(authOptions);
   const role = session?.user?.role;

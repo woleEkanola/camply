@@ -4,11 +4,14 @@ import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { getCampPointsAccess, assertCanAwardPoints, assertScope } from "../../campPoints/access";
 import { recordScoreEvent } from "../../leaderboard/record";
 import { campDayKey } from "../../leaderboard/dayKey";
+import { normalizeScannedQRToken } from "../../../lib/qr";
+import { resolveStaffScoreScope } from "../../leaderboard/staffScope";
 
 const scopeSchema = z.object({
   tribeId: z.string().optional(),
   campusId: z.string().optional(),
 });
+const subjectAudienceSchema = z.enum(["CAMPER", "TEACHER", "VOLUNTEER", "ALL_STAFF"]);
 
 async function availableCategories(prisma: any, campId: string) {
   const rows = await prisma.scoreCategory.findMany({
@@ -76,11 +79,16 @@ export const campPointsRouter = createTRPCRouter({
     }),
 
   roster: protectedProcedure
-    .input(z.object({ campId: z.string() }).merge(scopeSchema))
+    .input(z.object({ campId: z.string(), subjectAudience: subjectAudienceSchema.default("CAMPER") }).merge(scopeSchema))
     .query(async ({ ctx, input }) => {
       const access = await getCampPointsAccess(ctx, input.campId);
       if (!access.canTakeAttendance && !access.canAwardPoints) throw new TRPCError({ code: "FORBIDDEN" });
       assertScope(access, input, access.canAwardPoints ? "POINTS" : "ATTENDANCE");
+      if (input.subjectAudience !== "CAMPER") return ctx.prisma.staffProfile.findMany({
+        where: { campId: input.campId, status: "APPROVED", deletedAt: null, ...(input.subjectAudience === "ALL_STAFF" ? {} : { type: input.subjectAudience }), ...(input.tribeId ? { assignedTribeId: input.tribeId } : {}), ...(input.campusId ? { preferredCampusId: input.campusId } : {}) },
+        select: { id: true, firstName: true, lastName: true, preferredName: true, type: true, qrToken: true, assignedTribeId: true, preferredCampusId: true },
+        orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+      });
       return ctx.prisma.registration.findMany({
         where: {
           campId: input.campId,
@@ -111,6 +119,7 @@ export const campPointsRouter = createTRPCRouter({
         tribeId: z.string().optional(),
         campusId: z.string().optional(),
         points: z.number().int().min(-1000).max(1000).optional(),
+        subjectAudience: subjectAudienceSchema.default("CAMPER"),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -121,7 +130,8 @@ export const campPointsRouter = createTRPCRouter({
       const points = access.isAdmin && input.points !== undefined ? input.points : category.defaultPoints;
       if (points === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a non-zero point amount." });
       const scope = input.tribeId ? "TRIBE" : input.campusId ? "CAMPUS" : "CAMP";
-      const day = campDayKey(new Date(), "Africa/Lagos");
+      const settings = await ctx.prisma.leaderboardSettings.findUnique({ where: { campId: input.campId }, select: { timezone: true } });
+      const day = campDayKey(new Date(), settings?.timezone ?? "Africa/Lagos");
       return ctx.prisma.scoredSession.create({
         data: {
           campId: input.campId,
@@ -136,6 +146,7 @@ export const campPointsRouter = createTRPCRouter({
           awardPoints: points,
           createdById: ctx.userId,
           status: "ACTIVE",
+          subjectAudience: input.subjectAudience,
         },
       });
     }),
@@ -147,6 +158,7 @@ export const campPointsRouter = createTRPCRouter({
         qrToken: z.string().optional(),
         query: z.string().optional(),
         registrationIds: z.array(z.string()).max(100).optional(),
+        staffProfileIds: z.array(z.string()).max(100).optional(),
         entryMethod: z.enum(["QR", "SEARCH", "SELECT"]),
       })
     )
@@ -158,10 +170,31 @@ export const campPointsRouter = createTRPCRouter({
       assertCanAwardPoints(access);
       assertScope(access, { tribeId: batch.tribeId, campusId: batch.campusId }, "POINTS");
 
-      const token = input.qrToken?.trim();
+      const token = input.qrToken ? normalizeScannedQRToken(input.qrToken) : undefined;
       const query = input.query?.trim();
-      if (!token && !query && !input.registrationIds?.length) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Scan, search, or select at least one teenager." });
+      if (!token && !query && !input.registrationIds?.length && !input.staffProfileIds?.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Scan, search, or select at least one person." });
+      }
+      const audience = (batch.subjectAudience ?? "CAMPER") as "CAMPER" | "TEACHER" | "VOLUNTEER" | "ALL_STAFF";
+      if (audience !== "CAMPER") {
+        const staffScope = { campId: batch.campId, status: "APPROVED", deletedAt: null, ...(audience === "ALL_STAFF" ? {} : { type: audience }), ...(batch.tribeId ? { assignedTribeId: batch.tribeId } : {}), ...(batch.campusId ? { preferredCampusId: batch.campusId } : {}) } as any;
+        let staff: any[];
+        if (input.staffProfileIds?.length) staff = await ctx.prisma.staffProfile.findMany({ where: { ...staffScope, id: { in: input.staffProfileIds } } });
+        else if (token) staff = await ctx.prisma.staffProfile.findMany({ where: { ...staffScope, OR: [{ qrToken: token }, { id: token }] }, take: 2 });
+        else staff = await ctx.prisma.staffProfile.findMany({ where: { ...staffScope, OR: [{ firstName: { contains: query, mode: "insensitive" } }, { lastName: { contains: query, mode: "insensitive" } }, { email: { contains: query, mode: "insensitive" } }] }, take: 2 });
+        if (!staff.length) throw new TRPCError({ code: "NOT_FOUND", message: "No eligible staff member found in this group." });
+        if (!token && !input.staffProfileIds?.length && staff.length > 1) throw new TRPCError({ code: "CONFLICT", message: "More than one staff member matches. Search more specifically." });
+        let awarded = 0; let duplicates = 0;
+        const results: Array<{ staffProfileId: string; name: string; eventId: string | null }> = [];
+        for (const person of staff) {
+          const resolved = await resolveStaffScoreScope(ctx.prisma, person.id);
+          if (!resolved) continue;
+          if (!access.isAdmin && resolved.userId === ctx.userId) throw new TRPCError({ code: "FORBIDDEN", message: "You cannot award points to your own badge." });
+          const event = await recordScoreEvent({ campId: batch.campId, campusId: resolved.campusId, tribeId: resolved.tribeId, staffProfileId: person.id, categoryId: batch.categoryId, scoredSessionId: batch.id, points: batch.awardPoints ?? 0, reason: batch.name, notes: `Camp Points via ${input.entryMethod}`, source: "MANUAL", createdById: ctx.userId, idempotencyKey: `point-batch:${batch.id}:staff:${person.id}` });
+          if (event) awarded++; else duplicates++;
+          results.push({ staffProfileId: person.id, name: `${person.preferredName || person.firstName} ${person.lastName}`.trim(), eventId: event?.id ?? null });
+        }
+        return { awarded, duplicates, results };
       }
       const scope = {
         campId: batch.campId,
@@ -238,7 +271,7 @@ export const campPointsRouter = createTRPCRouter({
     }),
 
   history: protectedProcedure
-    .input(z.object({ campId: z.string(), tribeId: z.string().optional(), campusId: z.string().optional() }))
+    .input(z.object({ campId: z.string(), tribeId: z.string().optional(), campusId: z.string().optional(), subjectAudience: subjectAudienceSchema.optional() }))
     .query(async ({ ctx, input }) => {
       const access = await getCampPointsAccess(ctx, input.campId);
       if (!access.canTakeAttendance && !access.canAwardPoints) throw new TRPCError({ code: "FORBIDDEN" });
@@ -249,7 +282,13 @@ export const campPointsRouter = createTRPCRouter({
       const events = await ctx.prisma.scoreEvent.findMany({
         where: {
           campId: input.campId,
-          registrationId: { not: null },
+          ...(input.subjectAudience === "CAMPER"
+            ? { registrationId: { not: null } }
+            : input.subjectAudience === "TEACHER" || input.subjectAudience === "VOLUNTEER"
+              ? { staffProfile: { type: input.subjectAudience } }
+              : input.subjectAudience === "ALL_STAFF"
+                ? { staffProfileId: { not: null } }
+                : { OR: [{ registrationId: { not: null } }, { staffProfileId: { not: null } }] }),
           ...(tribeId ? { tribeId } : {}),
           ...(campusId ? { campusId } : {}),
           ...(!access.isAdmin && !tribeId && !campusId && access.managedCampusIds.length > 1 ? { campusId: { in: access.managedCampusIds } } : {}),
@@ -258,21 +297,28 @@ export const campPointsRouter = createTRPCRouter({
         take: 100,
       });
       const registrationIds = [...new Set(events.map((event: any) => event.registrationId).filter(Boolean))];
+      const staffProfileIds = [...new Set(events.map((event: any) => event.staffProfileId).filter(Boolean))];
       const categoryIds = [...new Set(events.map((event: any) => event.categoryId))];
-      const [registrations, categories] = await Promise.all([
+      const [registrations, staffProfiles, categories] = await Promise.all([
         ctx.prisma.registration.findMany({ where: { id: { in: registrationIds } }, select: { id: true, camper: { select: { name: true } } } }),
+        ctx.prisma.staffProfile.findMany({ where: { id: { in: staffProfileIds } }, select: { id: true, firstName: true, lastName: true, type: true } }),
         ctx.prisma.scoreCategory.findMany({ where: { id: { in: categoryIds } }, select: { id: true, name: true, color: true } }),
       ]);
       const names = new Map(registrations.map((row: any) => [row.id, row.camper.name]));
+      const staffNames = new Map(staffProfiles.map((row: any) => [row.id, { name: [row.firstName, row.lastName].filter(Boolean).join(" "), type: row.type }]));
       const categoryById = new Map(categories.map((row: any) => [row.id, row]));
-      return events.map((event: any) => ({ ...event, camperName: names.get(event.registrationId) ?? "Teenager", category: categoryById.get(event.categoryId) ?? null }));
+      return events.map((event: any) => {
+        const staff = staffNames.get(event.staffProfileId);
+        const subjectName = names.get(event.registrationId) ?? staff?.name ?? "Participant";
+        return { ...event, subjectName, subjectType: staff?.type ?? "CAMPER", camperName: subjectName, category: categoryById.get(event.categoryId) ?? null };
+      });
     }),
 
   undo: protectedProcedure
     .input(z.object({ eventId: z.string(), reason: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const original = await ctx.prisma.scoreEvent.findUnique({ where: { id: input.eventId } });
-      if (!original || !original.registrationId) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!original || (!original.registrationId && !original.staffProfileId)) throw new TRPCError({ code: "NOT_FOUND" });
       const access = await getCampPointsAccess(ctx, original.campId);
       assertCanAwardPoints(access);
       assertScope(access, { tribeId: original.tribeId, campusId: original.campusId }, "POINTS");
@@ -282,6 +328,7 @@ export const campPointsRouter = createTRPCRouter({
         campusId: original.campusId,
         tribeId: original.tribeId,
         registrationId: original.registrationId,
+        staffProfileId: original.staffProfileId,
         categoryId: original.categoryId,
         scoredSessionId: original.scoredSessionId,
         points: -original.points,

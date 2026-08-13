@@ -415,6 +415,7 @@ model Camp {
   incidentReports               IncidentReport[]
   medicalVisits                 MedicalVisit[]
   mealDistributions             MealDistribution[]
+  staffMealDistributions        StaffMealDistribution[]
   scanEvents                    ScanEvent[]
   staffScanEvents               StaffScanEvent[]
   departments                   Department[]
@@ -966,6 +967,8 @@ model ScoredSession {
   // remains the single session link for attendance, scheduled scans, and
   // human-led QR awards. Null on legacy/scheduled sessions.
   awardPoints Int?
+  // CAMPER | TEACHER | VOLUNTEER | ALL_STAFF. Null preserves legacy rows.
+  subjectAudience String?
   createdById String?
   status      String  @default("SCHEDULED") // SCHEDULED | ACTIVE | CLOSED | CANCELLED
 
@@ -1311,6 +1314,8 @@ model StaffProfile {
   qrToken         String?          @unique
   qrIssuedAt      DateTime?
   staffScanEvents StaffScanEvent[]
+  attendanceRecords StaffAttendanceRecord[]
+  mealDistributions StaffMealDistribution[]
 
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -1342,6 +1347,7 @@ model StaffScanEvent {
   location       String?
   result         String // SUCCESS | DUPLICATE | ERROR
   metadata       Json?
+  dedupeKey      String?      @unique
 
   @@index([staffProfileId])
   @@index([campId])
@@ -1378,8 +1384,10 @@ model AttendanceSession {
   closedAt             DateTime?
   closedById           String?
   allowVolunteerAccess Boolean            @default(false)
+  audience             String             @default("CAMPER") // CAMPER | TEACHER | VOLUNTEER | ALL_STAFF
   createdById          String
   records              AttendanceRecord[]
+  staffRecords         StaffAttendanceRecord[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -1396,6 +1404,27 @@ model AttendanceSession {
   @@index([campusId, date])
   @@index([scoredSessionId])
   @@index([status, date])
+}
+
+model StaffAttendanceRecord {
+  id             String            @id @default(cuid())
+  session        AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId      String
+  staffProfile   StaffProfile      @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  staffProfileId String
+  status         String
+  source         String            @default("MANUAL")
+  markedAt       DateTime          @default(now())
+  updatedById    String?
+  notes          String?
+  scoreVersion   Int               @default(0)
+  scoreEventId   String?
+  recordedById   String
+  recordedAt     DateTime          @default(now())
+
+  @@unique([sessionId, staffProfileId])
+  @@index([staffProfileId])
+  @@index([scoreEventId])
 }
 
 model AttendanceRecord {
@@ -1464,6 +1493,21 @@ model MealDistribution {
   servedAt       DateTime     @default(now())
 
   @@unique([registrationId, meal, date])
+}
+
+model StaffMealDistribution {
+  id             String       @id @default(cuid())
+  camp           Camp         @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId         String
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  staffProfileId String
+  meal           String
+  date           DateTime     @db.Date
+  servedById     String
+  servedAt       DateTime     @default(now())
+
+  @@unique([staffProfileId, meal, date])
+  @@index([campId, date])
 }
 
 // ─── Camp Structure & Organogram ────────────────────────────────────────────
@@ -2280,4 +2324,3 @@ model CampScheduleChange {
 
   @@index([scheduleId, createdAt])
 }
-

@@ -75,7 +75,7 @@ test.describe("Public Camp ID Card image route", () => {
     expect(Array.from(body.subarray(0, 4))).toEqual(PNG_MAGIC);
   });
 
-  test("the per-registration printable sheet route returns a valid 6-copy A4 PDF", async ({ page }) => {
+  test("the per-registration printable sheet route returns a valid 8-copy A4 PDF", async ({ page }) => {
     await loginWithPassword(page, "admin@camply.com", "password123");
     const response = await page.request.get(`/api/registrations/${registrationId}/camp-id-card.pdf`);
     expect(response.status()).toBe(200);

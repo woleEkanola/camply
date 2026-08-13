@@ -11,6 +11,8 @@ let otherTribeId = "";
 let adminId = "";
 let teacherId = "";
 let volunteerId = "";
+let teacherProfileId = "";
+let volunteerProfileId = "";
 let campusRepId = "";
 let registrationIds: string[] = [];
 
@@ -48,19 +50,21 @@ beforeEach(async () => {
   const profile = await prisma.staffProfile.create({ data: {
     userId: teacher.id, organizationId: orgId, campId, type: "TEACHER", status: "APPROVED",
     firstName: "Tribe", lastName: "Head", phone: "+2348000000000", email: teacher.email,
-    assignedTribeId: tribeId,
+    assignedTribeId: tribeId, preferredCampusId: campusId, qrToken: `STF-TEACHER-${stamp}`,
   } });
+  teacherProfileId = profile.id;
   const position = await prisma.position.create({ data: { name: "Tribe Head", campId, grantsAwardPoints: true } });
   await prisma.positionAssignment.create({ data: { positionId: position.id, staffId: profile.id } });
   const volunteer = await prisma.user.create({ data: {
     email: `points-volunteer-${stamp}@test.com`, password: "x", role: "VOLUNTEER", organizationId: orgId,
   } });
   volunteerId = volunteer.id;
-  await prisma.staffProfile.create({ data: {
+  const volunteerProfile = await prisma.staffProfile.create({ data: {
     userId: volunteer.id, organizationId: orgId, campId, type: "VOLUNTEER", status: "APPROVED",
     firstName: "Tribe", lastName: "Assistant", phone: "+2348000000001", email: volunteer.email,
-    assignedTribeId: tribeId,
+    assignedTribeId: tribeId, preferredCampusId: campusId, qrToken: `STF-VOLUNTEER-${stamp}`,
   } });
+  volunteerProfileId = volunteerProfile.id;
   const campusRep = await prisma.user.create({ data: {
     email: `points-campus-rep-${stamp}@test.com`, password: "x", role: "CAMPUS_REPRESENTATIVE", organizationId: orgId,
     managedCampuses: { connect: { id: campusId } },
@@ -122,6 +126,26 @@ describe("Camp Points workspace", () => {
     await expect(teacher.campPoints.startBatch({ campId, categoryId: category.id, tribeId })).resolves.toMatchObject({ tribeId });
     await expect(teacher.campPoints.startBatch({ campId, categoryId: category.id, tribeId: otherTribeId })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(teacher.campPoints.startBatch({ campId, categoryId: category.id })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("awards staff once, enforces audience matching, rolls up groups, and blocks non-admin self-awards", async () => {
+    const admin = callerAs("ADMIN", adminId);
+    const category = (await admin.campPoints.categories({ campId }))[0]!;
+    const batch = await admin.campPoints.startBatch({ campId, categoryId: category.id, tribeId, points: 9, subjectAudience: "ALL_STAFF" });
+    const first = await admin.campPoints.award({ batchId: batch.id, staffProfileIds: [teacherProfileId, volunteerProfileId], entryMethod: "SELECT" });
+    const teacherQr = (await prisma.staffProfile.findUniqueOrThrow({ where: { id: teacherProfileId } })).qrToken!;
+    const duplicate = await admin.campPoints.award({ batchId: batch.id, qrToken: `https://camp.test/id?token=${teacherQr}`, entryMethod: "QR" });
+    expect(first).toMatchObject({ awarded: 2, duplicates: 0 });
+    expect(await prisma.scoreEvent.count({ where: { scoredSessionId: batch.id, staffProfileId: { not: null } } })).toBe(2);
+    expect((await prisma.leaderboardStat.findFirst({ where: { campId, subjectType: "TRIBE", subjectId: tribeId, day: null } }))?.totalPoints).toBe(18);
+    expect((await prisma.leaderboardStat.findFirst({ where: { campId, subjectType: "CAMPUS", subjectId: campusId, day: null } }))?.totalPoints).toBe(18);
+    expect(duplicate).toMatchObject({ awarded: 0, duplicates: 1 });
+
+    const camperBatch = await admin.campPoints.startBatch({ campId, categoryId: category.id, tribeId, points: 4, subjectAudience: "CAMPER" });
+    await expect(admin.campPoints.award({ batchId: camperBatch.id, qrToken: (await prisma.staffProfile.findUniqueOrThrow({ where: { id: teacherProfileId } })).qrToken!, entryMethod: "QR" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const selfBatch = await callerAs("TEACHER", teacherId).campPoints.startBatch({ campId, categoryId: category.id, tribeId, subjectAudience: "TEACHER" });
+    await expect(callerAs("TEACHER", teacherId).campPoints.award({ batchId: selfBatch.id, staffProfileIds: [teacherProfileId], entryMethod: "SELECT" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("uses the uppercase global attendance template, creates its missing camp rule, and scores only present or late", async () => {
