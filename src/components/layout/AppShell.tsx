@@ -385,7 +385,9 @@ export default function AppShell({ area, children }: AppShellProps) {
           showMore={false}
         />
         <CommandPalette area={area} />
-        <ScheduleAlertController />
+        {(["admin", "teacher", "volunteer", "campus-rep"] as const).includes(area as "admin" | "teacher" | "volunteer" | "campus-rep") && (
+          <ScheduleAlertController />
+        )}
       </div>
       <OfflineSetupPrompt organizationId={organizationId} role={role} />
     </div>

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { normalizeExcelDateTimeValue } from "../../../lib/import-export/parse";
 import { parseTimeToMinutes, validateBundle } from "../../../lib/import-export/validate";
 import type { RawBundle } from "../../../lib/import-export/parse";
@@ -53,7 +53,7 @@ describe("Schedule Parsing & Validation Tests", () => {
       ],
     };
 
-    const { validated, errors } = validateBundle(rawBundle);
+    const { validated } = validateBundle(rawBundle);
     expect(validated.program_schedule.length).toBe(3);
 
     // Overlapping row should have an error
