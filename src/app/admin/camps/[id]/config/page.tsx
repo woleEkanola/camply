@@ -31,11 +31,15 @@ const CRITERIA: { key: string; label: string }[] = [
   { key: "POPULATION", label: "Balance by Population" },
 ];
 
-const BED_CRITERIA: { key: string; label: string }[] = [
-  { key: "AGE_GROUP", label: "Group Similar Ages Together" },
-  { key: "GROUP_TOGETHER", label: "Keep Same Tribe/Department Together" },
-  { key: "CAMPUS_TOGETHER", label: "Group by Home Campus" },
-  { key: "POPULATION_BALANCE", label: "Fill Partially-Occupied Rooms First" },
+// `defaultEnabled` must mirror DEFAULT_RULES in src/server/accommodation/engine.ts —
+// a camp saved before a criterion existed has no stored entry for it, and the
+// engine falls back to the default rather than treating absent as disabled.
+const BED_CRITERIA: { key: string; label: string; defaultEnabled: boolean }[] = [
+  { key: "AGE_GROUP", label: "Group Similar Ages Together", defaultEnabled: true },
+  { key: "GROUP_TOGETHER", label: "Keep Same Tribe/Department Together", defaultEnabled: true },
+  { key: "CAMPUS_TOGETHER", label: "Group by Home Campus", defaultEnabled: false },
+  { key: "POPULATION_BALANCE", label: "Fill Partially-Occupied Rooms First", defaultEnabled: true },
+  { key: "STAFF_SPREAD", label: "Spread Staff One Per Room", defaultEnabled: true },
 ];
 
 export default function CampConfigPage() {
@@ -161,7 +165,7 @@ export default function CampConfigPage() {
   // Bed Allocation States
   const [bedEnabled, setBedEnabled] = useState(false);
   const [bedRules, setBedRules] = useState<{ criterion: string; enabled: boolean }[]>(
-    BED_CRITERIA.map((c) => ({ criterion: c.key, enabled: false }))
+    BED_CRITERIA.map((c) => ({ criterion: c.key, enabled: c.defaultEnabled }))
   );
   const [bulkResult, setBulkResult] = useState("");
 
@@ -199,7 +203,10 @@ export default function CampConfigPage() {
     setBedEnabled((camp as any).bedAllocationEnabled ?? false);
     const existingBedRules = (camp as any).bedAllocationRules;
     if (Array.isArray(existingBedRules) && existingBedRules.length > 0) {
-      setBedRules(BED_CRITERIA.map((c) => ({ criterion: c.key, enabled: !!existingBedRules.find((r: any) => r.criterion === c.key)?.enabled })));
+      setBedRules(BED_CRITERIA.map((c) => {
+        const stored = existingBedRules.find((r: any) => r?.criterion === c.key);
+        return { criterion: c.key, enabled: stored ? !!stored.enabled : c.defaultEnabled };
+      }));
     }
   }, [camp]);
 

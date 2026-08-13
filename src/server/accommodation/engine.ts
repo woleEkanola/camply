@@ -14,7 +14,7 @@ export class BedAllocationError extends Error {
   }
 }
 
-type Criterion = "AGE_GROUP" | "GROUP_TOGETHER" | "CAMPUS_TOGETHER" | "POPULATION_BALANCE";
+type Criterion = "AGE_GROUP" | "GROUP_TOGETHER" | "CAMPUS_TOGETHER" | "POPULATION_BALANCE" | "STAFF_SPREAD";
 
 interface Rule {
   criterion: Criterion;
@@ -25,8 +25,22 @@ const DEFAULT_RULES: Rule[] = [
   { criterion: "AGE_GROUP", enabled: true },
   { criterion: "GROUP_TOGETHER", enabled: true },
   { criterion: "POPULATION_BALANCE", enabled: true },
+  { criterion: "STAFF_SPREAD", enabled: true },
   { criterion: "CAMPUS_TOGETHER", enabled: false },
 ];
+
+/**
+ * STAFF_SPREAD tier weights, deliberately orders of magnitude above the soft
+ * criteria below. Those are preferences that should trade off against each
+ * other; this is closer to a constraint — without the gap, GROUP_TOGETHER's
+ * +200 would pull same-tribe staff into one room, which is exactly the
+ * clustering this prevents. Tiers still let the soft rules break ties *within*
+ * a tier (e.g. which camper-occupied room a teacher covers first).
+ */
+const STAFF_SPREAD_OCCUPIED_BY_STAFF = -10_000;
+const STAFF_SPREAD_COVERS_CAMPERS = 10_000;
+/** Within the "covers campers" tier, put an adult in the fullest uncovered room first. */
+const STAFF_SPREAD_PER_CAMPER = 100;
 
 function ageGroup(dateOfBirth: Date | null, cutoff: Date): string {
   if (!dateOfBirth) return "unknown";
@@ -63,7 +77,18 @@ export interface BedSuggestion {
  * marked MALE/FEMALE physically cannot house the other gender, unlike the
  * soft preferences below. Pure read — never mutates anything.
  */
-export async function suggestBed(tx: TxClient, venueId: string, occupant: Occupant): Promise<BedSuggestion | null> {
+export async function suggestBed(
+  tx: TxClient,
+  venueId: string,
+  occupant: Occupant,
+  /**
+   * Beds held back for staff during the camper phase of bulkAutoAssignBeds.
+   * Without this, campers fill a room to its last bed and the room can never
+   * receive a supervising adult — scoring alone can't fix that, since by then
+   * there is simply no bed left to score.
+   */
+  excludeBedIds?: ReadonlySet<string>
+): Promise<BedSuggestion | null> {
   const venue = await tx.venue.findUniqueOrThrow({ where: { id: venueId }, include: { camp: true } });
 
   const hostels = await tx.hostel.findMany({
@@ -83,15 +108,24 @@ export async function suggestBed(tx: TxClient, venueId: string, occupant: Occupa
   for (const hostel of genderEligible) {
     for (const room of hostel.rooms) {
       for (const bed of room.beds) {
+        if (excludeBedIds?.has(bed.id)) continue;
         candidates.push({ bedId: bed.id, roomId: room.id, roomName: room.name, hostelId: hostel.id, hostelName: hostel.name });
       }
     }
   }
   if (candidates.length === 0) return null;
 
-  const rules: Rule[] = Array.isArray(venue.camp.bedAllocationRules)
+  // Merge stored rules *over* the defaults rather than replacing them: a camp
+  // configured before a criterion existed has no entry for it, and treating
+  // "absent" as "disabled" would silently withhold new behaviour (e.g.
+  // STAFF_SPREAD) from every pre-existing camp. Absent => that rule's default.
+  const storedRules = Array.isArray(venue.camp.bedAllocationRules)
     ? (venue.camp.bedAllocationRules as unknown as Rule[])
-    : DEFAULT_RULES;
+    : [];
+  const rules: Rule[] = DEFAULT_RULES.map((fallback) => {
+    const stored = storedRules.find((r) => r?.criterion === fallback.criterion);
+    return stored ? { criterion: fallback.criterion, enabled: !!stored.enabled } : fallback;
+  });
   const enabledRules = rules.filter((r) => r.enabled);
 
   const cutoff = venue.camp.ageCutoffDate ?? venue.camp.startDate;
@@ -108,6 +142,8 @@ export async function suggestBed(tx: TxClient, venueId: string, occupant: Occupa
     const staff = roomStaff.filter((s) => s.assignedRoomId === roomId);
     return {
       count: campers.length + staff.length,
+      camperCount: campers.length,
+      staffCount: staff.length,
       ages: [
         ...campers.map((r) => ageGroup(r.camper.dateOfBirth, cutoff)),
         ...staff.map((s) => ageGroup(s.dateOfBirth, cutoff)),
@@ -155,6 +191,19 @@ export async function suggestBed(tx: TxClient, venueId: string, occupant: Occupa
           // singles scattered across many rooms) while still respecting the
           // hard AVAILABLE-bed / gender filters above.
           score += occupants.count > 0 ? 30 : 0;
+          break;
+        }
+        case "STAFF_SPREAD": {
+          // Campers are unaffected — this only shapes where adults land.
+          if (occupant.kind !== "STAFF") break;
+          if (occupants.staffCount > 0) {
+            // Already supervised; only pick this if nothing better exists.
+            score += STAFF_SPREAD_OCCUPIED_BY_STAFF;
+            reasons.push("Room already has a staff member");
+          } else if (occupants.camperCount > 0) {
+            score += STAFF_SPREAD_COVERS_CAMPERS + occupants.camperCount * STAFF_SPREAD_PER_CAMPER;
+            reasons.push("Covers a room of campers with no staff yet");
+          }
           break;
         }
       }
@@ -310,6 +359,65 @@ export interface BedAssignmentResult {
 }
 
 /**
+ * Holds back one bed per room for the staff about to be placed, so campers
+ * can't fill a room to capacity and lock every adult out of it. Greedy and
+ * gender-aware: each staff member claims a bed in a distinct room drawn from
+ * the hostels their gender allows, preferring rooms that have no staff yet.
+ *
+ * Reserves at most one bed per room and never more beds than there are staff,
+ * so this can only displace a camper when doing so is what actually buys that
+ * room its supervising adult.
+ */
+async function reserveBedsForStaff(
+  venueId: string,
+  staff: { gender: string | null }[]
+): Promise<Set<string>> {
+  const reserved = new Set<string>();
+  if (staff.length === 0) return reserved;
+
+  const hostels = await prisma.hostel.findMany({
+    where: { venueId, deletedAt: null },
+    include: {
+      rooms: {
+        where: { deletedAt: null },
+        include: {
+          beds: { where: { deletedAt: null, status: "AVAILABLE" }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+          staffAssigned: { where: { deletedAt: null }, select: { id: true } },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+
+  const roomsWithReservation = new Set<string>();
+  for (const member of staff) {
+    const eligible = hostels.filter((h) => !h.gender || h.gender === "MIXED" || h.gender === member.gender);
+    let claimed = false;
+    // Two passes: rooms with no staff at all first (that's the coverage this
+    // exists for), then any remaining room so surplus staff still get a bed.
+    for (const preferUncovered of [true, false]) {
+      if (claimed) break;
+      for (const hostel of eligible) {
+        for (const room of hostel.rooms) {
+          if (roomsWithReservation.has(room.id)) continue;
+          if (preferUncovered && room.staffAssigned.length > 0) continue;
+          const bed = room.beds.find((b) => !reserved.has(b.id));
+          if (!bed) continue;
+          reserved.add(bed.id);
+          roomsWithReservation.add(room.id);
+          claimed = true;
+          break;
+        }
+        if (claimed) break;
+      }
+    }
+  }
+
+  return reserved;
+}
+
+/**
  * Bulk-assigns beds for every unassigned APPROVED camper/teacher/volunteer
  * already assigned to this Venue. Scoped by venueId, not just campId — a camp
  * can have multiple Venues, each with its own hostels, so pulling in
@@ -340,10 +448,16 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
     }),
   ]);
 
-  const occupants: Occupant[] = [
-    ...unassignedRegistrations.map(occupantFromRegistration),
-    ...unassignedStaff.map(occupantFromStaff),
-  ];
+  // Order matters and is load-bearing, not incidental: every camper is placed
+  // before any staff member, so STAFF_SPREAD can see which rooms actually hold
+  // campers and needs covering. Don't merge/interleave these by createdAt.
+  const camperOccupants = unassignedRegistrations.map(occupantFromRegistration);
+  const staffOccupants = unassignedStaff.map(occupantFromStaff);
+
+  // Held back during the camper phase only, then released for staff below.
+  const reservedForStaff = await reserveBedsForStaff(params.venueId, unassignedStaff);
+
+  const occupants: Occupant[] = [...camperOccupants, ...staffOccupants];
 
   const results: BedAssignmentResult[] = [];
   for (const occupant of occupants) {
@@ -357,7 +471,16 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
       // corrupting data, but running both under one lock avoids the wasted
       // suggestion and the resulting spurious "bed occupied" failure.
       const bedId = await prisma.$transaction(async (tx) => {
-        const suggestion = await suggestBed(tx, params.venueId, occupant);
+        // Staff-reserved beds are off-limits to campers but fair game once
+        // we reach the staff phase — that's the whole point of holding them.
+        const exclude = occupant.kind === "CAMPER" ? reservedForStaff : undefined;
+        let suggestion = await suggestBed(tx, params.venueId, occupant, exclude);
+        // Rather than fail a camper outright, fall back to the reserved pool:
+        // an unhoused camper is worse than an unsupervised room, and this only
+        // triggers once every non-reserved bed in the venue is taken.
+        if (!suggestion && occupant.kind === "CAMPER") {
+          suggestion = await suggestBed(tx, params.venueId, occupant);
+        }
         if (!suggestion) return null;
         await assignBedInTx(tx, { bedId: suggestion.bedId, occupant, actorId: params.actorId });
         return suggestion.bedId;
@@ -366,6 +489,9 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
         results.push({ occupantKey: key, error: "No matching-gender bed available" });
         continue;
       }
+      // Keep the reservation set honest: if a camper did consume a reserved
+      // bed via the fallback above, it's no longer held for anyone.
+      reservedForStaff.delete(bedId);
       results.push({ occupantKey: key, bedId });
     } catch (error) {
       results.push({ occupantKey: key, error: error instanceof Error ? error.message : String(error) });
