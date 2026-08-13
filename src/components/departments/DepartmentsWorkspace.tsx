@@ -123,7 +123,7 @@ export function DepartmentsWorkspace({ organizationId, campId, canManageAll = fa
     </div>
 
     {view === "organogram" && <CampDirectory organizationId={organizationId} campId={campId} readOnly={!canManageAll} initialView="organogram" showViewToggle={false} />}
-    {view === "contacts" && <div className="space-y-3"><div><h2 className="text-lg font-bold text-txt-primary">Camp contacts</h2><p className="text-sm text-txt-secondary">Search people, roles, departments, phone numbers, or email addresses, then call or message them.</p></div><CampDirectory organizationId={organizationId} campId={campId} readOnly initialView="directory" showViewToggle={false} /></div>}
+    {view === "contacts" && <div className="space-y-3"><div><h2 className="text-lg font-bold text-txt-primary">Camp contacts</h2><p className="text-sm text-txt-secondary">Search people, roles, departments, phone numbers, or email addresses, then call or message them.</p></div><CampDirectory organizationId={organizationId} campId={campId} readOnly={!canManageAll} initialView="directory" showViewToggle={false} /></div>}
     {view === "mine" && <MyDepartmentWorkspace embedded />}
 
     {view === "departments" && !staffArea && <div className="space-y-6">

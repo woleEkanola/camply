@@ -564,7 +564,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             )}
 
             {/* Toolbar */}
-            <div className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 rounded-xl border border-border-default bg-surface p-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-neutral-700">{selectedIds.length} selected</span>
                 {selectedIds.length > 0 && (

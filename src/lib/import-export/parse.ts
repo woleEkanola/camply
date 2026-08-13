@@ -39,6 +39,7 @@ export function normalizeExcelDateTimeValue(v: unknown): unknown {
   return v;
 }
 
+/** For XLSX rows only — cell values there are genuinely ambiguous Excel serial numbers. */
 function normalizeHeaderRow(row: RawRow): RawRow {
   const out: RawRow = {};
   for (const [key, value] of Object.entries(row)) {
@@ -49,13 +50,28 @@ function normalizeHeaderRow(row: RawRow): RawRow {
   return out;
 }
 
+/**
+ * For JSON/CSV rows — just trims keys/strings, no Excel date/time reinterpretation.
+ * Using normalizeHeaderRow here previously corrupted plain integers: a JSON
+ * `displayOrder: 0` falls in normalizeExcelDateTimeValue's "0 <= v < 1" Excel
+ * time-serial range and silently became the string "00:00", failing every
+ * campus/tribe row's schema check with "Expected number, received string".
+ */
+function normalizeRow(row: RawRow): RawRow {
+  const out: RawRow = {};
+  for (const [key, value] of Object.entries(row)) {
+    out[key.trim()] = typeof value === "string" ? value.trim() : value;
+  }
+  return out;
+}
+
 async function parseCsv(text: string, entityHint?: EntityKind): Promise<RawBundle> {
   const result = Papa.parse<RawRow>(text, {
     header: true,
     skipEmptyLines: true,
     transformHeader: (h) => h.trim(),
   });
-  const rows = (result.data ?? []).map(normalizeHeaderRow);
+  const rows = (result.data ?? []).map(normalizeRow);
   const headers = result.meta.fields ?? Object.keys(rows[0] ?? {});
   const entity = entityHint ?? detectEntityFromHeaders(headers);
   if (!entity) {
@@ -75,16 +91,16 @@ function jsonRowsToBundle(parsed: unknown, entityHint?: EntityKind): RawBundle {
         "Could not determine which entity this JSON array describes. Select an entity manually before importing."
       );
     }
-    return { [entity]: (parsed as RawRow[]).map(normalizeHeaderRow) };
+    return { [entity]: (parsed as RawRow[]).map(normalizeRow) };
   }
   if (parsed && typeof parsed === "object") {
     const obj = parsed as Record<string, unknown>;
     const bundle: RawBundle = {};
-    if (Array.isArray(obj.campuses)) bundle.campuses = (obj.campuses as RawRow[]).map(normalizeHeaderRow);
-    if (Array.isArray(obj.tribes)) bundle.tribes = (obj.tribes as RawRow[]).map(normalizeHeaderRow);
-    if (Array.isArray(obj.departments)) bundle.departments = (obj.departments as RawRow[]).map(normalizeHeaderRow);
+    if (Array.isArray(obj.campuses)) bundle.campuses = (obj.campuses as RawRow[]).map(normalizeRow);
+    if (Array.isArray(obj.tribes)) bundle.tribes = (obj.tribes as RawRow[]).map(normalizeRow);
+    if (Array.isArray(obj.departments)) bundle.departments = (obj.departments as RawRow[]).map(normalizeRow);
     if (Array.isArray(obj.program_schedule) || Array.isArray(obj.schedule)) {
-      bundle.program_schedule = ((obj.program_schedule ?? obj.schedule) as RawRow[]).map(normalizeHeaderRow);
+      bundle.program_schedule = ((obj.program_schedule ?? obj.schedule) as RawRow[]).map(normalizeRow);
     }
     if (Object.keys(bundle).length === 0) {
       throw new Error("JSON file did not contain any recognizable campuses, tribes, departments, or schedule data.");
@@ -153,7 +169,7 @@ function parseMarkdownTable(lines: string[]): RawRow[] {
       const v = cells[i];
       row[h] = v === "" || v === undefined ? undefined : v;
     });
-    return normalizeHeaderRow(row);
+    return normalizeRow(row);
   });
 }
 
