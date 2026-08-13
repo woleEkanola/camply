@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ArrowDownTrayIcon, ShareIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
+import { getPwaPlatform } from "@/lib/pwaPlatform";
 
 interface InstallPwaButtonProps {
   variant?: "header" | "sidebar" | "menu";
@@ -12,6 +13,8 @@ export function InstallPwaButton({ variant = "header" }: InstallPwaButtonProps) 
   const [isStandalone, setIsStandalone] = useState(false);
   const [showIosModal, setShowIosModal] = useState(false);
   const [isIos, setIsIos] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [showChromeNudge, setShowChromeNudge] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -27,9 +30,10 @@ export function InstallPwaButton({ variant = "header" }: InstallPwaButtonProps) 
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);
 
-    const ua = window.navigator.userAgent;
-    const iosDevice = /iphone|ipad|ipod/i.test(ua);
-    setIsIos(iosDevice);
+    const platform = getPwaPlatform();
+    setIsIos(platform.isIos);
+    setIsDesktop(platform.isDesktop);
+    setShowChromeNudge(platform.isAndroid && !platform.isChrome);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
@@ -52,6 +56,10 @@ export function InstallPwaButton({ variant = "header" }: InstallPwaButtonProps) 
     }
   };
 
+  // The install experience (offline QR scanning, camera access) only holds
+  // up on mobile — don't offer a portrait-locked, scan-focused PWA on desktop.
+  if (isDesktop) return null;
+
   if (isStandalone) {
     if (variant === "menu") {
       return (
@@ -73,7 +81,10 @@ export function InstallPwaButton({ variant = "header" }: InstallPwaButtonProps) 
           className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-semibold text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/40"
         >
           <ArrowDownTrayIcon className="h-4 w-4 text-teal-600" />
-          Install App
+          <span>
+            Install App
+            {showChromeNudge && <span className="block text-[11px] font-normal text-teal-500">Works best in Chrome</span>}
+          </span>
         </button>
         {showIosModal && <IosInstallInstructionModal onClose={() => setShowIosModal(false)} />}
       </>
@@ -89,7 +100,10 @@ export function InstallPwaButton({ variant = "header" }: InstallPwaButtonProps) 
           className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/40 transition"
         >
           <ArrowDownTrayIcon className="h-5 w-5 shrink-0 text-teal-600" />
-          <span>Install App</span>
+          <span>
+            Install App
+            {showChromeNudge && <span className="block text-[11px] font-normal text-teal-500">Works best in Chrome</span>}
+          </span>
         </button>
         {showIosModal && <IosInstallInstructionModal onClose={() => setShowIosModal(false)} />}
       </>
@@ -101,7 +115,7 @@ export function InstallPwaButton({ variant = "header" }: InstallPwaButtonProps) 
       <button
         type="button"
         onClick={handleInstallClick}
-        title="Install Camply PWA"
+        title={showChromeNudge ? "Install Camply PWA — works best in Chrome" : "Install Camply PWA"}
         className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition"
       >
         <ArrowDownTrayIcon className="h-4 w-4" />

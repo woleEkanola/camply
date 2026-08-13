@@ -267,7 +267,7 @@ export default function AppShell({ area, children }: AppShellProps) {
       {mobileOpen && (
         <div className="no-print fixed inset-0 z-40 md:hidden">
           <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-xs" onClick={() => setMobileOpen(false)} aria-hidden="true" />
-          <div className="fixed inset-y-0 left-0 flex w-72 flex-col bg-sidebar-bg border-r border-sidebar-border shadow-xl">{sidebarContent}</div>
+          <div data-testid="mobile-nav-panel" className="fixed inset-y-0 left-0 flex w-72 flex-col bg-sidebar-bg border-r border-sidebar-border shadow-xl">{sidebarContent}</div>
         </div>
       )}
 
