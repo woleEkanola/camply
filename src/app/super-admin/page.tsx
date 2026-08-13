@@ -13,17 +13,19 @@ import { Table, type Column } from "@/components/ui/Table";
 import { Dialog } from "@/components/ui/Dialog";
 import { Badge } from "@/components/ui/Badge";
 import { CorrectEmailDialog, type CorrectEmailTarget } from "@/components/users/CorrectEmailDialog";
-import { 
-  BuildingOfficeIcon, 
-  UsersIcon, 
-  WrenchScrewdriverIcon, 
+import { PlatformBrandingPanel } from "@/components/admin/branding/PlatformBrandingPanel";
+import {
+  BuildingOfficeIcon,
+  UsersIcon,
+  WrenchScrewdriverIcon,
   ChartBarIcon,
   CheckCircleIcon,
   XCircleIcon,
   KeyIcon,
   TrashIcon,
   EyeIcon,
-  PencilSquareIcon
+  PencilSquareIcon,
+  SwatchIcon
 } from "@heroicons/react/24/outline";
 
 export default function SuperAdminDashboard() {
@@ -582,6 +584,17 @@ export default function SuperAdminDashboard() {
           <WrenchScrewdriverIcon className="h-5 w-5" />
           System Tools
         </button>
+        <button
+          onClick={() => setActiveTab("branding")}
+          className={`flex items-center gap-2 pb-3 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
+            activeTab === "branding"
+              ? "border-accent-600 text-accent-700"
+              : "border-transparent text-txt-muted hover:text-txt-primary"
+          }`}
+        >
+          <SwatchIcon className="h-5 w-5" />
+          Branding
+        </button>
       </div>
 
       {/* Tab Contents */}
@@ -916,6 +929,8 @@ export default function SuperAdminDashboard() {
           </Card>
         </div>
       )}
+
+      {activeTab === "branding" && <PlatformBrandingPanel />}
 
       {activeTab === "trash" && (
         <div className="space-y-6">
