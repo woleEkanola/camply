@@ -29,10 +29,10 @@ test.describe("full camp simulation", () => {
     if (teacherTribesAssigned !== manifest.approvedTeacherCount) {
       await page.goto("/admin/teachers");
       await expect(page.getByText(/Manage and assign teachers for/)).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByRole("button", { name: "Auto Assign Tribes" })).toBeEnabled();
+      await expect(page.getByRole("button", { name: "Assign Unassigned to Tribes" })).toBeEnabled();
       page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("button", { name: "Auto Assign Tribes" }).click();
-      await expect(page.getByText("Auto assigned all teachers to tribes successfully!")).toBeVisible({ timeout: 120_000 });
+      await page.getByRole("button", { name: "Assign Unassigned to Tribes" }).click();
+      await expect(page.getByText(/Assigned \d+ unassigned teachers?; preserved \d+ existing assignments?\./)).toBeVisible({ timeout: 120_000 });
     }
 
     const approvedTeachers = await prisma.staffProfile.findMany({ where: { campId: manifest.campId, type: "TEACHER", status: "APPROVED", email: { startsWith: "simulation.teacher." } } });
@@ -46,7 +46,7 @@ test.describe("full camp simulation", () => {
       await page.goto("/admin/accommodation");
       await page.locator("select").first().selectOption(manifest.venueId);
       page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("button", { name: "Auto Assign Rooms & Beds" }).click();
+      await page.getByRole("button", { name: "Assign Unassigned Rooms & Beds" }).click();
     }
     // At this scale the accommodation page re-renders 840 bed chips after the
     // mutation. Assert the persisted result directly so DOM rendering time

@@ -121,6 +121,12 @@ const ADMIN_GROUPS: NavGroup[] = [
     name: "Camp Management",
     items: [
       {
+        name: "Assignment Setup",
+        href: "/admin/assignments",
+        icon: ClipboardDocumentCheckIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
         name: "Tribes",
         href: "/admin/tribes",
         icon: UserGroupIcon,

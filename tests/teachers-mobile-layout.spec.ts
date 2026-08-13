@@ -116,7 +116,7 @@ test.describe("Teachers page — mobile layout", () => {
   });
 
   test("header action buttons render single-line, not clipped", async ({ page }) => {
-    for (const name of ["Auto Assign Tribes", "Assign Departments", /Add Teacher/]) {
+    for (const name of ["Assign Unassigned to Tribes", "Assign Departments", /Add Teacher/]) {
       const button = page.getByRole("button", { name }).first();
       await expect(button).toBeVisible();
       const { scrollHeight, clientHeight } = await button.evaluate((el) => ({

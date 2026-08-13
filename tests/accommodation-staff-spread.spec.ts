@@ -26,12 +26,22 @@ test.describe("Accommodation: staff spread one per room", () => {
   const registrationIds: string[] = [];
   const camperIds: string[] = [];
   const parentUserIds: string[] = [];
+  let previousBedAllocationEnabled = false;
+  let previousBedAllocationRules: unknown = null;
 
   test.beforeAll(async () => {
     const ctx = await getFixtureOrgContext();
     organizationId = ctx.organizationId;
     campId = ctx.campId;
     campusId = ctx.campusId;
+    const camp = await prisma.camp.findUniqueOrThrow({ where: { id: campId }, select: { bedAllocationEnabled: true, bedAllocationRules: true } });
+    previousBedAllocationEnabled = camp.bedAllocationEnabled;
+    previousBedAllocationRules = camp.bedAllocationRules;
+    await prisma.camp.update({ where: { id: campId }, data: { bedAllocationEnabled: true, bedAllocationRules: [
+      { criterion: "GROUP_TOGETHER", enabled: true },
+      { criterion: "POPULATION_BALANCE", enabled: true },
+      { criterion: "STAFF_SPREAD", enabled: true },
+    ] } });
 
     const venue = await prisma.venue.create({ data: { campId, name: `E2E Spread Venue ${stamp}` } });
     venueId = venue.id;
@@ -101,6 +111,7 @@ test.describe("Accommodation: staff spread one per room", () => {
   });
 
   test.afterAll(async () => {
+    await prisma.camp.update({ where: { id: campId }, data: { bedAllocationEnabled: previousBedAllocationEnabled, bedAllocationRules: previousBedAllocationRules as any } });
     // Unconditional cleanup in dependency order — beds/rooms reference the
     // hostel, and registrations/staff hold the room FKs.
     await prisma.bed.deleteMany({ where: { roomId: { in: roomIds } } });
@@ -122,7 +133,7 @@ test.describe("Accommodation: staff spread one per room", () => {
     await page.locator("select").first().selectOption({ label: venue.name });
 
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Auto Assign Rooms & Beds" }).click();
+    await page.getByRole("button", { name: "Assign Unassigned Rooms & Beds" }).click();
     await expect(page.getByText(/^\d+ assigned(?:,|\.)/i)).toBeVisible({ timeout: 30000 });
 
     const staff = await prisma.staffProfile.findMany({ where: { id: { in: staffProfileIds } } });
@@ -178,7 +189,7 @@ test.describe("Accommodation: staff spread one per room", () => {
     await page.locator("select").first().selectOption({ label: venue.name });
 
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Auto Assign Rooms & Beds" }).click();
+    await page.getByRole("button", { name: "Assign Unassigned Rooms & Beds" }).click();
     await expect(page.getByText(/^\d+ assigned(?:,|\.)/i)).toBeVisible({ timeout: 30000 });
 
     // With 3 rooms all already covered, the 4th teacher has to double up

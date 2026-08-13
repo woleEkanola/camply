@@ -12,6 +12,94 @@ import * as accommodationEngine from "../../accommodation/engine";
 // carve-out here, unlike most other routers in this app.
 
 export const accommodationRouter = createTRPCRouter({
+  assignmentReadiness: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const camp = await ctx.prisma.camp.findUnique({ where: { id: input.campId } });
+      if (!camp || camp.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+      await assertOrgAdmin(ctx, camp.organizationId);
+
+      const [venues, activeTribes, approvedCampers, approvedTeachers, approvedStaff] = await Promise.all([
+        ctx.prisma.venue.findMany({ where: { campId: camp.id, visible: true, deletedAt: null }, orderBy: [{ name: "asc" }, { id: "asc" }] }),
+        ctx.prisma.tribe.count({ where: { campId: camp.id, status: "ACTIVE", deletedAt: null } }),
+        ctx.prisma.registration.findMany({ where: { campId: camp.id, status: "APPROVED", deletedAt: null }, select: { id: true, venueId: true, tribeId: true, roomId: true, camper: { select: { gender: true } } } }),
+        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, type: "TEACHER", status: "APPROVED", deletedAt: null }, select: { id: true, assignedVenueId: true, assignedTribeId: true, assignedRoomId: true, gender: true } }),
+        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, status: "APPROVED", deletedAt: null }, select: { id: true, assignedVenueId: true, assignedRoomId: true, gender: true } }),
+      ]);
+
+      const venueSummaries = await Promise.all(venues.map(async (venue) => {
+        const hostels = await ctx.prisma.hostel.findMany({
+          where: { venueId: venue.id, deletedAt: null },
+          include: { rooms: { where: { deletedAt: null }, include: { beds: { where: { deletedAt: null } } } } },
+        });
+        const rooms = hostels.flatMap((hostel) => hostel.rooms);
+        const beds = rooms.flatMap((room) => room.beds);
+        const campers = approvedCampers.filter((person) => person.venueId === venue.id);
+        const staff = approvedStaff.filter((person) => person.assignedVenueId === venue.id);
+        const teachers = approvedTeachers.filter((person) => person.assignedVenueId === venue.id);
+        const unassignedPeople = campers.filter((person) => !person.roomId).length + staff.filter((person) => !person.assignedRoomId).length;
+        const availableBeds = beds.filter((bed) => bed.status === "AVAILABLE" && !bed.registrationId && !bed.staffProfileId).length;
+        const occupiedBeds = beds.filter((bed) => !!bed.registrationId || !!bed.staffProfileId).length;
+        return {
+          id: venue.id,
+          name: venue.name,
+          hostels: hostels.length,
+          rooms: rooms.length,
+          beds: beds.length,
+          availableBeds,
+          occupiedBeds,
+          campers: campers.length,
+          staff: staff.length,
+          unassignedPeople,
+          campersWithoutTribe: campers.filter((person) => !person.tribeId).length,
+          teachersWithoutTribe: teachers.filter((person) => !person.assignedTribeId).length,
+          capacityShortfall: Math.max(0, unassignedPeople - availableBeds),
+        };
+      }));
+
+      const rooms = venueSummaries.reduce((sum, venue) => sum + venue.rooms, 0);
+      const beds = venueSummaries.reduce((sum, venue) => sum + venue.beds, 0);
+      const campersWithoutVenue = approvedCampers.filter((person) => !person.venueId).length;
+      const staffWithoutVenue = approvedStaff.filter((person) => !person.assignedVenueId).length;
+      const campersWithoutTribe = approvedCampers.filter((person) => !person.tribeId).length;
+      const teachersWithoutTribe = approvedTeachers.filter((person) => !person.assignedTribeId).length;
+      const existingBedAssignments = venueSummaries.reduce((sum, venue) => sum + venue.occupiedBeds, 0);
+
+      return {
+        camp: { id: camp.id, name: camp.name, bedAllocationEnabled: camp.bedAllocationEnabled },
+        totals: {
+          venues: venues.length,
+          rooms,
+          beds,
+          activeTribes,
+          approvedCampers: approvedCampers.length,
+          approvedTeachers: approvedTeachers.length,
+          campersWithoutVenue,
+          staffWithoutVenue,
+          campersWithoutTribe,
+          teachersWithoutTribe,
+          existingBedAssignments,
+          unassignedPeople: venueSummaries.reduce((sum, venue) => sum + venue.unassignedPeople, 0),
+        },
+        venues: venueSummaries,
+      };
+    }),
+
+  assignUnassignedStaffToSoleVenue: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const camp = await ctx.prisma.camp.findUnique({ where: { id: input.campId } });
+      if (!camp || camp.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+      await assertOrgAdmin(ctx, camp.organizationId);
+      const venues = await ctx.prisma.venue.findMany({ where: { campId: camp.id, visible: true, deletedAt: null }, select: { id: true } });
+      if (venues.length !== 1) throw new TRPCError({ code: "BAD_REQUEST", message: "This action is available only when the camp has exactly one venue. Assign venues manually for a multi-venue camp." });
+      const result = await ctx.prisma.staffProfile.updateMany({
+        where: { campId: camp.id, status: "APPROVED", assignedVenueId: null, deletedAt: null },
+        data: { assignedVenueId: venues[0].id },
+      });
+      return { count: result.count, venueId: venues[0].id };
+    }),
+
   // ─── Hostels ─────────────────────────────────────────────────────────
   listHostels: protectedProcedure
     .input(z.object({ venueId: z.string() }))
@@ -368,6 +456,7 @@ export const accommodationRouter = createTRPCRouter({
               gender: registration.camper.gender,
               dateOfBirth: registration.camper.dateOfBirth,
               groupId: registration.tribeId,
+              tribeId: registration.tribeId,
               campusId: registration.campusId,
             },
             actorId: ctx.userId,
@@ -416,6 +505,13 @@ export const accommodationRouter = createTRPCRouter({
       if (!venue) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, venue.camp.organizationId);
       const currentUser = ctx.session!.user;
-      return accommodationEngine.bulkAutoAssignBeds({ venueId: input.venueId, actorId: currentUser.id });
+      try {
+        return await accommodationEngine.bulkAutoAssignBeds({ venueId: input.venueId, actorId: currentUser.id });
+      } catch (error) {
+        if (error instanceof accommodationEngine.BedAllocationError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        }
+        throw error;
+      }
     }),
 });

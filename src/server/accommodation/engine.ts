@@ -53,8 +53,8 @@ function ageGroup(dateOfBirth: Date | null, cutoff: Date): string {
 
 /** Unifies Camper (Registration) and Staff (StaffProfile) occupants behind one shape so scoring is population-agnostic. */
 export type Occupant =
-  | { kind: "CAMPER"; registrationId: string; gender: string | null; dateOfBirth: Date | null; groupId: string | null; campusId: string | null }
-  | { kind: "STAFF"; staffProfileId: string; gender: string | null; dateOfBirth: Date | null; groupId: string | null; campusId: string | null };
+  | { kind: "CAMPER"; registrationId: string; gender: string | null; dateOfBirth: Date | null; groupId: string | null; tribeId?: string | null; campusId: string | null }
+  | { kind: "STAFF"; staffProfileId: string; gender: string | null; dateOfBirth: Date | null; groupId: string | null; tribeId?: string | null; campusId: string | null };
 
 function occupantKey(occupant: Occupant): string {
   return occupant.kind === "CAMPER" ? `camper:${occupant.registrationId}` : `staff:${occupant.staffProfileId}`;
@@ -97,8 +97,10 @@ export async function suggestBed(
       rooms: {
         where: { deletedAt: null },
         include: { beds: { where: { deletedAt: null, status: "AVAILABLE" } } },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }, { id: "asc" }],
       },
     },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
   });
 
   // Hard gender filter — unknown occupant gender can only go to an unspecified/MIXED hostel.
@@ -152,6 +154,11 @@ export async function suggestBed(
         ...campers.map((r) => r.tribeId),
         ...staff.map((s) => s.departmentId ?? s.assignedTribeId),
       ].filter((g): g is string => !!g),
+      camperTribeIds: campers.map((registration) => registration.tribeId).filter((tribeId): tribeId is string => !!tribeId),
+      tribeIds: [
+        ...campers.map((registration) => registration.tribeId),
+        ...staff.map((member) => member.assignedTribeId),
+      ].filter((tribeId): tribeId is string => !!tribeId),
       campusIds: [
         ...campers.map((r) => r.campusId),
         ...staff.map((s) => s.preferredCampusId),
@@ -159,7 +166,26 @@ export async function suggestBed(
     };
   }
 
-  const scored = candidates.map((candidate) => {
+  const groupTogether = enabledRules.some((rule) => rule.criterion === "GROUP_TOGETHER");
+  const occupantTribeId = occupant.tribeId;
+  const eligibleCandidates = groupTogether && occupantTribeId
+    ? candidates.filter((candidate) => {
+        const room = roomOccupants(candidate.roomId);
+        if (occupant.kind === "CAMPER") {
+          // A tribe may take the next empty room, but it never silently mixes
+          // with another tribe. Stable room ordering above makes each tribe's
+          // greedy allocation form a predictable room block.
+          return room.tribeIds.length === 0 || room.tribeIds.every((tribeId) => tribeId === occupantTribeId);
+        }
+        // Tribe-assigned staff sleep with their own campers. If their tribe's
+        // rooms have no compatible spare bed, return an explicit exception
+        // instead of placing them in another tribe's room.
+        return room.tribeIds.length === 0 || room.tribeIds.every((tribeId) => tribeId === occupantTribeId);
+      })
+    : candidates;
+  if (eligibleCandidates.length === 0) return null;
+
+  const scored = eligibleCandidates.map((candidate) => {
     let score = 0;
     const reasons: string[] = [];
     const occupants = roomOccupants(candidate.roomId);
@@ -337,6 +363,7 @@ function occupantFromRegistration(reg: { id: string; tribeId: string | null; cam
     gender: reg.camper.gender,
     dateOfBirth: reg.camper.dateOfBirth,
     groupId: reg.tribeId,
+    tribeId: reg.tribeId,
     campusId: reg.campusId,
   };
 }
@@ -347,7 +374,10 @@ function occupantFromStaff(staff: { id: string; gender: string | null; dateOfBir
     staffProfileId: staff.id,
     gender: staff.gender,
     dateOfBirth: staff.dateOfBirth,
-    groupId: staff.departmentId ?? staff.assignedTribeId,
+    // Sleeping-group cohesion follows the staff member's tribe first. Their
+    // operational department must not pull them away from their tribe rooms.
+    groupId: staff.assignedTribeId ?? staff.departmentId,
+    tribeId: staff.assignedTribeId,
     campusId: staff.preferredCampusId,
   };
 }
@@ -428,7 +458,22 @@ async function reserveBedsForStaff(
  * skipped here until assigned. Never fails the whole batch on one error.
  */
 export async function bulkAutoAssignBeds(params: { venueId: string; actorId: string }): Promise<BedAssignmentResult[]> {
-  const venue = await prisma.venue.findUniqueOrThrow({ where: { id: params.venueId } });
+  const venue = await prisma.venue.findUniqueOrThrow({ where: { id: params.venueId }, include: { camp: true } });
+  if (!venue.camp.bedAllocationEnabled) {
+    throw new BedAllocationError("BED_ALLOCATION_DISABLED", "Enable bed allocation in Camp Assignment Setup before assigning rooms and beds.");
+  }
+
+  const storedRules = Array.isArray(venue.camp.bedAllocationRules) ? venue.camp.bedAllocationRules as unknown as Rule[] : [];
+  const groupTogether = storedRules.find((rule) => rule?.criterion === "GROUP_TOGETHER")?.enabled ?? true;
+  if (groupTogether) {
+    const [camperWithoutTribe, teacherWithoutTribe] = await Promise.all([
+      prisma.registration.count({ where: { campId: venue.campId, venueId: params.venueId, status: "APPROVED", tribeId: null, roomId: null, deletedAt: null } }),
+      prisma.staffProfile.count({ where: { campId: venue.campId, assignedVenueId: params.venueId, type: "TEACHER", status: "APPROVED", assignedTribeId: null, assignedRoomId: null, deletedAt: null } }),
+    ]);
+    if (camperWithoutTribe || teacherWithoutTribe) {
+      throw new BedAllocationError("TRIBE_ASSIGNMENT_REQUIRED", `Assign tribes first: ${camperWithoutTribe} camper(s) and ${teacherWithoutTribe} teacher(s) at this venue still have no tribe.`);
+    }
+  }
 
   // Postgres gives no row-order guarantee for a findMany with no orderBy —
   // when capacity runs out mid-batch, which occupant wins the last bed vs.

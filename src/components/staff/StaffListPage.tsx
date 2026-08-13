@@ -238,7 +238,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     setSendEmailOnApprove(true);
   };
   const autoAssignToTribes = api.staff.autoAssignToTribes.useMutation({
-    onSuccess: () => { setSuccess("Auto assigned all teachers to tribes successfully!"); invalidate(); setTimeout(() => setSuccess(""), 5000); },
+    onSuccess: (result) => { setSuccess(`Assigned ${result.count} unassigned teacher${result.count === 1 ? "" : "s"}; preserved ${result.preserved} existing assignment${result.preserved === 1 ? "" : "s"}.`); invalidate(); setTimeout(() => setSuccess(""), 7000); },
     onError: (err) => setError(err.message),
   });
   const autoAssignToDepartments = api.staff.autoAssignToDepartments.useMutation({
@@ -422,9 +422,9 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                   className="w-full justify-center whitespace-nowrap sm:w-auto"
                   disabled={!campId}
                   loading={autoAssignToTribes.isPending}
-                  onClick={() => { if (window.confirm("Auto assign all teachers to tribes based on gender & quota?")) autoAssignToTribes.mutate({ organizationId, campId }); }}
+                  onClick={() => { if (window.confirm("Assign only teachers who do not have a tribe yet? Existing tribe and leadership assignments will be preserved.")) autoAssignToTribes.mutate({ organizationId, campId }); }}
                 >
-                  Auto Assign Tribes
+                  Assign Unassigned to Tribes
                 </Button>
                 <Button
                   variant="secondary"

@@ -928,100 +928,47 @@ export const staffRouter = createTRPCRouter({
 
       const teachers = await ctx.prisma.staffProfile.findMany({
         where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER", status: "APPROVED", deletedAt: null },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       });
 
       const tribes = await ctx.prisma.tribe.findMany({
-        where: { campId: input.campId, deletedAt: null },
+        where: { campId: input.campId, status: "ACTIVE", deletedAt: null },
+        orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
       });
 
       if (tribes.length === 0) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "No active tribes found in this camp." });
       }
 
-      await ctx.prisma.staffProfile.updateMany({
-        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER" },
-        data: {
-          assignedTribeId: null,
-          isCampMonitor: false,
-          isAssistantMonitor: false,
-        },
-      });
-
-      const males = teachers.filter((t: any) => t.gender?.toUpperCase() === "MALE");
-      const females = teachers.filter((t: any) => t.gender?.toUpperCase() === "FEMALE");
-      const others = teachers.filter((t: any) => t.gender?.toUpperCase() !== "MALE" && t.gender?.toUpperCase() !== "FEMALE");
-
-      const tribeMales: Record<string, typeof teachers> = {};
-      const tribeFemales: Record<string, typeof teachers> = {};
-      const tribeOthers: Record<string, typeof teachers> = {};
-
-      tribes.forEach((tr: any) => {
-        tribeMales[tr.id] = [];
-        tribeFemales[tr.id] = [];
-        tribeOthers[tr.id] = [];
-      });
-
-      males.forEach((m: any, idx: number) => {
-        const tr = tribes[idx % tribes.length];
-        tribeMales[tr.id].push(m);
-      });
-
-      females.forEach((f: any, idx: number) => {
-        const tr = tribes[idx % tribes.length];
-        tribeFemales[tr.id].push(f);
-      });
-
-      others.forEach((o: any, idx: number) => {
-        const tr = tribes[idx % tribes.length];
-        tribeOthers[tr.id].push(o);
-      });
-
-      const updates: any[] = [];
-
-      for (const tribe of tribes) {
-        const tId = tribe.id;
-
-        const mList = tribeMales[tId];
-        mList.forEach((m: any, idx: number) => {
-          updates.push(
-            ctx.prisma.staffProfile.update({
-              where: { id: m.id },
-              data: {
-                assignedTribeId: tId,
-                isCampMonitor: idx === 0,
-                isAssistantMonitor: idx === 1,
-              },
-            })
-          );
-        });
-
-        const fList = tribeFemales[tId];
-        fList.forEach((f: any, idx: number) => {
-          updates.push(
-            ctx.prisma.staffProfile.update({
-              where: { id: f.id },
-              data: {
-                assignedTribeId: tId,
-                isCampMonitor: idx === 0,
-                isAssistantMonitor: idx === 1,
-              },
-            })
-          );
-        });
-
-        const oList = tribeOthers[tId];
-        oList.forEach((o: any) => {
-          updates.push(
-            ctx.prisma.staffProfile.update({
-              where: { id: o.id },
-              data: { assignedTribeId: tId },
-            })
-          );
-        });
+      // Auto-assignment is deliberately additive. Manually selected tribe
+      // heads, assistants, members, and any hand-tuned assignments are never
+      // cleared or moved by this normal workflow.
+      const unassigned = teachers.filter((teacher: any) => !teacher.assignedTribeId);
+      const counts = new Map(tribes.map((tribe: any) => [tribe.id, { total: 0, MALE: 0, FEMALE: 0, OTHER: 0 }]));
+      for (const teacher of teachers.filter((item: any) => item.assignedTribeId)) {
+        const bucket = counts.get(teacher.assignedTribeId!);
+        if (!bucket) continue;
+        const gender = teacher.gender?.toUpperCase() === "MALE" ? "MALE" : teacher.gender?.toUpperCase() === "FEMALE" ? "FEMALE" : "OTHER";
+        bucket.total += 1;
+        bucket[gender] += 1;
       }
 
-      await ctx.prisma.$transaction(updates);
-      return { success: true, count: teachers.length };
+      const updates: any[] = [];
+      for (const teacher of unassigned) {
+        const gender = teacher.gender?.toUpperCase() === "MALE" ? "MALE" : teacher.gender?.toUpperCase() === "FEMALE" ? "FEMALE" : "OTHER";
+        const tribe = [...tribes].sort((a: any, b: any) => {
+          const aCount = counts.get(a.id)!;
+          const bCount = counts.get(b.id)!;
+          return aCount[gender] - bCount[gender] || aCount.total - bCount.total || a.displayOrder - b.displayOrder || a.id.localeCompare(b.id);
+        })[0];
+        const bucket = counts.get(tribe.id)!;
+        bucket.total += 1;
+        bucket[gender] += 1;
+        updates.push(ctx.prisma.staffProfile.update({ where: { id: teacher.id }, data: { assignedTribeId: tribe.id } }));
+      }
+
+      if (updates.length) await ctx.prisma.$transaction(updates);
+      return { success: true, count: unassigned.length, preserved: teachers.length - unassigned.length };
     }),
 
   departmentAssignmentMetrics: protectedProcedure
