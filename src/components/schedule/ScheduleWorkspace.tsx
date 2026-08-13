@@ -118,18 +118,22 @@ export function ScheduleWorkspace({ campId }: ScheduleWorkspaceProps) {
   const [editor, setEditor] = useState<{ event?: ScheduleEvent; row: ScheduleRow }>();
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string }>();
   const [visible, setVisible] = useState(true);
+  const [online, setOnline] = useState(true);
   const [cachedSnapshot, setCachedSnapshot] = useState<Snapshot>();
   const fileRef = useRef<HTMLInputElement>(null);
+  const selectedDayTouched = useRef(false);
 
   const activeCamp = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !campId && !!organizationId });
   const targetCampId = campId ?? activeCamp.data?.id;
+  const cacheKey = targetCampId && session?.user?.id ? `camply-schedule-${session.user.id}-${targetCampId}` : undefined;
   const utils = api.useUtils();
   const snapshotQuery = api.schedule.getPublishedSnapshot.useQuery(
     { campId: targetCampId! },
     { enabled: !!targetCampId, refetchInterval: visible ? 5000 : false, retry: 1 },
   );
   const refetchSnapshot = snapshotQuery.refetch;
-  const snapshot = snapshotQuery.data ?? cachedSnapshot;
+  const accessDenied = snapshotQuery.isError && ["FORBIDDEN", "UNAUTHORIZED"].includes((snapshotQuery.error as any)?.data?.code);
+  const snapshot = accessDenied ? undefined : snapshotQuery.data ?? cachedSnapshot;
   const canManage = snapshot?.canManage ?? false;
   const historyQuery = api.schedule.getHistory.useQuery({ campId: targetCampId! }, { enabled: !!targetCampId && canManage });
   const detailQuery = api.schedule.getSchedule.useQuery(
@@ -138,6 +142,11 @@ export function ScheduleWorkspace({ campId }: ScheduleWorkspaceProps) {
   );
 
   useEffect(() => {
+    setOnline(navigator.onLine);
+    const onOnline = () => { setOnline(true); if (targetCampId) void refetchSnapshot(); };
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
     const onVisibility = () => {
       const isVisible = document.visibilityState === "visible";
       setVisible(isVisible);
@@ -145,19 +154,34 @@ export function ScheduleWorkspace({ campId }: ScheduleWorkspaceProps) {
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onVisibility);
-    return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("focus", onVisibility); };
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onVisibility);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
   }, [refetchSnapshot, targetCampId]);
 
   useEffect(() => {
-    if (!targetCampId) return;
+    if (!cacheKey) return;
     if (snapshotQuery.data) {
-      localStorage.setItem(`camply-schedule-${targetCampId}`, JSON.stringify(snapshotQuery.data));
+      localStorage.setItem(cacheKey, JSON.stringify(snapshotQuery.data));
       setCachedSnapshot(undefined);
-    } else if (snapshotQuery.isError) {
-      const cached = localStorage.getItem(`camply-schedule-${targetCampId}`);
-      if (cached) setCachedSnapshot(JSON.parse(cached) as Snapshot);
+    } else if (snapshotQuery.isError && !accessDenied) {
+      const cached = localStorage.getItem(cacheKey);
+      if (!cached) return;
+      try {
+        setCachedSnapshot(JSON.parse(cached) as Snapshot);
+      } catch {
+        localStorage.removeItem(cacheKey);
+        setCachedSnapshot(undefined);
+      }
+    } else if (accessDenied) {
+      // Authorization and other server errors must never degrade into cached
+      // access. Offline data is only a network-disconnection fallback.
+      setCachedSnapshot(undefined);
     }
-  }, [snapshotQuery.data, snapshotQuery.isError, targetCampId]);
+  }, [accessDenied, cacheKey, snapshotQuery.data, snapshotQuery.isError]);
 
   useEffect(() => {
     const schedules = historyQuery.data;
@@ -168,7 +192,7 @@ export function ScheduleWorkspace({ campId }: ScheduleWorkspaceProps) {
   }, [historyQuery.data, selectedScheduleId]);
 
   useEffect(() => {
-    if (!snapshot?.dayTabs.length) return;
+    if (!snapshot?.dayTabs.length || selectedDayTouched.current) return;
     const today = formatInTimeZone(new Date(), snapshot.schedule?.timezone ?? "UTC", "yyyy-MM-dd");
     setSelectedDay(snapshot.dayTabs.find((day) => day.date === today)?.dayNumber ?? snapshot.dayTabs[0].dayNumber);
   }, [snapshot?.dayTabs, snapshot?.schedule?.timezone]);
@@ -229,6 +253,7 @@ export function ScheduleWorkspace({ campId }: ScheduleWorkspaceProps) {
       </header>
 
       {message && <div role={message.tone === "error" ? "alert" : "status"} className={cn("rounded-lg border p-3 text-sm", message.tone === "error" ? "border-danger-300 bg-danger-50 text-danger-700" : "border-success-300 bg-success-50 text-success-700")}>{message.text}</div>}
+      {snapshotQuery.isError && online && <div role="alert" className="rounded-lg border border-danger-300 bg-danger-50 p-3 text-sm text-danger-700">{accessDenied ? "Your schedule access has changed. Contact an administrator if this is unexpected." : "The latest schedule sync failed. The last successful view remains visible; retrying automatically."}</div>}
       {cachedSnapshot && !snapshotQuery.data && <div role="status" className="rounded-lg border border-warning-300 bg-warning-50 p-3 text-sm text-warning-800">Offline: showing the last saved schedule. Live controls are disabled until the connection returns.</div>}
 
       {canManage && <nav aria-label="Schedule views" className="flex gap-2 overflow-x-auto">
@@ -267,7 +292,7 @@ export function ScheduleWorkspace({ campId }: ScheduleWorkspaceProps) {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-wide text-accent-600">Live revision {snapshot.schedule.revision}</p><h2 className="mt-1 text-xl font-bold text-txt-primary">{snapshot.currentEvent?.title ?? "No activity running"}</h2><p className="mt-1 text-sm text-txt-muted">Next: {snapshot.nextEvent?.title ?? "End of programme"}</p></div><span className={cn("rounded-full px-3 py-1 text-sm font-semibold", snapshot.metrics.status === "BEHIND" ? "bg-warning-100 text-warning-800" : "bg-success-100 text-success-800")}>{snapshot.metrics.status === "ON_TIME" ? "On schedule" : `${snapshot.metrics.status === "BEHIND" ? "Behind" : "Ahead"} ${Math.abs(snapshot.metrics.varianceMinutes)}m`}</span></div>
             <div className="mt-4 grid gap-3 border-t border-border-default pt-4 sm:grid-cols-3"><Info label="Next activity" value={snapshot.nextEvent?.title ?? "None"} /><Info label="Selected day finish" value={selectedDayFinish ? formatInTimeZone(new Date(selectedDayFinish), snapshot.schedule.timezone, "HH:mm") : "--:--"} /><Info label="Last sync" value={formatInTimeZone(new Date(snapshot.serverNow), snapshot.schedule.timezone, "HH:mm:ss")} /></div>
           </div>
-          <div className="flex gap-2 overflow-x-auto border-b border-border-default pb-2">{snapshot.dayTabs.map((day) => <button key={day.dayNumber} onClick={() => setSelectedDay(day.dayNumber)} className={cn("shrink-0 rounded-lg px-4 py-2 text-sm font-medium", selectedDay === day.dayNumber ? "brand-tint-strong" : "bg-surface-raised text-txt-secondary")}>{day.label} · {day.date}</button>)}</div>
+          <div className="flex gap-2 overflow-x-auto border-b border-border-default pb-2">{snapshot.dayTabs.map((day) => <button key={day.dayNumber} onClick={() => { selectedDayTouched.current = true; setSelectedDay(day.dayNumber); }} className={cn("shrink-0 rounded-lg px-4 py-2 text-sm font-medium", selectedDay === day.dayNumber ? "brand-tint-strong" : "bg-surface-raised text-txt-secondary")}>{day.label} · {day.date}</button>)}</div>
           <EventList events={liveEvents as ScheduleEvent[]} timezone={snapshot.schedule.timezone} mode="live" currentId={snapshot.currentEvent?.id} serverNow={snapshot.serverNow} controls={canManage && !cachedSnapshot} onEdit={(event) => setEditor({ event, row: eventRow(event, snapshot.schedule!.timezone) })} onCancel={(event) => { const reason = prompt(event.cancelled ? "Why are you restoring this activity?" : "Why are you cancelling this activity?"); if (reason) cancelEvent.mutate({ scheduleId: snapshot.schedule!.id, eventId: event.id, expectedVersion: snapshot.schedule!.version, cancelled: !event.cancelled, reason }); }} onAdjust={(event, minutes) => adjust.mutate({ scheduleId: snapshot.schedule!.id, eventId: event.id, expectedVersion: snapshot.schedule!.version, minuteDelta: minutes })} onStart={(event) => startNow.mutate({ scheduleId: snapshot.schedule!.id, eventId: event.id, expectedVersion: snapshot.schedule!.version })} onEnd={(event) => endNow.mutate({ scheduleId: snapshot.schedule!.id, eventId: event.id, expectedVersion: snapshot.schedule!.version })} />
         </>}
       </section>}

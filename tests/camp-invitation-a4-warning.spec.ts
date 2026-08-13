@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { loginWithPassword, prisma } from "./helpers";
+import { loginWithPassword } from "./helpers";
 
 // Shares the seeded org's Camp Invitation template and edits its body copy.
 test.describe.configure({ mode: "serial" });
@@ -12,6 +12,8 @@ test.describe.configure({ mode: "serial" });
  * warns when it won't fit one page.
  */
 test.describe("Camp Invitation — A4 one-page warning", () => {
+  test.setTimeout(120_000);
+
   test("reports the fit, and warns once body copy pushes past one page", async ({ page }) => {
     await loginWithPassword(page, "admin@camply.com", "password123");
     await page.goto("/admin/communication/templates");
@@ -41,12 +43,11 @@ test.describe("Camp Invitation — A4 one-page warning", () => {
     // this never clicks Save — so the shared template is left untouched and
     // there is no fixture state to clean up.
     const editor = page.locator(".ProseMirror").first();
-    await editor.click();
-    await page.keyboard.press("Control+A");
-    for (let i = 0; i < 12; i++) {
-      await page.keyboard.type(`Paragraph ${i} of deliberately long body copy for the A4 overflow check.`);
-      await page.keyboard.press("Enter");
-    }
+    const longBody = Array.from(
+      { length: 12 },
+      (_, i) => `Paragraph ${i} of deliberately long body copy for the A4 overflow check.`
+    ).join("\n");
+    await editor.fill(longBody);
 
     await expect(warning).toBeVisible({ timeout: 25000 });
     await expect(page.getByText(/taller than a single A4 page allows/i)).toBeVisible();

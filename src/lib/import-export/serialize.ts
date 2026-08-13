@@ -74,7 +74,7 @@ export async function toXlsxWorkbook(data: {
   const addSheet = (name: string, entity: EntityKind, rows: AnyRow[]) => {
     const columns = COLUMNS_FOR[entity];
     const headers = columns.map((c) => c.key);
-    const aoa = [headers, ...rows.map((row) => columns.map((c) => cellValue(row, c.key)))];
+    const aoa = [headers, ...rows.map((row) => columns.map((c) => escapeFormula(cellValue(row, c.key))))];
     const sheet = XLSX.utils.aoa_to_sheet(aoa);
     XLSX.utils.book_append_sheet(workbook, sheet, name);
   };

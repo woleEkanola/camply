@@ -29,10 +29,25 @@ describe("schedule service", () => {
     expect(timeInZone(instant, "Africa/Lagos")).toBe("08:00");
   });
 
+  it("rejects a local time skipped by daylight-saving time", () => {
+    expect(() => zonedDateTime("2026-03-08", "02:30", "America/New_York")).toThrow("does not exist");
+  });
+
   it("supports a timed activity crossing midnight", () => {
     const start = zonedDateTime("2026-08-13", "23:30", "Africa/Lagos");
     const end = zonedDateTime("2026-08-14", "00:30", "Africa/Lagos");
     const issues = publishReadiness([event({ effectiveStart: start, effectiveEnd: end })], { startDate: new Date("2026-08-13T00:00:00Z"), endDate: new Date("2026-08-14T00:00:00Z") }, "Africa/Lagos");
+    expect(issues).toEqual([]);
+  });
+
+  it("keeps UTC-midnight camp boundaries stable in a western timezone", () => {
+    const start = zonedDateTime("2026-08-13", "08:00", "America/New_York");
+    const end = zonedDateTime("2026-08-13", "09:00", "America/New_York");
+    const issues = publishReadiness(
+      [event({ effectiveStart: start, effectiveEnd: end })],
+      { startDate: new Date("2026-08-13T00:00:00Z"), endDate: new Date("2026-08-13T00:00:00Z") },
+      "America/New_York",
+    );
     expect(issues).toEqual([]);
   });
 

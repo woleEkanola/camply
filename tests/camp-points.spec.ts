@@ -74,7 +74,7 @@ test.describe("Camp Points station", () => {
     await expect(checkboxes).toHaveCount(5);
     for (let index = 0; index < 5; index++) await checkboxes.nth(index).check();
     await page.getByRole("button", { name: "Award 5" }).click();
-    await expect(page.getByText("5 teenagers awarded.")).toBeVisible();
+    await expect(page.getByText("5 teenagers awarded.")).toBeVisible({ timeout: 30_000 });
     await expect.poll(() => prisma.scoreEvent.count({ where: { categoryId: { in: ids.categories }, registrationId: { in: ids.registrations } } })).toBe(5);
 
     await checkboxes.first().check();

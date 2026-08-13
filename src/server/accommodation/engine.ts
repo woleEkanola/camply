@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "../db";
 import { logEvent } from "../audit";
 import { calculateAge } from "../registration/validation";
+import { gendersMatch, normalizeGender } from "../../lib/gender";
 
 type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
@@ -104,7 +105,7 @@ export async function suggestBed(
   });
 
   // Hard gender filter — unknown occupant gender can only go to an unspecified/MIXED hostel.
-  const genderEligible = hostels.filter((h) => !h.gender || h.gender === "MIXED" || h.gender === occupant.gender);
+  const genderEligible = hostels.filter((h) => !h.gender || h.gender.toUpperCase() === "MIXED" || gendersMatch(h.gender, occupant.gender));
 
   const candidates: { bedId: string; roomId: string; roomName: string; hostelId: string; hostelName: string }[] = [];
   for (const hostel of genderEligible) {
@@ -240,9 +241,10 @@ export async function suggestBed(
 
   scored.sort((a, b) => b.score - a.score);
   const best = scored[0];
-  const worstScore = scored[scored.length - 1].score;
-  const spread = best.score - worstScore || 1;
-  const confidence = Math.round(Math.min(99, 50 + ((best.score - worstScore) / spread) * 49));
+  const runnerUp = scored[1]?.score ?? best.score;
+  const gap = Math.max(0, best.score - runnerUp);
+  const scale = Math.abs(best.score) + Math.abs(runnerUp) + 1;
+  const confidence = scored.length === 1 ? 99 : Math.round(Math.min(99, 50 + (gap / scale) * 49));
 
   return {
     bedId: best.candidate.bedId,
@@ -360,7 +362,7 @@ function occupantFromRegistration(reg: { id: string; tribeId: string | null; cam
   return {
     kind: "CAMPER",
     registrationId: reg.id,
-    gender: reg.camper.gender,
+    gender: normalizeGender(reg.camper.gender),
     dateOfBirth: reg.camper.dateOfBirth,
     groupId: reg.tribeId,
     tribeId: reg.tribeId,
@@ -372,7 +374,7 @@ function occupantFromStaff(staff: { id: string; gender: string | null; dateOfBir
   return {
     kind: "STAFF",
     staffProfileId: staff.id,
-    gender: staff.gender,
+    gender: normalizeGender(staff.gender),
     dateOfBirth: staff.dateOfBirth,
     // Sleeping-group cohesion follows the staff member's tribe first. Their
     // operational department must not pull them away from their tribe rooms.
@@ -400,7 +402,8 @@ export interface BedAssignmentResult {
  */
 async function reserveBedsForStaff(
   venueId: string,
-  staff: { gender: string | null }[]
+  staff: { gender: string | null; assignedTribeId: string | null }[],
+  groupTogether: boolean,
 ): Promise<Set<string>> {
   const reserved = new Set<string>();
   if (staff.length === 0) return reserved;
@@ -412,7 +415,8 @@ async function reserveBedsForStaff(
         where: { deletedAt: null },
         include: {
           beds: { where: { deletedAt: null, status: "AVAILABLE" }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
-          staffAssigned: { where: { deletedAt: null }, select: { id: true } },
+          staffAssigned: { where: { deletedAt: null }, select: { id: true, assignedTribeId: true } },
+          registrations: { where: { deletedAt: null }, select: { tribeId: true } },
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       },
@@ -422,7 +426,7 @@ async function reserveBedsForStaff(
 
   const roomsWithReservation = new Set<string>();
   for (const member of staff) {
-    const eligible = hostels.filter((h) => !h.gender || h.gender === "MIXED" || h.gender === member.gender);
+    const eligible = hostels.filter((h) => !h.gender || h.gender.toUpperCase() === "MIXED" || gendersMatch(h.gender, member.gender));
     let claimed = false;
     // Two passes: rooms with no staff at all first (that's the coverage this
     // exists for), then any remaining room so surplus staff still get a bed.
@@ -432,6 +436,8 @@ async function reserveBedsForStaff(
         for (const room of hostel.rooms) {
           if (roomsWithReservation.has(room.id)) continue;
           if (preferUncovered && room.staffAssigned.length > 0) continue;
+          const roomTribes = [...room.registrations.map((row) => row.tribeId), ...room.staffAssigned.map((row) => row.assignedTribeId)].filter(Boolean);
+          if (groupTogether && member.assignedTribeId && roomTribes.length > 0 && roomTribes.some((tribeId) => tribeId !== member.assignedTribeId)) continue;
           const bed = room.beds.find((b) => !reserved.has(b.id));
           if (!bed) continue;
           reserved.add(bed.id);
@@ -500,7 +506,7 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
   const staffOccupants = unassignedStaff.map(occupantFromStaff);
 
   // Held back during the camper phase only, then released for staff below.
-  const reservedForStaff = await reserveBedsForStaff(params.venueId, unassignedStaff);
+  const reservedForStaff = await reserveBedsForStaff(params.venueId, unassignedStaff, groupTogether);
 
   const occupants: Occupant[] = [...camperOccupants, ...staffOccupants];
 
@@ -531,7 +537,7 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
         return suggestion.bedId;
       });
       if (!bedId) {
-        results.push({ occupantKey: key, error: "No matching-gender bed available" });
+        results.push({ occupantKey: key, error: groupTogether && occupant.tribeId ? "No compatible bed is available for this gender and tribe" : "No matching-gender bed available" });
         continue;
       }
       // Keep the reservation set honest: if a camper did consume a reserved

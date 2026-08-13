@@ -96,6 +96,9 @@ export function ScanCenterShell({
 
   // Hook for Offline capabilities
   const offlineScanner = useOfflineScanner(organizationId);
+  useEffect(() => {
+    if (offlineScanner.syncError) toast.error(offlineScanner.syncError);
+  }, [offlineScanner.syncError]);
   const utils = api.useUtils();
 
   // Overlays & Dialogs State
@@ -823,7 +826,7 @@ export function ScanCenterShell({
 
             <div className="space-y-2">
               <h1 className="text-4xl md:text-5xl font-black tracking-tight">
-                {staffScanData.staffAction ?? staffScanData.actionPerformed}
+                {staffScanData.actionPerformed ?? staffScanData.staffAction}
               </h1>
               <p className="text-2xl md:text-3xl font-bold opacity-90">
                 {`${staffScanData.profile.firstName} ${staffScanData.profile.lastName}`.trim()}

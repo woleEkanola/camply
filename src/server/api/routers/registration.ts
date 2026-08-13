@@ -210,8 +210,9 @@ export const registrationRouter = createTRPCRouter({
       }
 
       // Check if user has permission to view registrations in this organization
-      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)
-        || await hasRegistrationCommandAccess(ctx, input.organizationId);
+      const isOrgAdmin = currentUser.role === "SUPER_ADMIN"
+        || (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === input.organizationId)
+        || (currentUser.organizationId === input.organizationId && await hasRegistrationCommandAccess(ctx, input.organizationId));
       const hasPermission =
         isOrgAdmin ||
         ((currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId);
@@ -242,6 +243,8 @@ export const registrationRouter = createTRPCRouter({
 
         campId = organization.activeCampId;
       }
+      const scopedCamp = await ctx.prisma.camp.findFirst({ where: { id: campId, organizationId: input.organizationId }, select: { id: true } });
+      if (!scopedCamp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found in this organization" });
 
       // For campus reps (any role — a rep can be a Teacher too) who aren't
       // also an org admin, only show registrations for their managed campuses
@@ -352,8 +355,9 @@ export const registrationRouter = createTRPCRouter({
       }
 
       // Check if user has permission to view these registrations
-      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)
-        || await hasRegistrationCommandAccess(ctx, profile.organizationId);
+      const isOrgAdmin = currentUser.role === "SUPER_ADMIN"
+        || (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === profile.organizationId)
+        || (currentUser.organizationId === profile.organizationId && await hasRegistrationCommandAccess(ctx, profile.organizationId));
       const isOwner = currentUser.id === profile.userId;
       const hasPermission =
         isOwner ||
@@ -452,8 +456,7 @@ export const registrationRouter = createTRPCRouter({
       const hasPermission =
         currentUser.id === registration.camper.userId || // User owns the profile
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === registration.campus.organizationId) ||
         !!(await ctx.prisma.campus.findFirst({
            where: {
              id: registration.campusId,
@@ -531,8 +534,7 @@ export const registrationRouter = createTRPCRouter({
       const hasPermission =
         currentUser.id === profile.userId || // User owns the profile
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === profile.organizationId) ||
         ((currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === profile.organizationId);
 
       if (!hasPermission) {
@@ -541,6 +543,12 @@ export const registrationRouter = createTRPCRouter({
           message: "Not authorized to create registrations for this profile"
         });
       }
+
+      const [targetCamp, scopedCampus] = await Promise.all([
+        ctx.prisma.camp.findFirst({ where: { id: input.campId, organizationId: profile.organizationId }, select: { id: true } }),
+        ctx.prisma.campus.findFirst({ where: { id: input.campusId, organizationId: profile.organizationId }, select: { id: true, suspended: true } }),
+      ]);
+      if (!targetCamp || !scopedCampus) throw new TRPCError({ code: "BAD_REQUEST", message: "Camp and campus must belong to the camper's organization" });
 
       // For campus reps (any role), check if the campus is one they manage
       if (!["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)) {
@@ -581,11 +589,7 @@ export const registrationRouter = createTRPCRouter({
       // This procedure writes `status` directly (see `registrationSchema`),
       // bypassing engine.ts's suspended-campus checks entirely — the one
       // confirmed gap in "engine.ts is the sole choke point." Guard it here.
-      const targetCampus = await ctx.prisma.campus.findUnique({
-        where: { id: input.campusId },
-        select: { suspended: true },
-      });
-      if (targetCampus?.suspended) {
+      if (scopedCampus.suspended) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "This campus is suspended — new registrations can't be created for it right now.",
@@ -636,9 +640,8 @@ export const registrationRouter = createTRPCRouter({
       const isOwner = currentUser.id === registration.camper.userId;
       const isAdmin =
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
-        Boolean((await getCampCommandAccess(ctx, registration.campId))?.permissions.includes("REGISTRATIONS"));
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === registration.campus.organizationId) ||
+        (currentUser.organizationId === registration.campus.organizationId && Boolean((await getCampCommandAccess(ctx, registration.campId))?.permissions.includes("REGISTRATIONS")));
 
       const isCampusRep = !!(await ctx.prisma.campus.findFirst({
           where: {
@@ -674,6 +677,16 @@ export const registrationRouter = createTRPCRouter({
         }
       }
 
+      if (isAdmin || isCampusRep) {
+        const organizationId = registration.campus.organizationId;
+        const [targetCamper, targetCamp, targetCampus] = await Promise.all([
+          ctx.prisma.camper.findFirst({ where: { id: input.data.camperId ?? registration.camperId, organizationId }, select: { id: true } }),
+          ctx.prisma.camp.findFirst({ where: { id: input.data.campId ?? registration.campId, organizationId }, select: { id: true } }),
+          ctx.prisma.campus.findFirst({ where: { id: input.data.campusId ?? registration.campusId, organizationId }, select: { id: true } }),
+        ]);
+        if (!targetCamper || !targetCamp || !targetCampus) throw new TRPCError({ code: "BAD_REQUEST", message: "Camper, camp, and campus must belong to the same organization" });
+      }
+
       // Update the registration
       return await ctx.prisma.registration.update({
         where: { id: input.id },
@@ -704,8 +717,7 @@ export const registrationRouter = createTRPCRouter({
       }
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === registration.campus.organizationId) ||
         !!(await ctx.prisma.campus.findFirst({
             where: {
               id: registration.campusId,
@@ -749,7 +761,8 @@ export const registrationRouter = createTRPCRouter({
         include: {
           camper: {
             include: { user: true }
-          }
+          },
+          campus: true,
         }
       });
 
@@ -761,8 +774,7 @@ export const registrationRouter = createTRPCRouter({
       const hasPermission =
         currentUser.id === registration.camper.userId || // User owns the profile
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === registration.campus.organizationId) ||
         !!(await ctx.prisma.campus.findFirst({
            where: {
              id: registration.campusId,
@@ -1032,6 +1044,11 @@ export const registrationRouter = createTRPCRouter({
         include: { campus: true },
       });
       await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+      const destination = await ctx.prisma.venue.findFirst({
+        where: { id: input.newVenueId, camp: { organizationId: registration.campus.organizationId } },
+        select: { id: true },
+      });
+      if (!destination) throw new TRPCError({ code: "BAD_REQUEST", message: "Destination venue must belong to this organization" });
       try {
         return await engine.transferVenue({ registrationId: input.registrationId, actorId: currentUser.id, newVenueId: input.newVenueId });
       } catch (error) {
@@ -1203,8 +1220,7 @@ export const registrationRouter = createTRPCRouter({
         const hasPermission =
           currentUser.id === registration.camper.userId ||
           currentUser.role === "SUPER_ADMIN" ||
-          currentUser.role === "OWNER" ||
-          currentUser.role === "ADMIN" ||
+          (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === registration.camper.organizationId) ||
           !!(await ctx.prisma.campus.findFirst({
             where: { id: registration.campusId, reps: { some: { id: currentUser.id } } },
           }));
@@ -1886,8 +1902,9 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)
-        || await hasRegistrationCommandAccess(ctx, input.organizationId);
+      const isAdmin = currentUser.role === "SUPER_ADMIN"
+        || (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === input.organizationId)
+        || (currentUser.organizationId === input.organizationId && await hasRegistrationCommandAccess(ctx, input.organizationId));
       let campusFilter: Record<string, unknown> = { organizationId: input.organizationId };
 
       if (!isAdmin) {
@@ -1979,8 +1996,9 @@ export const registrationRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const isAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role)
-        || await hasRegistrationCommandAccess(ctx, input.organizationId);
+      const isAdmin = currentUser.role === "SUPER_ADMIN"
+        || (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === input.organizationId)
+        || (currentUser.organizationId === input.organizationId && await hasRegistrationCommandAccess(ctx, input.organizationId));
       let campusFilter: Record<string, unknown> = { organizationId: input.organizationId };
 
       if (!isAdmin) {

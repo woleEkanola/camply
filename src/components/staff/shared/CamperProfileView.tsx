@@ -5,6 +5,8 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { CamperPhotoCropperModal } from "./CamperPhotoCropperModal";
+import { differenceInYears } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 
 interface CamperProfileViewProps {
   registration?: {
@@ -86,13 +88,12 @@ interface CamperProfileViewProps {
 
 function age(dob: string | Date | null | undefined) {
   if (!dob) return null;
-  const diff = Date.now() - new Date(dob).getTime();
-  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+  return differenceInYears(new Date(), new Date(dob));
 }
 
 function formatDate(dob: string | Date | null | undefined) {
   if (!dob) return "—";
-  return new Date(dob).toLocaleDateString();
+  return formatInTimeZone(new Date(dob), "UTC", "dd MMM yyyy");
 }
 
 export function CamperProfileView({ camper, registration, formFields }: CamperProfileViewProps) {
@@ -118,7 +119,7 @@ export function CamperProfileView({ camper, registration, formFields }: CamperPr
         return registration?.campus?.name || camper.homeCampus?.name || null;
       }
       const val = (camper as any)[field.systemKey] ?? (registration as any)?.[field.systemKey];
-      if (val instanceof Date) return val.toLocaleDateString();
+      if (val instanceof Date) return formatInTimeZone(val, "UTC", "dd MMM yyyy");
       return formatVal(val);
     }
     return null;

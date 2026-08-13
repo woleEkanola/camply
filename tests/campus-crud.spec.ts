@@ -80,8 +80,9 @@ test.describe("Admin: Campus CRUD and signup link generation", () => {
       .toBe(false);
 
     // Re-select after re-render (selection state resets after bulk action)
-    await findCampusCard(page, campusName);
-    await card.locator('input[type="checkbox"]').click();
+    const refreshedCard = await findCampusCard(page, campusName);
+    await refreshedCard.locator('input[type="checkbox"]').click();
+    await expect(page.getByRole("button", { name: "Enable Signup Links" })).toBeVisible();
     await page.getByRole("button", { name: "Enable Signup Links" }).click();
 
     await expect

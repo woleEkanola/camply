@@ -60,7 +60,9 @@ function normalizeHeaderRow(row: RawRow): RawRow {
 function normalizeRow(row: RawRow): RawRow {
   const out: RawRow = {};
   for (const [key, value] of Object.entries(row)) {
-    out[key.trim()] = typeof value === "string" ? value.trim() : value;
+    const normalizedKey = key.replace(/^\uFEFF/, "").trim();
+    const trimmed = typeof value === "string" ? value.trim() : value;
+    out[normalizedKey] = typeof trimmed === "string" && /^'[=+\-@]/.test(trimmed) ? trimmed.slice(1) : trimmed;
   }
   return out;
 }
@@ -69,7 +71,7 @@ async function parseCsv(text: string, entityHint?: EntityKind): Promise<RawBundl
   const result = Papa.parse<RawRow>(text, {
     header: true,
     skipEmptyLines: true,
-    transformHeader: (h) => h.trim(),
+    transformHeader: (h) => h.replace(/^\uFEFF/, "").trim(),
   });
   const rows = (result.data ?? []).map(normalizeRow);
   const headers = result.meta.fields ?? Object.keys(rows[0] ?? {});

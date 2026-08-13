@@ -32,6 +32,7 @@ export async function markAttendance(input: {
   });
   if (!registration) throw new AttendanceError("NOT_FOUND", "Eligible camper registration not found in this camp.");
   if (session.tribeId && registration.tribeId !== session.tribeId) throw new AttendanceError("FORBIDDEN", "This camper is not in the session's tribe.");
+  if (session.campusId && registration.campusId !== session.campusId) throw new AttendanceError("FORBIDDEN", "This camper is not in the session's campus.");
 
   const automaticStatus: AttendanceStatus = session.startsAt && occurredAt.getTime() > session.startsAt.getTime() + session.lateAfterMinutes * 60_000 ? "LATE" : "PRESENT";
   const status = input.status ?? automaticStatus;
@@ -131,7 +132,7 @@ export async function markStaffAttendance(input: {
     if (scoredSession && rule?.enabled) {
       if (previousScoreEventId) {
         const previous = await prisma.scoreEvent.findUnique({ where: { id: previousScoreEventId } });
-        if (previous) await recordScoreEvent({ campId: session.campId, campusId: scope.campusId, tribeId: scope.tribeId, staffProfileId: scope.staffProfileId, categoryId: previous.categoryId, ruleId: rule.id, scoredSessionId: scoredSession.id, points: -previous.points, source: "SYSTEM", occurredAt, createdById: input.actorId, reversesEventId: previous.id, idempotencyKey: `staff-attendance:${session.id}:${scope.staffProfileId}:reverse:v${record.scoreVersion}`, reason: `Attendance corrected to ${status}` });
+        if (previous) await recordScoreEvent({ campId: session.campId, campusId: scope.campusId, tribeId: scope.tribeId, staffProfileId: scope.staffProfileId, categoryId: previous.categoryId, scoredSessionId: scoredSession.id, points: -previous.points, source: "SYSTEM", occurredAt, createdById: input.actorId, reversesEventId: previous.id, idempotencyKey: `staff-attendance:${session.id}:${scope.staffProfileId}:reverse:v${record.scoreVersion}`, reason: `Attendance corrected to ${status}` });
       }
       if (status !== "ABSENT" && status !== "EXCUSED") {
         const minutesLate = status === "LATE" ? Math.max(session.lateAfterMinutes + 1, session.startsAt ? (occurredAt.getTime() - session.startsAt.getTime()) / 60_000 : 1) : 0;

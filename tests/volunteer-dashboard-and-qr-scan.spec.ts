@@ -57,7 +57,7 @@ test.describe("Volunteer Dashboard & Universal QR Scan E2E Test", () => {
 
     // Verify Welcome Greeting & Volunteer Badge
     await expect(page.getByRole("heading", { name: /Welcome back, Operational/ }).first()).toBeVisible();
-    await expect(page.getByText("VOLUNTEER", { exact: true })).toBeVisible();
+    await expect(page.getByTitle("VOLUNTEER")).toBeVisible();
     const photoCard = page.getByRole("link", { name: "Upload photo" });
     const welcomeCard = page.getByRole("heading", { name: /Welcome back, Operational/ }).first();
     const positionHeading = page.getByRole("heading", { name: "My position" });

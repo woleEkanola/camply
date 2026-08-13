@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, test, expect } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { format } from "date-fns";
 import { getFixtureOrgContext, loginWithPassword, prisma } from "./helpers";
 
@@ -6,14 +6,14 @@ let campId = "";
 let baselineRevision = 0;
 let originalPublishedId: string | null = null;
 
-beforeAll(async () => {
+test.beforeAll(async () => {
   ({ campId } = await getFixtureOrgContext());
   const schedules = await prisma.campSchedule.findMany({ where: { campId }, orderBy: { revision: "desc" } });
   baselineRevision = schedules[0]?.revision ?? 0;
   originalPublishedId = schedules.find((schedule) => schedule.status === "PUBLISHED")?.id ?? null;
 });
 
-afterAll(async () => {
+test.afterAll(async () => {
   await prisma.$transaction(async (tx) => {
     await tx.campSchedule.deleteMany({ where: { campId, revision: { gt: baselineRevision } } });
     if (originalPublishedId) await tx.campSchedule.update({ where: { id: originalPublishedId }, data: { status: "PUBLISHED" } });

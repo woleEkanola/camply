@@ -17,6 +17,7 @@ export function ScheduleAlertController({ campId }: ScheduleAlertControllerProps
   const organizationId = session?.user?.organizationId ?? "";
   const activeCamp = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !campId && !!organizationId });
   const targetCampId = campId ?? activeCamp.data?.id;
+  const storagePrefix = `camply-schedule-${session?.user?.id ?? "anonymous"}`;
   const [visible, setVisible] = useState(true);
   const [muted, setMuted] = useState(false);
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -29,7 +30,7 @@ export function ScheduleAlertController({ campId }: ScheduleAlertControllerProps
   const refetchSnapshot = query.refetch;
 
   useEffect(() => {
-    setMuted(localStorage.getItem("camply-schedule-reminders-muted") === "true");
+    setMuted(localStorage.getItem(`${storagePrefix}-reminders-muted`) === "true");
     const onVisibility = () => {
       const next = document.visibilityState === "visible";
       setVisible(next);
@@ -38,7 +39,7 @@ export function ScheduleAlertController({ campId }: ScheduleAlertControllerProps
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onVisibility);
     return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("focus", onVisibility); };
-  }, [refetchSnapshot, targetCampId]);
+  }, [refetchSnapshot, storagePrefix, targetCampId]);
 
   useEffect(() => {
     const snapshot = query.data;
@@ -49,8 +50,9 @@ export function ScheduleAlertController({ campId }: ScheduleAlertControllerProps
     if (!before) return;
     const timezone = snapshot.schedule.timezone;
     const addOnce = (banner: Banner) => {
-      if (sessionStorage.getItem(banner.id)) return;
-      sessionStorage.setItem(banner.id, "true");
+      const storageKey = `${storagePrefix}-${banner.id}`;
+      if (sessionStorage.getItem(storageKey)) return;
+      sessionStorage.setItem(storageKey, "true");
       setBanners((current) => [...current, banner]);
     };
 
@@ -58,8 +60,8 @@ export function ScheduleAlertController({ campId }: ScheduleAlertControllerProps
     if (completed) {
       const end = new Date(completed.actualEnd ?? completed.effectiveEnd ?? completed.effectiveStart);
       const key = `schedule-timeup-${snapshot.schedule.id}-${completed.id}-${end.toISOString()}`;
-      if (crossedInstant(before, now, end) && !sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, "true");
+      if (crossedInstant(before, now, end) && !sessionStorage.getItem(`${storagePrefix}-${key}`)) {
+        sessionStorage.setItem(`${storagePrefix}-${key}`, "true");
         setCritical({ id: key, completed: completed.title, next: snapshot.nextEvent?.title ?? "End of programme", time: snapshot.nextEvent ? formatInTimeZone(new Date(snapshot.nextEvent.effectiveStart), timezone, "HH:mm") : "--:--", location: snapshot.nextEvent?.location ?? "Camp grounds" });
       }
     }
@@ -79,12 +81,21 @@ export function ScheduleAlertController({ campId }: ScheduleAlertControllerProps
         if (crossedInstant(before, now, start)) addOnce({ id: `schedule-milestone-${snapshot.schedule.id}-${event.id}`, message: `${event.title} is starting now`, subtext: event.location ?? undefined });
       }
     }
-  }, [muted, query.data]);
+
+    for (const cancellation of snapshot.recentChanges.filter((change) => change.changeType === "CANCEL_EVENT")) {
+      const cancelledEvent = snapshot.events.find((event) => event.id === cancellation.eventId);
+      addOnce({
+        id: `schedule-cancelled-${cancellation.id}`,
+        message: `${cancelledEvent?.title ?? "A scheduled activity"} was cancelled`,
+        subtext: cancellation.reason ?? undefined,
+      });
+    }
+  }, [muted, query.data, storagePrefix]);
 
   const toggleMuted = () => {
     const next = !muted;
     setMuted(next);
-    localStorage.setItem("camply-schedule-reminders-muted", String(next));
+    localStorage.setItem(`${storagePrefix}-reminders-muted`, String(next));
   };
 
   if (!query.data?.schedule) return null;

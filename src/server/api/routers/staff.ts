@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeGender } from "../../../lib/gender";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { assertOrgAdminOrCommand, assertOrgAdminOrCampusRep as assertScopedOrgAccess } from "../trpc/scoping";
@@ -120,8 +121,8 @@ export const staffRouter = createTRPCRouter({
         ctx.prisma.staffProfile.count({ where: { ...where, status: "PENDING" } }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED" } }),
         ctx.prisma.staffProfile.count({ where: { ...where, status: "APPROVED", assignedVenueId: { not: null } } }),
-        ctx.prisma.staffProfile.count({ where: { ...where, gender: "Male" } }),
-        ctx.prisma.staffProfile.count({ where: { ...where, gender: "Female" } }),
+        ctx.prisma.staffProfile.count({ where: { ...where, gender: "MALE" } }),
+        ctx.prisma.staffProfile.count({ where: { ...where, gender: "FEMALE" } }),
       ]);
 
       const result: Record<string, any> = {
@@ -190,7 +191,7 @@ export const staffRouter = createTRPCRouter({
         ...(input.status && { status: input.status }),
         ...(input.venueId && { assignedVenueId: input.venueId }),
         ...(input.campusId && { preferredCampusId: input.campusId }),
-        ...(input.gender && { gender: input.gender }),
+        ...(input.gender && { gender: normalizeGender(input.gender) ?? input.gender }),
         ...(input.tribeId && { assignedTribeId: input.tribeId }),
         ...(input.departmentId && { departmentId: input.departmentId }),
         ...(input.assignmentStatus === "ASSIGNED" && { departmentId: { not: null } }),
@@ -846,7 +847,7 @@ export const staffRouter = createTRPCRouter({
       const firstName = systemValues.firstName || existingUser?.firstName || "";
       const lastName = systemValues.lastName || existingUser?.lastName || "";
       const phone = systemValues.phone || "";
-      const gender = systemValues.gender || "";
+      const gender = normalizeGender(systemValues.gender) || "";
 
       return ctx.prisma.$transaction(async (tx) => {
         const user =

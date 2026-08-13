@@ -31,6 +31,7 @@ export function parseTimeToMinutes(timeStr: string): number | null {
   if (ampmMatch) {
     let hours = parseInt(ampmMatch[1], 10);
     const minutes = parseInt(ampmMatch[2], 10);
+    if (hours < 1 || hours > 12 || minutes > 59) return null;
     const period = ampmMatch[3].toUpperCase();
     if (period === "PM" && hours < 12) hours += 12;
     if (period === "AM" && hours === 12) hours = 0;
@@ -40,6 +41,7 @@ export function parseTimeToMinutes(timeStr: string): number | null {
   if (h24Match) {
     const hours = parseInt(h24Match[1], 10);
     const minutes = parseInt(h24Match[2], 10);
+    if (hours > 23 || minutes > 59) return null;
     return hours * 60 + minutes;
   }
   return null;

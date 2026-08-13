@@ -123,6 +123,14 @@ afterAll(async () => {
 });
 
 describe("bed suggestion — hard gender filter", () => {
+  it("matches legacy title-case occupants to canonical gendered hostels", async () => {
+    const { room } = await makeHostelWithBeds("MALE", 1);
+    const suggestion = await accommodationEngine.suggestBed(prisma, venueId, {
+      kind: "CAMPER", registrationId: "legacy-registration", gender: "Male", dateOfBirth: null, groupId: null, campusId,
+    });
+    expect(suggestion?.roomId).toBe(room.id);
+  });
+
   it("never suggests a bed in a hostel of the wrong gender", async () => {
     await makeHostelWithBeds("FEMALE", 2);
     const { room: maleRoom } = await makeHostelWithBeds("MALE", 2);

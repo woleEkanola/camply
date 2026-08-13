@@ -52,6 +52,12 @@ describe("detectEntityFromHeaders", () => {
 });
 
 describe("CSV round-trip", () => {
+  it("accepts Excel's UTF-8 BOM and reverses spreadsheet formula escaping", async () => {
+    const csv = `\uFEFFname,description,status,campScoped\n'=Registration,'+2348012345678,ACTIVE,true`;
+    const { bundle } = await detectAndParse(makeFile("departments.csv", csv, "text/csv"), "departments");
+    expect(bundle.departments?.[0]).toMatchObject({ name: "=Registration", description: "+2348012345678" });
+  });
+
   it("campuses: serialize -> parse -> validate reproduces the original row", async () => {
     const csv = toCsv("campuses", [campus]);
     const file = makeFile("campuses.csv", csv, "text/csv");

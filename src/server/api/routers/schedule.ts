@@ -11,6 +11,7 @@ import {
   publishReadiness,
   renumberScheduleDays,
   resolveLiveState,
+  timeInZone,
   zonedDateTime,
 } from "../../schedule/service";
 
@@ -155,15 +156,39 @@ export const scheduleRouter = createTRPCRouter({
       if (schedule.status === "ARCHIVED") throw new TRPCError({ code: "BAD_REQUEST", message: "Archived revisions are read-only." });
       return ctx.prisma.$transaction(async (tx) => {
         await claimScheduleVersion(tx, schedule.id, input.expectedVersion, [schedule.status === "DRAFT" ? "DRAFT" : "PUBLISHED"]);
+        const beforeSchedule = schedule.status === "PUBLISHED" ? await tx.campSchedule.findUniqueOrThrow({ where: { id: schedule.id }, include: { events: true, camp: true } }) : null;
         const event = await tx.campScheduleEvent.findFirst({ where: { id: input.eventId, scheduleId: schedule.id } });
         if (!event) throw new TRPCError({ code: "NOT_FOUND", message: "Activity does not belong to this schedule." });
         if (schedule.status === "PUBLISHED" && (event.actualStart || event.effectiveStart <= new Date())) throw new TRPCError({ code: "BAD_REQUEST", message: "Only future, unstarted activities can be edited on a live schedule." });
         const date = input.date ?? dateInZone(event.effectiveStart, schedule.timezone);
-        const start = input.startTime ? zonedDateTime(date, input.startTime, schedule.timezone) : event.effectiveStart;
+        const start = (input.startTime || input.date)
+          ? zonedDateTime(date, input.startTime ?? timeInZone(event.effectiveStart, schedule.timezone), schedule.timezone)
+          : event.effectiveStart;
         const kind = input.kind ?? event.kind;
-        const end = kind === "MILESTONE" ? null : input.endTime ? zonedDateTime(input.endDate ?? date, input.endTime, schedule.timezone) : event.effectiveEnd;
+        const end = kind === "MILESTONE"
+          ? null
+          : input.endTime
+            ? zonedDateTime(input.endDate ?? date, input.endTime, schedule.timezone)
+            : input.date && event.effectiveEnd
+              ? new Date(event.effectiveEnd.getTime() + (start.getTime() - event.effectiveStart.getTime()))
+              : event.effectiveEnd;
         const updated = await tx.campScheduleEvent.update({ where: { id: event.id }, data: { title: input.title, facilitator: input.facilitator, location: input.location, notes: input.notes, kind, eventDate: input.date ? new Date(`${input.date}T00:00:00.000Z`) : undefined, effectiveStart: start, effectiveEnd: end, plannedStart: schedule.status === "DRAFT" ? start : undefined, plannedEnd: schedule.status === "DRAFT" ? end : undefined } });
         await renumberScheduleDays(tx, schedule.id, schedule.timezone);
+        if (schedule.status === "PUBLISHED") {
+          const live = await tx.campSchedule.findUniqueOrThrow({
+            where: { id: schedule.id },
+            include: { events: true, camp: true },
+          });
+          const beforeIssues = publishReadiness(beforeSchedule!.events, beforeSchedule!.camp, beforeSchedule!.timezone);
+          const beforeKeys = new Set(beforeIssues.map((issue) => `${issue.code}:${issue.eventId ?? "schedule"}:${issue.message}`));
+          const issues = publishReadiness(live.events, live.camp, live.timezone).filter((issue) => !beforeKeys.has(`${issue.code}:${issue.eventId ?? "schedule"}:${issue.message}`));
+          if (issues.length) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Cannot save this live change: ${issues.map((issue) => issue.message).join(" ")}`,
+            });
+          }
+        }
         await tx.campScheduleChange.create({ data: { scheduleId: schedule.id, eventId: event.id, actorId: ctx.session!.user.id, changeType: "EDIT_EVENT", beforeState: event, afterState: updated } });
         return updated;
       });
@@ -176,11 +201,20 @@ export const scheduleRouter = createTRPCRouter({
       if (schedule.status === "ARCHIVED") throw new TRPCError({ code: "BAD_REQUEST", message: "Archived revisions are read-only." });
       return ctx.prisma.$transaction(async (tx) => {
         await claimScheduleVersion(tx, schedule.id, input.expectedVersion, [schedule.status === "DRAFT" ? "DRAFT" : "PUBLISHED"]);
+        const beforeSchedule = schedule.status === "PUBLISHED" && !input.cancelled
+          ? await tx.campSchedule.findUniqueOrThrow({ where: { id: schedule.id }, include: { events: true, camp: true } })
+          : null;
         const event = await tx.campScheduleEvent.findFirst({ where: { id: input.eventId, scheduleId: schedule.id } });
         if (!event) throw new TRPCError({ code: "NOT_FOUND", message: "Activity does not belong to this schedule." });
         if (event.actualStart && !event.actualEnd) throw new TRPCError({ code: "BAD_REQUEST", message: "End the running activity before cancelling it." });
         if (schedule.status === "PUBLISHED" && (event.actualEnd || event.effectiveStart <= new Date())) throw new TRPCError({ code: "BAD_REQUEST", message: "Only future, unstarted live activities can be cancelled or restored." });
         const updated = await tx.campScheduleEvent.update({ where: { id: event.id }, data: { cancelled: input.cancelled } });
+        if (beforeSchedule) {
+          const afterSchedule = await tx.campSchedule.findUniqueOrThrow({ where: { id: schedule.id }, include: { events: true, camp: true } });
+          const beforeKeys = new Set(publishReadiness(beforeSchedule.events, beforeSchedule.camp, beforeSchedule.timezone).map((issue) => `${issue.code}:${issue.eventId ?? "schedule"}:${issue.message}`));
+          const newIssues = publishReadiness(afterSchedule.events, afterSchedule.camp, afterSchedule.timezone).filter((issue) => !beforeKeys.has(`${issue.code}:${issue.eventId ?? "schedule"}:${issue.message}`));
+          if (newIssues.length) throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot restore this activity: ${newIssues.map((issue) => issue.message).join(" ")}` });
+        }
         await tx.campScheduleChange.create({ data: { scheduleId: schedule.id, eventId: event.id, actorId: ctx.session!.user.id, changeType: input.cancelled ? "CANCEL_EVENT" : "RESTORE_EVENT", beforeState: event, afterState: updated, reason: input.reason } });
         return updated;
       });
@@ -209,7 +243,7 @@ export const scheduleRouter = createTRPCRouter({
       const schedule = await manageableSchedule(ctx, input.scheduleId);
       return ctx.prisma.$transaction(async (tx) => {
         await claimScheduleVersion(tx, schedule.id, input.expectedVersion, ["PUBLISHED"]);
-        const events = await tx.campScheduleEvent.findMany({ where: { scheduleId: schedule.id, cancelled: false }, orderBy: [{ eventDate: "asc" }, { sortOrder: "asc" }, { effectiveStart: "asc" }] });
+        const events = await tx.campScheduleEvent.findMany({ where: { scheduleId: schedule.id, cancelled: false }, orderBy: [{ effectiveStart: "asc" }, { sortOrder: "asc" }] });
         const index = events.findIndex((event) => event.id === input.eventId);
         if (index < 0) throw new TRPCError({ code: "NOT_FOUND", message: "Activity does not belong to this schedule." });
         const event = events[index];

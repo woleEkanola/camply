@@ -35,6 +35,12 @@ export function zonedDateTime(date: string, time: string, timezone: string): Dat
   if (Number.isNaN(result.getTime())) {
     throw new TRPCError({ code: "BAD_REQUEST", message: `Invalid local date/time: ${date} ${time}` });
   }
+  if (formatInTimeZone(result, timezone, "yyyy-MM-dd HH:mm") !== `${date} ${hh}:${mm}`) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `The local time ${date} ${hh}:${mm} does not exist in ${timezone} because of a daylight-saving transition.`,
+    });
+  }
   return result;
 }
 
@@ -85,8 +91,11 @@ export function publishReadiness(
   const issues: ScheduleIssue[] = [];
   if (active.length === 0) issues.push({ code: "EMPTY", message: "Add at least one activity before publishing." });
 
-  const campStart = dateInZone(camp.startDate, timezone);
-  const campEnd = dateInZone(camp.endDate, timezone);
+  // Camp boundaries are date-like values stored at UTC midnight. Rendering
+  // them through a western timezone would incorrectly move the camp one day
+  // earlier (for example 2026-08-13Z -> 2026-08-12 in America/New_York).
+  const campStart = dateInZone(camp.startDate, "UTC");
+  const campEnd = dateInZone(camp.endDate, "UTC");
   for (const event of active) {
     if (!event.title.trim()) issues.push({ code: "TITLE", eventId: event.id, message: "Activity title is required." });
     if (!event.location?.trim()) issues.push({ code: "LOCATION", eventId: event.id, message: `“${event.title}” needs a location.` });
@@ -126,11 +135,17 @@ export function resolveLiveState(events: CampScheduleEvent[], now: Date, selecte
     return end <= now && event.id !== current?.id;
   }) ?? null;
   const next = active.find((event) => event.effectiveStart > now && event.id !== current?.id) ?? null;
-  const varianceMinutes = current
-    ? differenceInMinutes(current.actualStart ?? current.effectiveStart, current.plannedStart)
+  const varianceSource = current ?? previous;
+  const varianceMinutes = varianceSource
+    ? current
+      ? differenceInMinutes(current.actualStart ?? current.effectiveStart, current.plannedStart)
+      : differenceInMinutes(previous!.actualEnd ?? previous!.effectiveEnd ?? previous!.effectiveStart, previous!.plannedEnd ?? previous!.plannedStart)
     : 0;
   const dayEvents = selectedDay ? active.filter((event) => event.dayNumber === selectedDay) : active;
-  const finalEvent = dayEvents.at(-1);
+  const projectedFinish = dayEvents.reduce<Date | null>((latest, event) => {
+    const finish = event.effectiveEnd ?? event.effectiveStart;
+    return !latest || finish > latest ? finish : latest;
+  }, null);
 
   return {
     current,
@@ -138,7 +153,7 @@ export function resolveLiveState(events: CampScheduleEvent[], now: Date, selecte
     next,
     varianceMinutes,
     status: varianceMinutes > 1 ? "BEHIND" as const : varianceMinutes < -1 ? "AHEAD" as const : "ON_TIME" as const,
-    projectedFinish: finalEvent ? finalEvent.effectiveEnd ?? finalEvent.effectiveStart : null,
+    projectedFinish,
   };
 }
 
@@ -187,8 +202,11 @@ export async function renumberScheduleDays(tx: Prisma.TransactionClient, schedul
     select: { id: true, effectiveStart: true },
   });
   const dates = Array.from(new Set(events.map((event) => dateInZone(event.effectiveStart, timezone))));
-  await Promise.all(events.map((event) => tx.campScheduleEvent.update({
-    where: { id: event.id },
-    data: { dayNumber: dates.indexOf(dateInZone(event.effectiveStart, timezone)) + 1 },
-  })));
+  const dayByDate = new Map(dates.map((date, index) => [date, index + 1]));
+  for (const event of events) {
+    await tx.campScheduleEvent.update({
+      where: { id: event.id },
+      data: { dayNumber: dayByDate.get(dateInZone(event.effectiveStart, timezone)) ?? 1 },
+    });
+  }
 }

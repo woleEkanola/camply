@@ -14,6 +14,7 @@ let draftId = "";
 let draftEventId = "";
 let publishedId = "";
 let publishedEventId = "";
+let secondPublishedEventId = "";
 
 function caller(id: string, role: UserRole, orgId = organizationId) {
   return appRouter.createCaller({ prisma, session: { user: { id, email: `${id}@camply.test`, role, organizationId: orgId }, expires: "" } });
@@ -34,8 +35,11 @@ beforeAll(async () => {
   await prisma.staffProfile.create({ data: { userId: staff.id, organizationId, campId, type: "TEACHER", status: "APPROVED", firstName: "Schedule", lastName: "Teacher", phone: `080${Date.now()}`, email: staff.email } });
 
   const draft = await prisma.campSchedule.create({ data: { campId, revision: 1, status: "DRAFT", timezone: "Africa/Lagos", events: { create: { dayNumber: 1, eventDate: new Date("2026-08-13T00:00:00Z"), title: "Draft event", location: "Hall", plannedStart: new Date("2026-08-13T07:00:00Z"), plannedEnd: new Date("2026-08-13T08:00:00Z"), effectiveStart: new Date("2026-08-13T07:00:00Z"), effectiveEnd: new Date("2026-08-13T08:00:00Z") } } }, include: { events: true } });
-  const published = await prisma.campSchedule.create({ data: { campId, revision: 2, status: "PUBLISHED", timezone: "Africa/Lagos", events: { create: { dayNumber: 1, eventDate: new Date("2026-08-13T00:00:00Z"), title: "Live event", location: "Field", plannedStart: new Date("2026-08-13T09:00:00Z"), plannedEnd: new Date("2026-08-13T10:00:00Z"), effectiveStart: new Date("2026-08-13T09:00:00Z"), effectiveEnd: new Date("2026-08-13T10:00:00Z") } } }, include: { events: true } });
-  draftId = draft.id; draftEventId = draft.events[0].id; publishedId = published.id; publishedEventId = published.events[0].id;
+  const published = await prisma.campSchedule.create({ data: { campId, revision: 2, status: "PUBLISHED", timezone: "Africa/Lagos", events: { create: [
+    { dayNumber: 2, eventDate: new Date("2026-08-14T00:00:00Z"), title: "Live event", location: "Field", plannedStart: new Date("2026-08-14T09:00:00Z"), plannedEnd: new Date("2026-08-14T10:00:00Z"), effectiveStart: new Date("2026-08-14T09:00:00Z"), effectiveEnd: new Date("2026-08-14T10:00:00Z") },
+    { dayNumber: 2, eventDate: new Date("2026-08-14T00:00:00Z"), title: "Later event", location: "Hall", plannedStart: new Date("2026-08-14T10:30:00Z"), plannedEnd: new Date("2026-08-14T11:30:00Z"), effectiveStart: new Date("2026-08-14T10:30:00Z"), effectiveEnd: new Date("2026-08-14T11:30:00Z"), sortOrder: 1 },
+  ] } }, include: { events: { orderBy: { sortOrder: "asc" } } } });
+  draftId = draft.id; draftEventId = draft.events[0].id; publishedId = published.id; publishedEventId = published.events[0].id; secondPublishedEventId = published.events[1].id;
 });
 
 afterAll(async () => {
@@ -62,6 +66,36 @@ describe("schedule router reliability", () => {
     await caller(adminId, "ADMIN").schedule.editEvent({ scheduleId: draftId, eventId: draftEventId, expectedVersion: 1, title: "First writer" });
     await expect(caller(adminId, "ADMIN").schedule.editEvent({ scheduleId: draftId, eventId: draftEventId, expectedVersion: 1, title: "Stale writer" })).rejects.toMatchObject({ code: "CONFLICT" });
     expect(await prisma.campScheduleEvent.findUniqueOrThrow({ where: { id: draftEventId } })).toMatchObject({ title: "First writer" });
+  });
+
+  it("rolls back a live edit that introduces an overlap", async () => {
+    await expect(caller(adminId, "ADMIN").schedule.editEvent({
+      scheduleId: publishedId,
+      eventId: secondPublishedEventId,
+      expectedVersion: 1,
+      startTime: "10:30",
+      endTime: "11:30",
+      date: "2026-08-14",
+    })).rejects.toThrow("overlaps");
+    expect(await prisma.campSchedule.findUniqueOrThrow({ where: { id: publishedId } })).toMatchObject({ version: 1 });
+    expect(await prisma.campScheduleEvent.findUniqueOrThrow({ where: { id: secondPublishedEventId } })).toMatchObject({
+      effectiveStart: new Date("2026-08-14T10:30:00Z"),
+    });
+  });
+
+  it("moves a live event by date while preserving its local time and duration", async () => {
+    await caller(adminId, "ADMIN").schedule.editEvent({
+      scheduleId: publishedId,
+      eventId: publishedEventId,
+      expectedVersion: 1,
+      date: "2026-08-15",
+    });
+    expect(await prisma.campSchedule.findUniqueOrThrow({ where: { id: publishedId } })).toMatchObject({ version: 2 });
+    expect(await prisma.campScheduleEvent.findUniqueOrThrow({ where: { id: publishedEventId } })).toMatchObject({
+      eventDate: new Date("2026-08-15T00:00:00Z"),
+      effectiveStart: new Date("2026-08-15T09:00:00Z"),
+      effectiveEnd: new Date("2026-08-15T10:00:00Z"),
+    });
   });
 
   it("blocks publishing an empty draft and live operations against drafts", async () => {

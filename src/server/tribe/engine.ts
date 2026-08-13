@@ -207,14 +207,22 @@ async function assignTribeInTx(
     include: { camper: true },
   });
 
-  const tribe = await tx.tribe.findUniqueOrThrow({ where: { id: params.tribeId }, include: { registrations: true } });
+  await tx.$queryRaw`SELECT "id" FROM "Tribe" WHERE "id" = ${params.tribeId} FOR UPDATE`;
+  const tribe = await tx.tribe.findUniqueOrThrow({ where: { id: params.tribeId } });
   if (tribe.campId !== registration.campId) {
     throw new TribeAllocationError("WRONG_CAMP", "This tribe does not belong to the same camp as the registration.");
   }
   if (tribe.status !== "ACTIVE") {
     throw new TribeAllocationError("TRIBE_INACTIVE", "This tribe is not active.");
   }
-  const currentCount = tribe.registrations.filter((r) => r.id !== registration.id).length;
+  const currentCount = await tx.registration.count({
+    where: {
+      tribeId: tribe.id,
+      id: { not: registration.id },
+      deletedAt: null,
+      status: { in: ["SUBMITTED", "PENDING", "REQUIRES_ACTION", "APPROVED", "CHECKED_IN", "COMPLETED"] },
+    },
+  });
   if (tribe.maxCapacity != null && currentCount >= tribe.maxCapacity) {
     throw new TribeAllocationError("TRIBE_FULL", "This tribe has reached its maximum capacity.");
   }

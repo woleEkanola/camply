@@ -123,6 +123,13 @@ export default function AppShell({ area, children }: AppShellProps) {
     || (requiredCommandPermission !== null && campCommandPermissions.includes(requiredCommandPermission));
 
   const handleLogout = async () => {
+    if (typeof window !== "undefined") {
+      await Promise.all((await caches.keys()).map((key) => caches.delete(key)));
+      await new Promise<void>((resolve) => {
+        const request = indexedDB.deleteDatabase("camply-offline-db");
+        request.onsuccess = request.onerror = request.onblocked = () => resolve();
+      });
+    }
     await signOut({ redirect: false });
     router.push("/login");
   };

@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { TribeWithCounts, AllocationUnit } from "./types";
 import { calculateAge } from "../../registration/validation";
+import { normalizeGender } from "../../../lib/gender";
 
 async function loadTribes(tx: PrismaClient, campId: string): Promise<TribeWithCounts[]> {
   const tribes = await tx.tribe.findMany({
@@ -80,7 +81,7 @@ async function loadUnits(
       id: r.camper.id,
       name: r.camper.name,
       dateOfBirth: r.camper.dateOfBirth as Date | null,
-      gender: (r.camper.gender as string | null) ?? null,
+      gender: normalizeGender(r.camper.gender),
       userId: r.camper.userId,
       school: (r.camper.school as string | null) ?? null,
       church: (r.camper.church as string | null) ?? null,

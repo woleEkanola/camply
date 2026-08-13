@@ -50,13 +50,12 @@ export async function enqueueExportJob(
  * src/server/registration/effects.ts's processSideEffect.
  */
 export async function processExportJob(id: string) {
-  const job = await prisma.exportJob.findUnique({ where: { id } });
-  if (!job || job.status === "DONE" || job.status === "CANCELLED") return;
-
-  await prisma.exportJob.update({
-    where: { id },
+  const claimed = await prisma.exportJob.updateMany({
+    where: { id, status: "QUEUED", runAfter: { lte: new Date() } },
     data: { status: "RUNNING", startedAt: new Date(), stage: "Preparing export…" },
   });
+  if (claimed.count !== 1) return;
+  const job = await prisma.exportJob.findUniqueOrThrow({ where: { id } });
 
   try {
     const descriptor = getExportDescriptor(job.kind as any);
@@ -76,8 +75,8 @@ export async function processExportJob(id: string) {
     const onProgress = async (p: ExportProgress) => {
       latestProgress =
         p.total && p.total > 0 ? Math.round(((p.processed ?? 0) / p.total) * 100) : latestProgress;
-      await prisma.exportJob.update({
-        where: { id },
+      await prisma.exportJob.updateMany({
+        where: { id, status: "RUNNING" },
         data: {
           ...(p.processed !== undefined ? { processed: p.processed } : {}),
           ...(p.total !== undefined ? { total: p.total } : {}),
@@ -88,18 +87,20 @@ export async function processExportJob(id: string) {
     };
 
     const artifact = await descriptor.build({ prisma }, params, job.format as any, onProgress);
+    const stillRunning = await prisma.exportJob.findFirst({ where: { id, status: "RUNNING" }, select: { id: true } });
+    if (!stillRunning) return;
     await artifactStore.put(id, artifact);
 
-    await prisma.exportJob.update({
-      where: { id },
+    await prisma.exportJob.updateMany({
+      where: { id, status: "RUNNING" },
       data: { status: "DONE", progress: 100, stage: "Ready", completedAt: new Date() },
     });
   } catch (error) {
     const attempts = job.attempts + 1;
     const backoffMinutes = Math.min(2 ** attempts, 30);
     const message = error instanceof Error ? error.message : String(error);
-    await prisma.exportJob.update({
-      where: { id },
+    await prisma.exportJob.updateMany({
+      where: { id, status: "RUNNING" },
       data: {
         attempts,
         status: attempts >= MAX_ATTEMPTS ? "FAILED" : "QUEUED",

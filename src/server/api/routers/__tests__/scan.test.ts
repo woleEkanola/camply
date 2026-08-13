@@ -614,7 +614,7 @@ describe("scanRouter - processStaffScan", () => {
     const lookup = await caller().scan.processStaffScan({ organizationId: orgId, qrToken: staff.qrToken!, station: "Identity Lookup", stationId: "IDENTITY_LOOKUP" });
     expect(lookup.result).toBe("SUCCESS");
     expect(lookup.subject.role).toBe("VOLUNTEER");
-    expect("history" in lookup && lookup.history.length).toBeGreaterThan(0);
+    expect("history" in lookup && (lookup.history?.length ?? 0)).toBeGreaterThan(0);
 
     const before = await prisma.staffScanEvent.count({ where: { staffProfileId: staff.id } });
     const unsupported = await caller().scan.processStaffScan({ organizationId: orgId, qrToken: staff.qrToken!, station: "Checkout Desk", stationId: "CHECKOUT" });

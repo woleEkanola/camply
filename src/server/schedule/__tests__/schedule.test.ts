@@ -21,6 +21,9 @@ describe("Schedule Parsing & Validation Tests", () => {
     expect(parseTimeToMinutes("02:15 PM")).toBe(855);
     expect(parseTimeToMinutes("12:00 AM")).toBe(0);
     expect(parseTimeToMinutes("12:00 PM")).toBe(720);
+    expect(parseTimeToMinutes("10:75")).toBeNull();
+    expect(parseTimeToMinutes("24:00")).toBeNull();
+    expect(parseTimeToMinutes("13:00 PM")).toBeNull();
     expect(parseTimeToMinutes("invalid")).toBeNull();
   });
 

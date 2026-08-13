@@ -16,6 +16,7 @@ test.describe("Admin: Import / Export campuses, tribes, departments", () => {
   const tribeCode = `I${stamp.toString().slice(-6)}`; // must fit Tribe.code's 10-char max, still unique per run
 
   let fixtureCampId: string;
+  let fixtureOrganizationId: string;
   let fixtureCampusId: string | undefined;
   let fixtureTribeId: string | undefined;
   let fixtureDeptId: string | undefined;
@@ -28,6 +29,7 @@ test.describe("Admin: Import / Export campuses, tribes, departments", () => {
 
   test.beforeAll(async () => {
     const { organizationId, campId } = await getFixtureOrgContext();
+    fixtureOrganizationId = organizationId;
     fixtureCampId = campId;
 
     const campus = await prisma.campus.create({
@@ -109,6 +111,7 @@ test.describe("Admin: Import / Export campuses, tribes, departments", () => {
     // job engine (src/components/export/) rather than downloading synchronously —
     // see src/server/export/builders/configBundle.ts.
     await page.getByRole("tab", { name: "Export", exact: true }).click();
+    const requestedAt = new Date();
     await page.getByRole("button", { name: "Export", exact: true }).click();
 
     const dialog = page.getByTestId("dialog-panel");
@@ -118,12 +121,20 @@ test.describe("Admin: Import / Export campuses, tribes, departments", () => {
     await expect(dialog).not.toBeVisible({ timeout: 10000 });
 
     await page.getByRole("tab", { name: "Job History" }).click();
-    const completedRow = page.getByText(/camply-export-.*\.json/).first();
-    await expect(completedRow).toBeVisible({ timeout: 20000 });
+    let exportJobId = "";
+    await expect.poll(async () => {
+      const job = await prisma.exportJob.findFirst({
+        where: { organizationId: fixtureOrganizationId, kind: "CONFIG_BUNDLE", format: "JSON", createdAt: { gte: requestedAt } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, status: true },
+      });
+      exportJobId = job?.id ?? "";
+      return job?.status;
+    }, { timeout: 20000 }).toBe("DONE");
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("link", { name: "Download" }).first().click(),
+      page.locator(`a[href="/api/exports/${exportJobId}/download"]`).click(),
     ]);
 
     const filePath = await download.path();

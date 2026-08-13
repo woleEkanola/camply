@@ -1,21 +1,29 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "@/utils/trpc";
 import { offline } from "@/lib/offlineEngine";
 import {
   getQueuedScans,
   clearQueuedScans,
+  incrementQueuedScanRetries,
   OfflineCamper,
 } from "@/lib/offlineDb";
 
 export function useOfflineScanner(organizationId: string) {
+  const MAX_SYNC_RETRIES = 5;
   const [isOnline, setIsOnline] = useState(true);
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const syncingRef = useRef(false);
 
   const processScanMutation = api.scan.processScan.useMutation();
   const syncMutation = api.scan.bulkSyncOfflineScans.useMutation();
 
   const utils = api.useUtils();
+  const syncMutationRef = useRef(syncMutation);
+  const utilsRef = useRef(utils);
+  syncMutationRef.current = syncMutation;
+  utilsRef.current = utils;
 
   const updateQueueCount = useCallback(async () => {
     try {
@@ -28,7 +36,7 @@ export function useOfflineScanner(organizationId: string) {
 
   // Sync offline scans to the server
   const syncOfflineQueue = useCallback(async () => {
-    if (isSyncing || typeof navigator === "undefined" || !navigator.onLine) return;
+    if (syncingRef.current || typeof navigator === "undefined" || !navigator.onLine) return;
     try {
       const queue = await getQueuedScans();
       if (queue.length === 0) {
@@ -36,12 +44,22 @@ export function useOfflineScanner(organizationId: string) {
         return;
       }
 
+      syncingRef.current = true;
       setIsSyncing(true);
+      setSyncError(null);
       console.log(`Syncing ${queue.length} offline scans...`);
 
-      const response = await syncMutation.mutateAsync({
+      const exhaustedCount = queue.filter((item) => (item.retryCount ?? 0) >= MAX_SYNC_RETRIES).length;
+      const orderedQueue = queue
+        .filter((item) => (item.retryCount ?? 0) < MAX_SYNC_RETRIES)
+        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      if (!orderedQueue.length) {
+        setSyncError(`${exhaustedCount} offline scan${exhaustedCount === 1 ? " has" : "s have"} reached the retry limit and need staff review.`);
+        return;
+      }
+      const response = await syncMutationRef.current.mutateAsync({
         organizationId,
-        scans: queue.map((q) => ({
+        scans: orderedQueue.map((q) => ({
           operationId: q.operationId,
           qrToken: q.qrToken,
           query: q.query,
@@ -56,19 +74,31 @@ export function useOfflineScanner(organizationId: string) {
 
       console.log("Offline sync response:", response);
 
-      const queuedIds = queue.map((q) => q.id).filter((id): id is number => id !== undefined);
-      await clearQueuedScans(queuedIds);
+      const completedIds = orderedQueue
+        .filter((_, index) => ["SUCCESS", "DUPLICATE"].includes(response.syncResults[index]?.status))
+        .map((q) => q.id)
+        .filter((id): id is number => id !== undefined);
+      await clearQueuedScans(completedIds);
+      const failedIds = orderedQueue
+        .filter((_, index) => response.syncResults[index]?.status === "FAILED")
+        .map((item) => item.id)
+        .filter((id): id is number => id !== undefined);
+      await incrementQueuedScanRetries(failedIds);
+      const failedCount = failedIds.length;
+      if (failedCount || exhaustedCount) setSyncError(`${failedCount + exhaustedCount} offline scan${failedCount + exhaustedCount === 1 ? "" : "s"} could not sync and remain queued for review or retry.`);
       await updateQueueCount();
 
-      utils.registration.getCheckInStats.invalidate();
-      utils.scan.getOperationalStats.invalidate();
-      utils.registration.lookupForCheckIn.invalidate();
+      utilsRef.current.registration.getCheckInStats.invalidate();
+      utilsRef.current.scan.getOperationalStats.invalidate();
+      utilsRef.current.registration.lookupForCheckIn.invalidate();
     } catch (err) {
       console.error("Offline sync error:", err);
+      setSyncError(err instanceof Error ? err.message : "Offline scans could not sync and remain queued.");
     } finally {
+      syncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [isSyncing, organizationId, syncMutation, updateQueueCount, utils]);
+  }, [organizationId, updateQueueCount]);
 
   // Monitor online status & setup auto-sync triggers (online, visibility, periodic interval)
   useEffect(() => {
@@ -256,6 +286,7 @@ export function useOfflineScanner(organizationId: string) {
     isOnline,
     offlineQueueCount,
     isSyncing,
+    syncError,
     executeScan,
     syncOfflineQueue,
     refreshCampersCache,

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { differenceInYears } from "date-fns";
 import { cn } from "@/lib/cn";
 import { api } from "@/utils/trpc";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -133,22 +134,22 @@ export function RegistrationReviewWorkspace({
 
   // Camper & Parent Meta
   const camper = registration.camper as any;
-  const camperName = camper?.name || "Camper Name";
+  const camperName = camper?.name || "Missing camper name";
   const birthDate = camper?.dateOfBirth ? new Date(camper.dateOfBirth) : null;
-  const age = birthDate ? new Date().getFullYear() - birthDate.getFullYear() : "13";
-  const gender = camper?.gender ? (camper.gender === "MALE" ? "Male" : "Female") : "Female";
+  const age = birthDate ? differenceInYears(new Date(), birthDate) : null;
+  const gender = camper?.gender ? (camper.gender.toUpperCase() === "MALE" ? "Male" : camper.gender.toUpperCase() === "FEMALE" ? "Female" : camper.gender) : "Missing";
   const campusName = registration.campus?.name || "Campus Unassigned";
-  const regNumber = registration.registrationNumber || "MYD-00015";
+  const regNumber = registration.registrationNumber || "Not assigned";
   const regDate = registration.createdAt
     ? new Date(registration.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-    : "Jul 19, 2026";
+    : "Missing";
 
   const parentUser = camper?.user || (registration as any).parent;
   const parentName = parentUser?.firstName
     ? `${parentUser.firstName} ${parentUser.lastName || ""}`
-    : parentUser?.name || "Mr. John Iyenoma";
-  const parentPhone = parentUser?.phone || "+234 802 123 4567";
-  const parentEmail = parentUser?.email || "john.iyenoma@gmail.com";
+    : parentUser?.name || "Missing";
+  const parentPhone = parentUser?.phone || "Missing";
+  const parentEmail = parentUser?.email || "Missing";
 
   // Documents summary
   const requiredDocTitles = ["Birth Certificate", "Parent Consent Form", "Medical Form", "Passport Photograph"];
@@ -208,7 +209,7 @@ export function RegistrationReviewWorkspace({
                 </div>
 
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-neutral-500">
-                  <span>{age} Years</span>
+                  <span>{age === null ? "Age missing" : `${age} Years`}</span>
                   <span>•</span>
                   <span>{gender}</span>
                   <span>•</span>
@@ -289,7 +290,7 @@ export function RegistrationReviewWorkspace({
                     <div>
                       <span className="text-neutral-500 font-medium">Date of Birth</span>
                       <p className="font-bold text-neutral-900 mt-0.5">
-                        {birthDate ? birthDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "06 May 2013"} ({age} yrs)
+                        {birthDate ? birthDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Missing"}{age === null ? "" : ` (${age} yrs)`}
                       </p>
                     </div>
                     <div>

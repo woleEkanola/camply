@@ -6,6 +6,7 @@ import { prisma } from "@/server/db";
 import { validateFormFields } from "@/server/registration/validateFormFields";
 import { assertDepartmentHasCapacity, DepartmentCapacityError } from "@/server/staff/departmentCapacity";
 import { normalizeEmail } from "@/lib/email";
+import { normalizeGender } from "@/lib/gender";
 
 const bodySchema = z.object({
   token: z.string().min(1),
@@ -164,6 +165,7 @@ export async function POST(request: Request) {
           email,
           dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
           ...rest,
+          gender: normalizeGender(rest.gender),
           preferredDepartmentId: rest.departmentId || null,
           fieldValues: {
             create: (fieldValues || []).map((fv) => ({ value: fv.value, field: { connect: { id: fv.fieldId } } })),

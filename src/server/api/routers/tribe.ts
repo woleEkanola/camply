@@ -198,6 +198,7 @@ export const tribeRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      await assertCanManageCamp(ctx, input.campId);
       const tribes = await ctx.prisma.tribe.findMany({
         where: { campId: input.campId, deletedAt: null },
         include: { _count: { select: { registrations: { where: { deletedAt: null } } } } },

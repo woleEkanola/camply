@@ -1695,13 +1695,19 @@ export const scanRouter = createTRPCRouter({
           },
         });
         const originalTime = existing?.timestamp ?? activeTime;
-        const actionPerformed = meal
+        const staffAction = meal
           ? `${subject.role} — Already collected ${meal.toLowerCase()} at ${new Intl.DateTimeFormat("en-NG", { timeZone: timezone, hour: "numeric", minute: "2-digit" }).format(originalTime)}`
           : `${subject.role} — Already recorded at this station today`;
+        const actionPerformed = input.stationId === "STAFF_CHECK_IN"
+          ? "Already Checked In"
+          : input.stationId === "STAFF_CHECKOUT"
+            ? "Already Checked Out"
+            : staffAction;
         return {
           result: "DUPLICATE" as const,
           actionPerformed,
-          message: actionPerformed,
+          staffAction,
+          message: staffAction,
           originalTime,
           timestamp: activeTime,
           subject,

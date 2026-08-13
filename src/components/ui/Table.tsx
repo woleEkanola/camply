@@ -114,10 +114,24 @@ export function Table<T>(props: TableProps<T>) {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [isColumnDropdownOpen, setIsColumnDropdownOpen] = useState(false);
 
-  const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
-  const [resizingColIndex, setResizingColIndex] = useState<number | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [resizingColId, setResizingColId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
-  const handleMouseDownResize = (index: number, e: React.MouseEvent) => {
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  const columnId = (column: Column<T>) =>
+    column.id ||
+    headerLabel(column.header) ||
+    (typeof column.accessor === "string" ? column.accessor : `column-${columns.indexOf(column)}`);
+
+  const handleMouseDownResize = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -125,16 +139,16 @@ export function Table<T>(props: TableProps<T>) {
     const thElement = (e.currentTarget.parentElement as HTMLElement);
     const startWidth = thElement ? thElement.getBoundingClientRect().width : 150;
 
-    setResizingColIndex(index);
+    setResizingColId(id);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
       const newWidth = Math.max(70, Math.min(800, startWidth + deltaX));
-      setColumnWidths((prev) => ({ ...prev, [index]: newWidth }));
+      setColumnWidths((prev) => ({ ...prev, [id]: newWidth }));
     };
 
     const handleMouseUp = () => {
-      setResizingColIndex(null);
+      setResizingColId(null);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
@@ -321,7 +335,7 @@ export function Table<T>(props: TableProps<T>) {
       ) : (
         <>
           {/* Desktop: unchanged table, gated to md+. */}
-          <div className="hidden overflow-x-auto md:block">
+          {!isMobile && <div className="overflow-x-auto">
             <table className="w-full table-fixed divide-y divide-border-default">
               <thead className="bg-surface-raised">
                 <tr>
@@ -336,13 +350,13 @@ export function Table<T>(props: TableProps<T>) {
                       />
                     </th>
                   )}
-                  {activeColumns.map((column, i) => (
+                  {activeColumns.map((column) => (
                     <th
-                      key={i}
+                      key={columnId(column)}
                       scope="col"
                       style={
-                        columnWidths[i]
-                          ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` }
+                        columnWidths[columnId(column)]
+                          ? { width: `${columnWidths[columnId(column)]}px`, minWidth: `${columnWidths[columnId(column)]}px`, maxWidth: `${columnWidths[columnId(column)]}px` }
                           : column.primary
                           ? { width: "26%", minWidth: "180px" }
                           : undefined
@@ -372,11 +386,11 @@ export function Table<T>(props: TableProps<T>) {
 
                       {/* Column Drag-to-Resize Handle */}
                       <div
-                        onMouseDown={(e) => handleMouseDownResize(i, e)}
+                        onMouseDown={(e) => handleMouseDownResize(columnId(column), e)}
                         onClick={(e) => e.stopPropagation()}
                         className={cn(
                           "absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-accent-400/50 transition-colors z-20 group-hover:bg-neutral-300/60",
-                          resizingColIndex === i && "bg-accent-500"
+                          resizingColId === columnId(column) && "bg-accent-500"
                         )}
                         title="Drag to resize column width"
                       />
@@ -387,8 +401,8 @@ export function Table<T>(props: TableProps<T>) {
                 {activeColumns.some((c) => c.filter) && (
                   <tr className="border-t border-border-default bg-surface-raised">
                     {selectable && <th scope="col" className="px-4 py-1.5" />}
-                    {activeColumns.map((column, i) => (
-                      <th key={i} scope="col" className="px-4 py-1.5 font-normal">
+                    {activeColumns.map((column) => (
+                      <th key={columnId(column)} scope="col" className="px-4 py-1.5 font-normal">
                         {column.filter && (
                           <select
                             aria-label={typeof column.header === "string" ? `Filter by ${column.header}` : undefined}
@@ -426,10 +440,10 @@ export function Table<T>(props: TableProps<T>) {
                         />
                       </td>
                     )}
-                    {activeColumns.map((column, i) => (
+                    {activeColumns.map((column) => (
                       <td
-                        key={i}
-                        style={columnWidths[i] ? { width: `${columnWidths[i]}px`, minWidth: `${columnWidths[i]}px`, maxWidth: `${columnWidths[i]}px` } : undefined}
+                        key={columnId(column)}
+                        style={columnWidths[columnId(column)] ? { width: `${columnWidths[columnId(column)]}px`, minWidth: `${columnWidths[columnId(column)]}px`, maxWidth: `${columnWidths[columnId(column)]}px` } : undefined}
                       className={cn(
                         "px-4 py-3 text-sm text-txt-primary overflow-hidden",
                           column.wrap ? "whitespace-normal break-words" : "truncate",
@@ -448,10 +462,10 @@ export function Table<T>(props: TableProps<T>) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </div>}
 
           {/* Mobile: card list built from the same columns/pageData/getCellValue. */}
-          <div className="md:hidden">
+          {isMobile && <div>
             {(filterableCols.length > 0 || (!isControlled && sortableCols.length > 0) || selectable) && (
               <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle bg-surface-raised px-3 py-2">
                 {selectable && (
@@ -466,9 +480,9 @@ export function Table<T>(props: TableProps<T>) {
                     All
                   </label>
                 )}
-                {filterableCols.map((column, i) => (
+                {filterableCols.map((column) => (
                   <select
-                    key={i}
+                    key={columnId(column)}
                     aria-label={typeof column.header === "string" ? `Filter by ${column.header}` : undefined}
                     className="min-h-[40px] flex-1 rounded border border-input-border bg-input-bg px-2 text-sm text-txt-primary focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
                     value={column.filter!.value}
@@ -495,11 +509,11 @@ export function Table<T>(props: TableProps<T>) {
                     }}
                   >
                     <option value="">Sort by…</option>
-                    {sortableCols.map((column, i) => {
+                    {sortableCols.map((column) => {
                       const label = headerLabel(column.header);
                       const key = String(column.accessor);
                       return (
-                        <Fragment key={i}>
+                        <Fragment key={columnId(column)}>
                           <option value={`${key}:asc`}>{label} (A–Z)</option>
                           <option value={`${key}:desc`}>{label} (Z–A)</option>
                         </Fragment>
@@ -557,8 +571,8 @@ export function Table<T>(props: TableProps<T>) {
 
                       {bodyCols.length > 0 && (
                         <dl className="grid grid-cols-[minmax(0,7rem)_1fr] gap-x-3 gap-y-1.5 text-sm">
-                          {bodyCols.map((column, i) => (
-                            <Fragment key={i}>
+                          {bodyCols.map((column) => (
+                            <Fragment key={columnId(column)}>
                               <dt className="truncate text-neutral-500">{column.mobileLabel ?? column.header}</dt>
                               <dd className="min-w-0 text-neutral-800">{getCellValue(row, column)}</dd>
                             </Fragment>
@@ -576,7 +590,7 @@ export function Table<T>(props: TableProps<T>) {
                 );
               })}
             </ul>
-          </div>
+          </div>}
         </>
       )}
 
