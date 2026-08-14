@@ -6,6 +6,7 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useToast } from "@/components/ui/Toast";
 
 export interface ExportJobSummary {
   id: string;
@@ -22,6 +23,8 @@ export interface ExportJobSummary {
   error: string | null;
   errorHint: string | null;
   createdAt: string | Date;
+  startedAt: string | Date | null;
+  updatedAt: string | Date;
   completedAt: string | Date | null;
   expiresAt: string | Date;
 }
@@ -57,9 +60,17 @@ function hasActive(jobs: ExportJobSummary[] | undefined): boolean {
 export function ExportCenter({ organizationId }: { organizationId: string }) {
   const { data: jobs, isLoading } = useExportJobs(organizationId);
   const utils = api.useUtils();
+  const toast = useToast();
 
   const retry = api.export.retry.useMutation({ onSuccess: () => utils.export.listMine.invalidate({ organizationId }) });
   const dismiss = api.export.dismiss.useMutation({ onSuccess: () => utils.export.listMine.invalidate({ organizationId }) });
+  const cancel = api.export.cancel.useMutation({
+    onSuccess: (result) => {
+      void utils.export.listMine.invalidate({ organizationId });
+      toast.info(result.cancelled ? "Export cancelled." : "The export had already finished.");
+    },
+    onError: (error) => toast.error(error.message || "Could not cancel this export."),
+  });
 
   if (isLoading) {
     return <p className="p-4 text-sm text-txt-muted">Loading exports…</p>;
@@ -80,13 +91,25 @@ export function ExportCenter({ organizationId }: { organizationId: string }) {
           <div key={job.id} className="space-y-1.5 rounded-md border border-border-default p-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-txt-primary">{job.fileName ?? job.label}</p>
-              <Badge tone={STATUS_TONE[job.status]}>{job.status === "QUEUED" ? "Queued" : "Generating"}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge tone={STATUS_TONE[job.status]}>{job.status === "QUEUED" ? "Queued" : "Generating"}</Badge>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={cancel.isPending && cancel.variables?.id === job.id}
+                  aria-label={`Cancel ${job.label} export`}
+                  onClick={() => cancel.mutate({ id: job.id })}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
             <ProgressBar percent={job.progress} />
             <p className="text-xs text-txt-muted">
               {job.stage ?? "Working…"}
               {job.total ? ` — ${job.processed ?? 0} / ${job.total}` : job.progress ? ` — ${job.progress}%` : ""}
             </p>
+            {isStalled(job) && <p className="text-xs font-medium text-warning-700">No progress update for several minutes. You can cancel this export and retry it.</p>}
           </div>
         )}
       </Section>
@@ -120,11 +143,11 @@ export function ExportCenter({ organizationId }: { organizationId: string }) {
           <div key={job.id} className="space-y-1 rounded-md border border-border-default p-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-txt-primary">{job.label}</p>
-              <Badge tone="danger">{job.status === "CANCELLED" ? "Cancelled" : "Failed"}</Badge>
+              <Badge tone={STATUS_TONE[job.status]}>{job.status === "CANCELLED" ? "Cancelled" : "Failed"}</Badge>
             </div>
             {job.errorHint && <p className="text-xs text-txt-secondary">{job.errorHint}</p>}
             <div className="flex items-center gap-1.5 pt-1">
-              {job.status === "FAILED" && (
+              {(job.status === "FAILED" || job.status === "CANCELLED") && (
                 <Button size="sm" icon={<ArrowPathIcon className="h-4 w-4" />} onClick={() => retry.mutate({ id: job.id })}>
                   Retry
                 </Button>
@@ -138,6 +161,11 @@ export function ExportCenter({ organizationId }: { organizationId: string }) {
       </Section>
     </div>
   );
+}
+
+function isStalled(job: ExportJobSummary): boolean {
+  if (job.status !== "RUNNING") return false;
+  return Date.now() - new Date(job.updatedAt).getTime() > 2 * 60 * 1000;
 }
 
 function Section({

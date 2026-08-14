@@ -84,6 +84,8 @@ export const exportRouter = createTRPCRouter({
           error: true,
           errorHint: true,
           createdAt: true,
+          startedAt: true,
+          updatedAt: true,
           completedAt: true,
           expiresAt: true,
         },
@@ -101,14 +103,14 @@ export const exportRouter = createTRPCRouter({
 
   retry: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     await assertOwnsJob(ctx, input.id);
-    await retryExportJob(input.id);
-    return { success: true };
+    const result = await retryExportJob(input.id);
+    return { success: result.retried };
   }),
 
   cancel: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     await assertOwnsJob(ctx, input.id);
-    await cancelExportJob(input.id);
-    return { success: true };
+    const result = await cancelExportJob(input.id);
+    return { success: true, cancelled: result.cancelled };
   }),
 
   dismiss: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
