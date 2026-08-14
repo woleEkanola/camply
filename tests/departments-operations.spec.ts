@@ -173,7 +173,7 @@ test.describe("JD Departments and daily operations", () => {
     await expect(page.getByRole("tab", { name: "My department" })).toBeVisible();
     expect(await page.getByRole("tab").allTextContents()).toEqual(["My department", "Contacts", "Organogram"]);
     await expect(page.getByRole("heading", { name: "My department" })).toBeVisible();
-    await expect(page.getByText("Venue Management Department (VMD)", { exact: true })).toBeVisible();
+    await expect(page.getByText("Venue Management Department (VMD) · Primary", { exact: true })).toBeVisible();
     await expect(page.getByText("VMD Hall & Environs Lead", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Today’s progress")).toBeVisible();
     const duty = page.getByRole("button").filter({ hasText: "Arrange chairs according to the programme layout." });

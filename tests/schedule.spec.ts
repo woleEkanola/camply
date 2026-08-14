@@ -27,7 +27,7 @@ test.describe.serial("Camp Program Schedule and Live Management", () => {
     await loginWithPassword(page, "admin@camply.com", "password123");
     await page.goto("http://localhost:3001/admin/schedule");
     await expect(page.getByRole("heading", { name: "Camp Program Schedule" })).toBeVisible();
-    await page.getByRole("button", { name: "1–3 Draft & publish" }).click();
+    await page.getByRole("button", { name: "Draft & Publish" }).click();
 
     const input = page.locator('input[type="file"]');
     await input.setInputFiles({ name: "invalid-schedule.csv", mimeType: "text/csv", buffer: Buffer.from(`date,startTime,endTime,activity,location,type\n${date},bad,09:00,Opening,,TIMED`) });

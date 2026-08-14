@@ -95,7 +95,7 @@ export const departmentOperationsRouter = createTRPCRouter({
           newValue: result,
         });
         return result;
-      });
+      }, { timeout: 30_000 });
     }),
 
   list: protectedProcedure

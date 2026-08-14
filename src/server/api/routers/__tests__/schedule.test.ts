@@ -25,7 +25,7 @@ beforeAll(async () => {
   const other = await prisma.organization.create({ data: { name: `Other ${stamp}`, slug: `other-${stamp}` } });
   organizationId = organization.id;
   otherOrganizationId = other.id;
-  const camp = await prisma.camp.create({ data: { name: `Schedule Camp ${stamp}`, slug: `schedule-camp-${stamp}`, year: 2026, startDate: new Date("2026-08-13T00:00:00Z"), endDate: new Date("2026-08-15T00:00:00Z"), organizationId, status: "OPEN", active: true } });
+  const camp = await prisma.camp.create({ data: { name: `Schedule Camp ${stamp}`, slug: `schedule-camp-${stamp}`, year: 2099, startDate: new Date("2099-08-13T00:00:00Z"), endDate: new Date("2099-08-15T00:00:00Z"), organizationId, status: "OPEN", active: true } });
   campId = camp.id;
   await prisma.organization.update({ where: { id: organizationId }, data: { activeCampId: campId } });
   const admin = await prisma.user.create({ data: { email: `schedule-admin-${stamp}@camply.test`, password: "x", role: "ADMIN", organizationId } });
@@ -34,10 +34,10 @@ beforeAll(async () => {
   adminId = admin.id; staffId = staff.id; parentId = parent.id;
   await prisma.staffProfile.create({ data: { userId: staff.id, organizationId, campId, type: "TEACHER", status: "APPROVED", firstName: "Schedule", lastName: "Teacher", phone: `080${Date.now()}`, email: staff.email } });
 
-  const draft = await prisma.campSchedule.create({ data: { campId, revision: 1, status: "DRAFT", timezone: "Africa/Lagos", events: { create: { dayNumber: 1, eventDate: new Date("2026-08-13T00:00:00Z"), title: "Draft event", location: "Hall", plannedStart: new Date("2026-08-13T07:00:00Z"), plannedEnd: new Date("2026-08-13T08:00:00Z"), effectiveStart: new Date("2026-08-13T07:00:00Z"), effectiveEnd: new Date("2026-08-13T08:00:00Z") } } }, include: { events: true } });
+  const draft = await prisma.campSchedule.create({ data: { campId, revision: 1, status: "DRAFT", timezone: "Africa/Lagos", events: { create: { dayNumber: 1, eventDate: new Date("2099-08-13T00:00:00Z"), title: "Draft event", location: "Hall", plannedStart: new Date("2099-08-13T07:00:00Z"), plannedEnd: new Date("2099-08-13T08:00:00Z"), effectiveStart: new Date("2099-08-13T07:00:00Z"), effectiveEnd: new Date("2099-08-13T08:00:00Z") } } }, include: { events: true } });
   const published = await prisma.campSchedule.create({ data: { campId, revision: 2, status: "PUBLISHED", timezone: "Africa/Lagos", events: { create: [
-    { dayNumber: 2, eventDate: new Date("2026-08-14T00:00:00Z"), title: "Live event", location: "Field", plannedStart: new Date("2026-08-14T09:00:00Z"), plannedEnd: new Date("2026-08-14T10:00:00Z"), effectiveStart: new Date("2026-08-14T09:00:00Z"), effectiveEnd: new Date("2026-08-14T10:00:00Z") },
-    { dayNumber: 2, eventDate: new Date("2026-08-14T00:00:00Z"), title: "Later event", location: "Hall", plannedStart: new Date("2026-08-14T10:30:00Z"), plannedEnd: new Date("2026-08-14T11:30:00Z"), effectiveStart: new Date("2026-08-14T10:30:00Z"), effectiveEnd: new Date("2026-08-14T11:30:00Z"), sortOrder: 1 },
+    { dayNumber: 2, eventDate: new Date("2099-08-14T00:00:00Z"), title: "Live event", location: "Field", plannedStart: new Date("2099-08-14T09:00:00Z"), plannedEnd: new Date("2099-08-14T10:00:00Z"), effectiveStart: new Date("2099-08-14T09:00:00Z"), effectiveEnd: new Date("2099-08-14T10:00:00Z") },
+    { dayNumber: 2, eventDate: new Date("2099-08-14T00:00:00Z"), title: "Later event", location: "Hall", plannedStart: new Date("2099-08-14T10:30:00Z"), plannedEnd: new Date("2099-08-14T11:30:00Z"), effectiveStart: new Date("2099-08-14T10:30:00Z"), effectiveEnd: new Date("2099-08-14T11:30:00Z"), sortOrder: 1 },
   ] } }, include: { events: { orderBy: { sortOrder: "asc" } } } });
   draftId = draft.id; draftEventId = draft.events[0].id; publishedId = published.id; publishedEventId = published.events[0].id; secondPublishedEventId = published.events[1].id;
 });
@@ -75,11 +75,11 @@ describe("schedule router reliability", () => {
       expectedVersion: 1,
       startTime: "10:30",
       endTime: "11:30",
-      date: "2026-08-14",
+      date: "2099-08-14",
     })).rejects.toThrow("overlaps");
     expect(await prisma.campSchedule.findUniqueOrThrow({ where: { id: publishedId } })).toMatchObject({ version: 1 });
     expect(await prisma.campScheduleEvent.findUniqueOrThrow({ where: { id: secondPublishedEventId } })).toMatchObject({
-      effectiveStart: new Date("2026-08-14T10:30:00Z"),
+      effectiveStart: new Date("2099-08-14T10:30:00Z"),
     });
   });
 
@@ -88,13 +88,13 @@ describe("schedule router reliability", () => {
       scheduleId: publishedId,
       eventId: publishedEventId,
       expectedVersion: 1,
-      date: "2026-08-15",
+      date: "2099-08-15",
     });
     expect(await prisma.campSchedule.findUniqueOrThrow({ where: { id: publishedId } })).toMatchObject({ version: 2 });
     expect(await prisma.campScheduleEvent.findUniqueOrThrow({ where: { id: publishedEventId } })).toMatchObject({
-      eventDate: new Date("2026-08-15T00:00:00Z"),
-      effectiveStart: new Date("2026-08-15T09:00:00Z"),
-      effectiveEnd: new Date("2026-08-15T10:00:00Z"),
+      eventDate: new Date("2099-08-15T00:00:00Z"),
+      effectiveStart: new Date("2099-08-15T09:00:00Z"),
+      effectiveEnd: new Date("2099-08-15T10:00:00Z"),
     });
   });
 

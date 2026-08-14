@@ -101,13 +101,13 @@ test.describe("Admin Trash: pagination survives a bulk delete on the last page",
     // We don't assert which specific fixture campuses remain because other tests'
     // trash may have interleaved on the last page; we only care that the bulk
     // purge actually removed rows and the view didn't fall into an empty state.
-    const totalAfter = await page.locator("span", { hasText: /^\d+ \/ \d+$/ }).textContent().catch(() => null);
-    if (totalAfter) {
-      const [, totalAfterNum] = totalAfter.split(" / ").map(Number);
-      expect(totalAfterNum).toBeLessThan(totalBefore);
-    } else {
-      // Pager disappeared — everything now fits on a single page.
-      await expect(page.getByText("Trash is empty")).not.toBeVisible();
-    }
+    // The selection clears before the invalidated trash query necessarily
+    // finishes refetching, so wait for pagination to observe the deletion
+    // instead of sampling its previous text immediately.
+    await expect.poll(async () => {
+      const totalAfter = await page.locator("span", { hasText: /^\d+ \/ \d+$/ }).textContent().catch(() => null);
+      if (!totalAfter) return 1; // Everything now fits on one page.
+      return Number(totalAfter.split(" / ")[1]);
+    }, { timeout: 15000 }).toBeLessThan(totalBefore);
   });
 });
