@@ -8,7 +8,7 @@ export const STAFF_ID_CARD_INCLUDE = {
       name: true,
       year: true,
       logoUrl: true,
-      organization: { select: { branding: { select: { logoUrl: true } } } },
+      organization: { select: { branding: { select: { idCardLogoUrl: true, logoUrl: true } } } },
     },
   },
   preferredCampus: { select: { name: true } },
@@ -50,7 +50,11 @@ export function buildStaffIdCardData(profile: StaffProfileForIdCard): StaffIdCar
     tribeLine,
     campName: profile.camp.name,
     campYear: String(profile.camp.year),
-    logoUrl: profile.camp.logoUrl ?? profile.camp.organization?.branding?.logoUrl ?? null,
+    logoUrl:
+      profile.camp.organization?.branding?.idCardLogoUrl ??
+      profile.camp.logoUrl ??
+      profile.camp.organization?.branding?.logoUrl ??
+      null,
     qrToken: profile.qrToken,
   };
 }
