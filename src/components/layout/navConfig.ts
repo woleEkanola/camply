@@ -220,9 +220,9 @@ const ADMIN_GROUPS: NavGroup[] = [
       },
       {
         name: "Platform Branding",
-        href: "/admin/branding",
+        href: "/super-admin/branding",
         icon: PaintBrushIcon,
-        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+        roles: ["SUPER_ADMIN"],
       },
       {
         name: "Import / Export",
@@ -310,7 +310,10 @@ export function getNavGroups(
   switch (area) {
     case "admin":
       groups = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)
-        ? ADMIN_GROUPS
+        ? ADMIN_GROUPS.map((group) => ({
+            ...group,
+            items: group.items.filter((item) => !item.roles || item.roles.includes(role)),
+          })).filter((group) => group.items.length > 0)
         : ADMIN_GROUPS.map((group) => ({
             ...group,
             items: group.items.filter((item) => {

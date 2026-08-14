@@ -50,4 +50,23 @@ test.describe("Nav: collapsible Communication/Settings groups", () => {
     // than on a same-session client-side navigation.
     await expect(nav.getByRole("link", { name: "Campaigns & Alerts", exact: true })).toBeVisible({ timeout: 15000 });
   });
+
+  test("Platform Branding links only Super Admin to the real page", async ({ page }) => {
+    await loginWithPassword(page, "admin@camply.com", "password123");
+    await page.waitForURL(/\/admin/, { timeout: 15000 });
+    const adminNav = page.locator("nav").first();
+    await adminNav.getByRole("button", { name: "Settings" }).click();
+    await expect(adminNav.getByRole("link", { name: "Platform Branding" })).toHaveCount(0);
+
+    await page.context().clearCookies();
+    await loginWithPassword(page, "superadmin@camply.com", "password123");
+    await page.goto("/admin");
+    const superAdminNav = page.locator("nav").first();
+    await superAdminNav.getByRole("button", { name: "Settings" }).click();
+    const brandingLink = superAdminNav.getByRole("link", { name: "Platform Branding" });
+    await expect(brandingLink).toHaveAttribute("href", "/super-admin/branding");
+    await brandingLink.click();
+    await expect(page).toHaveURL(/\/super-admin\/branding/);
+    await expect(page.getByRole("heading", { name: "Platform Branding" })).toBeVisible();
+  });
 });
