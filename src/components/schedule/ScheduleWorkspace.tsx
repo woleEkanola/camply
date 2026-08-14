@@ -257,7 +257,7 @@ export function ScheduleWorkspace({ campId }: ScheduleWorkspaceProps) {
       {cachedSnapshot && !snapshotQuery.data && <div role="status" className="rounded-lg border border-warning-300 bg-warning-50 p-3 text-sm text-warning-800">Offline: showing the last saved schedule. Live controls are disabled until the connection returns.</div>}
 
       {canManage && <nav aria-label="Schedule views" className="flex gap-2 overflow-x-auto">
-        {(["DRAFT", "LIVE", "HISTORY"] as View[]).map((item) => <button key={item} onClick={() => setView(item)} className={cn("rounded-lg px-4 py-2 text-sm font-semibold", view === item ? "brand-tint-strong" : "border border-border-default bg-surface-raised text-txt-secondary")}>{item === "DRAFT" ? "1–3 Draft & publish" : item === "LIVE" ? "4 Run camp live" : "History"}</button>)}
+        {(["DRAFT", "LIVE", "HISTORY"] as View[]).map((item) => <button key={item} onClick={() => setView(item)} className={cn("rounded-lg px-4 py-2 text-sm font-semibold", view === item ? "brand-tint-strong" : "border border-border-default bg-surface-raised text-txt-secondary")}>{item === "DRAFT" ? "Draft & Publish" : item === "LIVE" ? "Manage Live Schedule" : "History"}</button>)}
       </nav>}
 
       {view === "DRAFT" && canManage && <section className="space-y-5">
