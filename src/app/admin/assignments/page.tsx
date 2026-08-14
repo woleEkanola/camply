@@ -67,7 +67,7 @@ export default function AssignmentSetupPage() {
   const soleVenue = data?.venues.length === 1;
 
   const assignVenue = api.accommodation.assignUnassignedStaffToSoleVenue.useMutation({
-    onSuccess: (result) => { setError(""); setMessage(`Assigned ${result.count} unassigned staff member${result.count === 1 ? "" : "s"} to the camp's only venue.`); refresh(); },
+    onSuccess: (result) => { setError(""); setMessage(`Assigned ${result.camperCount} camper${result.camperCount === 1 ? "" : "s"} and ${result.staffCount} staff member${result.staffCount === 1 ? "" : "s"} who had no venue. Existing venue assignments were preserved.`); refresh(); },
     onError: showError,
   });
   const assignCampers = api.tribe.bulkAutoAssign.useMutation({
@@ -101,6 +101,7 @@ export default function AssignmentSetupPage() {
       {!campId ? <EmptyState title="No active camp" description="Set an active camp before assigning people." /> : readiness.isLoading ? <p className="text-sm text-txt-muted">Checking assignment readiness…</p> : !data ? <EmptyState title="Could not load assignment setup" description="Refresh the page and try again." /> : <>
         {error && <div className="rounded-lg bg-danger-50 p-4 text-sm text-danger-700">{error}</div>}
         {message && <div className="rounded-lg bg-success-50 p-4 text-sm text-success-700">{message}</div>}
+        {totals!.checkedInCampersWithAssignmentGaps > 0 && <div className="flex gap-2 rounded-lg bg-warning-50 p-4 text-sm text-warning-800"><ExclamationTriangleIcon className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>{totals!.checkedInCampersWithAssignmentGaps} checked-in camper{totals!.checkedInCampersWithAssignmentGaps === 1 ? " has" : "s have"} incomplete assignments.</strong> They remain included in every readiness check and safe auto-assignment action below.</span></div>}
 
         <div className="grid gap-3 sm:grid-cols-4">
           {[['Venues', totals!.venues], ['Rooms / beds', `${totals!.rooms} / ${totals!.beds}`], ['Tribes', totals!.activeTribes], ['Assignments preserved', totals!.existingBedAssignments]].map(([label, value]) => <Card key={String(label)}><CardBody><div className="text-2xl font-black text-txt-primary">{value}</div><div className="text-xs text-txt-muted">{label}</div></CardBody></Card>)}
@@ -110,9 +111,9 @@ export default function AssignmentSetupPage() {
           <div className="flex flex-wrap items-center gap-3"><Button variant="secondary" onClick={() => router.push("/admin/accommodation")}>{structureReady ? "Review accommodation" : "Create hostels, rooms and beds"}</Button><span className="text-sm text-txt-muted">{totals!.rooms} rooms · {totals!.beds} beds</span></div>
         </StepCard>
 
-        <StepCard number={2} title="Assign venues" description="Every approved camper, teacher and volunteer needs a venue before bed assignment." ready={venuesReady} locked={!structureReady} reason="Finish Step 1 first: create at least one venue, room and bed.">
+        <StepCard number={2} title="Assign venues" description="Every approved or checked-in camper, teacher and volunteer needs a venue before bed assignment." ready={venuesReady} locked={!structureReady} reason="Finish Step 1 first: create at least one venue, room and bed.">
           <div className="flex flex-wrap items-center gap-3">
-            {soleVenue && totals!.staffWithoutVenue > 0 && <Button loading={assignVenue.isPending} onClick={() => assignVenue.mutate({ campId })}>Assign unassigned staff to sole venue</Button>}
+            {soleVenue && (totals!.campersWithoutVenue > 0 || totals!.staffWithoutVenue > 0) && <Button loading={assignVenue.isPending} onClick={() => assignVenue.mutate({ campId })}>Assign missing people to sole venue</Button>}
             {(!soleVenue || totals!.campersWithoutVenue > 0) && <Button variant="secondary" onClick={() => router.push("/admin/registrations")}>Review venue assignments</Button>}
             <span className="text-sm text-txt-muted">{totals!.campersWithoutVenue} campers · {totals!.staffWithoutVenue} staff missing venue</span>
           </div>
@@ -125,7 +126,7 @@ export default function AssignmentSetupPage() {
           </div>
         </StepCard>
 
-        <StepCard number={4} title="Confirm tribe-first rules" description="Keep each tribe in its own room block and place tribe teachers only with their own campers." ready={configReady} locked={!tribesReady} reason="Finish Step 3 first: tribe-first housing requires all approved campers and teachers to have tribes.">
+        <StepCard number={4} title="Confirm tribe-first rules" description="Keep each tribe in its own room block and place tribe teachers only with their own campers." ready={configReady} locked={!tribesReady} reason="Finish Step 3 first: tribe-first housing requires all approved or checked-in campers and all approved teachers to have tribes.">
           <div className="flex flex-wrap items-center gap-3"><Button loading={enableAllocation.isPending} disabled={data.camp.bedAllocationEnabled} onClick={() => enableAllocation.mutate({ campId, bedAllocationEnabled: true, bedAllocationRules: [{ criterion: "AGE_GROUP", enabled: true }, { criterion: "GROUP_TOGETHER", enabled: true }, { criterion: "CAMPUS_TOGETHER", enabled: false }, { criterion: "POPULATION_BALANCE", enabled: true }, { criterion: "STAFF_SPREAD", enabled: true }] })}>{data.camp.bedAllocationEnabled ? "Tribe-first allocation enabled" : "Enable tribe-first allocation"}</Button><Button variant="secondary" onClick={() => router.push(`/admin/camps/${campId}/config`)}>Advanced criteria</Button></div>
         </StepCard>
 

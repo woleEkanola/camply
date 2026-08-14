@@ -310,6 +310,47 @@ describe("assignBedInTx", () => {
 });
 
 describe("bulkAutoAssignBeds", () => {
+  it("assigns CHECKED_IN campers but ignores COMPLETED campers", async () => {
+    await prisma.camp.update({ where: { id: campId }, data: { bedAllocationRules: [{ criterion: "GROUP_TOGETHER", enabled: false }] } });
+    await makeHostelWithBeds("MALE", 2);
+
+    const checkedInCamper = await makeCamper("MALE");
+    const checkedInRegistration = await approvedRegistrationFor(checkedInCamper.id);
+    await prisma.registration.update({ where: { id: checkedInRegistration.id }, data: { status: "CHECKED_IN" } });
+
+    const completedCamper = await makeCamper("MALE");
+    const completedRegistration = await approvedRegistrationFor(completedCamper.id);
+    await prisma.registration.update({ where: { id: completedRegistration.id }, data: { status: "COMPLETED" } });
+
+    const results = await accommodationEngine.bulkAutoAssignBeds({ venueId, actorId: parentId });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ occupantKey: `camper:${checkedInRegistration.id}` });
+    expect(results[0].bedId).toBeTruthy();
+    expect((await prisma.registration.findUniqueOrThrow({ where: { id: completedRegistration.id } })).roomId).toBeNull();
+  });
+
+  it("preserves a camper bed assigned after a bulk preview", async () => {
+    await prisma.camp.update({ where: { id: campId }, data: { bedAllocationRules: [{ criterion: "GROUP_TOGETHER", enabled: false }] } });
+    const { room } = await makeHostelWithBeds("MALE", 2);
+    const beds = await prisma.bed.findMany({ where: { roomId: room.id }, orderBy: { label: "asc" } });
+    const camper = await makeCamper("MALE");
+    const registration = await approvedRegistrationFor(camper.id);
+    const occupant = { kind: "CAMPER" as const, registrationId: registration.id, gender: "MALE", dateOfBirth: camper.dateOfBirth, groupId: null, campusId };
+
+    await prisma.$transaction((tx) => accommodationEngine.assignBedInTx(tx, { bedId: beds[0].id, occupant, actorId: parentId }));
+    const skipped = await prisma.$transaction((tx) => accommodationEngine.assignBedInTx(tx, {
+      bedId: beds[1].id,
+      occupant,
+      actorId: parentId,
+      preserveExistingAssignment: true,
+    }));
+
+    expect(skipped).toBeNull();
+    expect((await prisma.bed.findUniqueOrThrow({ where: { id: beds[0].id } })).registrationId).toBe(registration.id);
+    expect((await prisma.bed.findUniqueOrThrow({ where: { id: beds[1].id } })).registrationId).toBeNull();
+  });
+
   it("assigns a mixed batch of campers and staff, and reports failures for the rest when capacity runs out", async () => {
     await prisma.camp.update({ where: { id: campId }, data: { bedAllocationRules: [{ criterion: "GROUP_TOGETHER", enabled: false }] } });
     await makeHostelWithBeds("MALE", 1);

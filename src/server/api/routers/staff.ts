@@ -965,11 +965,12 @@ export const staffRouter = createTRPCRouter({
         const bucket = counts.get(tribe.id)!;
         bucket.total += 1;
         bucket[gender] += 1;
-        updates.push(ctx.prisma.staffProfile.update({ where: { id: teacher.id }, data: { assignedTribeId: tribe.id } }));
+        updates.push(ctx.prisma.staffProfile.updateMany({ where: { id: teacher.id, assignedTribeId: null }, data: { assignedTribeId: tribe.id } }));
       }
 
-      if (updates.length) await ctx.prisma.$transaction(updates);
-      return { success: true, count: unassigned.length, preserved: teachers.length - unassigned.length };
+      const updateResults = updates.length ? await ctx.prisma.$transaction(updates) : [];
+      const assigned = updateResults.reduce((sum: number, result: { count: number }) => sum + result.count, 0);
+      return { success: true, count: assigned, preserved: teachers.length - assigned };
     }),
 
   departmentAssignmentMetrics: protectedProcedure

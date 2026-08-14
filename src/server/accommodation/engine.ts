@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { logEvent } from "../audit";
 import { calculateAge } from "../registration/validation";
 import { gendersMatch, normalizeGender } from "../../lib/gender";
+import { ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES } from "../assignments/eligibility";
 
 type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
@@ -259,7 +260,7 @@ export async function suggestBed(
 
 export async function assignBedInTx(
   tx: Prisma.TransactionClient,
-  params: { bedId: string; occupant: Occupant; actorId: string | null }
+  params: { bedId: string; occupant: Occupant; actorId: string | null; preserveExistingAssignment?: boolean }
 ) {
   const bed = await tx.bed.findUniqueOrThrow({ where: { id: params.bedId }, include: { room: { include: { hostel: true } } } });
   const { occupant } = params;
@@ -275,6 +276,16 @@ export async function assignBedInTx(
   }
 
   if (occupant.kind === "CAMPER") {
+    await tx.$queryRaw`SELECT "id" FROM "Registration" WHERE "id" = ${occupant.registrationId} FOR UPDATE`;
+    const registration = await tx.registration.findUniqueOrThrow({
+      where: { id: occupant.registrationId },
+      select: { roomId: true, status: true, deletedAt: true },
+    });
+    if (params.preserveExistingAssignment && (
+      registration.roomId ||
+      registration.deletedAt ||
+      !ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES.includes(registration.status as (typeof ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES)[number])
+    )) return null;
     if (bed.staffProfileId) {
       throw new BedAllocationError("BED_OCCUPIED", "This bed is occupied by a staff member.");
     }
@@ -317,6 +328,12 @@ export async function assignBedInTx(
       newValue: { bedId: bed.id, roomId: bed.roomId },
     });
   } else {
+    await tx.$queryRaw`SELECT "id" FROM "StaffProfile" WHERE "id" = ${occupant.staffProfileId} FOR UPDATE`;
+    const staff = await tx.staffProfile.findUniqueOrThrow({
+      where: { id: occupant.staffProfileId },
+      select: { assignedRoomId: true, status: true, deletedAt: true },
+    });
+    if (params.preserveExistingAssignment && (staff.assignedRoomId || staff.deletedAt || staff.status !== "APPROVED")) return null;
     if (bed.registrationId) {
       throw new BedAllocationError("BED_OCCUPIED", "This bed is occupied by a camper.");
     }
@@ -387,6 +404,7 @@ function occupantFromStaff(staff: { id: string; gender: string | null; dateOfBir
 export interface BedAssignmentResult {
   occupantKey: string;
   bedId?: string;
+  preserved?: boolean;
   error?: string;
 }
 
@@ -454,14 +472,14 @@ async function reserveBedsForStaff(
 }
 
 /**
- * Bulk-assigns beds for every unassigned APPROVED camper/teacher/volunteer
+ * Bulk-assigns beds for every unassigned active camper/teacher/volunteer
  * already assigned to this Venue. Scoped by venueId, not just campId — a camp
  * can have multiple Venues, each with its own hostels, so pulling in
- * occupants assigned to a different Venue would misplace them. An APPROVED
- * Registration always has a venueId (approveRegistrationInTx requires it —
- * auto sole-Venue or manual); staff only get one via autoAssignSoleVenue or
- * a manual assignVenue, so multi-venue-camp staff without one are simply
- * skipped here until assigned. Never fails the whole batch on one error.
+ * occupants assigned to a different Venue would misplace them. Registrations
+ * normally receive a venue during approval; the Assignment Setup sole-venue
+ * repair also covers active records revisited after check-in. Staff without a
+ * venue in a multi-venue camp remain skipped until assigned. Never fails the
+ * whole batch on one error.
  */
 export async function bulkAutoAssignBeds(params: { venueId: string; actorId: string }): Promise<BedAssignmentResult[]> {
   const venue = await prisma.venue.findUniqueOrThrow({ where: { id: params.venueId }, include: { camp: true } });
@@ -473,7 +491,7 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
   const groupTogether = storedRules.find((rule) => rule?.criterion === "GROUP_TOGETHER")?.enabled ?? true;
   if (groupTogether) {
     const [camperWithoutTribe, teacherWithoutTribe] = await Promise.all([
-      prisma.registration.count({ where: { campId: venue.campId, venueId: params.venueId, status: "APPROVED", tribeId: null, roomId: null, deletedAt: null } }),
+      prisma.registration.count({ where: { campId: venue.campId, venueId: params.venueId, status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] }, tribeId: null, roomId: null, deletedAt: null } }),
       prisma.staffProfile.count({ where: { campId: venue.campId, assignedVenueId: params.venueId, type: "TEACHER", status: "APPROVED", assignedTribeId: null, assignedRoomId: null, deletedAt: null } }),
     ]);
     if (camperWithoutTribe || teacherWithoutTribe) {
@@ -489,7 +507,7 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
   // occupants are prioritized when beds are scarce.
   const [unassignedRegistrations, unassignedStaff] = await Promise.all([
     prisma.registration.findMany({
-      where: { campId: venue.campId, venueId: params.venueId, status: "APPROVED", roomId: null, deletedAt: null },
+      where: { campId: venue.campId, venueId: params.venueId, status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] }, roomId: null, deletedAt: null },
       include: { camper: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
@@ -521,7 +539,7 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
       // write in assignBedInTx already makes that safe rather than
       // corrupting data, but running both under one lock avoids the wasted
       // suggestion and the resulting spurious "bed occupied" failure.
-      const bedId = await prisma.$transaction(async (tx) => {
+      const assignment = await prisma.$transaction(async (tx) => {
         // Staff-reserved beds are off-limits to campers but fair game once
         // we reach the staff phase — that's the whole point of holding them.
         const exclude = occupant.kind === "CAMPER" ? reservedForStaff : undefined;
@@ -532,18 +550,29 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
         if (!suggestion && occupant.kind === "CAMPER") {
           suggestion = await suggestBed(tx, params.venueId, occupant);
         }
-        if (!suggestion) return null;
-        await assignBedInTx(tx, { bedId: suggestion.bedId, occupant, actorId: params.actorId });
-        return suggestion.bedId;
+        if (!suggestion) return { bedId: null, preserved: false };
+        const assigned = await assignBedInTx(tx, {
+          bedId: suggestion.bedId,
+          occupant,
+          actorId: params.actorId,
+          preserveExistingAssignment: true,
+        });
+        return assigned
+          ? { bedId: suggestion.bedId, preserved: false }
+          : { bedId: null, preserved: true };
       });
-      if (!bedId) {
+      if (assignment.preserved) {
+        results.push({ occupantKey: key, preserved: true });
+        continue;
+      }
+      if (!assignment.bedId) {
         results.push({ occupantKey: key, error: groupTogether && occupant.tribeId ? "No compatible bed is available for this gender and tribe" : "No matching-gender bed available" });
         continue;
       }
       // Keep the reservation set honest: if a camper did consume a reserved
       // bed via the fallback above, it's no longer held for anyone.
-      reservedForStaff.delete(bedId);
-      results.push({ occupantKey: key, bedId });
+      reservedForStaff.delete(assignment.bedId);
+      results.push({ occupantKey: key, bedId: assignment.bedId });
     } catch (error) {
       results.push({ occupantKey: key, error: error instanceof Error ? error.message : String(error) });
     }

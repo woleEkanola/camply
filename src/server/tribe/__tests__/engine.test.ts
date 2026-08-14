@@ -156,6 +156,31 @@ describe("automatic assignment on approval", () => {
   });
 });
 
+describe("bulk active-camper assignment", () => {
+  it("includes CHECKED_IN campers, excludes COMPLETED campers, and preserves existing tribes", async () => {
+    const originalTribe = await prisma.tribe.create({ data: { campId, name: "Original Tribe" } });
+    await prisma.tribe.create({ data: { campId, name: "Available Tribe" } });
+
+    const checkedInCamper = await makeCamper();
+    const checkedInRegistration = await approvedRegistrationFor(checkedInCamper.id);
+    await prisma.registration.update({ where: { id: checkedInRegistration.id }, data: { status: "CHECKED_IN", tribeId: null } });
+
+    const completedCamper = await makeCamper();
+    const completedRegistration = await approvedRegistrationFor(completedCamper.id);
+    await prisma.registration.update({ where: { id: completedRegistration.id }, data: { status: "COMPLETED", tribeId: null } });
+
+    const assignedCamper = await makeCamper();
+    const assignedRegistration = await approvedRegistrationFor(assignedCamper.id);
+    await tribeEngine.assignTribe({ registrationId: assignedRegistration.id, tribeId: originalTribe.id, actorId: parentId });
+
+    const results = await tribeEngine.bulkAutoAssignTribes({ campId, actorId: parentId });
+
+    expect(results.some((result) => result.registrationId === checkedInRegistration.id && result.tribeId)).toBe(true);
+    expect(results.some((result) => result.registrationId === completedRegistration.id)).toBe(false);
+    expect((await prisma.registration.findUniqueOrThrow({ where: { id: assignedRegistration.id } })).tribeId).toBe(originalTribe.id);
+  });
+});
+
 describe("manual assignment and capacity enforcement", () => {
   it("rejects assignment to a full tribe", async () => {
     const tribe = await prisma.tribe.create({ data: { campId, name: "Tiny Tribe", maxCapacity: 1 } });

@@ -6,6 +6,7 @@ import { assertOrgAdminOrCommand } from "../trpc/scoping";
 const assertOrgAdmin = (ctx: any, organizationId: string) =>
   assertOrgAdminOrCommand(ctx, organizationId, "ACCOMMODATION");
 import * as accommodationEngine from "../../accommodation/engine";
+import { ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES } from "../../assignments/eligibility";
 
 // Hostel/Room/Bed management is admin-only: Campus Representatives do not
 // manage camp operations (per PRD), so there is deliberately no campus-rep
@@ -19,10 +20,13 @@ export const accommodationRouter = createTRPCRouter({
       if (!camp || camp.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
       await assertOrgAdmin(ctx, camp.organizationId);
 
-      const [venues, activeTribes, approvedCampers, approvedTeachers, approvedStaff] = await Promise.all([
+      const [venues, activeTribes, assignableCampers, approvedTeachers, approvedStaff] = await Promise.all([
         ctx.prisma.venue.findMany({ where: { campId: camp.id, visible: true, deletedAt: null }, orderBy: [{ name: "asc" }, { id: "asc" }] }),
         ctx.prisma.tribe.count({ where: { campId: camp.id, status: "ACTIVE", deletedAt: null } }),
-        ctx.prisma.registration.findMany({ where: { campId: camp.id, status: "APPROVED", deletedAt: null }, select: { id: true, venueId: true, tribeId: true, roomId: true, camper: { select: { gender: true } } } }),
+        ctx.prisma.registration.findMany({
+          where: { campId: camp.id, status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] }, deletedAt: null },
+          select: { id: true, status: true, venueId: true, tribeId: true, roomId: true, camper: { select: { gender: true } } },
+        }),
         ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, type: "TEACHER", status: "APPROVED", deletedAt: null }, select: { id: true, assignedVenueId: true, assignedTribeId: true, assignedRoomId: true, gender: true } }),
         ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, status: "APPROVED", deletedAt: null }, select: { id: true, assignedVenueId: true, assignedRoomId: true, gender: true } }),
       ]);
@@ -34,7 +38,7 @@ export const accommodationRouter = createTRPCRouter({
         });
         const rooms = hostels.flatMap((hostel) => hostel.rooms);
         const beds = rooms.flatMap((room) => room.beds);
-        const campers = approvedCampers.filter((person) => person.venueId === venue.id);
+        const campers = assignableCampers.filter((person) => person.venueId === venue.id);
         const staff = approvedStaff.filter((person) => person.assignedVenueId === venue.id);
         const teachers = approvedTeachers.filter((person) => person.assignedVenueId === venue.id);
         const unassignedPeople = campers.filter((person) => !person.roomId).length + staff.filter((person) => !person.assignedRoomId).length;
@@ -59,9 +63,9 @@ export const accommodationRouter = createTRPCRouter({
 
       const rooms = venueSummaries.reduce((sum, venue) => sum + venue.rooms, 0);
       const beds = venueSummaries.reduce((sum, venue) => sum + venue.beds, 0);
-      const campersWithoutVenue = approvedCampers.filter((person) => !person.venueId).length;
+      const campersWithoutVenue = assignableCampers.filter((person) => !person.venueId).length;
       const staffWithoutVenue = approvedStaff.filter((person) => !person.assignedVenueId).length;
-      const campersWithoutTribe = approvedCampers.filter((person) => !person.tribeId).length;
+      const campersWithoutTribe = assignableCampers.filter((person) => !person.tribeId).length;
       const teachersWithoutTribe = approvedTeachers.filter((person) => !person.assignedTribeId).length;
       const existingBedAssignments = venueSummaries.reduce((sum, venue) => sum + venue.occupiedBeds, 0);
 
@@ -72,7 +76,12 @@ export const accommodationRouter = createTRPCRouter({
           rooms,
           beds,
           activeTribes,
-          approvedCampers: approvedCampers.length,
+          approvedCampers: assignableCampers.filter((person) => person.status === "APPROVED").length,
+          checkedInCampers: assignableCampers.filter((person) => person.status === "CHECKED_IN").length,
+          assignableCampers: assignableCampers.length,
+          checkedInCampersWithAssignmentGaps: assignableCampers.filter((person) =>
+            person.status === "CHECKED_IN" && (!person.venueId || !person.tribeId || !person.roomId)
+          ).length,
           approvedTeachers: approvedTeachers.length,
           campersWithoutVenue,
           staffWithoutVenue,
@@ -93,11 +102,22 @@ export const accommodationRouter = createTRPCRouter({
       await assertOrgAdmin(ctx, camp.organizationId);
       const venues = await ctx.prisma.venue.findMany({ where: { campId: camp.id, visible: true, deletedAt: null }, select: { id: true } });
       if (venues.length !== 1) throw new TRPCError({ code: "BAD_REQUEST", message: "This action is available only when the camp has exactly one venue. Assign venues manually for a multi-venue camp." });
-      const result = await ctx.prisma.staffProfile.updateMany({
-        where: { campId: camp.id, status: "APPROVED", assignedVenueId: null, deletedAt: null },
-        data: { assignedVenueId: venues[0].id },
-      });
-      return { count: result.count, venueId: venues[0].id };
+      const [campers, staff] = await ctx.prisma.$transaction([
+        ctx.prisma.registration.updateMany({
+          where: {
+            campId: camp.id,
+            status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] },
+            venueId: null,
+            deletedAt: null,
+          },
+          data: { venueId: venues[0].id, venueAssignedAt: new Date() },
+        }),
+        ctx.prisma.staffProfile.updateMany({
+          where: { campId: camp.id, status: "APPROVED", assignedVenueId: null, deletedAt: null },
+          data: { assignedVenueId: venues[0].id },
+        }),
+      ]);
+      return { count: campers.count + staff.count, camperCount: campers.count, staffCount: staff.count, venueId: venues[0].id };
     }),
 
   // ─── Hostels ─────────────────────────────────────────────────────────
