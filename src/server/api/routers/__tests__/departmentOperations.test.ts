@@ -91,6 +91,31 @@ describe("JD-driven department operations", () => {
     expect(workspace?.duties.some((duty) => duty.taskTitle === "Arrange chairs according to the programme layout.")).toBe(true);
   });
 
+  it("keeps one primary department while exposing multiple secondary departments", async () => {
+    const owner = caller(ownerId, "OWNER", `dept-owner-${stamp}@camply.test`);
+    const [registration, medical, security] = await Promise.all(
+      ["Registration", "Medical", "Security"].map((name) => prisma.department.findFirstOrThrow({ where: { campId, name }, include: { positions: { where: { deletedAt: null }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }], take: 2 } } }))
+    );
+    const teacherUser = await prisma.user.create({ data: { email: `multi-dept-${stamp}@camply.test`, password: "x", role: "TEACHER", organizationId } });
+    const teacher = await prisma.staffProfile.create({ data: { userId: teacherUser.id, organizationId, campId, type: "TEACHER", status: "APPROVED", firstName: "Multi", lastName: "Department", phone: "08000000001", email: teacherUser.email } });
+
+    await owner.departmentOperations.assignPerson({ positionId: registration.positions[0]!.id, staffId: teacher.id, secondary: false });
+    await owner.departmentOperations.assignPerson({ positionId: medical.positions[0]!.id, staffId: teacher.id, secondary: true });
+    await owner.departmentOperations.assignPerson({ positionId: security.positions[0]!.id, staffId: teacher.id, secondary: true });
+
+    expect(await prisma.staffProfile.findUniqueOrThrow({ where: { id: teacher.id } })).toMatchObject({ departmentId: registration.id });
+    const teacherCaller = caller(teacherUser.id, "TEACHER", teacherUser.email);
+    const departments = await teacherCaller.departmentOperations.myDepartments({ campId });
+    expect(departments.map((department) => department.name)).toEqual(expect.arrayContaining(["Registration", "Medical", "Security"]));
+    expect(departments.filter((department) => department.isPrimary).map((department) => department.id)).toEqual([registration.id]);
+
+    const medicalWorkspace = await teacherCaller.departmentOperations.myDepartment({ campId, date: "2026-08-12", departmentId: medical.id });
+    expect(medicalWorkspace).toMatchObject({ isPrimary: false, department: { id: medical.id, name: "Medical" } });
+    expect(medicalWorkspace?.department.positions.map((position) => position.id)).toContain(medical.positions[0]!.id);
+
+    await expect(owner.departmentOperations.assignPerson({ positionId: security.positions[1]!.id, staffId: teacher.id, secondary: false })).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
   it("enforces member checklist permissions and preserves immutable execution wording", async () => {
     const volunteer = caller(volunteerUserId, "VOLUNTEER", `dept-volunteer-${stamp}@camply.test`);
     await expect(volunteer.departmentOperations.createChecklistItem({ departmentId: vmdId, title: "Check extension cables", routine: "DAILY", assignmentType: "EVERYONE", required: true })).rejects.toMatchObject({ code: "FORBIDDEN" });

@@ -28,7 +28,14 @@ export function MyDepartmentWorkspace({ embedded = false }: { embedded?: boolean
   const organizationId = (session?.user as any)?.organizationId ?? "";
   const { data: camp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
   const date = todayKey();
-  const query = api.departmentOperations.myDepartment.useQuery({ campId: camp?.id ?? "", date }, { enabled: !!camp?.id });
+  const departmentsQuery = api.departmentOperations.myDepartments.useQuery({ campId: camp?.id ?? "" }, { enabled: !!camp?.id });
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
+  const departments = departmentsQuery.data ?? [];
+  const activeDepartmentId = departments.some((department) => department.id === selectedDepartmentId)
+    ? selectedDepartmentId
+    : departments.find((department) => department.isPrimary)?.id ?? departments[0]?.id ?? "";
+  const queryInput = { campId: camp?.id ?? "", date, departmentId: activeDepartmentId || undefined };
+  const query = api.departmentOperations.myDepartment.useQuery(queryInput, { enabled: !!camp?.id && !!activeDepartmentId });
   const data = query.data;
   const [guideOpen, setGuideOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -45,12 +52,12 @@ export function MyDepartmentWorkspace({ embedded = false }: { embedded?: boolean
   const [editDueTime, setEditDueTime] = useState("");
   const update = api.departmentOperations.updateExecution.useMutation({
     onMutate: async ({ id, status }) => {
-      await utils.departmentOperations.myDepartment.cancel();
-      const previous = utils.departmentOperations.myDepartment.getData({ campId: camp?.id ?? "", date });
-      utils.departmentOperations.myDepartment.setData({ campId: camp?.id ?? "", date }, (old) => old ? { ...old, duties: old.duties.map((duty) => duty.id === id ? { ...duty, status, completedAt: status === "COMPLETED" ? new Date() : null } : duty) } : old);
+      await utils.departmentOperations.myDepartment.cancel(queryInput);
+      const previous = utils.departmentOperations.myDepartment.getData(queryInput);
+      utils.departmentOperations.myDepartment.setData(queryInput, (old) => old ? { ...old, duties: old.duties.map((duty) => duty.id === id ? { ...duty, status, completedAt: status === "COMPLETED" ? new Date() : null } : duty) } : old);
       return { previous };
     },
-    onError: (error, _variables, context) => { if (context?.previous) utils.departmentOperations.myDepartment.setData({ campId: camp?.id ?? "", date }, context.previous); toast.error(error.message); },
+    onError: (error, _variables, context) => { if (context?.previous) utils.departmentOperations.myDepartment.setData(queryInput, context.previous); toast.error(error.message); },
     onSettled: () => utils.departmentOperations.myDepartment.invalidate(),
   });
   const create = api.departmentOperations.createChecklistItem.useMutation({
@@ -73,12 +80,14 @@ export function MyDepartmentWorkspace({ embedded = false }: { embedded?: boolean
   const total = data?.duties.length ?? 0;
 
   if (!camp) return <EmptyState title="No active camp" description="Your department will appear when an active camp is selected." />;
-  if (query.isLoading) return <div className="py-20 text-center text-sm text-txt-secondary">Loading today’s duties…</div>;
+  if (departmentsQuery.isLoading || query.isLoading) return <div className="py-20 text-center text-sm text-txt-secondary">Loading today’s duties…</div>;
   if (!data) return <EmptyState title="No department assignment" description="Ask your camp administrator to assign you to a department role." />;
 
   return <div className="pb-28">
-    {!embedded && <PageHeader title="My department" description={`${data.department.name} · ${data.department.positions.map((role) => role.name).join(", ") || "Member"}`} actions={<DepartmentActions canManage={data.canManage} canAdd={data.canAdd} onGuide={() => setGuideOpen(true)} onDetails={openDetails} onAdd={() => setAddOpen(true)} />} />}
-    {embedded && <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-bold text-txt-primary">My department</h2><p className="text-sm font-semibold text-txt-primary">{data.department.name}</p><p className="text-sm text-txt-secondary">{data.department.positions.map((role) => role.name).join(", ") || "Department member"}</p></div><DepartmentActions canManage={data.canManage} canAdd={data.canAdd} onGuide={() => setGuideOpen(true)} onDetails={openDetails} onAdd={() => setAddOpen(true)} /></div>}
+    {!embedded && <PageHeader title={departments.length > 1 ? "My departments" : "My department"} description={`${data.department.name} · ${data.isPrimary ? "Primary department" : "Secondary department"} · ${data.department.positions.map((role) => role.name).join(", ") || "Member"}`} actions={<DepartmentActions canManage={data.canManage} canAdd={data.canAdd} onGuide={() => setGuideOpen(true)} onDetails={openDetails} onAdd={() => setAddOpen(true)} />} />}
+    {embedded && <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-bold text-txt-primary">{departments.length > 1 ? "My departments" : "My department"}</h2><p className="text-sm font-semibold text-txt-primary">{data.department.name} · {data.isPrimary ? "Primary" : "Secondary"}</p><p className="text-sm text-txt-secondary">{data.department.positions.map((role) => role.name).join(", ") || "Department member"}</p></div><DepartmentActions canManage={data.canManage} canAdd={data.canAdd} onGuide={() => setGuideOpen(true)} onDetails={openDetails} onAdd={() => setAddOpen(true)} /></div>}
+
+    {departments.length > 1 && <DepartmentSwitcher departments={departments} selectedId={activeDepartmentId} onSelect={(departmentId) => { setSelectedDepartmentId(departmentId); setGuideOpen(false); setDetailsOpen(false); setAddOpen(false); setEditDuty(null); }} />}
 
     <div className="sticky top-2 z-20 mb-5 rounded-2xl border border-accent-200 bg-surface/95 p-4 shadow-sm backdrop-blur">
       <div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-accent-700">Today’s progress</p><p className="text-2xl font-bold text-txt-primary">{completed}/{total} completed</p></div><span className="text-2xl font-bold text-accent-700">{total ? Math.round((completed / total) * 100) : 0}%</span></div>
@@ -105,6 +114,10 @@ export function MyDepartmentWorkspace({ embedded = false }: { embedded?: boolean
 }
 
 function GuideSection({ title, values }: { title: string; values: string[] }) { return <section><h4 className="text-xs font-semibold uppercase tracking-wide text-txt-muted">{title}</h4>{values.length ? <ul className="mt-2 space-y-2 text-sm leading-relaxed text-txt-primary">{values.map((value, index) => <li key={`${value}-${index}`} className="flex gap-2"><span className="text-accent-600">•</span><span>{value}</span></li>)}</ul> : <p className="mt-2 text-sm text-txt-muted">None defined</p>}</section>; }
+
+function DepartmentSwitcher({ departments, selectedId, onSelect }: { departments: Array<{ id: string; name: string; isPrimary: boolean; roles: string[] }>; selectedId: string; onSelect: (departmentId: string) => void }) {
+  return <div className="mb-5 overflow-x-auto" role="tablist" aria-label="Assigned departments"><div className="flex min-w-max gap-2">{departments.map((department) => <button key={department.id} type="button" role="tab" aria-selected={department.id === selectedId} onClick={() => onSelect(department.id)} className={`rounded-xl border px-4 py-3 text-left transition ${department.id === selectedId ? "border-accent-500 bg-accent-50 text-accent-800" : "border-border-default bg-surface text-txt-secondary hover:bg-surface-hover"}`}><span className="flex items-center gap-2"><span className="font-semibold">{department.name}</span><Badge tone={department.isPrimary ? "info" : "neutral"}>{department.isPrimary ? "Primary" : "Secondary"}</Badge></span><span className="mt-1 block max-w-64 truncate text-xs">{department.roles.join(", ") || "Department member"}</span></button>)}</div></div>;
+}
 
 function DepartmentActions({ canManage, canAdd, onGuide, onDetails, onAdd }: { canManage: boolean; canAdd: boolean; onGuide: () => void; onDetails: () => void; onAdd: () => void }) {
   return <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={onGuide}>Department guide</Button>{canManage && <Button size="sm" variant="secondary" onClick={onDetails}><PencilIcon className="h-4 w-4" /> Edit details</Button>}{canAdd && <Button size="sm" onClick={onAdd}><PlusIcon className="h-4 w-4" /> Add task</Button>}</div>;

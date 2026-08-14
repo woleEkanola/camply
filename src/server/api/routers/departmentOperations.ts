@@ -47,7 +47,19 @@ async function assertView(ctx: any, departmentId: string) {
     // Continue to scoped department membership below.
   }
   const profile = await activeStaffProfileForUser(ctx.prisma, ctx.userId, department.campId);
-  if (!profile || profile.departmentId !== departmentId) throw new TRPCError({ code: "FORBIDDEN" });
+  if (!profile) throw new TRPCError({ code: "FORBIDDEN" });
+  const hasDepartmentAccess = profile.departmentId === departmentId || Boolean(
+    await ctx.prisma.positionAssignment.findFirst({
+      where: {
+        staffId: profile.id,
+        isCurrent: true,
+        OR: [{ endDate: null }, { endDate: { gte: new Date() } }],
+        position: { departmentId, status: "ACTIVE", deletedAt: null },
+      },
+      select: { id: true },
+    })
+  );
+  if (!hasDepartmentAccess) throw new TRPCError({ code: "FORBIDDEN" });
   const leader = await isDepartmentLeader(ctx.prisma, ctx.userId, departmentId);
   return { department, admin: false, leader, profile };
 }
@@ -156,7 +168,7 @@ export const departmentOperationsRouter = createTRPCRouter({
           childDepartments: { where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { displayOrder: "asc" } },
           positions: {
             where: { deletedAt: null },
-            include: { parentPosition: { select: { id: true, name: true, departmentId: true } }, assignments: { where: { isCurrent: true }, include: { staff: { select: { id: true, userId: true, firstName: true, lastName: true, email: true, phone: true, type: true } } } } },
+            include: { parentPosition: { select: { id: true, name: true, departmentId: true } }, assignments: { where: { isCurrent: true, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] }, include: { staff: { select: { id: true, userId: true, firstName: true, lastName: true, email: true, phone: true, type: true, departmentId: true } } } } },
             orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
           },
           checklistItems: { where: { active: true }, include: { position: { select: { id: true, name: true } }, assignedStaff: { select: { id: true, firstName: true, lastName: true } } }, orderBy: [{ routine: "asc" }, { sortOrder: "asc" }] },
@@ -228,30 +240,50 @@ export const departmentOperationsRouter = createTRPCRouter({
     }),
 
   assignPerson: protectedProcedure
-    .input(z.object({ positionId: z.string(), staffId: z.string(), temporary: z.boolean().default(false), startDate: z.string().datetime().optional(), endDate: z.string().datetime().optional(), reason: z.string().optional() }))
+    .input(z.object({
+      positionId: z.string(),
+      staffId: z.string(),
+      secondary: z.boolean().optional(),
+      // Backward-compatible alias for clients created before secondary
+      // department assignments were made explicit in the UI.
+      temporary: z.boolean().optional(),
+      startDate: z.string().datetime().optional(),
+      endDate: z.string().datetime().optional(),
+      reason: z.string().optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const position = await ctx.prisma.position.findUniqueOrThrow({ where: { id: input.positionId }, include: { camp: { select: { organizationId: true } } } });
       if (!position.departmentId) throw new TRPCError({ code: "BAD_REQUEST" });
       await assertManage(ctx, position.departmentId);
       const staff = await ctx.prisma.staffProfile.findFirst({ where: { id: input.staffId, campId: position.campId, organizationId: position.camp.organizationId, deletedAt: null } });
       if (!staff) throw new TRPCError({ code: "BAD_REQUEST", message: "The selected person does not belong to this camp" });
-      if (!input.temporary) {
-        const conflict = await ctx.prisma.positionAssignment.findFirst({
-          where: { staffId: input.staffId, isCurrent: true, positionId: { not: input.positionId }, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] },
-          select: { position: { select: { name: true } } },
-        });
-        if (conflict) {
-          throw new TRPCError({ code: "CONFLICT", message: `This person already has an active assignment as ${conflict.position.name}. Use a temporary deployment or remove the existing assignment first.` });
-        }
+      const secondary = input.secondary ?? input.temporary ?? false;
+      const duplicate = await ctx.prisma.positionAssignment.findFirst({
+        where: { staffId: input.staffId, positionId: input.positionId, isCurrent: true, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] },
+        select: { id: true },
+      });
+      if (duplicate) throw new TRPCError({ code: "CONFLICT", message: "This person already holds this role." });
+      if (secondary && !staff.departmentId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Assign a primary department before adding secondary departments." });
+      }
+      if (secondary && staff.departmentId === position.departmentId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This is already the person's primary department. Assign the role as primary instead." });
+      }
+      if (!secondary && staff.departmentId && staff.departmentId !== position.departmentId) {
+        const primary = await ctx.prisma.department.findUnique({ where: { id: staff.departmentId }, select: { name: true } });
+        throw new TRPCError({ code: "CONFLICT", message: `This person already has ${primary?.name ?? "another department"} as their primary department. Move the primary assignment or mark this as secondary.` });
       }
       return ctx.prisma.$transaction(async (tx: any) => {
-        if (!input.temporary && ["HEAD", "ASSISTANT_HEAD"].includes(position.roleKind)) {
+        if (["HEAD", "ASSISTANT_HEAD"].includes(position.roleKind)) {
           await tx.positionAssignment.updateMany({ where: { positionId: position.id, isCurrent: true }, data: { isCurrent: false, endDate: new Date() } });
         }
         const assignment = await tx.positionAssignment.create({ data: { positionId: position.id, staffId: input.staffId, startDate: input.startDate ? new Date(input.startDate) : new Date(), endDate: input.endDate ? new Date(input.endDate) : null, isCurrent: true, reason: input.reason } });
+        if (!secondary && !staff.departmentId) {
+          await tx.staffProfile.update({ where: { id: input.staffId }, data: { departmentId: position.departmentId } });
+        }
         await syncStaffProfileFromPositions(tx, input.staffId);
-        await writeAudit(tx, { organizationId: position.camp.organizationId, actorId: ctx.userId, action: input.temporary ? "DEPARTMENT_TEMPORARY_ASSIGNMENT_CREATED" : "DEPARTMENT_PERSON_ASSIGNED", subjectType: "POSITION_ASSIGNMENT", subjectId: assignment.id, newValue: input });
-        await tx.notification.create({ data: { organizationId: position.camp.organizationId, userId: staff.userId, title: "Department role assigned", body: `You have been assigned to ${position.name}.`, link: "/teacher/departments?view=mine", status: "SENT" } });
+        await writeAudit(tx, { organizationId: position.camp.organizationId, actorId: ctx.userId, action: secondary ? "DEPARTMENT_SECONDARY_ASSIGNMENT_CREATED" : "DEPARTMENT_PERSON_ASSIGNED", subjectType: "POSITION_ASSIGNMENT", subjectId: assignment.id, newValue: { ...input, secondary } });
+        await tx.notification.create({ data: { organizationId: position.camp.organizationId, userId: staff.userId, title: secondary ? "Secondary department assigned" : "Department role assigned", body: `You have been assigned to ${position.name}.`, link: "/teacher/departments?view=mine", status: "SENT" } });
         return assignment;
       });
     }),
@@ -274,7 +306,7 @@ export const departmentOperationsRouter = createTRPCRouter({
     .input(z.object({ assignmentId: z.string(), targetPositionId: z.string(), reason: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const [assignment, target] = await Promise.all([
-        ctx.prisma.positionAssignment.findUniqueOrThrow({ where: { id: input.assignmentId }, include: { position: { include: { camp: { select: { organizationId: true } } } }, staff: { select: { userId: true } } } }),
+        ctx.prisma.positionAssignment.findUniqueOrThrow({ where: { id: input.assignmentId }, include: { position: { include: { camp: { select: { organizationId: true } } } }, staff: { select: { userId: true, departmentId: true } } } }),
         ctx.prisma.position.findUniqueOrThrow({ where: { id: input.targetPositionId }, include: { camp: { select: { organizationId: true } } } }),
       ]);
       if (!assignment.position.departmentId || !target.departmentId || assignment.position.campId !== target.campId) throw new TRPCError({ code: "BAD_REQUEST", message: "Both roles must belong to the same camp." });
@@ -284,6 +316,9 @@ export const departmentOperationsRouter = createTRPCRouter({
         await tx.positionAssignment.update({ where: { id: assignment.id }, data: { isCurrent: false, endDate: new Date(), reason: input.reason ?? assignment.reason } });
         if (["HEAD", "ASSISTANT_HEAD"].includes(target.roleKind)) await tx.positionAssignment.updateMany({ where: { positionId: target.id, isCurrent: true }, data: { isCurrent: false, endDate: new Date() } });
         const moved = await tx.positionAssignment.create({ data: { positionId: target.id, staffId: assignment.staffId, startDate: new Date(), isCurrent: true, reason: input.reason } });
+        if (assignment.staff.departmentId === assignment.position.departmentId && target.departmentId !== assignment.position.departmentId) {
+          await tx.staffProfile.update({ where: { id: assignment.staffId }, data: { departmentId: target.departmentId } });
+        }
         await syncStaffProfileFromPositions(tx, assignment.staffId);
         await writeAudit(tx, { organizationId: target.camp.organizationId, actorId: ctx.userId, action: "DEPARTMENT_PERSON_MOVED", subjectType: "POSITION_ASSIGNMENT", subjectId: moved.id, reason: input.reason, previousValue: { assignmentId: assignment.id, positionId: assignment.positionId }, newValue: { positionId: target.id } });
         await tx.notification.create({ data: { organizationId: target.camp.organizationId, userId: assignment.staff.userId, title: "Department role changed", body: `You have been moved to ${target.name}.`, link: "/teacher/departments?view=mine", status: "SENT" } });
@@ -324,27 +359,79 @@ export const departmentOperationsRouter = createTRPCRouter({
       });
     }),
 
-  myDepartment: protectedProcedure
-    .input(z.object({ campId: z.string(), date: dateSchema }))
+  myDepartments: protectedProcedure
+    .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       const profile = await activeStaffProfileForUser(ctx.prisma, ctx.userId, input.campId);
-      if (!profile?.departmentId) return null;
-      await ensureDepartmentExecutions(ctx.prisma, { campId: input.campId, departmentId: profile.departmentId, date: input.date });
-      await ctx.prisma.departmentChecklistExecution.updateMany({ where: { departmentId: profile.departmentId, date: dateOnly(input.date), status: "PENDING", dueAt: { lt: new Date() } }, data: { status: "OVERDUE" } });
+      if (!profile) return [];
+      const assignments = await ctx.prisma.positionAssignment.findMany({
+        where: {
+          staffId: profile.id,
+          isCurrent: true,
+          OR: [{ endDate: null }, { endDate: { gte: new Date() } }],
+          position: { campId: input.campId, departmentId: { not: null }, status: "ACTIVE", deletedAt: null },
+        },
+        select: { position: { select: { departmentId: true, name: true } } },
+      });
+      const rolesByDepartment = new Map<string, string[]>();
+      for (const assignment of assignments) {
+        const departmentId = assignment.position.departmentId;
+        if (!departmentId) continue;
+        rolesByDepartment.set(departmentId, [...(rolesByDepartment.get(departmentId) ?? []), assignment.position.name]);
+      }
+      const departmentIds = new Set(rolesByDepartment.keys());
+      if (profile.departmentId) departmentIds.add(profile.departmentId);
+      if (!departmentIds.size) return [];
+      const departments = await ctx.prisma.department.findMany({
+        where: { id: { in: [...departmentIds] }, campId: input.campId, status: "ACTIVE", deletedAt: null },
+        select: { id: true, name: true, displayOrder: true },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      });
+      return departments
+        .map((department) => ({
+          id: department.id,
+          name: department.name,
+          isPrimary: department.id === profile.departmentId,
+          roles: rolesByDepartment.get(department.id) ?? [],
+        }))
+        .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.name.localeCompare(b.name));
+    }),
+
+  myDepartment: protectedProcedure
+    .input(z.object({ campId: z.string(), date: dateSchema, departmentId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const profile = await activeStaffProfileForUser(ctx.prisma, ctx.userId, input.campId);
+      if (!profile) return null;
+      const departmentId = input.departmentId ?? profile.departmentId;
+      if (!departmentId) return null;
+      if (departmentId !== profile.departmentId) {
+        const secondaryAssignment = await ctx.prisma.positionAssignment.findFirst({
+          where: {
+            staffId: profile.id,
+            isCurrent: true,
+            OR: [{ endDate: null }, { endDate: { gte: new Date() } }],
+            position: { campId: input.campId, departmentId, status: "ACTIVE", deletedAt: null },
+          },
+          select: { id: true },
+        });
+        if (!secondaryAssignment) throw new TRPCError({ code: "FORBIDDEN", message: "You are not assigned to this department." });
+      }
+      await ensureDepartmentExecutions(ctx.prisma, { campId: input.campId, departmentId, date: input.date });
+      await ctx.prisma.departmentChecklistExecution.updateMany({ where: { departmentId, date: dateOnly(input.date), status: "PENDING", dueAt: { lt: new Date() } }, data: { status: "OVERDUE" } });
       const positionIds = await currentPositionIdsForStaff(ctx.prisma, profile.id);
       const department = await ctx.prisma.department.findUniqueOrThrow({
-        where: { id: profile.departmentId },
+        where: { id: departmentId },
         include: {
           parentDepartment: { select: { id: true, name: true } },
-          positions: { where: { assignments: { some: { staffId: profile.id, isCurrent: true } } }, select: { id: true, name: true, roleKind: true, purpose: true, responsibilities: true, authority: true, successMeasures: true } },
+          positions: { where: { assignments: { some: { staffId: profile.id, isCurrent: true, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] } } }, select: { id: true, name: true, roleKind: true, purpose: true, responsibilities: true, authority: true, successMeasures: true } },
         },
       });
       const duties = await ctx.prisma.departmentChecklistExecution.findMany({
-        where: { departmentId: profile.departmentId, date: dateOnly(input.date), OR: [{ assignmentType: "EVERYONE" }, { assignmentType: "PERSON", assignedStaffId: profile.id }, { assignmentType: "ROLE", positionId: { in: positionIds } }] },
+        where: { departmentId, date: dateOnly(input.date), OR: [{ assignmentType: "EVERYONE" }, { assignmentType: "PERSON", assignedStaffId: profile.id }, { assignmentType: "ROLE", positionId: { in: positionIds } }] },
         orderBy: [{ routine: "asc" }, { dueAt: "asc" }, { createdAt: "asc" }],
       });
       const leader = await isDepartmentLeader(ctx.prisma, ctx.userId, department.id);
-      return { profile, department, duties, canManage: leader, canAdd: leader || department.allowMembersAddChecklistItems, canEdit: leader || department.allowMembersEditChecklistItems, canDeactivate: leader || department.allowMembersDeactivateChecklistItems };
+      return { profile, department, duties, isPrimary: department.id === profile.departmentId, canManage: leader, canAdd: leader || department.allowMembersAddChecklistItems, canEdit: leader || department.allowMembersEditChecklistItems, canDeactivate: leader || department.allowMembersDeactivateChecklistItems };
     }),
 
   updateExecution: protectedProcedure

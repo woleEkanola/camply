@@ -7,9 +7,20 @@ type TxClient = Prisma.TransactionClient;
  * Reads exclusively from Position/PositionAssignment (the authoritative source) and mirrors to StaffProfile.
  */
 export async function syncStaffProfileFromPositions(tx: TxClient, staffId: string) {
-  // 1. Fetch current active assignments for this staff profile, including parent positions and their active occupants.
+  const profile = await tx.staffProfile.findUniqueOrThrow({
+    where: { id: staffId },
+    select: { departmentId: true },
+  });
+
+  // 1. Fetch current, non-expired assignments for this staff profile,
+  // including parent positions and their active occupants.
   const activeAssignments = await tx.positionAssignment.findMany({
-    where: { staffId, isCurrent: true },
+    where: {
+      staffId,
+      isCurrent: true,
+      OR: [{ endDate: null }, { endDate: { gte: new Date() } }],
+      position: { status: "ACTIVE", deletedAt: null },
+    },
     include: {
       position: {
         include: {
@@ -24,14 +35,17 @@ export async function syncStaffProfileFromPositions(tx: TxClient, staffId: strin
         },
       },
     },
+    orderBy: [{ startDate: "asc" }, { id: "asc" }],
   });
 
   if (activeAssignments.length === 0) {
-    // If no active assignments exist, clear legacy reporting/leadership flags.
+    // A department membership can exist without a named role (for example,
+    // after automatic department allocation). Removing the last role must not
+    // silently erase that primary membership.
     await tx.staffProfile.update({
       where: { id: staffId },
       data: {
-        departmentId: null,
+        departmentId: profile.departmentId,
         isDepartmentHead: false,
         isAssistantHead: false,
         isCampMonitor: false,
@@ -48,18 +62,18 @@ export async function syncStaffProfileFromPositions(tx: TxClient, staffId: strin
   let isAssistantHead = false;
   let isCampMonitor = false;
   let isAssistantMonitor = false;
-  let departmentId: string | null = null;
+  // StaffProfile.departmentId is the durable primary department. Keep it
+  // even when that membership came from auto-allocation rather than a named
+  // role. Only choose the oldest assignment when no primary exists yet.
+  const departmentId = profile.departmentId
+    ?? activeAssignments.find((assignment) => assignment.position.departmentId)?.position.departmentId
+    ?? null;
   let reportsToId: string | null = null;
   let reportsToUserId: string | null = null;
 
   for (const assignment of activeAssignments) {
     const { position } = assignment;
     const nameLower = position.name.toLowerCase();
-
-    // Determine department
-    if (position.departmentId) {
-      departmentId = position.departmentId;
-    }
 
     // Determine leadership flags based on position naming conventions
     if (position.roleKind === "HEAD" || (nameLower.endsWith("head") && !nameLower.includes("assistant"))) {
@@ -76,7 +90,7 @@ export async function syncStaffProfileFromPositions(tx: TxClient, staffId: strin
 
     // Determine reporting lines
     const parentPos = position.parentPosition;
-    if (parentPos) {
+    if (position.departmentId === departmentId && parentPos && !reportsToId && !reportsToUserId) {
       // Find the first current occupant of the parent position
       const parentAssignment = parentPos.assignments[0];
       if (parentAssignment) {
