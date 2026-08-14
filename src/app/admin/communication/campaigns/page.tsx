@@ -43,6 +43,7 @@ export default function CampaignsPage() {
     { limit: 20 },
     { getNextPageParam: (lastPage) => lastPage.nextCursor }
   );
+  const { data: summary } = api.communication.dashboardStats.useQuery();
 
   const campaigns = data?.pages.flatMap((p) => p.items) ?? [];
 
@@ -63,14 +64,28 @@ export default function CampaignsPage() {
     <AppShell area="admin">
       <div className="mx-auto max-w-5xl space-y-6">
         <PageHeader
-          title="Campaigns"
-          description="Manage email campaigns"
+          title="Email Campaigns"
+          description="Create broadcasts, manage audiences and track campaign progress"
           actions={
             <Link href="/admin/communication/campaigns/new">
               <Button>New Campaign</Button>
             </Link>
           }
         />
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Campaign summary">
+          {[
+            { label: "Running", value: summary?.campaignsRunning ?? 0 },
+            { label: "Scheduled", value: summary?.campaignsScheduled ?? 0 },
+            { label: "Queue Size", value: summary?.queueSize ?? 0 },
+            { label: "Sent Today", value: summary?.sentToday ?? 0 },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl border border-border-default bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-txt-muted">{item.label}</p>
+              <p className="mt-1 text-2xl font-semibold text-txt-primary">{item.value}</p>
+            </div>
+          ))}
+        </div>
 
         {campaigns.length === 0 ? (
           <Card>
@@ -80,7 +95,7 @@ export default function CampaignsPage() {
           </Card>
         ) : (
           <div className="space-y-3">
-            {campaigns.map((campaign: any) => (
+            {campaigns.map((campaign) => (
               <Link key={campaign.id} href={`/admin/communication/campaigns/${campaign.id}`}>
                 <Card className="cursor-pointer transition-colors hover:bg-neutral-50">
                   <CardBody className="flex items-center justify-between">

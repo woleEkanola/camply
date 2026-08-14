@@ -38,28 +38,28 @@ test.describe("Communication Center", () => {
     // Communication is a collapsible group (navConfig.ts: `collapsible: true`)
     // and starts closed unless the current route is inside it — so its items
     // are genuinely absent from the DOM until the header is clicked. Its
-    // sub-pages (Campaigns, Audiences, Delivery Queue/Logs, Templates, Event
-    // Settings, Branding, Camp ID Card) are tabs within Email & Broadcasts /
-    // Push & Station Alerts now, not separate top-level nav links.
+    // Individual communication tools are contextual tabs inside three
+    // task-oriented workspace links.
     await expect(nav).toContainText("Communication");
-    await expect(nav).not.toContainText("Email & Broadcasts");
+    await expect(nav).not.toContainText("Campaigns & Alerts");
 
     await nav.getByText("Communication", { exact: true }).click();
 
-    for (const item of ["Email & Broadcasts", "Push & Station Alerts"]) {
+    for (const item of ["Campaigns & Alerts", "Templates & Setup", "Delivery & Reports"]) {
       await expect(nav).toContainText(item);
     }
   });
 
-  test("P2: /admin/communication redirects to the dashboard, which loads its stat cards", async ({ page }) => {
-    // The old overview page (4 nav cards + Recent Email Activity) is gone —
-    // src/app/admin/communication/page.tsx is now a pure redirect.
+  test("P2: Communication opens the campaign workspace with tabs and summary", async ({ page }) => {
     await page.goto("/admin/communication");
-    await expect(page).toHaveURL(/\/admin\/communication\/dashboard/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/admin\/communication\/campaigns/, { timeout: 15000 });
 
-    await expect(page.getByText("Communication Dashboard")).toBeVisible();
-    for (const label of ["Sent Today", "Failed", "Queue Size", "Success Rate", "Open Rate"]) {
+    await expect(page.getByRole("heading", { name: "Email Campaigns" })).toBeVisible();
+    for (const label of ["Running", "Scheduled", "Queue Size", "Sent Today"]) {
       await expect(page.getByText(label, { exact: true })).toBeVisible();
+    }
+    for (const tab of ["Email Campaigns", "Audiences", "Push Alerts"]) {
+      await expect(page.getByRole("tab", { name: tab })).toBeVisible();
     }
   });
 
@@ -161,22 +161,17 @@ test.describe("Communication Center", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
   });
 
-  test("P8: Broadcast page loads with Compose and History tabs", async ({ page }) => {
+  test("P8: Legacy Broadcast route opens the unified campaign composer", async ({ page }) => {
     await page.goto("/admin/communication/broadcast");
-    await expect(page.locator("h1")).toContainText("Broadcast");
+    await expect(page).toHaveURL(/\/admin\/communication\/campaigns\/new/, { timeout: 15000 });
+    await expect(page.getByRole("heading", { name: "New Campaign" })).toBeVisible();
+  });
 
-    // Two tabs
-    await expect(page.getByRole("tab", { name: "Compose" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "History" })).toBeVisible();
-
-    // Compose tab has recipient options (scope to main content, not sidebar)
-    const main = page.locator("main");
-    await expect(main.locator('text=Parents')).toBeVisible();
-    await expect(main.locator('text=Teachers').first()).toBeVisible();
-    await expect(main.locator('text=Volunteers').first()).toBeVisible();
-
-    // Send Now button
-    await expect(main.getByRole("button", { name: "Send Now" })).toBeVisible();
+  test("P8b: Push Alerts is honest about incomplete delivery", async ({ page }) => {
+    await page.goto("/admin/communication/push");
+    await expect(page.getByRole("heading", { name: "Push Alerts" })).toBeVisible();
+    await expect(page.getByText("Sending is not enabled yet")).toBeVisible();
+    await expect(page.getByRole("button", { name: /send/i })).toHaveCount(0);
   });
 
   test("P9: No console errors on any Communication page", async ({ page }) => {

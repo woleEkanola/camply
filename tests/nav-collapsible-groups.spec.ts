@@ -22,11 +22,11 @@ test.describe("Nav: collapsible Communication/Settings groups", () => {
     await expect(nav.getByRole("link", { name: "Campers", exact: true })).toBeVisible();
 
     // Communication's children are hidden until its header is clicked.
-    await expect(nav.getByRole("link", { name: "Email & Broadcasts", exact: true })).not.toBeVisible();
+    await expect(nav.getByRole("link", { name: "Campaigns & Alerts", exact: true })).not.toBeVisible();
     const communicationHeader = nav.getByRole("button", { name: "Communication" });
     await expect(communicationHeader).toBeVisible();
     await communicationHeader.click();
-    await expect(nav.getByRole("link", { name: "Email & Broadcasts", exact: true })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Campaigns & Alerts", exact: true })).toBeVisible();
 
     // Settings' children are likewise hidden until clicked, independent of Communication.
     await expect(nav.getByRole("link", { name: "Access Control", exact: true })).not.toBeVisible();
@@ -36,7 +36,7 @@ test.describe("Nav: collapsible Communication/Settings groups", () => {
 
     // Collapsing Communication again hides its children without affecting Settings.
     await communicationHeader.click();
-    await expect(nav.getByRole("link", { name: "Email & Broadcasts", exact: true })).not.toBeVisible();
+    await expect(nav.getByRole("link", { name: "Campaigns & Alerts", exact: true })).not.toBeVisible();
     await expect(nav.getByRole("link", { name: "Access Control", exact: true })).toBeVisible();
   });
 
@@ -48,6 +48,6 @@ test.describe("Nav: collapsible Communication/Settings groups", () => {
     // (getNavGroups returns [] until `role` is known), so the nav — and the
     // auto-expand effect that depends on it — can take a beat longer here
     // than on a same-session client-side navigation.
-    await expect(nav.getByRole("link", { name: "Email & Broadcasts", exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(nav.getByRole("link", { name: "Campaigns & Alerts", exact: true })).toBeVisible({ timeout: 15000 });
   });
 });

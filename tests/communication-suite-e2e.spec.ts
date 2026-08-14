@@ -9,15 +9,13 @@ test.describe("Communication Center Suite — Full E2E Verification", () => {
     await loginWithPassword(page, "owner@camply.com", "password123");
   });
 
-  test("1. Communication Dashboard — Metrics, Stats Cards & Quick Actions", async ({ page }) => {
+  test("1. Legacy dashboard opens the campaign workspace and summary", async ({ page }) => {
     await page.goto("/admin/communication/dashboard");
     await page.waitForLoadState("domcontentloaded");
-    
-    const heading = page.getByRole("heading", { name: /Communication/i }).first();
-    await expect(heading).toBeVisible({ timeout: 20000 });
-
-    const pageText = await page.locator("body").innerText();
-    expect(pageText).toMatch(/Campaigns|Communication|Audiences|Templates|Analytics/i);
+    await expect(page).toHaveURL(/\/admin\/communication\/campaigns/, { timeout: 20000 });
+    await expect(page.getByRole("heading", { name: "Email Campaigns" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Audiences" })).toBeVisible();
+    await expect(page.getByText("Queue Size", { exact: true })).toBeVisible();
   });
 
   test("2. Campaigns Management — List & Create Campaign Trigger", async ({ page }) => {

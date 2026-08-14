@@ -9,14 +9,10 @@ import {
   ClipboardDocumentListIcon,
   QrCodeIcon,
   MegaphoneIcon,
-  IdentificationIcon,
   AcademicCapIcon,
   HandRaisedIcon,
   ClipboardDocumentCheckIcon,
   ExclamationTriangleIcon,
-  HeartIcon,
-  CakeIcon,
-  Squares2X2Icon,
   BuildingOffice2Icon,
   TrashIcon,
   ArrowsUpDownIcon,
@@ -49,6 +45,8 @@ export interface NavItem {
   roles?: Role[];
   /** Department category required for volunteers (e.g. Medical or Kitchen). */
   volunteerCategory?: string;
+  /** Additional route prefixes represented by this workspace-level link. */
+  activePrefixes?: string[];
 }
 
 export interface NavGroup {
@@ -167,16 +165,40 @@ const ADMIN_GROUPS: NavGroup[] = [
     collapsible: true,
     items: [
       {
-        name: "Email & Broadcasts",
-        href: "/admin/communication",
+        name: "Campaigns & Alerts",
+        href: "/admin/communication/campaigns",
         icon: MegaphoneIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+        activePrefixes: [
+          "/admin/communication/campaigns",
+          "/admin/communication/audiences",
+          "/admin/communication/push",
+          "/admin/communication/broadcast",
+          "/admin/communication/dashboard",
+        ],
       },
       {
-        name: "Push & Station Alerts",
-        href: "/admin/communication/push",
-        icon: MegaphoneIcon,
+        name: "Templates & Setup",
+        href: "/admin/communication/templates",
+        icon: DocumentTextIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+        activePrefixes: [
+          "/admin/communication/templates",
+          "/admin/communication/events",
+          "/admin/communication/branding",
+          "/admin/communication/id-card",
+        ],
+      },
+      {
+        name: "Delivery & Reports",
+        href: "/admin/communication/queue",
+        icon: ChartBarIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+        activePrefixes: [
+          "/admin/communication/queue",
+          "/admin/communication/logs",
+          "/admin/communication/analytics",
+        ],
       },
     ],
   },
@@ -336,6 +358,8 @@ export function getBottomNavItems(
   volunteerCategory?: string | null,
   campCommandPermissions: readonly string[] = []
 ): NavItem[] {
+  // Kept in the public signature for callers shared with getNavGroups.
+  void hasCampusRepAccess;
   if (!role) return [];
   switch (area) {
     case "admin":

@@ -21,11 +21,27 @@ import { OfflineSetupPrompt } from "@/components/pwa/OfflineSetupPrompt";
 import { OfflineDataNavButton } from "@/components/pwa/OfflineDataNavButton";
 import { permissionForAdminPath } from "@/lib/campCommand";
 import { ScheduleAlertController } from "@/components/schedule/ScheduleAlertController";
+import { CommunicationWorkspaceNav } from "@/components/communication/CommunicationWorkspaceNav";
 
 
 export interface AppShellProps {
   area: AppArea;
   children: React.ReactNode;
+}
+
+function isNavItemActive(pathname: string | null, item: { href: string; activePrefixes?: string[] }) {
+  if (!pathname) return false;
+  if (item.activePrefixes?.some((prefix) => pathname === prefix || pathname.startsWith(prefix + "/"))) return true;
+  const exactMatch = [
+    "/admin",
+    "/admin/communication",
+    "/dashboard",
+    "/campus-rep-dashboard",
+    "/super-admin",
+    "/teacher",
+    "/volunteer",
+  ].includes(item.href);
+  return exactMatch ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
 }
 
 /**
@@ -93,9 +109,7 @@ export default function AppShell({ area, children }: AppShellProps) {
   useEffect(() => {
     for (const group of groups) {
       if (!group.collapsible) continue;
-      const containsActive = group.items.some(
-        (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
-      );
+      const containsActive = group.items.some((item) => isNavItemActive(pathname, item));
       if (containsActive) {
         setOpenGroups((prev) => (prev[group.name] ? prev : { ...prev, [group.name]: true }));
       }
@@ -109,7 +123,7 @@ export default function AppShell({ area, children }: AppShellProps) {
   const displayLogo =
     area === "super-admin"
       ? platformBrandingQuery.data?.platformLogoUrl || "/logo.png"
-      : (orgBrandingQuery.data as any)?.masterLogoUrl ||
+      : orgBrandingQuery.data?.masterLogoUrl ||
         orgBrandingQuery.data?.logoUrl ||
         platformBrandingQuery.data?.platformLogoUrl ||
         "/logo.png";
@@ -192,17 +206,7 @@ export default function AppShell({ area, children }: AppShellProps) {
             {groupOpen && (
             <div className="space-y-0.5">
               {group.items.map((item) => {
-                // Links requiring exact path matching to prevent sub-paths from incorrectly triggering active highlight.
-                const exactMatch = [
-                  "/admin",
-                  "/admin/communication",
-                  "/dashboard",
-                  "/campus-rep-dashboard",
-                  "/super-admin",
-                  "/teacher",
-                  "/volunteer"
-                ].includes(item.href);
-                const active = exactMatch ? pathname === item.href : pathname === item.href || pathname?.startsWith(item.href + "/");
+                const active = isNavItemActive(pathname, item);
                 return (
                   <Link
                     key={item.href}
@@ -381,6 +385,9 @@ export default function AppShell({ area, children }: AppShellProps) {
         </header>
 
         <main id="print-area" className="flex-1 overflow-auto scrollbar-hide px-6 pt-6 pb-20 md:pb-6">
+          {area === "admin" && pathname?.startsWith("/admin/communication") && (
+            <CommunicationWorkspaceNav />
+          )}
           {children}
         </main>
       </div>

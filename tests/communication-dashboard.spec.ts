@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
 
-test.describe("Communication Dashboard", () => {
+test.describe("Communication campaign summary", () => {
   test.describe.configure({ mode: "serial" });
 
   let organizationId: string;
@@ -17,10 +17,8 @@ test.describe("Communication Dashboard", () => {
     }).catch(() => {});
 
     const admin = await prisma.user.findUniqueOrThrow({ where: { email: "admin@camply.com" } });
-    const parent = await prisma.user.findFirstOrThrow({ where: { organizationId, role: "PARENT" } });
-
-    // Seed a campaign + recipient so dashboard has data
-    const campaign = await prisma.emailCampaign.create({
+    // Seed a campaign so the consolidated campaign workspace has list data.
+    await prisma.emailCampaign.create({
       data: {
         organizationId,
         name: "E2E Test Campaign",
@@ -34,18 +32,6 @@ test.describe("Communication Dashboard", () => {
       },
     });
 
-    await prisma.emailRecipient.create({
-      data: {
-        campaignId: campaign.id,
-        userId: parent.id,
-        email: "parent@camply.test",
-        recipientType: "PARENT",
-        deliveryStatus: "SENT",
-        deliverySource: "CAMPAIGN",
-        subject: "Dashboard Test",
-        sentAt: new Date(),
-      },
-    });
   });
 
   test.afterAll(async () => {
@@ -53,22 +39,19 @@ test.describe("Communication Dashboard", () => {
     await prisma.emailCampaign.deleteMany({ where: { organizationId } });
   });
 
-  test("dashboard loads with stats and recent activity", async ({ page }) => {
+  test("legacy dashboard redirects to campaign summary", async ({ page }) => {
     await page.context().clearCookies();
     await loginWithPassword(page, "admin@camply.com", "password123");
 
-    // Navigate via sidebar
+    // Old bookmarks remain valid and land on the consolidated workspace.
     await page.goto("/admin/communication/dashboard");
-    await expect(page.getByRole("heading", { name: "Communication Dashboard" })).toBeVisible({ timeout: 15000 });
+    await expect(page).toHaveURL(/\/admin\/communication\/campaigns/, { timeout: 15000 });
+    await expect(page.getByRole("heading", { name: "Email Campaigns" })).toBeVisible();
 
-    // Stats cards should be present
+    // Useful operational metrics now sit above the campaigns list.
     await expect(page.getByText("Sent Today")).toBeVisible();
-    await expect(page.getByText("Sent This Week")).toBeVisible();
     await expect(page.getByText("Queue Size")).toBeVisible();
-    await expect(page.getByText("Success Rate")).toBeVisible();
-
-    // Recent activity section
-    await expect(page.getByText("Recent Activity")).toBeVisible();
+    await expect(page.getByText("Running", { exact: true })).toBeVisible();
     await expect(page.getByText("E2E Test Campaign")).toBeVisible();
   });
 });
