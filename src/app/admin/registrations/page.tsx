@@ -298,6 +298,8 @@ function RegistrationsPage() {
   const awaitingVettingCount = statsData?.awaitingVetting ?? 0;
   const awaitingFinalCount = statsData?.awaitingFinal ?? 0;
   const statsTotalCount = statsData?.totalCount ?? 0;
+  const maleCount = statsData?.maleCount ?? 0;
+  const femaleCount = statsData?.femaleCount ?? 0;
 
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -598,6 +600,8 @@ function RegistrationsPage() {
             awaitingVettingCount,
             awaitingFinalCount,
             duplicateCount: statsData?.duplicateCount ?? 0,
+            maleCount,
+            femaleCount,
           }}
           registrations={registrations}
           selectedIds={selectedIds}
@@ -650,6 +654,8 @@ function RegistrationsPage() {
       ) : (
         <div>
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-6">
+            <StatCard data-testid="registration-stat-male" label="Male" value={maleCount} tone="info" />
+            <StatCard data-testid="registration-stat-female" label="Female" value={femaleCount} tone="attention" />
             <StatCard
               label="Total Registrations"
               value={statsTotalCount}

@@ -545,20 +545,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       </BulkActionBar>
 
       {/* Stats Cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard
-          data-testid="camper-stat-approved"
-          label="Approved"
-          value={statsData?.approvedCount ?? 0}
-          tone="success"
-          selected={statusFilter === "APPROVED" && genderFilter === ""}
-          onClick={() => {
-            setCursor(undefined);
-            setAllCampers([]);
-            setGenderFilter("");
-            setStatusFilter((prev) => (prev === "APPROVED" ? "" : "APPROVED"));
-          }}
-        />
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           data-testid="camper-stat-in-camp"
           label="In Camp"
@@ -576,24 +563,26 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           data-testid="camper-stat-male"
           label="Male"
           value={statsData?.checkedInMaleCount ?? 0}
-          selected={genderFilter === "Male" && statusFilter === ""}
+          selected={genderFilter === "Male" && statusFilter === "CHECKED_IN"}
           onClick={() => {
             setCursor(undefined);
             setAllCampers([]);
-            setStatusFilter("");
-            setGenderFilter((prev) => (prev === "Male" ? "" : "Male"));
+            const selected = genderFilter === "Male" && statusFilter === "CHECKED_IN";
+            setStatusFilter(selected ? "" : "CHECKED_IN");
+            setGenderFilter(selected ? "" : "Male");
           }}
         />
         <StatCard
           data-testid="camper-stat-female"
           label="Female"
           value={statsData?.checkedInFemaleCount ?? 0}
-          selected={genderFilter === "Female" && statusFilter === ""}
+          selected={genderFilter === "Female" && statusFilter === "CHECKED_IN"}
           onClick={() => {
             setCursor(undefined);
             setAllCampers([]);
-            setStatusFilter("");
-            setGenderFilter((prev) => (prev === "Female" ? "" : "Female"));
+            const selected = genderFilter === "Female" && statusFilter === "CHECKED_IN";
+            setStatusFilter(selected ? "" : "CHECKED_IN");
+            setGenderFilter(selected ? "" : "Female");
           }}
         />
         <StatCard

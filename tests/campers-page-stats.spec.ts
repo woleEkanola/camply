@@ -4,8 +4,8 @@ import bcrypt from "bcryptjs";
 import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
 
 /**
- * Verifies the admin and teacher campers pages show the 5 scoped
- * stat cards: Approved (APPROVED), In Camp (CHECKED_IN),
+ * Verifies the admin and teacher campers pages show the 4 operational
+ * stat cards: In Camp (CHECKED_IN),
  * Male (CHECKED_IN males), Female (CHECKED_IN females),
  * Exited Camp (COMPLETED).
  *
@@ -115,12 +115,11 @@ test.describe("Campers page: stat cards (admin + teacher)", () => {
   //  ADMIN CAMPERS PAGE
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("admin campers page shows all 5 scoped stat cards", async ({ page }) => {
+  test("admin campers page always shows all 4 operational stat cards", async ({ page }) => {
     await loginWithPassword(page, "admin@camply.com", "password123");
     await page.goto("/admin/campers");
 
-    await expect(page.getByTestId("camper-stat-approved")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId("camper-stat-in-camp")).toBeVisible();
+    await expect(page.getByTestId("camper-stat-in-camp")).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId("camper-stat-male")).toBeVisible();
     await expect(page.getByTestId("camper-stat-female")).toBeVisible();
     await expect(page.getByTestId("camper-stat-exited-camp")).toBeVisible();
@@ -130,13 +129,12 @@ test.describe("Campers page: stat cards (admin + teacher)", () => {
     await loginWithPassword(page, "admin@camply.com", "password123");
     await page.goto("/admin/campers");
 
-    await expect(page.getByTestId("camper-stat-approved")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId("camper-stat-in-camp")).toBeVisible({ timeout: 10000 });
 
     // Poll until the async stats query resolves (cards mount at 0 first)
     await expect(async () => {
       // At minimum the 4 we created with registrations, plus any
       // pre-existing fixture-org campers
-      expect(await statValue(page, "camper-stat-approved")).toBeGreaterThanOrEqual(1);
       expect(await statValue(page, "camper-stat-in-camp")).toBeGreaterThanOrEqual(2);
       expect(await statValue(page, "camper-stat-exited-camp")).toBeGreaterThanOrEqual(1);
     }).toPass({ timeout: 15000 });
@@ -151,12 +149,11 @@ test.describe("Campers page: stat cards (admin + teacher)", () => {
   //  TEACHER CAMPERS PAGE
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("teacher campers page shows all 5 scoped stat cards", async ({ page }) => {
+  test("teacher campers page always shows all 4 operational stat cards", async ({ page }) => {
     await loginWithPassword(page, teacherEmail, "password123");
     await page.goto("/teacher/campers");
 
-    await expect(page.getByTestId("camper-stat-approved")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId("camper-stat-in-camp")).toBeVisible();
+    await expect(page.getByTestId("camper-stat-in-camp")).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId("camper-stat-male")).toBeVisible();
     await expect(page.getByTestId("camper-stat-female")).toBeVisible();
     await expect(page.getByTestId("camper-stat-exited-camp")).toBeVisible();
@@ -166,10 +163,9 @@ test.describe("Campers page: stat cards (admin + teacher)", () => {
     await loginWithPassword(page, teacherEmail, "password123");
     await page.goto("/teacher/campers");
 
-    await expect(page.getByTestId("camper-stat-approved")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId("camper-stat-in-camp")).toBeVisible({ timeout: 10000 });
 
     await expect(async () => {
-      expect(await statValue(page, "camper-stat-approved")).toBeGreaterThanOrEqual(1);
       expect(await statValue(page, "camper-stat-in-camp")).toBeGreaterThanOrEqual(2);
       expect(await statValue(page, "camper-stat-exited-camp")).toBeGreaterThanOrEqual(1);
     }).toPass({ timeout: 15000 });

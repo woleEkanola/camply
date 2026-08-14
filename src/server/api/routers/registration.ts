@@ -1923,11 +1923,19 @@ export const registrationRouter = createTRPCRouter({
         ...(input.campusId && { campusId: input.campusId }),
       };
 
-      const statusCounts = await ctx.prisma.registration.groupBy({
-        by: ["status"],
-        where: baseWhere,
-        _count: { _all: true },
-      });
+      const [statusCounts, maleCount, femaleCount] = await Promise.all([
+        ctx.prisma.registration.groupBy({
+          by: ["status"],
+          where: baseWhere,
+          _count: { _all: true },
+        }),
+        ctx.prisma.registration.count({
+          where: { ...baseWhere, camper: { gender: { equals: "MALE", mode: "insensitive" } } },
+        }),
+        ctx.prisma.registration.count({
+          where: { ...baseWhere, camper: { gender: { equals: "FEMALE", mode: "insensitive" } } },
+        }),
+      ]);
       const countsByStatus = Object.fromEntries(statusCounts.map((s) => [s.status, s._count._all]));
 
       const awaitingVetting = await ctx.prisma.registration.count({
@@ -1974,6 +1982,8 @@ export const registrationRouter = createTRPCRouter({
         awaitingFinal,
         duplicateCount: duplicateRegIds.size,
         totalCount,
+        maleCount,
+        femaleCount,
       };
     }),
 
