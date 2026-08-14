@@ -13,7 +13,12 @@ import { loadTemplateForEvent } from "../email/templateLoader";
 import { renderEmail, renderEmailWithEvent } from "../email/renderer";
 import { resolveFromAddress } from "../email/resolveFromAddress";
 import { interpolateSubject } from "../email/interpolate";
-import { processCampaignSideEffect } from "../email/campaign/sender";
+import {
+  PermanentCampaignError,
+  ResendCampaignError,
+  processCampaignEffectBatch,
+  processCampaignSideEffect,
+} from "../email/campaign/sender";
 
 let resend: Resend | null = null;
 function getResend() {
@@ -269,7 +274,19 @@ async function runEffect(registrationId: string, type: SideEffectType) {
  */
 export async function processSideEffect(id: string) {
   const effect = await prisma.sideEffect.findUnique({ where: { id } });
-  if (!effect || effect.status === "DONE") return;
+  if (!effect || effect.status !== "QUEUED") return;
+
+  const claimed = await prisma.sideEffect.updateMany({
+    where: { id, status: "QUEUED" },
+    data: { status: "PROCESSING" },
+  });
+  if (claimed.count === 0) return;
+  if (effect.type === "CAMPAIGN_SEND" && effect.txId) {
+    await prisma.emailRecipient.updateMany({
+      where: { id: effect.txId, deliveryStatus: "QUEUED" },
+      data: { deliveryStatus: "PROCESSING" },
+    });
+  }
 
   // Campaign effects respect the campaign's own lifecycle: a CANCELLED campaign
   // must never send again; a PAUSED campaign defers without burning attempts.
@@ -280,13 +297,15 @@ export async function processSideEffect(id: string) {
     });
     if (campaign?.status === "CANCELLED") {
       await prisma.sideEffect.update({ where: { id }, data: { status: "CANCELLED" } });
+      if (effect.txId) await prisma.emailRecipient.updateMany({ where: { id: effect.txId, deliveryStatus: "PROCESSING" }, data: { deliveryStatus: "CANCELLED" } });
       return;
     }
-    if (campaign?.status === "PAUSED") {
+    if (campaign?.status === "PAUSED" || campaign?.status === "NEEDS_ATTENTION") {
       await prisma.sideEffect.update({
         where: { id },
-        data: { runAfter: new Date(Date.now() + 5 * 60 * 1000) },
+        data: { status: "QUEUED", runAfter: new Date(Date.now() + 60 * 1000) },
       });
+      if (effect.txId) await prisma.emailRecipient.updateMany({ where: { id: effect.txId, deliveryStatus: "PROCESSING" }, data: { deliveryStatus: "QUEUED" } });
       return;
     }
   }
@@ -305,29 +324,53 @@ export async function processSideEffect(id: string) {
     // When a campaign's queue drains, mark it COMPLETED (failures are visible
     // per-recipient in campaign stats — COMPLETED means "send run finished").
     if (effect.type === "CAMPAIGN_SEND" && effect.campaignId) {
-      const remaining = await prisma.sideEffect.count({
-        where: { campaignId: effect.campaignId, type: "CAMPAIGN_SEND", status: "QUEUED" },
-      });
-      if (remaining === 0) {
-        await prisma.emailCampaign.updateMany({
-          where: { id: effect.campaignId, status: "SENDING" },
-          data: { status: "COMPLETED", completedAt: new Date() },
-        });
-      }
+      await finalizeCampaignIfDrained(effect.campaignId);
     }
   } catch (error) {
-    const attempts = effect.attempts + 1;
-    const backoffMinutes = Math.min(2 ** attempts, 60);
-    await prisma.sideEffect.update({
-      where: { id },
-      data: {
-        attempts,
-        status: attempts >= MAX_ATTEMPTS ? "FAILED" : "QUEUED",
-        lastError: error instanceof Error ? error.message : String(error),
-        runAfter: new Date(Date.now() + backoffMinutes * 60 * 1000),
-      },
-    });
+    await recordEffectFailure(effect, error);
+    if (effect.campaignId) await finalizeCampaignIfDrained(effect.campaignId);
   }
+}
+
+async function finalizeCampaignIfDrained(campaignId: string) {
+  const active = await prisma.sideEffect.count({
+    where: { campaignId, type: "CAMPAIGN_SEND", status: { in: ["QUEUED", "PROCESSING"] } },
+  });
+  if (active > 0) return;
+  const held = await prisma.emailRecipient.count({ where: { campaignId, deliveryStatus: "HELD" } });
+  await prisma.emailCampaign.updateMany({
+    where: { id: campaignId, status: "SENDING" },
+    data: held > 0
+      ? { status: "NEEDS_ATTENTION", completedAt: null }
+      : { status: "COMPLETED", completedAt: new Date() },
+  });
+}
+
+async function recordEffectFailure(effect: { id: string; txId: string | null; attempts: number }, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof PermanentCampaignError) {
+    await prisma.$transaction([
+      prisma.sideEffect.update({ where: { id: effect.id }, data: { status: "CANCELLED", lastError: message } }),
+      ...(effect.txId ? [prisma.emailRecipient.update({ where: { id: effect.txId }, data: { deliveryStatus: "HELD", failedReason: message } })] : []),
+    ]);
+    return;
+  }
+  const attempts = effect.attempts + 1;
+  const permanent = error instanceof ResendCampaignError && error.permanent;
+  const terminal = permanent || attempts >= MAX_ATTEMPTS;
+  const delayMs = error instanceof ResendCampaignError && error.retryAfterMs
+    ? error.retryAfterMs
+    : Math.min(2 ** attempts, 60) * 60 * 1000;
+  await prisma.$transaction([
+    prisma.sideEffect.update({
+      where: { id: effect.id },
+      data: { attempts, status: terminal ? "FAILED" : "QUEUED", lastError: message, runAfter: new Date(Date.now() + delayMs) },
+    }),
+    ...(effect.txId ? [prisma.emailRecipient.update({
+      where: { id: effect.txId },
+      data: { deliveryStatus: terminal ? "FAILED" : "QUEUED", failedReason: message, retryCount: { increment: 1 } },
+    })] : []),
+  ]);
 }
 
 /** Best-effort immediate run right after a transition commits; falls back to the sweep on failure. */
@@ -423,7 +466,7 @@ async function processBroadcastEffect(effectId: string) {
 }
 
 /** Sweeps due, non-terminal effects. Intended to be hit by a cron/pinger every minute or so. */
-export async function sweepPendingSideEffects(limit = 25) {
+export async function sweepPendingSideEffects(limit = 200) {
   // Fire any scheduled campaigns whose time has come — their sends enqueue
   // CAMPAIGN_SEND effects which the loop below then picks up.
   try {
@@ -433,6 +476,15 @@ export async function sweepPendingSideEffects(limit = 25) {
     console.error("[sweep] processScheduledCampaigns failed:", error);
   }
 
+  await prisma.sideEffect.updateMany({
+    where: { status: "PROCESSING", updatedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) }, type: { not: { startsWith: "SCORE_" } } },
+    data: { status: "QUEUED", runAfter: new Date() },
+  });
+  await prisma.emailRecipient.updateMany({
+    where: { deliveryStatus: "PROCESSING", updatedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } },
+    data: { deliveryStatus: "QUEUED" },
+  });
+
   const due = await prisma.sideEffect.findMany({
     // Excludes SCORE_* — those are drained separately by drainScoreQueue
     // (src/server/leaderboard/queue.ts), so a burst of QR scans can't starve
@@ -441,8 +493,44 @@ export async function sweepPendingSideEffects(limit = 25) {
     take: limit,
     orderBy: { runAfter: "asc" },
   });
+  const campaignGroups = new Map<string, typeof due>();
   for (const effect of due) {
-    await processSideEffect(effect.id);
+    if (effect.type !== "CAMPAIGN_SEND" || !effect.campaignId) {
+      await processSideEffect(effect.id);
+      continue;
+    }
+    const group = campaignGroups.get(effect.campaignId) ?? [];
+    group.push(effect);
+    campaignGroups.set(effect.campaignId, group);
   }
-  return { processed: due.length };
+
+  let processed = due.length - [...campaignGroups.values()].reduce((sum, group) => sum + group.length, 0);
+  for (const [campaignId, effects] of campaignGroups) {
+    const campaign = await prisma.emailCampaign.findUnique({ where: { id: campaignId }, select: { status: true, personalizeEvent: true, attachments: true } });
+    if (campaign?.status !== "SENDING") {
+      for (const effect of effects) await processSideEffect(effect.id);
+      processed += effects.length;
+      continue;
+    }
+    const claimed: typeof effects = [];
+    for (const effect of effects) {
+      const result = await prisma.sideEffect.updateMany({ where: { id: effect.id, status: "QUEUED" }, data: { status: "PROCESSING" } });
+      if (result.count === 0) continue;
+      claimed.push(effect);
+      if (effect.txId) await prisma.emailRecipient.updateMany({ where: { id: effect.txId, deliveryStatus: "QUEUED" }, data: { deliveryStatus: "PROCESSING" } });
+    }
+    const chunkSize = campaign.personalizeEvent || (Array.isArray(campaign.attachments) && campaign.attachments.length > 0) ? 1 : 100;
+    for (let offset = 0; offset < claimed.length; offset += chunkSize) {
+      const chunk = claimed.slice(offset, offset + chunkSize);
+      try {
+        await processCampaignEffectBatch(prisma, chunk.map((effect) => effect.id));
+        await prisma.sideEffect.updateMany({ where: { id: { in: chunk.map((effect) => effect.id) }, status: "PROCESSING" }, data: { status: "DONE" } });
+      } catch (error) {
+        for (const effect of chunk) await recordEffectFailure(effect, error);
+      }
+    }
+    processed += claimed.length;
+    await finalizeCampaignIfDrained(campaignId);
+  }
+  return { processed };
 }

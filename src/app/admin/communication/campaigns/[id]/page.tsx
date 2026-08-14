@@ -15,7 +15,7 @@ import Link from "next/link";
 function statusTone(status: string): "success" | "warning" | "danger" | "neutral" | "info" {
   const map: Record<string, "success" | "warning" | "danger" | "neutral" | "info"> = {
     DRAFT: "neutral", SCHEDULED: "info", QUEUED: "warning", SENDING: "warning",
-    COMPLETED: "success", PAUSED: "warning", CANCELLED: "neutral", FAILED: "danger",
+    COMPLETED: "success", PAUSED: "warning", NEEDS_ATTENTION: "danger", CANCELLED: "neutral", FAILED: "danger",
   };
   return map[status] ?? "neutral";
 }
@@ -24,11 +24,20 @@ export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const utils = api.useUtils();
-  const { data: campaign, isLoading } = api.communication.campaignGet.useQuery({ id });
+  const { data: campaign, isLoading } = api.communication.campaignGet.useQuery(
+    { id },
+    { refetchInterval: (query) => ["SENDING", "PAUSED", "NEEDS_ATTENTION"].includes((query.state.data as any)?.status) ? 2_000 : false }
+  );
   const sendMut = api.communication.campaignSend.useMutation();
   const cancelMut = api.communication.campaignCancel.useMutation();
+  const pauseMut = api.communication.campaignPause.useMutation();
+  const resumeMut = api.communication.campaignResume.useMutation();
+  const retryHeldMut = api.communication.campaignRetryHeld.useMutation();
+  const retryFailedMut = api.communication.campaignRetryFailed.useMutation();
+  const kickMut = api.communication.campaignKickQueue.useMutation();
   const nonOpenerMut = api.communication.campaignSendToNonOpeners.useMutation();
   const [showNonOpener, setShowNonOpener] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   if (isLoading) {
     return <AppShell area="admin"><div className="mx-auto max-w-4xl space-y-6"><Skeleton className="h-8 w-48" /></div></AppShell>;
@@ -40,6 +49,15 @@ export default function CampaignDetail() {
 
   const s = (campaign as any).stats;
   const nonOpenerCount = Math.max(0, s.delivered - s.opened);
+  const isPersonalized = !!campaign.personalizeEvent;
+  const individualDelivery = isPersonalized || ((campaign.attachments as any[])?.length ?? 0) > 0;
+  const estimatedSeconds = Math.ceil((s.queued + s.processing) / (individualDelivery ? 4 : 400));
+  const lastActivity = s.lastActivityAt ? new Date(s.lastActivityAt) : null;
+  const stale = campaign.status === "SENDING" && lastActivity && Date.now() - lastActivity.getTime() > 2 * 60 * 1000;
+  const refresh = async (message?: string) => {
+    if (message) setNotice(message);
+    await utils.communication.campaignGet.invalidate({ id });
+  };
 
   return (
     <AppShell area="admin">
@@ -56,9 +74,15 @@ export default function CampaignDetail() {
           }
         />
 
+        {notice && <div className="rounded-lg border border-accent-200 bg-accent-50 px-4 py-2 text-sm text-accent-800">{notice}</div>}
+        {stale && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">No campaign progress has been recorded for more than two minutes. Use “Send queued now” or verify the email-effects scheduler.</div>}
+
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-neutral-900">{s.total}</div><div className="text-xs text-txt-secondary">Total</div></div>
           <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-amber-600">{s.queued}</div><div className="text-xs text-txt-secondary">Queued</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-blue-600">{s.processing}</div><div className="text-xs text-txt-secondary">Processing</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-amber-700">{s.held}</div><div className="text-xs text-txt-secondary">Held</div></div>
+          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-cyan-700">{s.sent}</div><div className="text-xs text-txt-secondary">Accepted</div></div>
           <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-green-600">{s.delivered}</div><div className="text-xs text-txt-secondary">Delivered</div></div>
           <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-red-600">{s.failed + s.bounced}</div><div className="text-xs text-txt-secondary">Failed/Bounced</div></div>
           <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-indigo-600">{s.opened}</div><div className="text-xs text-txt-secondary">Opened</div></div>
@@ -68,15 +92,43 @@ export default function CampaignDetail() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {campaign.status === "DRAFT" && <Button onClick={() => sendMut.mutate({ id })}>Send Now</Button>}
+          {campaign.status === "DRAFT" && <Button onClick={async () => { await sendMut.mutateAsync({ id }); await refresh("Campaign queued."); }}>Send Now</Button>}
           {campaign.status === "SCHEDULED" && <Button variant="danger" onClick={() => { cancelMut.mutate({ id }); utils.communication.campaignGet.invalidate({ id }); }}>Cancel Schedule</Button>}
-          {campaign.status === "SENDING" && <Button variant="secondary" onClick={() => api.communication.campaignPause.useMutation().mutate({ id })}>Pause</Button>}
+          {campaign.status === "SENDING" && <Button variant="secondary" loading={pauseMut.isPending} onClick={async () => { await pauseMut.mutateAsync({ id }); await refresh("Campaign paused. Messages already accepted by Resend are unchanged."); }}>Pause</Button>}
+          {campaign.status === "PAUSED" && <Button loading={resumeMut.isPending} onClick={async () => { await resumeMut.mutateAsync({ id }); await refresh("Campaign resumed."); }}>Resume</Button>}
+          {campaign.status === "SENDING" && s.queued > 0 && <Button variant="secondary" loading={kickMut.isPending} onClick={async () => { const result = await kickMut.mutateAsync({ id }); await refresh(`Processed ${result.processed} queued items.`); }}>Send queued now</Button>}
+          {s.held > 0 && <Button variant="secondary" loading={retryHeldMut.isPending} onClick={async () => { const result = await retryHeldMut.mutateAsync({ id }); await refresh(`${result.queued} held campers are now queued; ${result.stillHeld} still need attention.`); }}>Retry held campers</Button>}
+          {s.failed > 0 && <Button variant="secondary" loading={retryFailedMut.isPending} onClick={async () => { const result = await retryFailedMut.mutateAsync({ id }); await refresh(`${result.retried} failed messages queued for retry.`); }}>Retry failed</Button>}
+          {["SENDING", "PAUSED", "NEEDS_ATTENTION"].includes(campaign.status) && <Button variant="danger" size="sm" loading={cancelMut.isPending} onClick={async () => { await cancelMut.mutateAsync({ id }); await refresh("Remaining unsent messages cancelled."); }}>Cancel remaining</Button>}
           {campaign.status === "COMPLETED" && nonOpenerCount > 0 && (
             <Button onClick={() => setShowNonOpener(true)}>Send to Non-Openers ({nonOpenerCount})</Button>
           )}
           {(campaign.status === "DRAFT" || campaign.status === "SCHEDULED") && <Button variant="danger" size="sm" onClick={() => { cancelMut.mutate({ id }); utils.communication.campaignGet.invalidate({ id }); }}>Cancel</Button>}
           <Link href={`/admin/communication/campaigns/new?id=${id}`}><Button variant="secondary" size="sm">Duplicate</Button></Link>
         </div>
+
+        {["SENDING", "PAUSED", "NEEDS_ATTENTION"].includes(campaign.status) && (
+          <p className="text-sm text-txt-secondary">
+            {s.queued + s.processing > 0
+              ? `Estimated time to submit the remaining messages to Resend: ${estimatedSeconds < 60 ? `${estimatedSeconds} seconds` : `${Math.ceil(estimatedSeconds / 60)} minutes`}.`
+              : "No messages are waiting for submission."}
+            {lastActivity && ` Last activity: ${lastActivity.toLocaleString()}.`}
+          </p>
+        )}
+
+        {isPersonalized && (
+          <Card>
+            <CardHeader><CardTitle>Personalized ID-card delivery</CardTitle></CardHeader>
+            <CardBody className="space-y-2 text-sm text-txt-secondary">
+              <p>Each camper receives a separate email containing the inline eight-card sheet, a printable A4 PDF, and all shared attachments below.</p>
+              {s.heldIssues?.length > 0 && (
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {s.heldIssues.map((issue: any) => <p key={issue.id} className="text-amber-700">{issue.email || "No parent email"}: {issue.reason}</p>)}
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        )}
 
         <Card>
           <CardHeader><CardTitle>Subject</CardTitle></CardHeader>

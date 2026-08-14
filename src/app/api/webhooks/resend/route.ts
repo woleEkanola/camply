@@ -1,21 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/db";
-import crypto from "crypto";
-
-function verifySignature(payload: string, signature: string, secret: string): boolean {
-  try {
-    const parts = signature.split(",");
-    const timestamp = parts.find((p) => p.startsWith("t="))?.slice(2);
-    const sig = parts.find((p) => p.startsWith("v1,"))?.slice(3);
-    if (!timestamp || !sig) return false;
-
-    const signedPayload = `${timestamp}.${payload}`;
-    const expected = crypto.createHmac("sha256", secret).update(signedPayload).digest("base64");
-    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
-  } catch {
-    return false;
-  }
-}
+import { verifyResendWebhookSignature } from "@/server/email/webhooks/verifyResend";
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,8 +10,7 @@ export async function POST(request: NextRequest) {
     // unset RESEND_WEBHOOK_SECRET previously skipped verification entirely,
     // letting anyone POST unauthenticated events that write delivery state.
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
-    const signature = request.headers.get("svix-signature") ?? "";
-    if (!webhookSecret || !signature || !verifySignature(rawBody, signature, webhookSecret)) {
+    if (!webhookSecret || !verifyResendWebhookSignature(rawBody, request.headers, webhookSecret)) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
@@ -48,11 +32,34 @@ export async function POST(request: NextRequest) {
     const where = { providerMessageId: event.data.email_id };
 
     switch (event.type) {
+      case "email.sent":
+        await prisma.emailRecipient.updateMany({
+          where: { ...where, deliveryStatus: { in: ["QUEUED", "PROCESSING"] } },
+          data: { sentAt: new Date(), deliveryStatus: "SENT" },
+        });
+        break;
+
+      case "email.delivery_delayed":
+        await prisma.emailRecipient.updateMany({
+          where: { ...where, deliveryStatus: { in: ["SENT", "DELAYED"] } },
+          data: { deliveryStatus: "DELAYED", failedReason: "Delivery is delayed by the recipient's mail server." },
+        });
+        break;
+
       case "email.delivered":
         // Events can arrive out of order — never regress OPENED/CLICKED/BOUNCED.
         await prisma.emailRecipient.updateMany({
           where: { ...where, deliveryStatus: { notIn: ["OPENED", "CLICKED", "BOUNCED"] } },
-          data: { deliveredAt: new Date(), deliveryStatus: "DELIVERED" },
+          data: { deliveredAt: new Date(), deliveryStatus: "DELIVERED", failedReason: null },
+        });
+        break;
+
+      case "email.failed":
+      case "email.suppressed":
+      case "email.complained":
+        await prisma.emailRecipient.updateMany({
+          where: { ...where, deliveryStatus: { notIn: ["OPENED", "CLICKED", "DELIVERED"] } },
+          data: { deliveryStatus: "FAILED", failedReason: `Resend reported ${event.type.replace("email.", "")}.` },
         });
         break;
 
