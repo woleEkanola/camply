@@ -15,6 +15,7 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
   const { data: venues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: !!campId });
   const { data: tribes = [] } = api.tribe.listByCamp.useQuery({ campId }, { enabled: !!campId && profile?.type === "TEACHER" });
   const { data: departments = [] } = api.department.list.useQuery({ organizationId, campId }, { enabled: !!organizationId && !!campId });
+  const { data: memberships = [] } = api.departmentOperations.staffDepartmentMemberships.useQuery({ staffId }, { enabled: !!staffId });
   const { data: reportsToOptions } = api.staff.listReportsToOptions.useQuery(
     { organizationId, campId, excludeStaffId: staffId },
     { enabled: !!organizationId && !!campId }
@@ -41,7 +42,9 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
     utils.staff.getById.invalidate({ id: staffId });
     utils.staff.adminList.invalidate();
     utils.staff.stats.invalidate();
+    utils.departmentOperations.staffDepartmentMemberships.invalidate({ staffId });
   };
+  const [addSecondaryId, setAddSecondaryId] = useState("");
   const onErr = (e: { message: string }) => setActionError(e.message);
 
   const approve = api.staff.approve.useMutation({ onSuccess: invalidate, onError: onErr });
@@ -56,6 +59,9 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
   const setTribeMonitor = api.staff.setTribeMonitor.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignHostel = api.staff.assignHostel.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignRoom = api.staff.assignRoom.useMutation({ onSuccess: invalidate, onError: onErr });
+  const setPrimaryDepartment = api.departmentOperations.setPrimaryDepartment.useMutation({ onSuccess: invalidate, onError: onErr });
+  const addSecondaryDepartment = api.departmentOperations.addSecondaryDepartment.useMutation({ onSuccess: () => { setAddSecondaryId(""); invalidate(); }, onError: onErr });
+  const removePerson = api.departmentOperations.removePerson.useMutation({ onSuccess: invalidate, onError: onErr });
 
   const assignCampus = api.user.assignCampusToRep.useMutation({
     onSuccess: () => {
@@ -160,6 +166,41 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
           {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
         </Select>
       </div>
+
+      {(() => {
+        const secondaryMemberships = memberships.filter((membership) => !membership.isPrimary);
+        const takenIds = new Set(memberships.map((membership) => membership.departmentId));
+        const addableDepartments = departments.filter((department: any) => !takenIds.has(department.id));
+        return (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-neutral-700">Secondary departments</label>
+            {secondaryMemberships.length === 0 ? (
+              <p className="text-sm text-neutral-500">None</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {secondaryMemberships.map((membership) => (
+                  <li key={membership.departmentId} className="flex items-center justify-between gap-2 rounded-lg bg-surface-raised px-2.5 py-1.5 text-sm">
+                    <span className="text-neutral-900">{membership.departmentName}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button" className="text-xs font-medium text-accent-700 hover:underline" onClick={() => setPrimaryDepartment.mutate({ staffId, departmentId: membership.departmentId })}>Make primary</button>
+                      <button type="button" className="text-xs font-medium text-danger-700 hover:underline" onClick={() => membership.roles.forEach((role) => removePerson.mutate({ assignmentId: role.assignmentId }))}>Remove</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {profile.departmentId && (
+              <div className="mt-2 flex items-center gap-2">
+                <Select value={addSecondaryId} onChange={(e) => setAddSecondaryId(e.target.value)}>
+                  <option value="">Add to another department…</option>
+                  {addableDepartments.map((department: any) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                </Select>
+                <Button variant="secondary" disabled={!addSecondaryId} loading={addSecondaryDepartment.isPending} onClick={() => addSecondaryDepartment.mutate({ staffId, departmentId: addSecondaryId })}>Add</Button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-sm text-neutral-700">

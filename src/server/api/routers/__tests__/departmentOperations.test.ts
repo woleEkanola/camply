@@ -50,6 +50,21 @@ describe("JD-driven department operations", () => {
 
     const departments = await prisma.department.findMany({ where: { campId, deletedAt: null } });
     expect(departments).toHaveLength(20);
+    for (const department of departments) {
+      expect(department.jdKey, department.name).toBeTruthy();
+    }
+
+    // Renaming a JD-installed department must not cause a re-install to
+    // create a duplicate — matching should fall back to the stable jdKey.
+    const registrationBeforeRename = await prisma.department.findFirstOrThrow({ where: { campId, name: "Registration" } });
+    await prisma.department.update({ where: { id: registrationBeforeRename.id }, data: { name: "Registration Team (renamed)" } });
+    const third = await owner.departmentOperations.installJd({ campId, overwriteExisting: false });
+    expect(third.departmentsCreated).toBe(0);
+    const departmentsAfterRename = await prisma.department.findMany({ where: { campId, deletedAt: null } });
+    expect(departmentsAfterRename).toHaveLength(20);
+    const renamed = await prisma.department.findUniqueOrThrow({ where: { id: registrationBeforeRename.id } });
+    expect(renamed.name).toBe("Registration Team (renamed)");
+    await prisma.department.update({ where: { id: registrationBeforeRename.id }, data: { name: "Registration" } });
     const vmd = departments.find((department) => department.name === "Venue Management Department (VMD)");
     expect(vmd).toBeTruthy();
     vmdId = vmd!.id;

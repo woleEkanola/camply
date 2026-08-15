@@ -131,6 +131,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [bulkVenueId, setBulkVenueId] = useState("");
   const [departmentAllocatorOpen, setDepartmentAllocatorOpen] = useState(false);
   const [departmentStrategy, setDepartmentStrategy] = useState<"PREFERENCE" | "BALANCED" | "GENDER_BALANCED">("PREFERENCE");
+  const [departmentMode, setDepartmentMode] = useState<"FILL_UNASSIGNED" | "INCLUDE_RETIRED">("FILL_UNASSIGNED");
 
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allLoadedItems, setAllLoadedItems] = useState<any[]>([]);
@@ -174,6 +175,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     { organizationId, campId },
     { enabled: !!organizationId && !!campId && type === "TEACHER" }
   );
+  const { data: departmentPreview, isFetching: departmentPreviewLoading } = api.staff.previewDepartmentAssignment.useQuery(
+    { organizationId, campId, strategy: departmentStrategy, mode: departmentMode },
+    { enabled: !!organizationId && !!campId && type === "TEACHER" && departmentAllocatorOpen }
+  );
 
   useEffect(() => {
     if (data?.items) {
@@ -193,6 +198,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     utils.staff.adminList.invalidate();
     utils.staff.stats.invalidate();
     utils.staff.departmentAssignmentMetrics.invalidate();
+    utils.staff.previewDepartmentAssignment.invalidate();
     setSelectedIds([]);
   };
 
@@ -703,7 +709,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
 
       <Dialog open={departmentAllocatorOpen} onClose={() => setDepartmentAllocatorOpen(false)} title="Auto-assign unassigned teachers" size="lg">
         <div className="space-y-5">
-          <p className="text-sm text-txt-secondary">Existing manual assignments are preserved. Only approved, unassigned teachers are allocated, and full departments are skipped.</p>
+          <p className="text-sm text-txt-secondary">Existing manual assignments are preserved. Full departments are skipped.</p>
           <div className="grid gap-3 sm:grid-cols-3">
             {([
               ["PREFERENCE", "Preference first", "Use the form choice first, then place overflow in the least-filled available department."],
@@ -716,6 +722,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
               </button>
             ))}
           </div>
+          <label className="flex items-start gap-2 text-sm text-txt-secondary">
+            <input type="checkbox" className="mt-0.5" checked={departmentMode === "INCLUDE_RETIRED"} onChange={(event) => setDepartmentMode(event.target.checked ? "INCLUDE_RETIRED" : "FILL_UNASSIGNED")} />
+            <span>Also reassign teachers whose department was deleted, archived, or merged into another one (not just teachers with no department at all).</span>
+          </label>
           <div className="max-h-52 overflow-y-auto rounded-lg border border-border-default">
             {departmentMetrics?.departments.map((department: any) => (
               <div key={department.id} className="flex items-center justify-between border-b border-border-subtle px-3 py-2 last:border-0">
@@ -724,9 +734,18 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
               </div>
             ))}
           </div>
+          <div>
+            <p className="mb-2 text-sm font-semibold text-txt-primary">Preview{departmentPreview ? ` — ${departmentPreview.totals.preferenceMatched} of ${departmentPreview.totals.count} get their preference` : ""}</p>
+            {departmentPreviewLoading ? <p className="text-sm text-txt-secondary">Calculating…</p> : !departmentPreview?.items.length ? <p className="text-sm text-txt-secondary">No one matches this mode right now.</p> : <div className="max-h-52 overflow-y-auto rounded-lg border border-border-default">
+              {departmentPreview.items.map((item) => <div key={item.teacherId} className="flex items-center justify-between border-b border-border-subtle px-3 py-2 text-sm last:border-0">
+                <span className="text-txt-primary">{item.firstName} {item.lastName}</span>
+                <span className={cn("text-xs font-medium", item.targetDepartmentId ? (item.preferenceMatched ? "text-success-700" : "text-txt-secondary") : "text-danger-700")}>{item.targetDepartmentName ?? "No department available"}{item.targetDepartmentId && item.preferenceMatched ? " · preference" : ""}</span>
+              </div>)}
+            </div>}
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setDepartmentAllocatorOpen(false)}>Cancel</Button>
-            <Button loading={autoAssignToDepartments.isPending} disabled={!departmentMetrics?.unassigned} onClick={() => autoAssignToDepartments.mutate({ organizationId, campId, strategy: departmentStrategy })}>Assign {departmentMetrics?.unassigned ?? 0} unassigned</Button>
+            <Button loading={autoAssignToDepartments.isPending} disabled={!departmentPreview?.totals.count} onClick={() => autoAssignToDepartments.mutate({ organizationId, campId, strategy: departmentStrategy, mode: departmentMode })}>Assign {departmentPreview?.totals.count ?? 0} teacher{departmentPreview?.totals.count === 1 ? "" : "s"}</Button>
           </div>
         </div>
       </Dialog>

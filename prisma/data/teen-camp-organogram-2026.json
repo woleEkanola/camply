@@ -4,101 +4,121 @@
   "departments": [
     {
       "name": "Camp Board",
+      "jdKey": "camp-board",
       "parent": null,
       "displayOrder": 0
     },
     {
       "name": "Camp Command",
+      "jdKey": "camp-command",
       "parent": "Camp Board",
       "displayOrder": 1
     },
     {
       "name": "People & Programmes",
+      "jdKey": "people-programmes",
       "parent": "Camp Command",
       "displayOrder": 2
     },
     {
       "name": "Operations",
+      "jdKey": "operations",
       "parent": "Camp Command",
       "displayOrder": 3
     },
     {
       "name": "Registration",
+      "jdKey": "registration",
       "parent": "People & Programmes",
       "displayOrder": 10
     },
     {
       "name": "Programme & Protocol",
+      "jdKey": "programme-protocol",
       "parent": "People & Programmes",
       "displayOrder": 11
     },
     {
       "name": "Prayer",
+      "jdKey": "prayer",
       "parent": "People & Programmes",
       "displayOrder": 12
     },
     {
       "name": "Counselling",
+      "jdKey": "counselling",
       "parent": "People & Programmes",
       "displayOrder": 13
     },
     {
       "name": "Games & Recreation",
+      "jdKey": "games-recreation",
       "parent": "People & Programmes",
       "displayOrder": 14
     },
     {
       "name": "Food & Catering",
+      "jdKey": "food-catering",
       "parent": "People & Programmes",
       "displayOrder": 15
     },
     {
       "name": "Accommodation",
+      "jdKey": "accommodation",
       "parent": "People & Programmes",
       "displayOrder": 16
     },
     {
       "name": "Tribe Heads",
+      "jdKey": "tribe-heads",
       "parent": "People & Programmes",
       "displayOrder": 17
     },
     {
       "name": "Facilities",
+      "jdKey": "facilities",
       "parent": "Operations",
       "displayOrder": 20
     },
     {
       "name": "Venue Management Department (VMD)",
+      "jdKey": "venue-management-department",
       "parent": "Operations",
       "displayOrder": 21
     },
     {
       "name": "Medical",
+      "jdKey": "medical",
       "parent": "Operations",
       "displayOrder": 22
     },
     {
       "name": "Security",
+      "jdKey": "security",
       "parent": "Operations",
       "displayOrder": 23
     },
     {
       "name": "Transport & Logistics",
+      "jdKey": "transport-logistics",
       "parent": "Operations",
       "displayOrder": 24
     },
     {
       "name": "IT & Digital Systems",
+      "jdKey": "it-digital-systems",
       "parent": "Operations",
       "displayOrder": 25
     },
     {
       "name": "Communications",
+      "jdKey": "communications",
       "parent": "Operations",
       "displayOrder": 26
     },
     {
       "name": "Media",
+      "jdKey": "media",
       "parent": "Operations",
       "displayOrder": 27
     }

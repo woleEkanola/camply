@@ -49,14 +49,25 @@ export async function seedTeenCampDepartments(
   const departments = new Map<string, { id: string; name: string }>();
 
   for (const definition of jd.departments) {
-    const existing = await db.department.findFirst({
-      where: {
-        organizationId: input.organizationId,
-        campId: input.campId,
-        name: definition.name,
-        deletedAt: null,
-      },
-    });
+    // Match by the stable jdKey first (immune to admin renames); fall back
+    // to exact name for departments installed before jdKey existed.
+    const existing =
+      (await db.department.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          campId: input.campId,
+          jdKey: definition.jdKey,
+          deletedAt: null,
+        },
+      })) ??
+      (await db.department.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          campId: input.campId,
+          name: definition.name,
+          deletedAt: null,
+        },
+      }));
 
     const sourceUnit = jd.units.find(
       (unit) => unit.departmentName === definition.name && departmentRoleKind(unit) === "HEAD"
@@ -85,8 +96,11 @@ export async function seedTeenCampDepartments(
         where: { id: existing.id },
         data: {
           ...data,
-          displayOrder: definition.displayOrder,
-          status: "ACTIVE",
+          // Only force status/displayOrder back to the JD's values when the
+          // admin explicitly asked to overwrite — otherwise re-installing
+          // silently un-archives departments or discards manual ordering.
+          ...(input.overwriteExisting ? { displayOrder: definition.displayOrder, status: "ACTIVE" } : {}),
+          jdKey: existing.jdKey ?? definition.jdKey,
           enableProgrammeTriggeredTasks: jd.units.some((unit) => unit.departmentName === definition.name && unit.tasks.some((task) => task.routine.includes("PROGRAMME"))),
         },
       });
@@ -98,6 +112,7 @@ export async function seedTeenCampDepartments(
           organizationId: input.organizationId,
           campId: input.campId,
           name: definition.name,
+          jdKey: definition.jdKey,
           systemKey: definition.name === "Camp Command" ? "CAMP_COMMAND" : null,
           displayOrder: definition.displayOrder,
           status: "ACTIVE",

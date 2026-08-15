@@ -1535,8 +1535,12 @@ model Department {
   enableRoutineChecklists              Boolean                        @default(true)
   enableProgrammeTriggeredTasks        Boolean                        @default(false)
   enableDeadlineReminders              Boolean                        @default(true)
-  status                               String                         @default("ACTIVE") // ACTIVE | INACTIVE
+  status                               String                         @default("ACTIVE") // ACTIVE | INACTIVE | ARCHIVED
   maxCapacity                          Int? // null = unlimited; mirrors Tribe.maxCapacity
+  jdKey                                String? // stable identity from the JD document; null for admin-authored departments
+  mergedIntoId                         String?
+  mergedInto                           Department?                    @relation("DepartmentMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom                           Department[]                   @relation("DepartmentMerge")
   positions                            Position[]
   announcements                        DepartmentAnnouncement[]
   documents                            DepartmentDocument[]
@@ -1555,7 +1559,9 @@ model Department {
   // prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([organizationId, campId, name])
   @@index([campId, systemKey])
+  @@index([campId, jdKey])
   @@index([parentDepartmentId, displayOrder])
+  @@index([mergedIntoId])
   @@index([deletedAt])
 }
 
@@ -1756,6 +1762,7 @@ model PositionAssignment {
   startDate   DateTime           @default(now())
   endDate     DateTime?
   isCurrent   Boolean            @default(true)
+  isPrimary   Boolean            @default(false) // whether this is the staff member's primary department (vs. a secondary one)
   accessMode  CommandAccessMode?
   permissions String[]           @default([])
   reason      String?
@@ -1765,6 +1772,7 @@ model PositionAssignment {
   @@index([positionId])
   @@index([staffId])
   @@index([isCurrent])
+  @@index([staffId, isCurrent, isPrimary])
 }
 
 model DepartmentChecklistItem {

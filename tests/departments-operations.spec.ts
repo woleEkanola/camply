@@ -149,7 +149,7 @@ test.describe("JD Departments and daily operations", () => {
 
     await page.getByRole("button", { name: "List view" }).click();
     await expect(page.getByRole("columnheader", { name: "Department" })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "Venue Management Department (VMD)" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Venue Management Department (VMD)", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Card view" }).click();
     await expect(page.getByRole("button").filter({ hasText: "Venue Management Department (VMD)" })).toBeVisible();
 
@@ -237,7 +237,8 @@ test.describe("JD Departments and daily operations", () => {
     await page.getByRole("button", { name: "Assign Departments" }).click();
     await expect(page.getByRole("heading", { name: "Auto-assign unassigned teachers" })).toBeVisible();
     await page.getByRole("button", { name: /Balance capacity/ }).click();
-    await page.getByRole("button", { name: /Assign 1 unassigned/ }).click();
+    await expect(page.getByRole("button", { name: /Assign 1 teacher/ })).toBeEnabled({ timeout: 15_000 });
+    await page.getByRole("button", { name: /Assign 1 teacher/ }).click();
     await expect.poll(async () => (await prisma.staffProfile.findUniqueOrThrow({ where: { id: teacherId } })).departmentId).not.toBeNull();
   });
 

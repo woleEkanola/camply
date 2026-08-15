@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { logEvent } from "../../audit";
 import { seedTeenCampDepartments } from "../../departments/jdSeed";
+import { DepartmentMergeError, mergeDepartmentInTx } from "../../departments/merge";
 import {
   activeStaffProfileForUser,
   currentPositionIdsForStaff,
@@ -9,6 +10,7 @@ import {
   ensureDepartmentExecutions,
   isDepartmentLeader,
 } from "../../departments/operations";
+import { suggestDepartmentMatch } from "../../departments/reconciliation";
 import { syncStaffProfileFromPositions } from "../../utils/hierarchySync";
 import { assertCanManageCamp } from "../trpc/scoping";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
@@ -96,6 +98,133 @@ export const departmentOperationsRouter = createTRPCRouter({
         });
         return result;
       }, { timeout: 30_000 });
+    }),
+
+  // Read-only: never writes anything. Splits a camp's departments into the
+  // ones the 2026 JD already recognizes (jdKey set) and the stray ones left
+  // over from before "Install 2026 JD" was run (or admin-authored since),
+  // with a suggested JD target for each stray one. The admin reviews and
+  // confirms via applyReconciliation — nothing here is auto-applied.
+  reconciliationPlan: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const camp = await assertCanManageCamp(ctx, input.campId, "CAMP_STRUCTURE");
+      const departments = await ctx.prisma.department.findMany({
+        where: { organizationId: camp.organizationId, campId: input.campId, deletedAt: null },
+        select: { id: true, name: true, jdKey: true, systemKey: true, status: true },
+        orderBy: { name: "asc" },
+      });
+
+      const matched = departments.filter((department: any) => department.jdKey);
+      const unmatched = departments.filter((department: any) => !department.jdKey && department.systemKey !== "CAMP_COMMAND");
+      const unmatchedIds = unmatched.map((department: any) => department.id);
+
+      const [staffCounts, preferredCounts, positionCounts, checklistCounts, childCounts] = unmatchedIds.length
+        ? await Promise.all([
+            ctx.prisma.staffProfile.groupBy({ by: ["departmentId"], where: { departmentId: { in: unmatchedIds }, deletedAt: null, status: { in: ["PENDING", "APPROVED"] } }, _count: { _all: true } }),
+            ctx.prisma.staffProfile.groupBy({ by: ["preferredDepartmentId"], where: { preferredDepartmentId: { in: unmatchedIds }, deletedAt: null }, _count: { _all: true } }),
+            ctx.prisma.position.groupBy({ by: ["departmentId"], where: { departmentId: { in: unmatchedIds }, deletedAt: null }, _count: { _all: true } }),
+            ctx.prisma.departmentChecklistItem.groupBy({ by: ["departmentId"], where: { departmentId: { in: unmatchedIds } }, _count: { _all: true } }),
+            ctx.prisma.department.groupBy({ by: ["parentDepartmentId"], where: { parentDepartmentId: { in: unmatchedIds }, deletedAt: null }, _count: { _all: true } }),
+          ])
+        : [[], [], [], [], []];
+      const toMap = (rows: any[], key: string) => new Map(rows.map((row) => [row[key], row._count._all]));
+      const staffByDept = toMap(staffCounts, "departmentId");
+      const preferredByDept = toMap(preferredCounts, "preferredDepartmentId");
+      const positionsByDept = toMap(positionCounts, "departmentId");
+      const checklistByDept = toMap(checklistCounts, "departmentId");
+      const childByDept = toMap(childCounts, "parentDepartmentId");
+
+      const candidates = matched.map((department: any) => ({ department, name: department.name }));
+      const unmatchedPlan = unmatched.map((department: any) => {
+        const suggestion = suggestDepartmentMatch(department.name, candidates);
+        return {
+          id: department.id,
+          name: department.name,
+          staffCount: staffByDept.get(department.id) ?? 0,
+          preferredByCount: preferredByDept.get(department.id) ?? 0,
+          currentPositionCount: positionsByDept.get(department.id) ?? 0,
+          childCount: childByDept.get(department.id) ?? 0,
+          checklistItemCount: checklistByDept.get(department.id) ?? 0,
+          suggestedTargetId: suggestion?.department.id ?? null,
+          suggestedTargetName: suggestion?.department.name ?? null,
+          confidence: suggestion?.confidence ?? "NONE",
+        };
+      });
+
+      return {
+        jdInstalled: matched.length > 0,
+        matched: matched.map((department: any) => ({ id: department.id, name: department.name })),
+        unmatched: unmatchedPlan,
+      };
+    }),
+
+  // Applies admin-confirmed reconciliation decisions. Each decision runs in
+  // its own transaction and contributes its own pass/fail result — one bad
+  // merge must not roll back every other decision in the same batch.
+  applyReconciliation: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      decisions: z.array(z.object({
+        sourceId: z.string(),
+        action: z.enum(["MERGE", "KEEP", "ARCHIVE"]),
+        targetId: z.string().optional(),
+      })).min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const camp = await assertCanManageCamp(ctx, input.campId, "CAMP_STRUCTURE");
+      const results: Array<{ sourceId: string; action: string; ok: boolean; error?: string; summary?: unknown }> = [];
+
+      for (const decision of input.decisions) {
+        try {
+          if (decision.action === "KEEP") {
+            results.push({ sourceId: decision.sourceId, action: decision.action, ok: true });
+            continue;
+          }
+
+          if (decision.action === "ARCHIVE") {
+            await ctx.prisma.$transaction(async (tx: any) => {
+              const department = await tx.department.findUniqueOrThrow({ where: { id: decision.sourceId } });
+              if (department.organizationId !== camp.organizationId || department.campId !== input.campId) {
+                throw new TRPCError({ code: "BAD_REQUEST", message: "Department does not belong to this camp." });
+              }
+              if (department.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be archived." });
+              await tx.department.update({ where: { id: decision.sourceId }, data: { status: "ARCHIVED" } });
+              await tx.departmentActivityLog.create({ data: { departmentId: decision.sourceId, action: "DEPT_ARCHIVED", actorId: ctx.userId } });
+              await writeAudit(tx, { organizationId: camp.organizationId, actorId: ctx.userId, action: "DEPARTMENT_ARCHIVED", subjectType: "DEPARTMENT", subjectId: decision.sourceId });
+            });
+            results.push({ sourceId: decision.sourceId, action: decision.action, ok: true });
+            continue;
+          }
+
+          if (decision.action === "MERGE") {
+            if (!decision.targetId) throw new TRPCError({ code: "BAD_REQUEST", message: "A merge target is required." });
+            const [sourceDept, targetDept] = await Promise.all([
+              ctx.prisma.department.findUniqueOrThrow({ where: { id: decision.sourceId } }),
+              ctx.prisma.department.findUniqueOrThrow({ where: { id: decision.targetId } }),
+            ]);
+            if (sourceDept.organizationId !== camp.organizationId || sourceDept.campId !== input.campId || targetDept.campId !== input.campId) {
+              throw new TRPCError({ code: "BAD_REQUEST", message: "Both departments must belong to this camp." });
+            }
+            const summary = await ctx.prisma.$transaction(
+              (tx: any) => mergeDepartmentInTx(tx, { sourceId: decision.sourceId, targetId: decision.targetId!, actorId: ctx.userId }),
+              { timeout: 30_000 }
+            );
+            results.push({ sourceId: decision.sourceId, action: decision.action, ok: true, summary });
+            continue;
+          }
+        } catch (error) {
+          if (error instanceof DepartmentMergeError) {
+            results.push({ sourceId: decision.sourceId, action: decision.action, ok: false, error: error.message });
+          } else if (error instanceof TRPCError) {
+            results.push({ sourceId: decision.sourceId, action: decision.action, ok: false, error: error.message });
+          } else {
+            results.push({ sourceId: decision.sourceId, action: decision.action, ok: false, error: "Failed to apply this decision." });
+          }
+        }
+      }
+
+      return { results };
     }),
 
   list: protectedProcedure
@@ -277,13 +406,43 @@ export const departmentOperationsRouter = createTRPCRouter({
         if (["HEAD", "ASSISTANT_HEAD"].includes(position.roleKind)) {
           await tx.positionAssignment.updateMany({ where: { positionId: position.id, isCurrent: true }, data: { isCurrent: false, endDate: new Date() } });
         }
-        const assignment = await tx.positionAssignment.create({ data: { positionId: position.id, staffId: input.staffId, startDate: input.startDate ? new Date(input.startDate) : new Date(), endDate: input.endDate ? new Date(input.endDate) : null, isCurrent: true, reason: input.reason } });
+        const assignment = await tx.positionAssignment.create({ data: { positionId: position.id, staffId: input.staffId, startDate: input.startDate ? new Date(input.startDate) : new Date(), endDate: input.endDate ? new Date(input.endDate) : null, isCurrent: true, isPrimary: !secondary, reason: input.reason } });
         if (!secondary && !staff.departmentId) {
           await tx.staffProfile.update({ where: { id: input.staffId }, data: { departmentId: position.departmentId } });
         }
         await syncStaffProfileFromPositions(tx, input.staffId);
         await writeAudit(tx, { organizationId: position.camp.organizationId, actorId: ctx.userId, action: secondary ? "DEPARTMENT_SECONDARY_ASSIGNMENT_CREATED" : "DEPARTMENT_PERSON_ASSIGNED", subjectType: "POSITION_ASSIGNMENT", subjectId: assignment.id, newValue: { ...input, secondary } });
         await tx.notification.create({ data: { organizationId: position.camp.organizationId, userId: staff.userId, title: secondary ? "Secondary department assigned" : "Department role assigned", body: `You have been assigned to ${position.name}.`, link: "/teacher/departments?view=mine", status: "SENT" } });
+        return assignment;
+      });
+    }),
+
+  // Convenience wrapper around assignPerson for the common case: attach
+  // someone to another department as a secondary member without making the
+  // admin pick a specific role first. Finds or creates a generic "Member"
+  // position in that department. Role-specific secondary assignment (e.g.
+  // making them that department's Assistant Leader) still goes through the
+  // department workspace's own role picker, which calls assignPerson directly.
+  addSecondaryDepartment: protectedProcedure
+    .input(z.object({ staffId: z.string(), departmentId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const department = await ctx.prisma.department.findFirst({ where: { id: input.departmentId, deletedAt: null }, select: { id: true, name: true, campId: true, organizationId: true } });
+      if (!department?.campId) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertManage(ctx, department.id);
+      const staff = await ctx.prisma.staffProfile.findFirst({ where: { id: input.staffId, campId: department.campId, organizationId: department.organizationId, deletedAt: null } });
+      if (!staff) throw new TRPCError({ code: "BAD_REQUEST", message: "The selected person does not belong to this camp" });
+      if (!staff.departmentId) throw new TRPCError({ code: "BAD_REQUEST", message: "Assign a primary department before adding secondary departments." });
+      if (staff.departmentId === department.id) throw new TRPCError({ code: "BAD_REQUEST", message: "This is already the person's primary department." });
+
+      return ctx.prisma.$transaction(async (tx: any) => {
+        const position = await tx.position.findFirst({ where: { campId: department.campId, departmentId: department.id, roleKind: "MEMBER", deletedAt: null } })
+          ?? await tx.position.create({ data: { campId: department.campId, departmentId: department.id, name: `${department.name} Member`, roleKind: "MEMBER" } });
+        const duplicate = await tx.positionAssignment.findFirst({ where: { staffId: input.staffId, positionId: position.id, isCurrent: true }, select: { id: true } });
+        if (duplicate) throw new TRPCError({ code: "CONFLICT", message: "This person already belongs to this department." });
+        const assignment = await tx.positionAssignment.create({ data: { positionId: position.id, staffId: input.staffId, isCurrent: true, isPrimary: false } });
+        await syncStaffProfileFromPositions(tx, input.staffId);
+        await writeAudit(tx, { organizationId: department.organizationId, actorId: ctx.userId, action: "DEPARTMENT_SECONDARY_ASSIGNMENT_CREATED", subjectType: "POSITION_ASSIGNMENT", subjectId: assignment.id, newValue: { staffId: input.staffId, departmentId: department.id } });
+        await tx.notification.create({ data: { organizationId: department.organizationId, userId: staff.userId, title: "Secondary department assigned", body: `You have been added to ${department.name}.`, link: "/teacher/departments?view=mine", status: "SENT" } });
         return assignment;
       });
     }),
@@ -312,17 +471,85 @@ export const departmentOperationsRouter = createTRPCRouter({
       if (!assignment.position.departmentId || !target.departmentId || assignment.position.campId !== target.campId) throw new TRPCError({ code: "BAD_REQUEST", message: "Both roles must belong to the same camp." });
       await assertManage(ctx, assignment.position.departmentId);
       if (target.departmentId !== assignment.position.departmentId) await assertManage(ctx, target.departmentId);
+      const wasPrimary = assignment.staff.departmentId === assignment.position.departmentId;
       return ctx.prisma.$transaction(async (tx: any) => {
         await tx.positionAssignment.update({ where: { id: assignment.id }, data: { isCurrent: false, endDate: new Date(), reason: input.reason ?? assignment.reason } });
         if (["HEAD", "ASSISTANT_HEAD"].includes(target.roleKind)) await tx.positionAssignment.updateMany({ where: { positionId: target.id, isCurrent: true }, data: { isCurrent: false, endDate: new Date() } });
-        const moved = await tx.positionAssignment.create({ data: { positionId: target.id, staffId: assignment.staffId, startDate: new Date(), isCurrent: true, reason: input.reason } });
-        if (assignment.staff.departmentId === assignment.position.departmentId && target.departmentId !== assignment.position.departmentId) {
+        const moved = await tx.positionAssignment.create({ data: { positionId: target.id, staffId: assignment.staffId, startDate: new Date(), isCurrent: true, isPrimary: wasPrimary, reason: input.reason } });
+        if (wasPrimary && target.departmentId !== assignment.position.departmentId) {
           await tx.staffProfile.update({ where: { id: assignment.staffId }, data: { departmentId: target.departmentId } });
         }
         await syncStaffProfileFromPositions(tx, assignment.staffId);
         await writeAudit(tx, { organizationId: target.camp.organizationId, actorId: ctx.userId, action: "DEPARTMENT_PERSON_MOVED", subjectType: "POSITION_ASSIGNMENT", subjectId: moved.id, reason: input.reason, previousValue: { assignmentId: assignment.id, positionId: assignment.positionId }, newValue: { positionId: target.id } });
         await tx.notification.create({ data: { organizationId: target.camp.organizationId, userId: assignment.staff.userId, title: "Department role changed", body: `You have been moved to ${target.name}.`, link: "/teacher/departments?view=mine", status: "SENT" } });
         return moved;
+      });
+    }),
+
+  // Admin-facing: every department a given staff member currently belongs
+  // to, with which one is primary and which roles they hold in each. Used by
+  // the staff assignments tab to show secondary departments alongside the
+  // primary picker — `myDepartments` above is self-service only (it derives
+  // the staff profile from the caller's own session).
+  staffDepartmentMemberships: protectedProcedure
+    .input(z.object({ staffId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const staff = await ctx.prisma.staffProfile.findUniqueOrThrow({ where: { id: input.staffId }, select: { id: true, organizationId: true, campId: true, departmentId: true } });
+      if (!isAdmin(ctx, staff.organizationId)) {
+        try { await assertCanManageCamp(ctx, staff.campId, "CAMP_STRUCTURE"); } catch { throw new TRPCError({ code: "FORBIDDEN" }); }
+      }
+      const assignments = await ctx.prisma.positionAssignment.findMany({
+        where: { staffId: input.staffId, isCurrent: true, OR: [{ endDate: null }, { endDate: { gte: new Date() } }], position: { departmentId: { not: null }, deletedAt: null } },
+        select: { id: true, isPrimary: true, position: { select: { id: true, name: true, roleKind: true, departmentId: true } } },
+      });
+      const departmentIds = [...new Set(assignments.map((assignment: any) => assignment.position.departmentId as string))];
+      if (staff.departmentId) departmentIds.push(staff.departmentId);
+      const uniqueIds = [...new Set(departmentIds)];
+      if (!uniqueIds.length) return [];
+      const departments = await ctx.prisma.department.findMany({ where: { id: { in: uniqueIds } }, select: { id: true, name: true, status: true, deletedAt: true } });
+      const departmentsById = new Map(departments.map((department: any) => [department.id, department]));
+      const byDepartment = new Map<string, { assignmentId: string; positionName: string; roleKind: string }[]>();
+      for (const assignment of assignments) {
+        const departmentId = assignment.position.departmentId as string;
+        byDepartment.set(departmentId, [...(byDepartment.get(departmentId) ?? []), { assignmentId: assignment.id, positionName: assignment.position.name, roleKind: assignment.position.roleKind }]);
+      }
+      return uniqueIds
+        .map((departmentId) => {
+          const department = departmentsById.get(departmentId);
+          const roles = byDepartment.get(departmentId) ?? [];
+          return {
+            departmentId,
+            departmentName: department?.name ?? "Unknown department",
+            departmentActive: !!department && !department.deletedAt && department.status === "ACTIVE",
+            isPrimary: departmentId === staff.departmentId,
+            roles,
+          };
+        })
+        .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.departmentName.localeCompare(b.departmentName));
+    }),
+
+  // Promotes a department the staff member already holds a role in to their
+  // primary department, demoting the incumbent — without tearing down and
+  // recreating any PositionAssignment rows (their startDate/history survive).
+  setPrimaryDepartment: protectedProcedure
+    .input(z.object({ staffId: z.string(), departmentId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const staff = await ctx.prisma.staffProfile.findUniqueOrThrow({ where: { id: input.staffId }, select: { id: true, organizationId: true, departmentId: true, userId: true } });
+      if (staff.departmentId === input.departmentId) return { success: true, departmentId: input.departmentId };
+      const hasRoleInTarget = await ctx.prisma.positionAssignment.count({ where: { staffId: input.staffId, isCurrent: true, position: { departmentId: input.departmentId, deletedAt: null } } });
+      if (!hasRoleInTarget) throw new TRPCError({ code: "BAD_REQUEST", message: "Assign this person to a role in that department first." });
+      await assertManage(ctx, input.departmentId);
+      if (staff.departmentId) await assertManage(ctx, staff.departmentId);
+
+      return ctx.prisma.$transaction(async (tx: any) => {
+        if (staff.departmentId) {
+          await tx.positionAssignment.updateMany({ where: { staffId: input.staffId, isCurrent: true, isPrimary: true, position: { departmentId: staff.departmentId } }, data: { isPrimary: false } });
+        }
+        await tx.positionAssignment.updateMany({ where: { staffId: input.staffId, isCurrent: true, position: { departmentId: input.departmentId } }, data: { isPrimary: true } });
+        await tx.staffProfile.update({ where: { id: input.staffId }, data: { departmentId: input.departmentId } });
+        await syncStaffProfileFromPositions(tx, input.staffId);
+        await writeAudit(tx, { organizationId: staff.organizationId, actorId: ctx.userId, action: "DEPARTMENT_PRIMARY_CHANGED", subjectType: "STAFF_PROFILE", subjectId: input.staffId, previousValue: { departmentId: staff.departmentId }, newValue: { departmentId: input.departmentId } });
+        return { success: true, departmentId: input.departmentId };
       });
     }),
 
@@ -371,13 +598,15 @@ export const departmentOperationsRouter = createTRPCRouter({
           OR: [{ endDate: null }, { endDate: { gte: new Date() } }],
           position: { campId: input.campId, departmentId: { not: null }, status: "ACTIVE", deletedAt: null },
         },
-        select: { position: { select: { departmentId: true, name: true } } },
+        select: { isPrimary: true, position: { select: { departmentId: true, name: true } } },
       });
       const rolesByDepartment = new Map<string, string[]>();
+      const primaryDepartmentIds = new Set<string>();
       for (const assignment of assignments) {
         const departmentId = assignment.position.departmentId;
         if (!departmentId) continue;
         rolesByDepartment.set(departmentId, [...(rolesByDepartment.get(departmentId) ?? []), assignment.position.name]);
+        if (assignment.isPrimary) primaryDepartmentIds.add(departmentId);
       }
       const departmentIds = new Set(rolesByDepartment.keys());
       if (profile.departmentId) departmentIds.add(profile.departmentId);
@@ -387,11 +616,19 @@ export const departmentOperationsRouter = createTRPCRouter({
         select: { id: true, name: true, displayOrder: true },
         orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       });
+      // Only trust the persisted per-assignment flag once at least one of
+      // this person's current assignments actually carries it — rows created
+      // outside assignPerson (e.g. direct writes predating this column, or
+      // future migrations/imports) default isPrimary to false and would
+      // otherwise report every department as non-primary. When nothing is
+      // marked primary yet, fall back to StaffProfile.departmentId for all
+      // departments, exactly like before this flag existed.
+      const anyPersistedPrimary = primaryDepartmentIds.size > 0;
       return departments
         .map((department) => ({
           id: department.id,
           name: department.name,
-          isPrimary: department.id === profile.departmentId,
+          isPrimary: anyPersistedPrimary && rolesByDepartment.has(department.id) ? primaryDepartmentIds.has(department.id) : department.id === profile.departmentId,
           roles: rolesByDepartment.get(department.id) ?? [],
         }))
         .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.name.localeCompare(b.name));
@@ -423,7 +660,7 @@ export const departmentOperationsRouter = createTRPCRouter({
         where: { id: departmentId },
         include: {
           parentDepartment: { select: { id: true, name: true } },
-          positions: { where: { assignments: { some: { staffId: profile.id, isCurrent: true, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] } } }, select: { id: true, name: true, roleKind: true, purpose: true, responsibilities: true, authority: true, successMeasures: true } },
+          positions: { where: { assignments: { some: { staffId: profile.id, isCurrent: true, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] } } }, select: { id: true, name: true, roleKind: true, purpose: true, responsibilities: true, authority: true, successMeasures: true, assignments: { where: { staffId: profile.id, isCurrent: true }, select: { isPrimary: true } } } },
         },
       });
       const duties = await ctx.prisma.departmentChecklistExecution.findMany({
@@ -431,7 +668,18 @@ export const departmentOperationsRouter = createTRPCRouter({
         orderBy: [{ routine: "asc" }, { dueAt: "asc" }, { createdAt: "asc" }],
       });
       const leader = await isDepartmentLeader(ctx.prisma, ctx.userId, department.id);
-      return { profile, department, duties, isPrimary: department.id === profile.departmentId, canManage: leader, canAdd: leader || department.allowMembersAddChecklistItems, canEdit: leader || department.allowMembersEditChecklistItems, canDeactivate: leader || department.allowMembersDeactivateChecklistItems };
+      // Only trust the persisted per-assignment flag once at least one of
+      // this person's current assignments (in any department) actually
+      // carries it — rows created outside assignPerson default isPrimary to
+      // false and would otherwise report every department as non-primary.
+      // When nothing is marked primary yet, fall back to
+      // StaffProfile.departmentId, exactly like before this flag existed.
+      const hasAnyPersistedPrimary = (await ctx.prisma.positionAssignment.count({ where: { staffId: profile.id, isCurrent: true, isPrimary: true } })) > 0;
+      const isPrimary = hasAnyPersistedPrimary
+        ? department.positions.some((position: any) => position.assignments.some((assignment: any) => assignment.isPrimary))
+        : department.id === profile.departmentId;
+      const departmentForClient = { ...department, positions: department.positions.map((position: any) => { const { assignments, ...rest } = position; return rest; }) };
+      return { profile, department: departmentForClient, duties, isPrimary, canManage: leader, canAdd: leader || department.allowMembersAddChecklistItems, canEdit: leader || department.allowMembersEditChecklistItems, canDeactivate: leader || department.allowMembersDeactivateChecklistItems };
     }),
 
   updateExecution: protectedProcedure

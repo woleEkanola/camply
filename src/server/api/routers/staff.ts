@@ -15,6 +15,7 @@ import { hashPassword } from "../../../lib/auth";
 import { isCompleteNigerianPhone } from "../../../lib/phone";
 import { ensureStaffQrToken, regenerateStaffQrToken } from "../../staff/idToken";
 import { assertDepartmentHasCapacity, DepartmentCapacityError, getDepartmentAvailability } from "../../staff/departmentCapacity";
+import { loadAutoAssignContext, rankDepartmentCandidates, resolvePreferredDepartmentId, simulateAssignmentPlan } from "../../staff/departmentAssignment";
 
 
 async function requireStaffProfile(ctx: { prisma: any; userId: string }) {
@@ -996,61 +997,70 @@ export const staffRouter = createTRPCRouter({
       };
     }),
 
+  // Read-only: runs the exact same ranking `autoAssignToDepartments` uses,
+  // simulated in memory, so an admin can see who lands where — including
+  // whether their preference resolves through a merge — before anything is
+  // written.
+  previewDepartmentAssignment: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string(), strategy: z.enum(["PREFERENCE", "BALANCED", "GENDER_BALANCED"]).default("PREFERENCE"), mode: z.enum(["FILL_UNASSIGNED", "INCLUDE_RETIRED"]).default("FILL_UNASSIGNED") }))
+    .query(async ({ ctx, input }) => {
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
+      const context = await loadAutoAssignContext(ctx.prisma, input);
+      if (!context) throw new TRPCError({ code: "BAD_REQUEST", message: "No active departments found." });
+
+      const plan = simulateAssignmentPlan({
+        teachers: context.teachers,
+        departments: context.departments,
+        initialCounts: context.counts,
+        initialGenderCounts: context.genderCounts,
+        strategy: input.strategy,
+        departmentsById: context.departmentsById,
+      });
+      const departmentNames = new Map(context.departments.map((department: any) => [department.id, department.name]));
+      const teachersById = new Map(context.teachers.map((teacher: any) => [teacher.id, teacher]));
+
+      const items = plan.map((item) => {
+        const teacher = teachersById.get(item.teacherId);
+        return {
+          ...item,
+          firstName: teacher?.firstName ?? "",
+          lastName: teacher?.lastName ?? "",
+          currentDepartmentId: teacher?.departmentId ?? null,
+          currentDepartmentName: teacher?.departmentId ? departmentNames.get(teacher.departmentId) ?? null : null,
+          targetDepartmentName: item.targetDepartmentId ? departmentNames.get(item.targetDepartmentId) ?? null : null,
+        };
+      });
+      return {
+        strategy: input.strategy,
+        mode: input.mode,
+        items,
+        totals: {
+          count: items.filter((item) => item.targetDepartmentId).length,
+          preferenceMatched: items.filter((item) => item.preferenceMatched).length,
+          unassigned: items.filter((item) => !item.targetDepartmentId).length,
+        },
+      };
+    }),
+
   autoAssignToDepartments: protectedProcedure
-    .input(z.object({ organizationId: z.string(), campId: z.string(), strategy: z.enum(["PREFERENCE", "BALANCED", "GENDER_BALANCED"]).default("PREFERENCE") }))
+    .input(z.object({ organizationId: z.string(), campId: z.string(), strategy: z.enum(["PREFERENCE", "BALANCED", "GENDER_BALANCED"]).default("PREFERENCE"), mode: z.enum(["FILL_UNASSIGNED", "INCLUDE_RETIRED"]).default("FILL_UNASSIGNED") }))
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdminOrCampusRep(ctx, input.organizationId);
 
-      const teachers = await ctx.prisma.staffProfile.findMany({
-        where: { organizationId: input.organizationId, campId: input.campId, type: "TEACHER", status: "APPROVED", departmentId: null, deletedAt: null },
-        orderBy: { submittedAt: "asc" },
-      });
-
-      const depts = await ctx.prisma.department.findMany({
-        where: { organizationId: input.organizationId, campId: input.campId, status: "ACTIVE", deletedAt: null },
-        orderBy: { name: "asc" },
-      });
-
-      if (depts.length === 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "No active departments found." });
-      }
-
-      const availability = await getDepartmentAvailability(ctx.prisma, depts.map((department: any) => department.id));
-      const assigned = await ctx.prisma.staffProfile.findMany({
-        where: { departmentId: { in: depts.map((department: any) => department.id) }, status: { in: ["PENDING", "APPROVED"] }, deletedAt: null },
-        select: { departmentId: true, gender: true },
-      });
-      const counts = new Map(depts.map((department: any) => [department.id, availability.get(department.id)?.count ?? 0]));
-      const genderCounts = new Map<string, Map<string, number>>();
-      for (const person of assigned) {
-        const gender = person.gender?.toUpperCase() || "UNSPECIFIED";
-        const byGender = genderCounts.get(person.departmentId!) ?? new Map<string, number>();
-        byGender.set(gender, (byGender.get(gender) ?? 0) + 1);
-        genderCounts.set(person.departmentId!, byGender);
-      }
+      const context = await loadAutoAssignContext(ctx.prisma, input);
+      if (!context) throw new TRPCError({ code: "BAD_REQUEST", message: "No active departments found." });
+      const { teachers, departments, departmentsById } = context;
+      const counts = context.counts;
+      const genderCounts = context.genderCounts;
+      const totalPopulation = teachers.length + [...counts.values()].reduce((sum, value) => sum + value, 0);
 
       let count = 0;
       let preferenceMatched = 0;
       let fallbackAssigned = 0;
       for (const teacher of teachers) {
+        const resolvedPreferredDepartmentId = resolvePreferredDepartmentId(teacher.preferredDepartmentId, departmentsById);
+        const candidates = rankDepartmentCandidates(teacher, resolvedPreferredDepartmentId, departments, counts, genderCounts, input.strategy, totalPopulation);
         const gender = teacher.gender?.toUpperCase() || "UNSPECIFIED";
-        const candidates = depts
-          .filter((department: any) => department.maxCapacity == null || (counts.get(department.id) ?? 0) < department.maxCapacity)
-          .sort((left: any, right: any) => {
-            const leftCount = counts.get(left.id) ?? 0;
-            const rightCount = counts.get(right.id) ?? 0;
-            const leftFill = left.maxCapacity ? leftCount / left.maxCapacity : leftCount / Math.max(1, teachers.length + assigned.length);
-            const rightFill = right.maxCapacity ? rightCount / right.maxCapacity : rightCount / Math.max(1, teachers.length + assigned.length);
-            if (input.strategy === "PREFERENCE") {
-              const preference = Number(right.id === teacher.preferredDepartmentId) - Number(left.id === teacher.preferredDepartmentId);
-              if (preference) return preference;
-            }
-            if (input.strategy === "GENDER_BALANCED") {
-              const genderDifference = (genderCounts.get(left.id)?.get(gender) ?? 0) - (genderCounts.get(right.id)?.get(gender) ?? 0);
-              if (genderDifference) return genderDifference;
-            }
-            return leftFill - rightFill || leftCount - rightCount || Number(right.id === teacher.preferredDepartmentId) - Number(left.id === teacher.preferredDepartmentId) || left.name.localeCompare(right.name);
-          });
 
         for (const department of candidates) {
           try {
@@ -1063,15 +1073,15 @@ export const staffRouter = createTRPCRouter({
             byGender.set(gender, (byGender.get(gender) ?? 0) + 1);
             genderCounts.set(department.id, byGender);
             count++;
-            if (department.id === teacher.preferredDepartmentId) preferenceMatched++;
-            else if (teacher.preferredDepartmentId) fallbackAssigned++;
+            if (department.id === resolvedPreferredDepartmentId) preferenceMatched++;
+            else if (resolvedPreferredDepartmentId) fallbackAssigned++;
             break;
           } catch (error) {
             if (!(error instanceof DepartmentCapacityError)) throw error;
           }
         }
       }
-      return { success: true, count, preferenceMatched, fallbackAssigned, unassigned: teachers.length - count, strategy: input.strategy };
+      return { success: true, count, preferenceMatched, fallbackAssigned, unassigned: teachers.length - count, strategy: input.strategy, mode: input.mode };
     }),
 });
 
