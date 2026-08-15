@@ -545,10 +545,22 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       </BulkActionBar>
 
       {/* Stats Cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard
+          data-testid="camper-stat-approved"
+          label="Total Approved"
+          value={statsData?.approvedCount ?? 0}
+          selected={statusFilter === "APPROVED" && genderFilter === ""}
+          onClick={() => {
+            setCursor(undefined);
+            setAllCampers([]);
+            setGenderFilter("");
+            setStatusFilter((prev) => (prev === "APPROVED" ? "" : "APPROVED"));
+          }}
+        />
         <StatCard
           data-testid="camper-stat-in-camp"
-          label="In Camp"
+          label="Checked In"
           value={statsData?.inCampCount ?? 0}
           tone="info"
           selected={statusFilter === "CHECKED_IN" && genderFilter === ""}

@@ -654,8 +654,6 @@ function RegistrationsPage() {
       ) : (
         <div>
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-6">
-            <StatCard data-testid="registration-stat-male" label="Male" value={maleCount} tone="info" />
-            <StatCard data-testid="registration-stat-female" label="Female" value={femaleCount} tone="attention" />
             <StatCard
               label="Total Registrations"
               value={statsTotalCount}
@@ -666,6 +664,8 @@ function RegistrationsPage() {
                 setDuplicatesOnly(false);
               }}
             />
+            <StatCard data-testid="registration-stat-male" label="Male" value={maleCount} tone="info" />
+            <StatCard data-testid="registration-stat-female" label="Female" value={femaleCount} tone="attention" />
             <StatCard
               label="Duplicates"
               value={statsData?.duplicateCount ?? 0}

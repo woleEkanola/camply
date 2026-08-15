@@ -642,9 +642,9 @@ export function MobileRegistrationsView({
   };
 
   const statCards = [
+    { label: "All", value: stats.totalCount ?? registrations.length, statusKey: "", valueColor: "text-neutral-900" },
     { label: "Male", value: stats.maleCount ?? 0, statusKey: null, valueColor: "text-blue-600" },
     { label: "Female", value: stats.femaleCount ?? 0, statusKey: null, valueColor: "text-purple-600" },
-    { label: "All", value: stats.totalCount ?? registrations.length, statusKey: "", valueColor: "text-neutral-900" },
     ...(isTwoStep
       ? [
           { label: "Pending", value: stats.awaitingVettingCount ?? 0, statusKey: "REVIEW_AWAITING_VETTING", valueColor: "text-amber-600" },

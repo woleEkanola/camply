@@ -312,8 +312,11 @@ export const camperRouter = createTRPCRouter({
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "COMPLETED" } } } }),
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, tribeId: { not: null } } } } }),
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "APPROVED" } } } }),
-        ctx.prisma.camper.count({ where: { ...where, gender: { equals: "MALE", mode: "insensitive" }, registrations: { some: { ...registrationScope, status: "CHECKED_IN" } } } }),
-        ctx.prisma.camper.count({ where: { ...where, gender: { equals: "FEMALE", mode: "insensitive" }, registrations: { some: { ...registrationScope, status: "CHECKED_IN" } } } }),
+        // Male/female breakdown covers everyone who has physically come
+        // through camp — still checked in, or already checked out — not
+        // just those currently on-site.
+        ctx.prisma.camper.count({ where: { ...where, gender: { equals: "MALE", mode: "insensitive" }, registrations: { some: { ...registrationScope, status: { in: ["CHECKED_IN", "COMPLETED"] } } } } }),
+        ctx.prisma.camper.count({ where: { ...where, gender: { equals: "FEMALE", mode: "insensitive" }, registrations: { some: { ...registrationScope, status: { in: ["CHECKED_IN", "COMPLETED"] } } } } }),
       ]);
 
       return { totalCount, maleCount, femaleCount, otherCount, inCampCount, exitedCampCount, assignedTribeCount, approvedCount, checkedInMaleCount, checkedInFemaleCount };
