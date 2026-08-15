@@ -11,6 +11,7 @@ import {
   buildCorrectionEmail,
   buildRejectedEmail,
   buildWaitlistedEmail,
+  buildTribeChangedEmail,
   buildStaffApprovedEmail,
   buildStaffRejectedEmail,
   buildWelcomeEmail,
@@ -118,6 +119,7 @@ type EmailEventKey =
   | "REGISTRATION_SUBMITTED"
   | "CORRECTION_REQUESTED"
   | "REGISTRATION_WAITLISTED"
+  | "TRIBE_CHANGED"
   | "STAFF_APPROVED"
   | "STAFF_REJECTED"
   | "OTP_EMAIL"
@@ -138,6 +140,7 @@ const EVENT_ASSEMBLERS: Record<EmailEventKey, (p: {
   REGISTRATION_SUBMITTED: buildSubmittedEmail,
   CORRECTION_REQUESTED: buildCorrectionEmail,
   REGISTRATION_WAITLISTED: buildWaitlistedEmail,
+  TRIBE_CHANGED: buildTribeChangedEmail,
   STAFF_APPROVED: buildStaffApprovedEmail,
   STAFF_REJECTED: buildStaffRejectedEmail,
   OTP_EMAIL: buildOtpEmail,

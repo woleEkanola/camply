@@ -193,9 +193,17 @@ function UserDashboard() {
                         </div>
                         <p className="text-xs text-txt-secondary">{activeReg?.campus?.name ?? camper.homeCampus?.name ?? "No campus"}</p>
                         {activeReg ? (
-                          <div className="mt-1 flex items-center gap-2">
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
                             <span className="text-xs text-txt-secondary">{activeReg.camp?.name}</span>
                             <StatusBadge status={activeReg.status} labelOverrides={PARENT_STATUS_LABELS} />
+                            {activeReg.tribe && (
+                              <span
+                                className="rounded-full border px-2 py-0.5 text-xs font-medium"
+                                style={{ borderColor: activeReg.tribe.color ?? "#E67E22", color: activeReg.tribe.color ?? "#E67E22" }}
+                              >
+                                🏳️ {activeReg.tribe.name}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <p className="mt-1 text-xs text-txt-muted">Not registered for current camp</p>

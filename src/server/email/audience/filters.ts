@@ -23,6 +23,10 @@ export const registrationStatusFilter = z.enum([
   "CHECKED_IN",
   "CHECKED_OUT",
   "COMPLETED",
+  // Staff-only status (StaffStatus.DEACTIVATED) — this filter doubles as the
+  // status selector for staff recipient types (see resolver.ts), which use a
+  // completely different enum than Registration.status.
+  "DEACTIVATED",
 ]);
 
 export const dateRangeFilter = z.object({
@@ -45,7 +49,6 @@ export const audienceFilterSchema = z.object({
       tribeId: z.string().optional(),
       hostelId: z.string().optional(),
       departmentId: z.string().optional(),
-      teacherId: z.string().optional(),
       volunteerDepartment: z.string().optional(),
       gender: z.enum(["MALE", "FEMALE", "MIXED"]).optional(),
       ageRange: z

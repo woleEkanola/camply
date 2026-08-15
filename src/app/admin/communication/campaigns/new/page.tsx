@@ -206,8 +206,12 @@ function ComposerInner() {
   };
 
   const handleTestSend = async () => {
-    const to = window.prompt("Send test to email address:");
+    // Test sends always render from sample data (a fake tribe name among
+    // other placeholders) — restricted server-side to the requesting
+    // admin's own address so that data can never reach a real parent.
+    const to = session?.user?.email;
     if (!to || !editor) return;
+    if (!window.confirm(`Send a test email (with sample data) to your address, ${to}?`)) return;
     await previewMut.mutateAsync({
       event: personalize ? "CAMP_INVITATION" : "BROADCAST",
       tiptapJson: editor.getJSON() as Record<string, unknown>,
@@ -244,6 +248,20 @@ function ComposerInner() {
           <CardBody className="space-y-4">
             <Input label="Campaign Name" value={name} onChange={(e: any) => setName(e.target.value)} placeholder="Summer Camp Newsletter" />
             <Input label="Subject" value={subject} onChange={(e: any) => setSubject(e.target.value)} placeholder="Updates for {{camp_name}}" />
+            {personalize && !subject.includes("{{camper_name}}") && (
+              <p className="rounded-lg status-warning px-3 py-2 text-xs">
+                This subject doesn't include the camper's name. A parent with more than one camper here will get
+                several identically-titled emails (for different campers, possibly different tribes) with no way
+                to tell them apart at a glance.{" "}
+                <button
+                  type="button"
+                  className="font-medium underline"
+                  onClick={() => setSubject((s) => (s ? `${s} — {{camper_name}}` : "{{camper_name}}"))}
+                >
+                  Add camper name to subject
+                </button>
+              </p>
+            )}
             <Input label="Preview Text" value={previewText} onChange={(e: any) => setPreviewText(e.target.value)} placeholder="Brief preview shown in inbox" />
           </CardBody>
         </Card>

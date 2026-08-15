@@ -161,6 +161,33 @@ export function buildWaitlistedEmail(p: AssemblerParams): string {
   return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `Waitlisted for ${v.camp_name || "camp"}` });
 }
 
+// ─── TRIBE_CHANGED ──────────────────────────────────────────────────────────
+
+/**
+ * Sent only when a registration's tribe actually *changes* (not a first-time
+ * assignment — that's the approval email's job). Deliberately short and
+ * unambiguous: the whole point is to be the last word on which tribe is
+ * current, for a parent who may be holding an earlier, now-wrong email.
+ */
+export function buildTribeChangedEmail(p: AssemblerParams): string {
+  const v = p.variables;
+  const content = [
+    EmailHero({ illustration: "🏳️" }),
+    StatusBanner({ type: "info", title: "Tribe Updated", subtitle: `${v.camper_name || "Your camper"}'s tribe for ${v.camp_name || "camp"} has changed.` }),
+    InfoCard({
+      rows: [
+        v.previous_tribe_name ? { label: "Previous Tribe", value: v.previous_tribe_name } : null,
+        { label: "Current Tribe", value: v.tribe_name || "" },
+      ].filter((r): r is { label: string; value: string } => !!r && !!r.value),
+    }),
+    BodyText({ text: "Any earlier email naming a different tribe is now out of date — this one is current.", align: "center" }),
+    p.bodyContent ? Section({ children: p.bodyContent }) : "",
+    SupportCard({ supportEmail: p.branding?.supportEmail, supportPhone: p.branding?.supportPhone, websiteUrl: p.branding?.websiteUrl }),
+    EmailFooter({ branding: p.branding }),
+  ].filter(Boolean).join("\n");
+  return EmailLayout({ content, branding: p.branding, previewText: p.previewText || `${v.camper_name || "Your camper"}'s tribe has been updated` });
+}
+
 // ─── STAFF_APPROVED ─────────────────────────────────────────────────────────
 
 export function buildStaffApprovedEmail(p: AssemblerParams): string {

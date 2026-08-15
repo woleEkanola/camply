@@ -75,7 +75,7 @@ export default function CampaignDetail() {
         />
 
         {notice && <div className="rounded-lg border border-accent-200 bg-accent-50 px-4 py-2 text-sm text-accent-800">{notice}</div>}
-        {stale && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">No campaign progress has been recorded for more than two minutes. Use “Send queued now” or verify the email-effects scheduler.</div>}
+        {stale && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">No campaign progress has been recorded for more than two minutes — sending appears to have stalled. Use “Send queued now” below to nudge it, or check back shortly.</div>}
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-neutral-900">{s.total}</div><div className="text-xs text-txt-secondary">Total</div></div>
@@ -96,7 +96,10 @@ export default function CampaignDetail() {
           {campaign.status === "SCHEDULED" && <Button variant="danger" onClick={() => { cancelMut.mutate({ id }); utils.communication.campaignGet.invalidate({ id }); }}>Cancel Schedule</Button>}
           {campaign.status === "SENDING" && <Button variant="secondary" loading={pauseMut.isPending} onClick={async () => { await pauseMut.mutateAsync({ id }); await refresh("Campaign paused. Messages already accepted by Resend are unchanged."); }}>Pause</Button>}
           {campaign.status === "PAUSED" && <Button loading={resumeMut.isPending} onClick={async () => { await resumeMut.mutateAsync({ id }); await refresh("Campaign resumed."); }}>Resume</Button>}
-          {campaign.status === "SENDING" && s.queued > 0 && <Button variant="secondary" loading={kickMut.isPending} onClick={async () => { const result = await kickMut.mutateAsync({ id }); await refresh(`Processed ${result.processed} queued items.`); }}>Send queued now</Button>}
+          {/* Sending is automatic (fires immediately on send, then self-continues
+              until the queue drains) — this is a break-glass nudge for when
+              progress has visibly stalled, not something a healthy send needs. */}
+          {campaign.status === "SENDING" && s.queued > 0 && stale && <Button variant="secondary" loading={kickMut.isPending} onClick={async () => { const result = await kickMut.mutateAsync({ id }); await refresh(`Processed ${result.processed} queued items.`); }}>Send queued now</Button>}
           {s.held > 0 && <Button variant="secondary" loading={retryHeldMut.isPending} onClick={async () => { const result = await retryHeldMut.mutateAsync({ id }); await refresh(`${result.queued} held campers are now queued; ${result.stillHeld} still need attention.`); }}>Retry held campers</Button>}
           {s.failed > 0 && <Button variant="secondary" loading={retryFailedMut.isPending} onClick={async () => { const result = await retryFailedMut.mutateAsync({ id }); await refresh(`${result.retried} failed messages queued for retry.`); }}>Retry failed</Button>}
           {["SENDING", "PAUSED", "NEEDS_ATTENTION"].includes(campaign.status) && <Button variant="danger" size="sm" loading={cancelMut.isPending} onClick={async () => { await cancelMut.mutateAsync({ id }); await refresh("Remaining unsent messages cancelled."); }}>Cancel remaining</Button>}

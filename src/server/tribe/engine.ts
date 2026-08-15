@@ -8,6 +8,7 @@ import { scoreCandidate, computeTargetSize } from "./allocator/scoring";
 import { rankCandidates } from "./allocator/selector";
 import { runAllocationPipeline, simulateAllocation } from "./allocator/pipeline";
 import { ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES } from "../assignments/eligibility";
+import { enqueueTribeChangedEffect } from "../registration/effects";
 
 export { simulateAllocation, runAllocationPipeline };
 export { normalizeRules, DEFAULT_RULES_V2 };
@@ -201,12 +202,42 @@ export async function suggestTribe(tx: TxClient, registrationId: string): Promis
 
 async function assignTribeInTx(
   tx: Prisma.TransactionClient,
-  params: { registrationId: string; tribeId: string; actorId: string | null; method: "AUTOMATIC" | "MANUAL" | "HYBRID_OVERRIDE"; rules?: unknown; preserveExistingAssignment?: boolean },
+  params: {
+    registrationId: string;
+    tribeId: string;
+    actorId: string | null;
+    method: "AUTOMATIC" | "MANUAL" | "HYBRID_OVERRIDE";
+    rules?: unknown;
+    preserveExistingAssignment?: boolean;
+    allowLockedOverride?: boolean;
+    // Separate from preserveExistingAssignment: a CAS race-guard for callers
+    // (bulkAutoAssignTribes) that already pre-filtered by status before
+    // computing assignments — re-checks status hasn't changed since. Not a
+    // general "only active registrations can be assigned" business rule, so
+    // it must not apply to confirmAssignment's default (which legitimately
+    // assigns DRAFT-status registrations mid-recommendation-flow).
+    requireActiveStatus?: boolean;
+    // Out-param: the caller's own transaction wrapper reads this after
+    // commit to decide whether to enqueue a TRIBE_CHANGED notification
+    // email — the notification must never be sent, or its outbox row
+    // created, from inside this transaction (it uses the outer `prisma`
+    // client on a separate connection, and the write here could still roll
+    // back later in the same transaction).
+    outPreviousTribeId?: { current?: string | null };
+  },
 ) {
   const registration = await tx.registration.findUniqueOrThrow({
     where: { id: params.registrationId },
     include: { camper: true },
   });
+
+  // isTribeLocked previously only gated *suggesting* a new tribe
+  // (recommendTribeInTx) — the actual writer never checked it, so locking a
+  // registration protected nothing. A caller that genuinely wants to move a
+  // locked registration must say so explicitly.
+  if (registration.isTribeLocked && !params.allowLockedOverride) {
+    throw new TribeAllocationError("TRIBE_LOCKED", "This registration's tribe assignment is locked.");
+  }
 
   await tx.$queryRaw`SELECT "id" FROM "Tribe" WHERE "id" = ${params.tribeId} FOR UPDATE`;
   const tribe = await tx.tribe.findUniqueOrThrow({ where: { id: params.tribeId } });
@@ -229,16 +260,14 @@ async function assignTribeInTx(
   }
 
   const previousTribeId = registration.tribeId;
+  if (params.outPreviousTribeId) params.outPreviousTribeId.current = previousTribeId;
   if (params.preserveExistingAssignment && previousTribeId) return null;
 
   const updatedResult = await tx.registration.updateMany({
     where: {
       id: registration.id,
-      ...(params.preserveExistingAssignment ? {
-        tribeId: null,
-        status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] },
-        deletedAt: null,
-      } : {}),
+      ...(params.preserveExistingAssignment ? { tribeId: null } : {}),
+      ...(params.requireActiveStatus ? { status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] }, deletedAt: null } : {}),
     },
     data: { tribeId: params.tribeId, tribeAssignedAt: new Date(), tribeAssignmentMethod: params.method },
   });
@@ -257,15 +286,30 @@ async function assignTribeInTx(
   return updated;
 }
 
+/**
+ * Enqueues a TRIBE_CHANGED notification email — deliberately called after
+ * the assignment transaction has committed (using the outer `prisma`, not
+ * `tx`), never from inside it. See assignTribeInTx's `outPreviousTribeId`
+ * doc comment for why.
+ */
+async function maybeEnqueueTribeChanged(out: { current?: string | null } | undefined, registrationId: string) {
+  if (!out?.current) return;
+  const previousTribe = await prisma.tribe.findUnique({ where: { id: out.current }, select: { name: true } });
+  await enqueueTribeChangedEffect({ registrationId, previousTribeId: out.current, previousTribeName: previousTribe?.name ?? "" });
+}
+
 export async function assignTribe(params: {
   registrationId: string;
   tribeId: string;
   actorId: string;
   method?: "AUTOMATIC" | "MANUAL" | "HYBRID_OVERRIDE";
 }) {
-  return prisma.$transaction((tx) =>
-    assignTribeInTx(tx, { ...params, method: params.method ?? "MANUAL" })
+  const out: { current?: string | null } = {};
+  const updated = await prisma.$transaction((tx) =>
+    assignTribeInTx(tx, { ...params, method: params.method ?? "MANUAL", outPreviousTribeId: out })
   );
+  if (updated) await maybeEnqueueTribeChanged(out, updated.id);
+  return updated;
 }
 
 export async function recommendTribeInTx(
@@ -394,7 +438,8 @@ export async function overrideRecommendation(
 export async function confirmAssignmentInTx(
   tx: Prisma.TransactionClient,
   registrationId: string,
-  actorId: string | null
+  actorId: string | null,
+  opts?: { preserveExistingAssignment?: boolean; allowLockedOverride?: boolean; outPreviousTribeId?: { current?: string | null } }
 ) {
   const reg = await tx.registration.findUniqueOrThrow({
     where: { id: registrationId },
@@ -414,12 +459,21 @@ export async function confirmAssignmentInTx(
   }
 
   const method = reg.tribeRecommendationStatus === "MANUAL_OVERRIDE" ? "HYBRID_OVERRIDE" : "AUTOMATIC";
+  // Defaults to true so a caller that doesn't explicitly opt in to
+  // reassignment can never silently overwrite a camper who is already
+  // placed — the bug this default closes moved already-assigned campers
+  // whenever bulkApplySuggestedTribes was called with explicit registrationIds.
+  const preserveExistingAssignment = opts?.preserveExistingAssignment ?? true;
   const updatedReg = await assignTribeInTx(tx, {
     registrationId,
     tribeId: targetTribeId,
     actorId,
     method,
+    preserveExistingAssignment,
+    allowLockedOverride: opts?.allowLockedOverride,
+    outPreviousTribeId: opts?.outPreviousTribeId,
   });
+  if (!updatedReg) return reg;
 
   const finalStatus = reg.tribeRecommendationStatus === "MANUAL_OVERRIDE" ? "MANUAL_OVERRIDE" : "ASSIGNED";
   return tx.registration.update({
@@ -428,8 +482,15 @@ export async function confirmAssignmentInTx(
   });
 }
 
-export async function confirmAssignment(registrationId: string, actorId: string) {
-  return prisma.$transaction((tx) => confirmAssignmentInTx(tx, registrationId, actorId));
+export async function confirmAssignment(
+  registrationId: string,
+  actorId: string,
+  opts?: { preserveExistingAssignment?: boolean; allowLockedOverride?: boolean }
+) {
+  const out: { current?: string | null } = {};
+  const updated = await prisma.$transaction((tx) => confirmAssignmentInTx(tx, registrationId, actorId, { ...opts, outPreviousTribeId: out }));
+  await maybeEnqueueTribeChanged(out, registrationId);
+  return updated;
 }
 
 export async function bulkSuggestTribes(params: {
@@ -463,36 +524,66 @@ export async function bulkSuggestTribes(params: {
   return results;
 }
 
+export interface BulkApplyTribesResult {
+  assigned: { registrationId: string; tribeId?: string }[];
+  skippedAlreadyAssigned: string[];
+  skippedLocked: string[];
+  errors: { registrationId: string; error: string }[];
+}
+
+/**
+ * Applies each registration's `suggestedTribeId` to `tribeId`.
+ *
+ * By default this never moves a registration that's already assigned or
+ * locked — regardless of whether `registrationIds` was supplied. Passing an
+ * explicit selection used to drop that guard entirely (the root cause of
+ * campers getting silently reassigned mid-campaign, see the tribe-email
+ * incident plan); `allowReassign: true` is now the only way to opt into
+ * moving an already-placed camper, and even then a locked registration still
+ * requires the admin to unlock it first.
+ */
 export async function bulkApplySuggestedTribes(params: {
   campId: string;
   registrationIds?: string[];
   actorId: string;
-}) {
+  allowReassign?: boolean;
+}): Promise<BulkApplyTribesResult> {
   const whereClause: Prisma.RegistrationWhereInput = {
     campId: params.campId,
     deletedAt: null,
     suggestedTribeId: { not: null },
     ...(params.registrationIds && params.registrationIds.length > 0
       ? { id: { in: params.registrationIds } }
-      : { tribeId: null }),
+      : {}),
   };
 
-  const registrations = await prisma.registration.findMany({
+  const candidates = await prisma.registration.findMany({
     where: whereClause,
-    select: { id: true },
+    select: { id: true, tribeId: true },
   });
 
-  const results: { registrationId: string; tribeId?: string; error?: string }[] = [];
-  for (const reg of registrations) {
+  const result: BulkApplyTribesResult = { assigned: [], skippedAlreadyAssigned: [], skippedLocked: [], errors: [] };
+
+  for (const reg of candidates) {
+    if (!params.allowReassign && reg.tribeId) {
+      result.skippedAlreadyAssigned.push(reg.id);
+      continue;
+    }
     try {
-      const updated = await confirmAssignment(reg.id, params.actorId);
-      results.push({ registrationId: reg.id, tribeId: updated.tribeId ?? undefined });
+      const updated = await confirmAssignment(reg.id, params.actorId, {
+        preserveExistingAssignment: !params.allowReassign,
+      });
+      result.assigned.push({ registrationId: reg.id, tribeId: updated.tribeId ?? undefined });
     } catch (err) {
-      results.push({ registrationId: reg.id, error: err instanceof Error ? err.message : String(err) });
+      if (err instanceof TribeAllocationError && err.code === "TRIBE_LOCKED") {
+        result.skippedLocked.push(reg.id);
+      } else {
+        result.errors.push({ registrationId: reg.id, error: err instanceof Error ? err.message : String(err) });
+      }
     }
   }
 
-  return results;
+  return result;
 }
 
 export async function autoAssignTribeOnApproval(registrationId: string) {
@@ -510,14 +601,16 @@ export async function autoAssignTribeOnApproval(registrationId: string) {
 }
 
 export async function reassignTribe(params: { registrationId: string; tribeId: string; actorId: string; reason?: string }) {
+  const out: { current?: string | null } = {};
   const result = await prisma.$transaction(async (tx) => {
-    const updated = await assignTribeInTx(tx, { ...params, method: "MANUAL" });
+    const updated = await assignTribeInTx(tx, { ...params, method: "MANUAL", outPreviousTribeId: out });
     if (!updated) throw new TribeAllocationError("ASSIGNMENT_NOT_APPLIED", "The tribe assignment was not applied.");
     return tx.registration.update({
       where: { id: updated.id },
       data: { tribeRecommendationStatus: "MANUAL_OVERRIDE" },
     });
   });
+  await maybeEnqueueTribeChanged(out, result.id);
 
   if (params.reason) {
     await logEvent(prisma, {
@@ -589,6 +682,7 @@ export async function bulkAutoAssignTribes(params: { campId: string; actorId: st
         actorId: params.actorId,
         method: "AUTOMATIC",
         preserveExistingAssignment: true,
+        requireActiveStatus: true,
       }));
       results.push(updated
         ? { registrationId: assignment.registrationId, tribeId: updated.tribeId ?? undefined }

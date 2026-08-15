@@ -44,6 +44,7 @@ export const EMAIL_VARIABLES: EmailVariable[] = [
   // Tribe
   { key: "tribe_name", label: "Tribe Name", category: "camp", sampleValue: "Tribe of Judah" },
   { key: "tribe_color", label: "Tribe Color", category: "camp", sampleValue: "#E53935" },
+  { key: "previous_tribe_name", label: "Previous Tribe Name", category: "camp", sampleValue: "Tribe of Reuben" },
 
   // Accommodation (Camp Invitation email — omitted from the certificate when unassigned)
   { key: "hostel_name", label: "Hostel Name", category: "camp", sampleValue: "Grace Hostel" },

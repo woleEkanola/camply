@@ -280,6 +280,17 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
   },
 ];
 
+const DASHBOARD_GROUPS: NavGroup[] = [
+  {
+    name: "Dashboard",
+    items: [
+      { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
+      { name: "Documents", href: "/dashboard/documents", icon: DocumentTextIcon },
+      { name: "Profile", href: "/profile", icon: UserGroupIcon },
+    ],
+  },
+];
+
 const CAMPUS_REP_GROUPS: NavGroup[] = [
   {
     name: "Dashboard",
@@ -332,6 +343,8 @@ export function getNavGroups(
       groups = CAMPUS_REP_GROUPS;
       break;
     case "dashboard":
+      groups = DASHBOARD_GROUPS;
+      break;
     case "super-admin":
       return [];
   }
@@ -408,6 +421,11 @@ export function getBottomNavItems(
         { name: "My Tribe", href: "/campus-rep-dashboard/tribe", icon: UserGroupIcon },
       ];
     case "dashboard":
+      return [
+        { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
+        { name: "Documents", href: "/dashboard/documents", icon: DocumentTextIcon },
+        { name: "Profile", href: "/profile", icon: UserGroupIcon },
+      ];
     case "super-admin":
       return [];
   }

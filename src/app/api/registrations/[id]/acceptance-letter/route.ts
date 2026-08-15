@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const registration = await prisma.registration.findUnique({
     where: { id },
-    include: { camper: true, camp: true, campus: true },
+    include: { camper: true, camp: true, campus: true, tribe: { select: { name: true } } },
   });
   if (!registration) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -40,6 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       reportingDate: (registration.camp as any).arrivalDate?.toDateString?.() ?? undefined,
       qrDataUrl,
       instructionsHtml: (registration.camp as any).remindersHtml,
+      tribeName: registration.tribe?.name ?? null,
     });
 
     return new NextResponse(pdfBytes, {

@@ -184,6 +184,30 @@ export const DEFAULT_TEMPLATES: Record<string, DefaultTemplate> = {
     },
   },
 
+  TRIBE_CHANGED: {
+    name: "Tribe Updated",
+    description: "Sent when a camper's tribe changes after they were already assigned one — a correction, not a first-time assignment",
+    subject: "{{camper_name}}'s tribe has been updated",
+    previewText: "Your camper's tribe has changed.",
+    content: {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Tribe Update" }] },
+        { type: "paragraph", content: [
+          { type: "text", marks: [{ type: "bold" }], text: "{{camper_name}}" },
+          { type: "text", text: "'s tribe for " },
+          { type: "text", marks: [{ type: "bold" }], text: "{{camp_name}}" },
+          { type: "text", text: " has changed." },
+        ] },
+        { type: "paragraph", content: [
+          { type: "text", marks: [{ type: "bold" }], text: "Current Tribe: " },
+          { type: "text", text: "{{tribe_name}}" },
+        ] },
+        { type: "paragraph", content: [{ type: "text", text: "Any earlier email naming a different tribe is now out of date — this one is current." }] },
+      ],
+    },
+  },
+
   STAFF_APPROVED: {
     name: "Staff Approved",
     description: "Sent when a teacher or volunteer application is approved",
@@ -312,7 +336,7 @@ export const DEFAULT_TEMPLATES: Record<string, DefaultTemplate> = {
   },
 };
 
-/** All 10 event keys in a convenient array. CAMP_INVITATION is
+/** All 11 event keys in a convenient array. CAMP_INVITATION is
  * campaign-triggered only — it deliberately has no EmailEventConfig
  * automatic-trigger binding (see src/server/email/campaign/sender.ts). */
 export const ALL_EVENT_KEYS = [
@@ -321,6 +345,7 @@ export const ALL_EVENT_KEYS = [
   "REGISTRATION_SUBMITTED",
   "CORRECTION_REQUESTED",
   "REGISTRATION_WAITLISTED",
+  "TRIBE_CHANGED",
   "STAFF_APPROVED",
   "STAFF_REJECTED",
   "OTP_EMAIL",

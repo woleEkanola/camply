@@ -7,6 +7,14 @@ const assertOrgAdmin = (ctx: any, organizationId: string) =>
   assertOrgAdminOrCommand(ctx, organizationId, "ACCOMMODATION");
 import * as accommodationEngine from "../../accommodation/engine";
 import { ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES } from "../../assignments/eligibility";
+import { normalizeGender } from "../../../lib/gender";
+
+function hostelGenderBucket(gender: string | null): "MALE" | "FEMALE" | "MIXED" {
+  const normalized = gender?.trim().toUpperCase();
+  if (normalized === "MALE") return "MALE";
+  if (normalized === "FEMALE") return "FEMALE";
+  return "MIXED"; // unspecified or explicitly MIXED — open to any gender, same as suggestBed's hard filter
+}
 
 // Hostel/Room/Bed management is admin-only: Campus Representatives do not
 // manage camp operations (per PRD), so there is deliberately no campus-rep
@@ -25,10 +33,10 @@ export const accommodationRouter = createTRPCRouter({
         ctx.prisma.tribe.count({ where: { campId: camp.id, status: "ACTIVE", deletedAt: null } }),
         ctx.prisma.registration.findMany({
           where: { campId: camp.id, status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] }, deletedAt: null },
-          select: { id: true, status: true, venueId: true, tribeId: true, roomId: true, camper: { select: { gender: true } } },
+          select: { id: true, status: true, venueId: true, tribeId: true, roomId: true, camper: { select: { name: true, gender: true } } },
         }),
-        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, type: "TEACHER", status: "APPROVED", deletedAt: null }, select: { id: true, assignedVenueId: true, assignedTribeId: true, assignedRoomId: true, gender: true } }),
-        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, status: "APPROVED", deletedAt: null }, select: { id: true, assignedVenueId: true, assignedRoomId: true, gender: true } }),
+        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, type: "TEACHER", status: "APPROVED", deletedAt: null }, select: { id: true, firstName: true, lastName: true, assignedVenueId: true, assignedTribeId: true, assignedRoomId: true, gender: true } }),
+        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, status: "APPROVED", deletedAt: null }, select: { id: true, firstName: true, lastName: true, assignedVenueId: true, assignedRoomId: true, gender: true } }),
       ]);
 
       const venueSummaries = await Promise.all(venues.map(async (venue) => {
@@ -41,9 +49,47 @@ export const accommodationRouter = createTRPCRouter({
         const campers = assignableCampers.filter((person) => person.venueId === venue.id);
         const staff = approvedStaff.filter((person) => person.assignedVenueId === venue.id);
         const teachers = approvedTeachers.filter((person) => person.assignedVenueId === venue.id);
-        const unassignedPeople = campers.filter((person) => !person.roomId).length + staff.filter((person) => !person.assignedRoomId).length;
+        const unassignedCampers = campers.filter((person) => !person.roomId);
+        const unassignedStaff = staff.filter((person) => !person.assignedRoomId);
+        const unassignedPeople = unassignedCampers.length + unassignedStaff.length;
         const availableBeds = beds.filter((bed) => bed.status === "AVAILABLE" && !bed.registrationId && !bed.staffProfileId).length;
         const occupiedBeds = beds.filter((bed) => !!bed.registrationId || !!bed.staffProfileId).length;
+
+        // Gender-aware breakdown — capacityShortfall above is a raw
+        // headcount vs. bed count and stays silent when, say, 30 free beds
+        // are all in a FEMALE hostel and the 30 unassigned people are all
+        // male. Mirrors suggestBed's own hard gender filter (engine.ts) so
+        // "ready to assign" here actually predicts what bulkAutoAssignBeds
+        // will do.
+        const availableBedsByGender = { MALE: 0, FEMALE: 0, MIXED: 0 };
+        for (const hostel of hostels) {
+          const bucket = hostelGenderBucket(hostel.gender);
+          const free = hostel.rooms.reduce((sum, room) => sum + room.beds.filter((bed) => bed.status === "AVAILABLE" && !bed.registrationId && !bed.staffProfileId).length, 0);
+          availableBedsByGender[bucket] += free;
+        }
+        const unassignedByGender = { MALE: 0, FEMALE: 0, UNKNOWN: 0 };
+        const missingGenderPeople: { name: string; kind: "CAMPER" | "STAFF" }[] = [];
+        for (const camper of unassignedCampers) {
+          const gender = normalizeGender(camper.camper.gender);
+          if (gender) unassignedByGender[gender] += 1;
+          else { unassignedByGender.UNKNOWN += 1; missingGenderPeople.push({ name: camper.camper.name, kind: "CAMPER" }); }
+        }
+        for (const member of unassignedStaff) {
+          const gender = normalizeGender(member.gender);
+          if (gender) unassignedByGender[gender] += 1;
+          else { unassignedByGender.UNKNOWN += 1; missingGenderPeople.push({ name: `${member.firstName} ${member.lastName}`.trim(), kind: "STAFF" }); }
+        }
+        // Conservative on purpose: MIXED beds can serve any gender, but a
+        // MALE/FEMALE bed can't serve the other, so crediting MIXED capacity
+        // toward one gender's shortfall risks understating the other's.
+        // MIXED beds are reported separately so an admin can reconcile the
+        // remainder by hand.
+        const genderShortfall = {
+          MALE: Math.max(0, unassignedByGender.MALE - availableBedsByGender.MALE),
+          FEMALE: Math.max(0, unassignedByGender.FEMALE - availableBedsByGender.FEMALE),
+          UNKNOWN: Math.max(0, unassignedByGender.UNKNOWN - availableBedsByGender.MIXED),
+        };
+
         return {
           id: venue.id,
           name: venue.name,
@@ -58,6 +104,10 @@ export const accommodationRouter = createTRPCRouter({
           campersWithoutTribe: campers.filter((person) => !person.tribeId).length,
           teachersWithoutTribe: teachers.filter((person) => !person.assignedTribeId).length,
           capacityShortfall: Math.max(0, unassignedPeople - availableBeds),
+          availableBedsByGender,
+          unassignedByGender,
+          genderShortfall,
+          missingGenderPeople,
         };
       }));
 
@@ -484,6 +534,7 @@ export const accommodationRouter = createTRPCRouter({
             occupant: {
               kind: "CAMPER",
               registrationId: registration.id,
+              name: registration.camper.name,
               gender: registration.camper.gender,
               dateOfBirth: registration.camper.dateOfBirth,
               groupId: registration.tribeId,

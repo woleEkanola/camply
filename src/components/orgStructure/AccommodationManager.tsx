@@ -8,6 +8,7 @@ import { Input, Select } from "@/components/ui/Input";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
+import { BED_FAILURE_MESSAGES, type BedFailureReason } from "@/lib/bedFailureMessages";
 
 // ─── Bulk Room Dialog ─────────────────────────────────────────────────────────
 
@@ -489,6 +490,7 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ type: "hostel" | "room" | "bed"; id: string; label: string } | null>(null);
   const [autoAssignSummary, setAutoAssignSummary] = useState("");
+  const [autoAssignExceptions, setAutoAssignExceptions] = useState<{ name: string; kind: "CAMPER" | "STAFF"; reason?: BedFailureReason; error?: string }[]>([]);
 
   const invalidate = () => utils.accommodation.listHostels.invalidate({ venueId });
 
@@ -518,12 +520,13 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
   const bulkAutoAssignBeds = api.accommodation.bulkAutoAssignBeds.useMutation({
     onSuccess: (results) => {
       const assigned = results.filter((r) => r.bedId).length;
-      const failed = results.length - assigned;
-      setAutoAssignSummary(
-        failed > 0
-          ? `${assigned} assigned, ${failed} could not be placed — no matching-gender bed available.`
-          : `${assigned} assigned.`
-      );
+      // preserved rows already had a bed before this run — they're neither
+      // a new success nor a failure, and counting them as failed (as
+      // `results.length - assigned` used to) overstated how many people
+      // actually couldn't be placed.
+      const failed = results.filter((r) => !r.bedId && !r.preserved);
+      setAutoAssignSummary(failed.length > 0 ? `${assigned} assigned, ${failed.length} could not be placed — see details below.` : `${assigned} assigned.`);
+      setAutoAssignExceptions(failed.map((r) => ({ name: r.name, kind: r.kind, reason: r.reason, error: r.error })));
       invalidate();
     },
     onError: (err) => setError(err.message),
@@ -570,7 +573,16 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
       {autoAssignSummary && (
         <div className="mb-4 rounded-md bg-accent-50 p-3 text-sm text-accent-700">
           <span>{autoAssignSummary}</span>
-          <button onClick={() => setAutoAssignSummary("")} className="ml-3 text-xs underline">Dismiss</button>
+          <button onClick={() => { setAutoAssignSummary(""); setAutoAssignExceptions([]); }} className="ml-3 text-xs underline">Dismiss</button>
+          {autoAssignExceptions.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-xs text-accent-800">
+              {autoAssignExceptions.map((exception, index) => (
+                <li key={`${exception.name}-${index}`}>
+                  {exception.name} ({exception.kind === "STAFF" ? "Staff" : "Camper"}) — {exception.reason ? BED_FAILURE_MESSAGES[exception.reason].summary : exception.error}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

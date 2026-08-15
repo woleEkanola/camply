@@ -107,6 +107,42 @@ export async function sendWaitlistEmail(params: { to: string; camperName: string
   });
 }
 
+export async function sendTribeChangedEmail(params: {
+  to: string;
+  camperName: string;
+  campName: string;
+  previousTribeName: string;
+  tribeName: string;
+  tribeColor?: string | null;
+  viewUrl: string;
+  orgSlug?: string;
+  organizationId?: string;
+}) {
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  const { from, replyTo } = await resolveFromAddress({
+    organizationId: params.organizationId,
+    event: "TRIBE_CHANGED",
+  });
+  await resend.emails.send({
+    from,
+    to: params.to,
+    subject: `${params.camperName}'s tribe has been updated`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color:#E67E22;">Tribe Update</h2>
+        <p><strong>${params.camperName}</strong>'s tribe for <strong>${params.campName}</strong> has changed.</p>
+        ${params.previousTribeName ? `<p>Previous tribe: ${params.previousTribeName}</p>` : ""}
+        <p style="font-size: 18px;">New tribe: <strong style="color:${params.tribeColor ?? "#E67E22"}">${params.tribeName}</strong></p>
+        <p>Any earlier email naming a different tribe is now out of date — this one is current.</p>
+        <p><a href="${params.viewUrl}">View Registration</a></p>
+      </div>
+    `,
+    replyTo,
+  });
+}
+
 export async function sendSubmissionEmail(params: { to: string; camperName: string; campName: string; orgSlug?: string; organizationId?: string }) {
   if (!resend) {
     resend = new Resend(process.env.RESEND_API_KEY);

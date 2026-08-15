@@ -974,6 +974,16 @@ export const communicationRouter = createTRPCRouter({
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       const oid = orgId(ctx);
 
+      // A real send is only ever rendered from sample data (getSampleData()
+      // below) — including a fake tribe name unrelated to any real camper.
+      // Restricting the recipient to the requesting admin's own address is
+      // what stops that fake data from ever reaching a real parent, which is
+      // exactly how this shipped once: an admin free-typed an arbitrary
+      // address into a "send test to" prompt.
+      if (input.to && input.to.toLowerCase() !== currentUser.email?.toLowerCase()) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Test emails can only be sent to your own address." });
+      }
+
       const variables = { ...getSampleData(), ...input.variables };
 
       const { unknownTokens } = validateTemplate({
@@ -1067,7 +1077,7 @@ export const communicationRouter = createTRPCRouter({
         await resend.emails.send({
           from,
           to: input.to,
-          subject: interpolatedSubject,
+          subject: `[TEST] ${interpolatedSubject}`,
           html,
           replyTo,
         });
@@ -1703,6 +1713,11 @@ export const communicationRouter = createTRPCRouter({
           senderMode: original.senderMode,
           customFromLocalPart: original.customFromLocalPart,
           replyTo: original.replyTo,
+          // Matches campaignDuplicate — without these a personalized (e.g.
+          // Camp Invitation) campaign's follow-up silently renders through
+          // the generic branch, which has no tribe/camper variables at all.
+          personalizeEvent: original.personalizeEvent,
+          personalizeCampId: original.personalizeCampId,
           createdById: ctx.session!.user!.id,
         },
       } as any);

@@ -8,6 +8,7 @@ export interface AcceptanceLetterParams {
   reportingDate?: string;
   qrDataUrl: string; // data:image/png;base64,...
   instructionsHtml?: string | null;
+  tribeName?: string | null;
 }
 
 function stripHtml(html: string): string {
@@ -39,6 +40,7 @@ export async function generateAcceptanceLetterPdf(params: AcceptanceLetterParams
   drawLine(`Camper: ${params.camperName}`, { bold: true });
   drawLine(`Registration Number: ${params.registrationNumber}`);
   drawLine(`Campus: ${params.campusName}`);
+  if (params.tribeName) drawLine(`Tribe: ${params.tribeName}`);
   if (params.reportingDate) drawLine(`Reporting Date: ${params.reportingDate}`);
   y -= 10;
 

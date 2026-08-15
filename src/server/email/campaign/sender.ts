@@ -43,13 +43,19 @@ interface SendCampaignResult extends CampaignReadiness {
 
 const PERSONALIZED_STATUSES = ["APPROVED", "CHECKED_IN"];
 const DEFAULT_REQUESTS_PER_SECOND = 4;
-let nextResendRequestAt = 0;
-let requestSpacingMs = Math.ceil(1000 / configuredRequestsPerSecond());
 
 function configuredRequestsPerSecond(): number {
   const parsed = Number(process.env.RESEND_MAX_REQUESTS_PER_SECOND ?? DEFAULT_REQUESTS_PER_SECOND);
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 5) : DEFAULT_REQUESTS_PER_SECOND;
 }
+
+// The floor requestSpacingMs decays back to once rate-limit pressure eases —
+// never a moving target, or a single 429 permanently slows every future send
+// in this process (the bug this replaced: `Math.max(requestSpacingMs, ...)`
+// used the mutable value as its own floor, so it could only ever ratchet up).
+const BASELINE_REQUEST_SPACING_MS = Math.ceil(1000 / configuredRequestsPerSecond());
+let nextResendRequestAt = 0;
+let requestSpacingMs = BASELINE_REQUEST_SPACING_MS;
 
 function recipientTypeForRole(role: string): string {
   if (role === "PARENT") return "PARENT";
@@ -306,11 +312,25 @@ async function waitForRateSlot() {
 function applyRateHeaders(headers: Record<string, string> | null) {
   if (!headers) return;
   const limit = Number(headers["ratelimit-limit"] ?? headers["x-ratelimit-limit"]);
-  if (Number.isFinite(limit) && limit > 0) requestSpacingMs = Math.max(requestSpacingMs, Math.ceil(1000 / limit));
+  // Recomputed fresh from the latest header each call, floored at our own
+  // configured baseline — so spacing tracks Resend's *current* advertised
+  // limit in both directions instead of only ever growing.
+  if (Number.isFinite(limit) && limit > 0) requestSpacingMs = Math.max(BASELINE_REQUEST_SPACING_MS, Math.ceil(1000 / limit));
   const remaining = Number(headers["ratelimit-remaining"] ?? headers["x-ratelimit-remaining"]);
   const retryAfter = Number(headers["retry-after"]);
   if (remaining === 0 && Number.isFinite(retryAfter)) nextResendRequestAt = Math.max(nextResendRequestAt, Date.now() + retryAfter * 1000);
 }
+
+// Test-only access to module-private rate-limit state — there's no
+// meaningful way to exercise the requestSpacingMs decay fix by driving it
+// through an actual Resend call (would require mocking the network client),
+// so tests call applyRateHeaders directly with fabricated header objects.
+export const __testing__ = {
+  applyRateHeaders,
+  getRequestSpacingMs: () => requestSpacingMs,
+  resetRequestSpacingMs: () => { requestSpacingMs = BASELINE_REQUEST_SPACING_MS; },
+  BASELINE_REQUEST_SPACING_MS,
+};
 
 function resendError(result: { error: any; headers: Record<string, string> | null }): ResendCampaignError {
   const retryAfter = Number(result.headers?.["retry-after"]);
@@ -401,6 +421,20 @@ export async function sendCampaign(
       recipientCount: existingRecipients.length + newUsers.length,
     },
   });
+
+  // Best-effort immediate kick, mirroring runSideEffectsNow for registration
+  // emails (effects.ts) — without this, a freshly-sent campaign sits queued
+  // doing nothing until a cron tick or a manual "Send queued now" click.
+  // Fire-and-forget: sendCampaign's own result must never depend on this
+  // succeeding, since sweepPendingSideEffects (the cron path) is still the
+  // safety net if it fails or the process dies mid-send. Dynamic import
+  // avoids a static circular dependency (effects.ts already imports from
+  // this module).
+  if (queuedCount > 0) {
+    import("../../registration/effects")
+      .then(({ sweepPendingSideEffects }) => sweepPendingSideEffects())
+      .catch((error) => console.error(`[sendCampaign] immediate kick failed for campaign ${campaignId}:`, error));
+  }
 
   const readiness = await getCampaignReadiness(prisma, campaignId, { manualEmails });
   return { ...readiness, recipientCount: existingRecipients.length + newUsers.length };

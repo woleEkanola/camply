@@ -15,6 +15,7 @@ const assertOrgAdminOrCampusRep = (ctx: any, organizationId: string, campusId?: 
 const hasRegistrationCommandAccess = async (ctx: any, organizationId: string) =>
   Boolean((await getActiveCampCommandAccess(ctx, organizationId))?.permissions.includes("REGISTRATIONS"));
 import { normalizeScannedQRToken } from "../../../lib/qr";
+import { ensureRegistrationQrToken } from "../../registration/idToken";
 
 function toTRPCError(error: unknown): TRPCError {
   if (error instanceof RegistrationValidationError) {
@@ -504,11 +505,59 @@ export const registrationRouter = createTRPCRouter({
         include: {
           camper: true,
           camp: true,
-          campus: true
+          campus: true,
+          tribe: { select: { name: true, color: true } },
         },
         orderBy: { createdAt: "desc" }
       });
     }),
+
+  // Fallback download page for a parent's own approved campers' documents —
+  // the ID card and acceptance letter otherwise only ever go out by email.
+  // Deliberately never returns qrToken itself: the session-gated
+  // /api/registrations/[id]/{camp-id-card.pdf,acceptance-letter,qr} routes
+  // re-derive it server-side via canAccessRegistration, so the client only
+  // needs to know a registration id and whether each download is ready.
+  getMyDocuments: protectedProcedure.query(async ({ ctx }) => {
+    const currentUser = ctx.session?.user;
+    if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+    const campers = await ctx.prisma.camper.findMany({ where: { userId: currentUser.id }, select: { id: true } });
+    const registrations = await ctx.prisma.registration.findMany({
+      where: { camperId: { in: campers.map((c: { id: string }) => c.id) }, status: "APPROVED", deletedAt: null },
+      include: { camper: { select: { name: true } }, camp: { select: { name: true } }, tribe: { select: { name: true, color: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const results = [];
+    for (const registration of registrations) {
+      let qrToken = registration.qrToken;
+      // Approved-but-missing-token can only happen for registrations
+      // approved before qrToken issuance existed, or a rare revert/re-approve
+      // race — there's no bulk backfill for camper tokens (unlike staff),
+      // so lazily issue one here rather than leaving the parent stuck.
+      if (!qrToken) {
+        qrToken = await ctx.prisma.$transaction((tx: any) => ensureRegistrationQrToken(tx, registration.id));
+      }
+      const ready = !!qrToken && !!registration.registrationNumber;
+      const hasTribe = !!registration.tribe;
+      results.push({
+        registrationId: registration.id,
+        camperName: registration.camper.name,
+        campName: registration.camp.name,
+        registrationNumber: registration.registrationNumber,
+        hasTribe,
+        tribeName: registration.tribe?.name ?? null,
+        tribeColor: registration.tribe?.color ?? null,
+        // Acceptance letter only needs the token + registration number;
+        // the ID card additionally needs a tribe (color header band).
+        canDownloadAcceptanceLetter: ready,
+        canDownloadIdCard: ready && hasTribe,
+        pendingReason: !ready ? "Not approved yet" : !hasTribe ? "ID card not ready yet — awaiting tribe assignment" : null,
+      });
+    }
+    return results;
+  }),
 
   // Create a new registration
   create: protectedProcedure

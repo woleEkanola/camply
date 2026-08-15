@@ -82,6 +82,7 @@ function RegistrationsPage() {
   const [bulkAction, setBulkAction] = useState<"REJECT" | "REQUEST_CORRECTION" | "DELETE" | null>(null);
   const [bulkReason, setBulkReason] = useState("");
   const [bulkResult, setBulkResult] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [reassignCandidateIds, setReassignCandidateIds] = useState<string[]>([]);
 
   const openParam = searchParams.get("openReg") || searchParams.get("open") || searchParams.get("id");
   const queryParam = searchParams.get("q");
@@ -226,8 +227,24 @@ function RegistrationsPage() {
   });
 
   const bulkApplyMut = api.tribe.bulkApply.useMutation({
-    onSuccess: (res) => {
-      setBulkResult({ message: `Applied tribe assignments for ${res.length} registration(s).`, type: "success" });
+    onSuccess: (res, variables) => {
+      const parts = [`Assigned ${res.assigned.length} registration(s).`];
+      if (res.skippedAlreadyAssigned.length > 0) parts.push(`${res.skippedAlreadyAssigned.length} skipped — already in a tribe.`);
+      if (res.skippedLocked.length > 0) parts.push(`${res.skippedLocked.length} skipped — tribe assignment locked.`);
+      if (res.errors.length > 0) parts.push(`${res.errors.length} failed.`);
+      setBulkResult({
+        message: parts.join(" "),
+        type: res.errors.length > 0 ? "error" : "success",
+      });
+      // Offer to move on: only for registrations that were skipped purely for
+      // already having a tribe, and only when this was the safe (non-reassign)
+      // call — a locked registration needs an explicit unlock first, not this
+      // shortcut, and re-offering after an allowReassign call would loop.
+      if (!variables.allowReassign && res.skippedAlreadyAssigned.length > 0) {
+        setReassignCandidateIds(res.skippedAlreadyAssigned);
+      } else {
+        setReassignCandidateIds([]);
+      }
       setSelectedIds([]);
       invalidateRegistrations();
     },
@@ -721,7 +738,24 @@ function RegistrationsPage() {
           {bulkResult && (
             <div className={cn("mb-4 rounded-md p-3 text-sm", bulkResult.type === "success" ? "bg-success-50 text-success-700" : "bg-danger-50 text-danger-700")}>
               <span>{bulkResult.message}</span>
-              <button onClick={() => setBulkResult(null)} className="ml-3 text-xs underline">Dismiss</button>
+              <button onClick={() => { setBulkResult(null); setReassignCandidateIds([]); }} className="ml-3 text-xs underline">Dismiss</button>
+              {reassignCandidateIds.length > 0 && (
+                <>
+                  <button
+                    className="ml-3 text-xs underline"
+                    onClick={() => {
+                      if (window.confirm(
+                        `Move ${reassignCandidateIds.length} registration${reassignCandidateIds.length === 1 ? "" : "s"} to their newly suggested tribe? This will change a tribe they're already in — anyone already notified of the old tribe should get a correction email once this session's tribe-change notification lands.`
+                      )) {
+                        bulkApplyMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: reassignCandidateIds, allowReassign: true });
+                      }
+                    }}
+                  >
+                    Reassign anyway
+                  </button>
+                  <button className="ml-3 text-xs underline" onClick={() => setReassignCandidateIds([])}>Cancel</button>
+                </>
+              )}
             </div>
           )}
 
