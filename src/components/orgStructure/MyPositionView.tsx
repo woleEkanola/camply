@@ -8,9 +8,9 @@ import { EmptyState } from "@/components/ui/EmptyState";
 
 function Step({ label, value }: { label: string; value: string | number | null }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="w-40 shrink-0 text-xs font-medium uppercase tracking-wide text-neutral-400">{label}</div>
-      <div className="font-medium text-neutral-900">{value ?? "Unassigned"}</div>
+    <div className="min-w-0 rounded-xl border border-border-subtle bg-surface-raised p-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-txt-muted">{label}</div>
+      <div className="mt-1 truncate font-medium text-txt-primary" title={String(value ?? "Unassigned")}>{value ?? "Unassigned"}</div>
     </div>
   );
 }
@@ -32,8 +32,8 @@ export function MyPositionView() {
   return (
     <Card>
       <CardBody>
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-accent-600">You Are Here</h2>
-        <div className="space-y-3">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-accent-600">You Are Here</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
           <Step label={position.title ?? "Role"} value={position.role} />
           {isTeacher && <Step label="Tribe" value={position.tribe} />}
           <Step label="Centre" value={position.centre} />

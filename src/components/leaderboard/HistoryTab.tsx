@@ -10,8 +10,9 @@ import { BarChartWrapper } from "@/components/charts/BarChartWrapper";
 import { BumpChart } from "@/components/charts/BumpChart";
 import { cn } from "@/lib/cn";
 import { ClockIcon } from "@heroicons/react/24/outline";
+import { formatInTimeZone } from "date-fns-tz";
 
-const dayLabel = (d: string | Date) => new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const dayLabel = (d: string | Date) => formatInTimeZone(new Date(d), "UTC", "MMM d");
 
 export function HistoryTab({ campId }: { campId: string }) {
   // The procedure has always accepted a subjectType; the UI hardcoded TRIBE,

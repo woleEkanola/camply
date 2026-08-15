@@ -19,7 +19,7 @@ function formatDate(date: string | Date | null) {
   return new Date(date).toLocaleString();
 }
 
-function InboxContent() {
+export function InboxContent() {
   const [activeTab, setActiveTab] = useState<"all" | "unread" | "pinned">("all");
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const utils = api.useUtils();

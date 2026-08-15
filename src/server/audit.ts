@@ -9,6 +9,9 @@ export interface AuditEventInput {
   action: string;
   previousValue?: unknown;
   newValue?: unknown;
+  subjectType?: string;
+  subjectId?: string;
+  reason?: string;
 }
 
 /**
@@ -25,6 +28,9 @@ export async function logEvent(tx: TxClient, event: AuditEventInput) {
       action: event.action,
       previousValue: event.previousValue as Prisma.InputJsonValue | undefined,
       newValue: event.newValue as Prisma.InputJsonValue | undefined,
+      subjectType: event.subjectType,
+      subjectId: event.subjectId,
+      reason: event.reason,
     },
   });
 }

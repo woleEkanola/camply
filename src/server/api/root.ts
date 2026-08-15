@@ -31,12 +31,15 @@ import { exportRouter } from "./routers/export";
 import { registrationConfigRouter } from "./routers/registrationConfig";
 import { positionRouter } from "./routers/position";
 import { communicationRouter } from "./routers/communication";
-
 import { scanRouter } from "./routers/scan";
 import { leaderboardRouter } from "./routers/leaderboard";
 import { searchRouter } from "./routers/search";
 import { pushRouter } from "./routers/push";
 import { platformBrandingRouter } from "./routers/platformBranding";
+import { campPointsRouter } from "./routers/campPoints";
+import { campCommandRouter } from "./routers/campCommand";
+import { departmentOperationsRouter } from "./routers/departmentOperations";
+import { scheduleRouter } from "./routers/schedule";
 
 /**
  * This is the primary router for your server.
@@ -81,9 +84,10 @@ export const appRouter = createTRPCRouter({
   search: searchRouter,
   push: pushRouter,
   platformBranding: platformBrandingRouter,
-  // booking: bookingRouter, // removed because booking router file was deleted
-  // eventType: eventTypeRouter, // removed because eventType router file was deleted
-  // schedule: scheduleRouter, // removed because schedule router file was deleted
+  campPoints: campPointsRouter,
+  campCommand: campCommandRouter,
+  departmentOperations: departmentOperationsRouter,
+  schedule: scheduleRouter,
 });
 
 // export type definition of API

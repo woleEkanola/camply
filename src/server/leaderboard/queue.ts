@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { evaluateRule } from "./rules";
 import { recordScoreEvent } from "./record";
 import { campDayKey } from "./dayKey";
+import { resolveStaffScoreScope } from "./staffScope";
 
 const SCORE_TYPE_PREFIX = "SCORE_";
 
@@ -106,6 +107,8 @@ async function processScanScore(payload: ScoreScanPayload) {
 async function processStaffScanScore(payload: ScoreStaffScanPayload) {
   const staffScan = await prisma.staffScanEvent.findUnique({ where: { id: payload.staffScanEventId } });
   if (!staffScan || !payload.stationId || !staffScan.campId) return;
+  const staffScope = await resolveStaffScoreScope(prisma, staffScan.staffProfileId);
+  if (!staffScope) return;
 
   const day = campDayKey(staffScan.timestamp, "Africa/Lagos");
   const session = await findSessionForScan(payload.campId, payload.stationId, day, null);
@@ -124,6 +127,8 @@ async function processStaffScanScore(payload: ScoreStaffScanPayload) {
 
   await recordScoreEvent({
     campId: payload.campId,
+    campusId: staffScope.campusId,
+    tribeId: staffScope.tribeId,
     staffProfileId: staffScan.staffProfileId,
     categoryId: session.categoryId,
     ruleId: rule.id,

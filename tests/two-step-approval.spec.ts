@@ -261,11 +261,11 @@ test.describe("Two-step registration approval", () => {
   test("endorsing a registration notifies org admins in-app", async ({ page }) => {
     await loginWithPassword(page, repEmail, "password123");
     await page.goto("/campus-rep-dashboard/registrations");
+    await page.getByPlaceholder("Name, email, or registration #").fill(parentEmailE);
 
-    const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailE}` });
-    await expect(row).toBeVisible({ timeout: 10000 });
-    await row.getByRole("button", { name: "Endorse" }).click();
-    await expect(row.getByText("Endorsed ✓ awaiting admin")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: `E2E TwoStep Camper ${parentEmailE}` })).toBeVisible({ timeout: 10000 });
+    await page.locator("button:visible", { hasText: /^Recommend$/ }).first().click();
+    await expect(page.locator("button:visible", { hasText: /^Awaiting Approval$/ }).first()).toBeVisible({ timeout: 10000 });
 
     const admins = await prisma.user.findMany({
       where: { organizationId, role: { in: ["SUPER_ADMIN", "OWNER", "ADMIN"] }, deletedAt: null },
@@ -316,10 +316,10 @@ test.describe("Two-step registration approval", () => {
 
     await loginWithPassword(page, repEmail, "password123");
     await page.goto("/campus-rep-dashboard/registrations");
-    const row = page.locator("tr", { hasText: `E2E TwoStep Camper ${parentEmailF}` });
-    await expect(row).toBeVisible({ timeout: 10000 });
-    await expect(row.getByRole("button", { name: "Endorse" })).toBeVisible({ timeout: 10000 });
-    await expect(row.getByText("Endorsed ✓ awaiting admin")).toHaveCount(0);
+    await page.getByPlaceholder("Name, email, or registration #").fill(parentEmailF);
+    await expect(page.getByRole("heading", { name: `E2E TwoStep Camper ${parentEmailF}` })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("button:visible", { hasText: /^Recommend$/ }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("button:visible", { hasText: /^Awaiting Approval$/ })).toHaveCount(0);
   });
 
   test("a campus rep cannot see or endorse another campus's registration", async ({ page }) => {

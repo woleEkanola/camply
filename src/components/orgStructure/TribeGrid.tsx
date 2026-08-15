@@ -411,7 +411,7 @@ export function TribeGrid({
                     variant="ghost"
                     onClick={() => setDeleteTarget({ id: t.id, name: t.name })}
                   >
-                    Delete
+                    Archive
                   </Button>
                 </div>
               </CardBody>
@@ -456,9 +456,9 @@ export function TribeGrid({
       </Dialog>
 
       {/* ── Delete Confirm Dialog ── */}
-      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Tribe" size="sm">
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Archive Tribe" size="sm">
         <p className="text-sm text-neutral-600">
-          Are you sure you want to delete <strong>"{deleteTarget?.name}"</strong>? This action cannot be undone if campers are assigned.
+          Archive <strong>"{deleteTarget?.name}"</strong>? Assigned campers and staff must be moved first.
         </p>
         {formError && <p className="mt-2 text-sm text-danger-600">{formError}</p>}
         <div className="mt-5 flex justify-end gap-2">
@@ -468,7 +468,7 @@ export function TribeGrid({
             loading={deleteTribe.isPending}
             onClick={() => deleteTarget && deleteTribe.mutate({ id: deleteTarget.id })}
           >
-            Delete
+            Archive
           </Button>
         </div>
       </Dialog>

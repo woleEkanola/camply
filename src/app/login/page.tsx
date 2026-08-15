@@ -17,12 +17,19 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [hint, setHint] = useState("");
+  const [securityNotice, setSecurityNotice] = useState("");
   const [loading, setLoading] = useState(false);
   
   // States for verification code (OTP) and password
   const [authValue, setAuthValue] = useState("");
   const [passwordValue, setPasswordValue] = useState("");
   const router = useRouter();
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("reason") === "email-changed") {
+      setSecurityNotice("Your email address was changed by an administrator. Sign in again using your new email address; your password is unchanged.");
+    }
+  }, []);
 
   // Resend-code cooldown, step 2.
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -443,6 +450,11 @@ export default function LoginPage() {
 
   const messages = (
     <>
+      {securityNotice && (
+        <div className="mb-4 rounded-md status-info border border-current/15 p-3 text-sm" role="status">
+          {securityNotice}
+        </div>
+      )}
       {error && (
         <div className="mb-4 rounded-md status-danger border border-current/15 p-3 text-sm">
           {error}

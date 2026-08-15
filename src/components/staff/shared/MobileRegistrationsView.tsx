@@ -553,6 +553,8 @@ interface MobileRegistrationsViewProps {
     awaitingVettingCount?: number;
     awaitingFinalCount?: number;
     duplicateCount?: number;
+    maleCount?: number;
+    femaleCount?: number;
   };
   registrations: any[];
   selectedIds: string[];
@@ -641,6 +643,8 @@ export function MobileRegistrationsView({
 
   const statCards = [
     { label: "All", value: stats.totalCount ?? registrations.length, statusKey: "", valueColor: "text-neutral-900" },
+    { label: "Male", value: stats.maleCount ?? 0, statusKey: null, valueColor: "text-blue-600" },
+    { label: "Female", value: stats.femaleCount ?? 0, statusKey: null, valueColor: "text-purple-600" },
     ...(isTwoStep
       ? [
           { label: "Pending", value: stats.awaitingVettingCount ?? 0, statusKey: "REVIEW_AWAITING_VETTING", valueColor: "text-amber-600" },
@@ -776,12 +780,13 @@ export function MobileRegistrationsView({
       {/* 2. STATISTICS SUMMARY CARDS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 pt-0.5">
         {statCards.map((stat) => {
-          const isSelected = activeFilterKey === stat.statusKey;
+          const isSelected = stat.statusKey !== null && activeFilterKey === stat.statusKey;
+          const Comp = stat.statusKey === null ? "div" : "button";
           return (
-            <button
+            <Comp
               key={stat.label}
-              type="button"
-              onClick={() => onSelectStatusFilter(stat.statusKey)}
+              {...(stat.statusKey !== null ? { type: "button" as const, onClick: () => onSelectStatusFilter(stat.statusKey) } : {})}
+              data-testid={`registration-stat-${stat.label.toLowerCase()}`}
               className={cn(
                 "flex min-w-[100px] flex-col justify-between rounded-2xl border p-3.5 text-left transition-all shrink-0 active:scale-95 shadow-2xs",
                 isSelected
@@ -795,7 +800,7 @@ export function MobileRegistrationsView({
               <span className="mt-1 text-xs font-semibold text-txt-secondary">
                 {stat.label}
               </span>
-            </button>
+            </Comp>
           );
         })}
       </div>

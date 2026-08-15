@@ -107,6 +107,8 @@ test.describe("Admin Registrations Card/List View", () => {
 
   test("stat cards show all status categories", async ({ page }) => {
     await expect(page.getByText("Total Registrations")).toBeVisible();
+    await expect(page.getByTestId("registration-stat-male")).toBeVisible();
+    await expect(page.getByTestId("registration-stat-female")).toBeVisible();
 
     // Verify key stat card labels are present
     const statLabels = [

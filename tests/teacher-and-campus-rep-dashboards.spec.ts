@@ -53,25 +53,43 @@ test.describe("Teacher & Campus Rep Dashboards Redesign E2E Test", () => {
 
     await page.waitForSelector("text=Teacher Dashboard", { timeout: 15000 });
 
-    // Verify Welcome Greeting & TEACHER badge
-    await expect(page.locator("text=Welcome back, Lead!")).toBeVisible();
-    await expect(page.getByText("TEACHER", { exact: true })).toBeVisible();
+    const teacherWelcome = page.getByRole("heading", { name: /Welcome back, Lead/ });
+    await expect(teacherWelcome).toHaveCount(1);
+    const [photoBox, welcomeBox, positionBox] = await Promise.all([
+      page.getByRole("link", { name: "Upload photo" }).boundingBox(),
+      teacherWelcome.boundingBox(),
+      page.getByRole("heading", { name: "My position" }).boundingBox(),
+    ]);
+    expect(photoBox!.y).toBeLessThan(welcomeBox!.y);
+    expect(welcomeBox!.y).toBeLessThan(positionBox!.y);
 
-    // Verify Quick Actions Grid
-    await expect(page.locator('button:has-text("QR Code Scanner")')).toBeVisible();
-    await expect(page.locator('button:has-text("Take Attendance")')).toBeVisible();
-    await expect(page.locator('button:has-text("My Tribe Roster")')).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My position" })).toBeVisible();
+    await expect(page.getByText("You Are Here", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: /My Tribe Hub/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Inbox/ }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /Report an incident/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Campers" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Incidents" })).toBeVisible();
+    await page.goto("/teacher/my-position");
+    await expect(page).toHaveURL(/\/teacher$/);
   });
 
   test("2. Campus Rep logs in and views redesigned Campus Management Hub", async ({ page }) => {
-    // Log in as teacher@camply.com (Campus Rep)
-    await loginWithPassword(page, "teacher@camply.com", "password123");
+    await loginWithPassword(page, "campusrep@camply.com", "password123");
     await page.goto("/campus-rep-dashboard");
 
     await page.waitForSelector("text=Campus Management Hub", { timeout: 15000 });
 
     // Verify Campus Rep badge
     await expect(page.getByText("CAMPUS REPRESENTATIVE", { exact: true })).toBeVisible();
+    await expect(page.getByText("My assignment", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My position" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /My Tribe Hub/ }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Registrations" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Campers" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Incidents" })).toBeVisible();
 
     // Verify Quick Action Cards
     await expect(page.locator('button:has-text("Review Registrations")')).toBeVisible();

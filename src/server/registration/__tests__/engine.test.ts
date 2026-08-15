@@ -360,7 +360,7 @@ describe("campus registration quota (SignupLink-scoped)", () => {
     expect(reloadedB.status).toBe("DRAFT");
   });
 
-  it("WAITLIST behavior allows submission past quota, then waitlists the excess at approval", async () => {
+  it("WAITLIST behavior waitlists excess registrations and permits an explicit admin capacity override", async () => {
     await makeSignupLink({ quota: 1, quotaFullBehavior: "WAITLIST" });
 
     const camperA = await makeCamper();
@@ -382,6 +382,19 @@ describe("campus registration quota (SignupLink-scoped)", () => {
       where: { registrationId: approvedB.id, action: "REGISTRATION_WAITLISTED" },
     });
     expect((auditRow?.newValue as any)?.reason).toBe("CAMPUS_QUOTA_REACHED");
+
+    const promoted = await engine.approveRegistration({
+      registrationId: approvedB.id,
+      actorId: adminId,
+      overrideCapacity: true,
+    });
+    expect(promoted.status).toBe("APPROVED");
+
+    const approvalAudit = await prisma.auditLog.findFirst({
+      where: { registrationId: approvedB.id, action: "REGISTRATION_APPROVED" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect((approvalAudit?.newValue as any)?.capacityOverride).toBe(true);
   });
 
   it("quota=0 means unlimited — no gate at submission or approval", async () => {

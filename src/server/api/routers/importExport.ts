@@ -5,6 +5,7 @@ import { assertOrgAdmin } from "../trpc/scoping";
 import { importBundleSchema } from "../../../lib/import-export/schemas";
 import type { CampusRow, DepartmentRow, TribeRow } from "../../../lib/import-export/types";
 import { importCampuses, importDepartments, importTribes } from "../../importExport/importer";
+import { createDraftFromRows } from "../../schedule/service";
 
 /**
  * Shared with src/server/export/builders/configBundle.ts so the background
@@ -100,10 +101,18 @@ export const importExportRouter = createTRPCRouter({
         });
       }
 
+      if (input.bundle.program_schedule?.length && !org.activeCampId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Set an active camp before importing a program schedule",
+        });
+      }
+
       const results: {
         campuses?: Awaited<ReturnType<typeof importCampuses>>;
         tribes?: Awaited<ReturnType<typeof importTribes>>;
         departments?: Awaited<ReturnType<typeof importDepartments>>;
+        program_schedule?: { created: number; updated: number; errors: { rowIndex: number; name: string; message: string }[]; warnings: { rowIndex: number; name: string; message: string }[] };
       } = {};
 
       if (input.bundle.campuses?.length) {
@@ -119,6 +128,28 @@ export const importExportRouter = createTRPCRouter({
           org.activeCampId,
           input.bundle.departments
         );
+      }
+
+      // ─── Program Schedule import ─────────────────────────────────────
+      if (input.bundle.program_schedule?.length && org.activeCampId) {
+        const campId = org.activeCampId;
+        const rows = input.bundle.program_schedule;
+        const timezone = "Africa/Lagos";
+        await ctx.prisma.$transaction((tx) => createDraftFromRows(tx, {
+          campId,
+          timezone,
+          reminderMinutes: [5, 3, 2],
+          rows,
+          actorId: ctx.session!.user.id,
+          source: "import-export",
+        }));
+
+        results.program_schedule = {
+          created: rows.length,
+          updated: 0,
+          errors: [],
+          warnings: [],
+        };
       }
 
       return results;

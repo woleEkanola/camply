@@ -22,8 +22,18 @@ export interface PersonalizedRecipient {
  * variables — reused by both the recipient-resolution query and any
  * ad-hoc single-registration render (e.g. a test-send). */
 export const CAMP_INVITATION_INCLUDE = {
-  camper: { select: { name: true, userId: true, user: { select: { email: true } } } },
-  camp: { select: { name: true, organization: { select: { slug: true } }, arrivalDate: true } },
+  camper: { select: { name: true, gender: true, userId: true, user: { select: { email: true } } } },
+  camp: {
+    select: {
+      name: true,
+      year: true,
+      logoUrl: true,
+      arrivalDate: true,
+      organization: {
+        select: { slug: true, branding: { select: { logoUrl: true, idCardEnabled: true } } },
+      },
+    },
+  },
   campus: { select: { name: true } },
   tribe: { select: { name: true, color: true } },
   room: { select: { name: true, hostel: { select: { name: true } } } },
@@ -34,8 +44,14 @@ type RegistrationWithCampInvitationData = {
   id: string;
   registrationNumber: string | null;
   qrToken: string | null;
-  camper: { name: string; userId: string; user: { email: string } };
-  camp: { name: string; organization: { slug: string } | null; arrivalDate: Date | null };
+  camper: { name: string; gender?: string | null; userId: string; user: { email: string } };
+  camp: {
+    name: string;
+    year?: number;
+    logoUrl?: string | null;
+    organization: { slug: string; branding?: { logoUrl: string | null; idCardEnabled: boolean } | null } | null;
+    arrivalDate: Date | null;
+  };
   campus: { name: string };
   tribe: { name: string; color: string } | null;
   room: { name: string; hostel: { name: string } | null } | null;

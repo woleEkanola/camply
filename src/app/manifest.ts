@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Camply Offline Scan",
     short_name: "Camply",
     description: "Reliable offline-first camper registration, QR scanning, and event management.",
-    start_url: "/login",
+    start_url: "/",
     display: "standalone",
     background_color: "#0F172A",
     theme_color: "#0D9488",

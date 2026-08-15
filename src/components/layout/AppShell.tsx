@@ -17,10 +17,31 @@ import { BottomNav } from "./BottomNav";
 import { Menu, Transition } from "@headlessui/react";
 import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
 import { RoleSwitcher } from "./RoleSwitcher";
+import { OfflineSetupPrompt } from "@/components/pwa/OfflineSetupPrompt";
+import { OfflineDataNavButton } from "@/components/pwa/OfflineDataNavButton";
+import { permissionForAdminPath } from "@/lib/campCommand";
+import { ScheduleAlertController } from "@/components/schedule/ScheduleAlertController";
+import { CommunicationWorkspaceNav } from "@/components/communication/CommunicationWorkspaceNav";
+
 
 export interface AppShellProps {
   area: AppArea;
   children: React.ReactNode;
+}
+
+function isNavItemActive(pathname: string | null, item: { href: string; activePrefixes?: string[] }) {
+  if (!pathname) return false;
+  if (item.activePrefixes?.some((prefix) => pathname === prefix || pathname.startsWith(prefix + "/"))) return true;
+  const exactMatch = [
+    "/admin",
+    "/admin/communication",
+    "/dashboard",
+    "/campus-rep-dashboard",
+    "/super-admin",
+    "/teacher",
+    "/volunteer",
+  ].includes(item.href);
+  return exactMatch ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
 }
 
 /**
@@ -34,6 +55,7 @@ export default function AppShell({ area, children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { data: session } = useSession();
+  const reauthRequired = !!session?.user?.reauthRequired;
   const activeRef = useRef<HTMLAnchorElement>(null);
   const navRef = useRef<HTMLElement>(null);
 
@@ -46,6 +68,12 @@ export default function AppShell({ area, children }: AppShellProps) {
     }
   }, [pathname]);
 
+  useEffect(() => {
+    if (reauthRequired) {
+      void signOut({ callbackUrl: "/login?reason=email-changed" });
+    }
+  }, [reauthRequired]);
+
   const handleScroll = () => {
     if (navRef.current && typeof window !== "undefined") {
       sessionStorage.setItem("sidebar-scroll-position", navRef.current.scrollTop.toString());
@@ -55,23 +83,24 @@ export default function AppShell({ area, children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const { data: userProfile } = api.user.getProfile.useQuery(undefined, {
-    enabled: !!session?.user,
+    enabled: !!session?.user && !reauthRequired,
   });
 
   const { data: staffProfile } = api.staff.getMyProfile.useQuery(undefined, {
-    enabled: !!session?.user && (session.user.role === "VOLUNTEER" || session.user.role === "TEACHER"),
+    enabled: !!session?.user && !reauthRequired && (session.user.role === "VOLUNTEER" || session.user.role === "TEACHER"),
   });
 
   const organizationId = session?.user?.organizationId ?? "";
   const { data: organization } = api.organization.getById.useQuery(
     { id: organizationId },
-    { enabled: !!organizationId }
+    { enabled: !!organizationId && !reauthRequired }
   );
 
   const role = session?.user?.role as Role | undefined;
   const managedCampuses = (session?.user as { managedCampuses?: string[] } | undefined)?.managedCampuses ?? [];
-  const groups = getNavGroups(role, area, managedCampuses.length > 0, staffProfile?.volunteerCategory);
-  const bottomNavItems = getBottomNavItems(role, area, managedCampuses.length > 0, staffProfile?.volunteerCategory);
+  const campCommandPermissions = session?.user?.capabilities?.campCommand?.[0]?.permissions ?? [];
+  const groups = getNavGroups(role, area, managedCampuses.length > 0, staffProfile?.volunteerCategory, campCommandPermissions);
+  const bottomNavItems = getBottomNavItems(role, area, managedCampuses.length > 0, staffProfile?.volunteerCategory, campCommandPermissions);
 
   // Collapsible groups (Communication, Settings) start closed; auto-expand
   // whichever one contains the current route so the active link is never
@@ -80,9 +109,7 @@ export default function AppShell({ area, children }: AppShellProps) {
   useEffect(() => {
     for (const group of groups) {
       if (!group.collapsible) continue;
-      const containsActive = group.items.some(
-        (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
-      );
+      const containsActive = group.items.some((item) => isNavItemActive(pathname, item));
       if (containsActive) {
         setOpenGroups((prev) => (prev[group.name] ? prev : { ...prev, [group.name]: true }));
       }
@@ -90,18 +117,33 @@ export default function AppShell({ area, children }: AppShellProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, role]);
 
-  const platformBrandingQuery = api.platformBranding.get.useQuery();
-  const orgBrandingQuery = api.communication.brandingGet.useQuery(undefined, { enabled: area !== "super-admin" });
+  const platformBrandingQuery = api.platformBranding.get.useQuery(undefined, { enabled: !reauthRequired });
+  const orgBrandingQuery = api.communication.brandingGet.useQuery(undefined, { enabled: area !== "super-admin" && !reauthRequired });
 
   const displayLogo =
     area === "super-admin"
       ? platformBrandingQuery.data?.platformLogoUrl || "/logo.png"
-      : (orgBrandingQuery.data as any)?.masterLogoUrl ||
+      : orgBrandingQuery.data?.masterLogoUrl ||
         orgBrandingQuery.data?.logoUrl ||
         platformBrandingQuery.data?.platformLogoUrl ||
         "/logo.png";
 
+  // Camp Command permissions narrow the admin shell only for an actual Camp
+  // Command appointment. Other established contextual grants (campus reps and
+  // Position.grantsManageCamp) continue through their existing authorization.
+  const commandOnlyAdminContext = area === "admin" && !!role && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role) && campCommandPermissions.length > 0;
+  const requiredCommandPermission = pathname ? permissionForAdminPath(pathname) : "DASHBOARD";
+  const commandPageAllowed = !commandOnlyAdminContext
+    || (requiredCommandPermission !== null && campCommandPermissions.includes(requiredCommandPermission));
+
   const handleLogout = async () => {
+    if (typeof window !== "undefined") {
+      await Promise.all((await caches.keys()).map((key) => caches.delete(key)));
+      await new Promise<void>((resolve) => {
+        const request = indexedDB.deleteDatabase("camply-offline-db");
+        request.onsuccess = request.onerror = request.onblocked = () => resolve();
+      });
+    }
     await signOut({ redirect: false });
     router.push("/login");
   };
@@ -164,17 +206,7 @@ export default function AppShell({ area, children }: AppShellProps) {
             {groupOpen && (
             <div className="space-y-0.5">
               {group.items.map((item) => {
-                // Links requiring exact path matching to prevent sub-paths from incorrectly triggering active highlight.
-                const exactMatch = [
-                  "/admin",
-                  "/admin/communication",
-                  "/dashboard",
-                  "/campus-rep-dashboard",
-                  "/super-admin",
-                  "/teacher",
-                  "/volunteer"
-                ].includes(item.href);
-                const active = exactMatch ? pathname === item.href : pathname === item.href || pathname?.startsWith(item.href + "/");
+                const active = isNavItemActive(pathname, item);
                 return (
                   <Link
                     key={item.href}
@@ -202,6 +234,11 @@ export default function AppShell({ area, children }: AppShellProps) {
 
       <div className="border-t border-sidebar-border p-2 space-y-1">
         <InstallPwaButton variant="sidebar" />
+        <OfflineDataNavButton
+          organizationId={organizationId}
+          variant="sidebar"
+          sidebarExpanded={sidebarOpen}
+        />
         <button
           onClick={handleLogout}
           className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-fg hover:bg-surface-raised hover:text-txt-primary"
@@ -212,6 +249,18 @@ export default function AppShell({ area, children }: AppShellProps) {
       </div>
     </>
   );
+
+  if (!commandPageAllowed) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-page-bg p-6 text-page-fg">
+        <div className="max-w-md rounded-2xl border border-border-default bg-surface p-6 text-center shadow-sm">
+          <h1 className="text-xl font-bold text-txt-primary">Access not included</h1>
+          <p className="mt-2 text-sm text-txt-secondary">Your Camp Command appointment does not include this part of the admin area.</p>
+          <Link href="/admin" className="mt-4 inline-flex rounded-lg bg-accent-600 px-4 py-2 text-sm font-semibold text-white">Return to Camp Command</Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-page-bg text-page-fg">
@@ -229,7 +278,7 @@ export default function AppShell({ area, children }: AppShellProps) {
       {mobileOpen && (
         <div className="no-print fixed inset-0 z-40 md:hidden">
           <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-xs" onClick={() => setMobileOpen(false)} aria-hidden="true" />
-          <div className="fixed inset-y-0 left-0 flex w-72 flex-col bg-sidebar-bg border-r border-sidebar-border shadow-xl">{sidebarContent}</div>
+          <div data-testid="mobile-nav-panel" className="fixed inset-y-0 left-0 flex w-72 flex-col bg-sidebar-bg border-r border-sidebar-border shadow-xl">{sidebarContent}</div>
         </div>
       )}
 
@@ -258,7 +307,7 @@ export default function AppShell({ area, children }: AppShellProps) {
             {session?.user?.email && (
               <Menu as="div" className="relative ml-1 sm:ml-2">
                 <div>
-                  <Menu.Button className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2">
+                  <Menu.Button aria-label="Open user menu" className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2">
                     {userProfile?.photoUrl ? (
                       <img
                         src={userProfile.photoUrl}
@@ -307,6 +356,14 @@ export default function AppShell({ area, children }: AppShellProps) {
                       {() => <InstallPwaButton variant="menu" />}
                     </Menu.Item>
                     <Menu.Item>
+                      {() => (
+                        <OfflineDataNavButton
+                          organizationId={organizationId}
+                          variant="menu"
+                        />
+                      )}
+                    </Menu.Item>
+                    <Menu.Item>
                       {({ active }) => (
                         <button
                           onClick={handleLogout}
@@ -328,6 +385,9 @@ export default function AppShell({ area, children }: AppShellProps) {
         </header>
 
         <main id="print-area" className="flex-1 overflow-auto scrollbar-hide px-6 pt-6 pb-20 md:pb-6">
+          {area === "admin" && pathname?.startsWith("/admin/communication") && (
+            <CommunicationWorkspaceNav />
+          )}
           {children}
         </main>
       </div>
@@ -336,10 +396,14 @@ export default function AppShell({ area, children }: AppShellProps) {
         <BottomNav
           items={bottomNavItems}
           onMoreClick={() => setMobileOpen(true)}
-          showMore={area !== "admin" && area !== "teacher"}
+          showMore={false}
         />
         <CommandPalette area={area} />
+        {(["admin", "teacher", "volunteer", "campus-rep"] as const).includes(area as "admin" | "teacher" | "volunteer" | "campus-rep") && (
+          <ScheduleAlertController />
+        )}
       </div>
+      <OfflineSetupPrompt organizationId={organizationId} role={role} />
     </div>
   );
 }

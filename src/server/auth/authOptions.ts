@@ -172,6 +172,23 @@ export const authOptions: NextAuthOptions = {
           token.staffStatus = staff.status as "APPROVED" | "PENDING" | "REJECTED";
         }
         token.capabilities = await getUserCapabilities(user.id);
+        token.reauthRequired = false;
+      } else if (token.id && !token.reauthRequired) {
+        const currentAccount = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { email: true, active: true, deletedAt: true },
+        });
+        const tokenEmail = normalizeEmail(token.email ?? "");
+        token.reauthRequired = !currentAccount
+          || !currentAccount.active
+          || !!currentAccount.deletedAt
+          || normalizeEmail(currentAccount.email) !== tokenEmail;
+        if (!token.reauthRequired && currentAccount) {
+          // Leadership appointments and revocations must be reflected without
+          // asking the teacher to sign out. This session copy drives UI only;
+          // every mutation still re-checks the live DB assignment.
+          token.capabilities = await getUserCapabilities(token.id);
+        }
       }
       return token;
     },
@@ -185,6 +202,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).staffType = token.staffType as "TEACHER" | "VOLUNTEER" | undefined;
         (session.user as any).staffStatus = token.staffStatus as "APPROVED" | "PENDING" | "REJECTED" | undefined;
         session.user.capabilities = (token.capabilities as UserCapabilities) ?? EMPTY_CAPABILITIES;
+        session.user.reauthRequired = !!token.reauthRequired;
       }
       return session;
     },

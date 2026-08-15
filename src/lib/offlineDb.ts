@@ -343,6 +343,24 @@ export async function clearQueuedScans(ids: number[]): Promise<void> {
   });
 }
 
+export async function incrementQueuedScanRetries(ids: number[]): Promise<void> {
+  if (!ids.length) return;
+  const db = await initDb();
+  if (!db) return;
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction("scansQueue", "readwrite");
+    const store = transaction.objectStore("scansQueue");
+    for (const id of ids) {
+      const request = store.get(id);
+      request.onsuccess = () => {
+        if (request.result) store.put({ ...request.result, retryCount: (request.result.retryCount ?? 0) + 1 });
+      };
+    }
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = (event: any) => reject(event.target.error);
+  });
+}
+
 export async function checkLocalDuplicate(
   identifier: string,
   station: string

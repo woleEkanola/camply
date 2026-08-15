@@ -10,7 +10,6 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Dialog } from "@/components/ui/Dialog";
 import { AttachmentList } from "@/components/communication/AttachmentList";
@@ -56,7 +55,12 @@ function ComposerInner() {
   const [confirmDraftId, setConfirmDraftId] = useState("");
   const [confirmData, setConfirmData] = useState<{ isDuplicate: boolean; lastCampaign?: any } | null>(null);
   const [sending, setSending] = useState(false);
+  const [attachmentsUploading, setAttachmentsUploading] = useState(false);
   const [manualRecipientCheck, setManualRecipientCheck] = useState<{ matched: number; unmatched: string[] } | null>(null);
+  const [readiness, setReadiness] = useState<{
+    ready: number; held: number; total: number; sharedAttachments: number; personalizedPdfs: number;
+    estimatedSeconds: number; blockingErrors: string[]; issues: Array<{ registrationId: string; camperName: string; email: string; reasons: string[] }>;
+  } | null>(null);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -126,7 +130,7 @@ function ComposerInner() {
   });
 
   const handleSaveDraft = async () => {
-    if (!name || !subject || !editor) return;
+    if (!name || !subject || !editor || attachmentsUploading) return;
     if (editId) {
       await updateMut.mutateAsync({ id: editId, ...campaignPayload() });
     } else {
@@ -136,7 +140,11 @@ function ComposerInner() {
   };
 
   const handleSendNow = async () => {
-    if (!name || !subject || !editor) return;
+    if (!name || !subject || !editor || attachmentsUploading) return;
+    if (personalize && !personalizeCampId) {
+      setToast("Select a camp before sending a personalized invitation.");
+      return;
+    }
 
     // Create or update draft first, then check for duplicates
     let draftId: string = editId ?? "";
@@ -168,6 +176,12 @@ function ComposerInner() {
       setManualRecipientCheck(null);
     }
 
+    const readinessResult = await utils.communication.campaignReadiness.fetch({
+      id: draftId,
+      manualEmails: rawEmails.length > 0 ? rawEmails : undefined,
+    });
+    setReadiness(readinessResult);
+
     setConfirmDraftId(draftId);
     setConfirmData(duplicateCheck);
     setShowConfirm(true);
@@ -175,13 +189,20 @@ function ComposerInner() {
 
   const handleConfirmSend = async () => {
     setSending(true);
-    const emails = manualEmailsText
-      .split(/[\s,;\n]+/)
-      .map((e) => e.trim())
-      .filter((e) => e.includes("@"));
-    await sendMut.mutateAsync({ id: confirmDraftId, manualEmails: emails.length > 0 ? emails : undefined });
-    setShowConfirm(false);
-    router.push(`/admin/communication/campaigns/${confirmDraftId}`);
+    try {
+      const emails = manualEmailsText
+        .split(/[\s,;\n]+/)
+        .map((e) => e.trim())
+        .filter((e) => e.includes("@"));
+      await sendMut.mutateAsync({ id: confirmDraftId, manualEmails: emails.length > 0 ? emails : undefined });
+      setShowConfirm(false);
+      router.push(`/admin/communication/campaigns/${confirmDraftId}`);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Unable to queue this campaign.");
+      setShowConfirm(false);
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleTestSend = async () => {
@@ -243,7 +264,7 @@ function ComposerInner() {
                   Personalize as Camp Invitation
                 </span>
                 <span className="block text-xs text-txt-secondary">
-                  Sends one certificate-style Camp Invitation email per approved registration in the
+                  Sends one certificate-style Camp Invitation email per approved or checked-in registration in the
                   selected camp (camper name, QR code, hostel/room), instead of one shared message to
                   the audience below.
                   {!campInvitationEnabled && (
@@ -268,7 +289,7 @@ function ComposerInner() {
                   ]}
                 />
                 <p className="mt-1 text-xs text-txt-secondary">
-                  Only APPROVED registrations for this camp will receive the invitation.
+                  APPROVED and CHECKED_IN registrations for this camp are included. Each camper receives a separate personalized email.
                 </p>
               </div>
             ) : (
@@ -295,7 +316,7 @@ function ComposerInner() {
                 className="mt-1 w-full rounded-md border border-border-default px-3 py-2 text-xs text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
               />
               <p className="mt-1 text-[10px] text-txt-muted">
-                Overrides the audience selector above. {personalize ? "Only APPROVED registrations whose parent email matches will receive the invitation." : "Only users matching these emails will receive the broadcast."}
+                Overrides the audience selector above. {personalize ? "Approved or checked-in registrations whose parent email matches will receive one invitation per camper." : "Only users matching these emails will receive the broadcast."}
               </p>
             </div>
           </CardBody>
@@ -316,7 +337,7 @@ function ComposerInner() {
         <Card>
           <CardHeader><CardTitle>Attachments</CardTitle></CardHeader>
           <CardBody>
-            <AttachmentList attachments={attachments} onChange={setAttachments} />
+            <AttachmentList attachments={attachments} onChange={setAttachments} onUploadingChange={setAttachmentsUploading} />
           </CardBody>
         </Card>
 
@@ -343,8 +364,8 @@ function ComposerInner() {
         <div className="flex items-center justify-between">
           <Button variant="secondary" onClick={handleTestSend}>Send Test</Button>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={handleSaveDraft}>Save Draft</Button>
-            <Button onClick={handleSendNow}>Send Now</Button>
+            <Button variant="secondary" onClick={handleSaveDraft} disabled={attachmentsUploading}>Save Draft</Button>
+            <Button onClick={handleSendNow} disabled={attachmentsUploading}>{attachmentsUploading ? "Uploading attachments..." : "Send Now"}</Button>
           </div>
         </div>
 
@@ -359,7 +380,7 @@ function ComposerInner() {
             <Button
               onClick={handleConfirmSend}
               loading={sending}
-              disabled={manualRecipientCheck ? manualRecipientCheck.matched === 0 : false}
+              disabled={(manualRecipientCheck ? manualRecipientCheck.matched === 0 : false) || !readiness || readiness.ready === 0 || readiness.blockingErrors.length > 0}
             >
               {confirmData?.isDuplicate ? "Send Again Anyway" : manualRecipientCheck ? `Send to ${manualRecipientCheck.matched}` : "Confirm Send"}
             </Button>
@@ -410,6 +431,33 @@ function ComposerInner() {
                   <p className="text-xs text-danger-600 font-medium">
                     No recipients to send to. Check the email addresses and try again.
                   </p>
+                )}
+              </div>
+            )}
+
+            {readiness && (
+              <div className="rounded-lg border border-border-default p-3 space-y-2">
+                <p className="font-medium text-txt-primary">Delivery readiness</p>
+                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                  <span><strong>{readiness.ready}</strong> ready</span>
+                  <span><strong>{readiness.held}</strong> held</span>
+                  <span><strong>{readiness.personalizedPdfs}</strong> ID-card PDFs</span>
+                  <span><strong>{readiness.sharedAttachments}</strong> shared files</span>
+                </div>
+                <p className="text-xs text-txt-secondary">
+                  Estimated Resend submission time: {readiness.estimatedSeconds < 60 ? `${readiness.estimatedSeconds} seconds` : `${Math.ceil(readiness.estimatedSeconds / 60)} minutes`}.
+                  {personalize && " Each ready camper receives the inline eight-card sheet, a printable PDF, and every shared attachment."}
+                </p>
+                {readiness.blockingErrors.map((message) => <p key={message} role="alert" className="text-xs text-danger-600">{message}</p>)}
+                {readiness.issues.length > 0 && (
+                  <div className="max-h-28 overflow-y-auto space-y-1">
+                    {readiness.issues.slice(0, 20).map((issue) => (
+                      <p key={issue.registrationId} className="text-xs text-amber-700">
+                        {issue.email || "No parent email"}: {issue.reasons.join(" ")}
+                      </p>
+                    ))}
+                    {readiness.issues.length > 20 && <p className="text-xs text-txt-muted">And {readiness.issues.length - 20} more held campers.</p>}
+                  </div>
                 )}
               </div>
             )}

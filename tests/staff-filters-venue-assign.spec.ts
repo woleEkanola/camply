@@ -130,6 +130,10 @@ test.describe("Teachers page: Campus column, filters, venue assignment", () => {
     // Use the text "Approve" button in the fixed bottom bulk-action bar,
     // scoped to the bar that appears when items are selected.
     await page.locator(".fixed.bottom-0").getByRole("button", { name: "Approve" }).click();
+    const approvalDialog = page.getByRole("dialog", { name: "Approve selected profiles" });
+    await expect(approvalDialog.getByText("Send approval emails after approval")).toBeVisible();
+    await approvalDialog.getByRole("checkbox").uncheck();
+    await approvalDialog.getByRole("button", { name: "Approve selected" }).click();
 
     await expect
       .poll(async () => (await prisma.staffProfile.findUniqueOrThrow({ where: { id: pendingProfileId! } })).assignedVenueId, { timeout: 10000 })

@@ -1,7 +1,7 @@
 export const EXPORT_FORMAT = "camply-export" as const;
 export const EXPORT_VERSION = 1 as const;
 
-export type EntityKind = "campuses" | "tribes" | "departments";
+export type EntityKind = "campuses" | "tribes" | "departments" | "program_schedule";
 
 export interface CampusRow {
   name: string;
@@ -44,19 +44,33 @@ export interface DepartmentRow {
   campScoped?: boolean;
 }
 
+export interface ScheduleRow {
+  date: string;
+  startTime: string;
+  endDate?: string;
+  endTime?: string;
+  activity: string;
+  facilitator?: string;
+  location?: string;
+  type?: "TIMED" | "MILESTONE";
+  notes?: string;
+}
+
 export interface ImportBundle {
   campuses?: CampusRow[];
   tribes?: TribeRow[];
   departments?: DepartmentRow[];
+  program_schedule?: ScheduleRow[];
 }
 
 export interface ExportBundle {
   format: typeof EXPORT_FORMAT;
   version: typeof EXPORT_VERSION;
   exportedAt: string;
-  campuses: CampusRow[];
-  tribes: TribeRow[];
-  departments: DepartmentRow[];
+  campuses?: CampusRow[];
+  tribes?: TribeRow[];
+  departments?: DepartmentRow[];
+  program_schedule?: ScheduleRow[];
 }
 
 export interface RowError {
@@ -77,6 +91,7 @@ export interface ImportResult {
   campuses?: EntityImportResult;
   tribes?: EntityImportResult;
   departments?: EntityImportResult;
+  program_schedule?: EntityImportResult;
 }
 
 /** Single source of truth for column order/labels across CSV, XLSX, MD, and the Format Guide UI. */
@@ -120,3 +135,16 @@ export const DEPARTMENT_COLUMNS: { key: keyof DepartmentRow; required: boolean; 
   { key: "status", required: false, type: "ACTIVE | INACTIVE (default ACTIVE)", example: "ACTIVE" },
   { key: "campScoped", required: false, type: "boolean (default false)", example: "false" },
 ];
+
+export const SCHEDULE_COLUMNS: { key: keyof ScheduleRow; required: boolean; type: string; example: string }[] = [
+  { key: "date", required: true, type: "YYYY-MM-DD", example: "2026-08-12" },
+  { key: "startTime", required: true, type: "HH:mm or AM/PM", example: "08:00" },
+  { key: "endDate", required: false, type: "YYYY-MM-DD", example: "2026-08-12" },
+  { key: "endTime", required: false, type: "HH:mm or AM/PM (required for TIMED)", example: "09:00" },
+  { key: "activity", required: true, type: "text", example: "Praise Session" },
+  { key: "facilitator", required: false, type: "text", example: "Worship Team" },
+  { key: "location", required: false, type: "text (required before publish)", example: "Main Auditorium" },
+  { key: "type", required: false, type: "TIMED | MILESTONE (default TIMED)", example: "TIMED" },
+  { key: "notes", required: false, type: "text", example: "Bring notebooks" },
+];
+

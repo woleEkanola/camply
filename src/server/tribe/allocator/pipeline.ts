@@ -21,7 +21,7 @@ export async function runAllocationPipeline(
   options: {
     rules?: unknown;
     targetSize?: number | null;
-    scope?: "approved" | "all";
+    scope?: "approved" | "active" | "all";
     lockedRegistrationIds?: string[];
   } = {},
 ): Promise<SimulationResult & { state: AllocationState }> {

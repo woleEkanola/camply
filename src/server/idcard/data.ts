@@ -11,7 +11,7 @@ export const ID_CARD_INCLUDE = {
       name: true,
       year: true,
       logoUrl: true,
-      organization: { select: { branding: { select: { logoUrl: true } } } },
+      organization: { select: { branding: { select: { idCardLogoUrl: true, logoUrl: true } } } },
     },
   },
   campus: { select: { name: true } },
@@ -42,7 +42,11 @@ export function buildCampIdCardData(registration: RegistrationForIdCard): CampId
     tribeColor: registration.tribe.color ?? "#1E3A8A",
     campName: registration.camp.name,
     campYear: String(registration.camp.year),
-    logoUrl: registration.camp.logoUrl ?? registration.camp.organization?.branding?.logoUrl ?? null,
+    logoUrl:
+      registration.camp.organization?.branding?.idCardLogoUrl ??
+      registration.camp.logoUrl ??
+      registration.camp.organization?.branding?.logoUrl ??
+      null,
     qrToken: registration.qrToken,
   };
 }

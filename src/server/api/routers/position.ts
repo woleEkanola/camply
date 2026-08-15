@@ -109,12 +109,14 @@ export const positionRouter = createTRPCRouter({
       name: z.string().min(1).optional(),
       status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
       grantsManageCamp: z.boolean().optional(),
+      grantsAwardPoints: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const position = await ctx.prisma.position.findUnique({
         where: { id: input.id },
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Camp Command positions are managed from Settings." });
       await assertCanManageCamp(ctx, position.campId);
 
       // Granting/revoking the Camp Head flag itself is deliberately gated
@@ -123,7 +125,7 @@ export const positionRouter = createTRPCRouter({
       // also toggle grantsManageCamp, a Camp Head could grant the flag to
       // arbitrary other positions (or keep it after being reassigned) —
       // unbounded privilege escalation. Only a true org admin may change it.
-      if (input.grantsManageCamp !== undefined) {
+      if (input.grantsManageCamp !== undefined || input.grantsAwardPoints !== undefined) {
         const camp = await ctx.prisma.camp.findUnique({ where: { id: position.campId } });
         await assertOrgAdmin(ctx, camp!.organizationId);
       }
@@ -146,6 +148,7 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.id },
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Camp Command positions cannot be moved." });
       await assertCanManageCamp(ctx, position.campId);
 
       // Prevent cycles (cannot report to itself or its descendants)
@@ -206,6 +209,9 @@ export const positionRouter = createTRPCRouter({
       const positions = await ctx.prisma.position.findMany({ where: { id: { in: orderedIds }, deletedAt: null } });
       const firstPos = positions[0];
       if (!firstPos) throw new TRPCError({ code: "NOT_FOUND" });
+      if (positions.some((candidate) => candidate.leadershipRole)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Camp Command positions cannot be reordered." });
+      }
       await assertCanManageCamp(ctx, firstPos.campId);
       if (positions.length !== orderedIds.length || positions.some((candidate) => candidate.campId !== firstPos.campId)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Positions must belong to the same camp." });
@@ -234,6 +240,7 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.positionId },
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Use Camp Command settings to appoint leadership." });
       await assertCanManageCamp(ctx, position.campId);
 
       const staff = await ctx.prisma.staffProfile.findUnique({
@@ -298,6 +305,7 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.positionId },
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Use Camp Command settings to remove leadership appointments." });
       await assertCanManageCamp(ctx, position.campId);
 
       const staff = await ctx.prisma.staffProfile.findUnique({
@@ -347,6 +355,7 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.id },
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Camp Command positions cannot be deleted." });
       await assertCanManageCamp(ctx, position.campId);
 
       const now = new Date();

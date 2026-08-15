@@ -546,12 +546,12 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
               loading={bulkAutoAssignBeds.isPending}
               onClick={() => {
                 setAutoAssignSummary("");
-                if (window.confirm("Auto assign all unassigned approved campers, teachers, and volunteers to available beds at this venue?")) {
+                if (window.confirm("Assign only unassigned approved campers, teachers, and volunteers? Existing room and bed assignments will be preserved.")) {
                   bulkAutoAssignBeds.mutate({ venueId });
                 }
               }}
             >
-              Auto Assign Rooms & Beds
+              Assign Unassigned Rooms & Beds
             </Button>
             <Button size="sm" onClick={() => setHostelDialogOpen(true)}>
               + Add Hostel

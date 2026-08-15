@@ -24,6 +24,7 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       managedCampuses?: string[];
+      reauthRequired?: boolean;
     }
   }
 }
@@ -35,6 +36,7 @@ declare module "next-auth/jwt" {
     organizationId?: string;
     managedCampuses?: string[];
     capabilities?: UserCapabilities;
+    reauthRequired?: boolean;
   }
 }
 

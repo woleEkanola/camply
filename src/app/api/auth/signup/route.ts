@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/server/auth/authOptions';
 import { prisma } from '@/server/db';
 import { resolveSignupLinkByToken } from '@/server/registration/resolveSignupLink';
+import { normalizeGender } from '@/lib/gender';
 
 // Define validation schema for signup request
 const signupSchema = z.object({
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
         organizationId,
         homeCampusId: signupLink.campusId, // Campus of the link the parent is registering through, not the parent's earlier campus
         dateOfBirth: dob ? new Date(dob) : undefined, // Ensure ISO DateTime
-        gender,
+        gender: normalizeGender(gender),
         active: true,
         fieldValues: {
           create: (fieldValues || []).map((fv: any) => ({

@@ -19,12 +19,18 @@ test.describe("Accommodation: Auto Assign Rooms & Beds", () => {
   let registrationId: string | undefined;
   let staffUserId: string | undefined;
   let staffProfileId: string | undefined;
+  let previousBedAllocationEnabled = false;
+  let previousBedAllocationRules: unknown = null;
 
   test.beforeAll(async () => {
     const ctx = await getFixtureOrgContext();
     organizationId = ctx.organizationId;
     campId = ctx.campId;
     campusId = ctx.campusId;
+    const camp = await prisma.camp.findUniqueOrThrow({ where: { id: campId }, select: { bedAllocationEnabled: true, bedAllocationRules: true } });
+    previousBedAllocationEnabled = camp.bedAllocationEnabled;
+    previousBedAllocationRules = camp.bedAllocationRules;
+    await prisma.camp.update({ where: { id: campId }, data: { bedAllocationEnabled: true, bedAllocationRules: [{ criterion: "GROUP_TOGETHER", enabled: false }] } });
 
     // A dedicated venue keeps the venue-picker dropdown unambiguous
     // regardless of what other specs have left behind in this shared dev DB.
@@ -85,6 +91,7 @@ test.describe("Accommodation: Auto Assign Rooms & Beds", () => {
   });
 
   test.afterAll(async () => {
+    await prisma.camp.update({ where: { id: campId }, data: { bedAllocationEnabled: previousBedAllocationEnabled, bedAllocationRules: previousBedAllocationRules as any } });
     if (maleRoomId) await prisma.bed.deleteMany({ where: { roomId: maleRoomId } });
     if (femaleRoomId) await prisma.bed.deleteMany({ where: { roomId: femaleRoomId } });
     if (maleRoomId) await prisma.room.deleteMany({ where: { id: maleRoomId } });
@@ -108,7 +115,7 @@ test.describe("Accommodation: Auto Assign Rooms & Beds", () => {
     await page.locator("select").first().selectOption({ label: venue.name });
 
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Auto Assign Rooms & Beds" }).click();
+    await page.getByRole("button", { name: "Assign Unassigned Rooms & Beds" }).click();
 
     await expect(page.getByText(/^\d+ assigned(?:,|\.)/i)).toBeVisible({ timeout: 15000 });
 

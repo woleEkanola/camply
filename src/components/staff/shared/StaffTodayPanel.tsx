@@ -23,10 +23,12 @@ export function StaffTodayPanel({
   organizationId,
   campId,
   profile,
+  section = "all",
 }: {
   organizationId: string;
   campId?: string;
   profile?: any;
+  section?: "all" | "hero" | "operations";
 }) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -47,7 +49,7 @@ export function StaffTodayPanel({
   return (
     <div className="space-y-6">
       {/* 1. HERO PROFILE & ASSIGNMENT BANNER */}
-      <div className="relative overflow-hidden rounded-2xl border border-border-default bg-surface p-6 shadow-sm">
+      {section !== "operations" && <div className="relative overflow-hidden rounded-2xl border border-border-default bg-surface p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -90,10 +92,10 @@ export function StaffTodayPanel({
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* 2. CORE OPERATIONAL QUICK ACTIONS GRID */}
-      <div>
+      {section !== "hero" && <><div>
         <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-txt-secondary">
           Core Operational Tools
         </h3>
@@ -293,7 +295,7 @@ export function StaffTodayPanel({
             </div>
           </div>
         </CardBody>
-      </Card>
+      </Card></>}
     </div>
   );
 }

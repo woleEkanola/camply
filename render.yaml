@@ -62,6 +62,21 @@ services:
     sync: false
   - key: APP_URL
     sync: false
+# Drains registration and campaign email outbox work. Campaign sends are
+# idempotent and atomically claimed, so overlapping/restarted invocations are
+# safe. This is the continuation mechanism for campaigns larger than one run.
+- type: cron
+  name: email-effects-sweep
+  runtime: node
+  plan: free
+  schedule: "* * * * *"
+  buildCommand: "true"
+  startCommand: curl -sf -X POST -H "x-cron-secret:$CRON_SECRET" "$APP_URL/api/cron/effects"
+  envVars:
+  - key: CRON_SECRET
+    sync: false
+  - key: APP_URL
+    sync: false
 # Drains the leaderboard's SCORE_* SideEffect outbox (see
 # src/server/leaderboard/queue.ts, src/app/api/cron/score/route.ts) — the
 # at-most-once half of automatic scan scoring. Runs every minute, same

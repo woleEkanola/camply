@@ -63,7 +63,7 @@ export function StaffRegistrationWizard({ token, type }: { token: string; type: 
   const campId = linkData?.campId ?? "";
 
   const { data: fields = [] } = api.formField.list.useQuery(
-    { organizationId: orgId, audience: type, campId },
+    { organizationId: orgId, audience: type, campId, signupToken: token },
     { enabled: !!orgId }
   );
   const visibleFields = fields.filter((f: FormFieldDTO) => f.visible);

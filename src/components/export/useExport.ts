@@ -20,6 +20,7 @@ export interface UseExportOptions {
  */
 export function useExport({ kind, organizationId, label, filters, selectedIds }: UseExportOptions) {
   const toast = useToast();
+  const utils = api.useUtils();
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<ExportScope>("CURRENT_FILTER");
   const [presetId, setPresetId] = useState<string | undefined>(undefined);
@@ -62,6 +63,7 @@ export function useExport({ kind, organizationId, label, filters, selectedIds }:
     onSuccess: () => {
       toast.success(`"${label}" export started — check the Export Center for progress.`);
       setOpen(false);
+      utils.export.listMine.invalidate({ organizationId });
     },
     onError: (err) => {
       toast.error(err.message || "Couldn't start this export.");

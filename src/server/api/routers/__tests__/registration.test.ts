@@ -76,7 +76,7 @@ function adminCaller() {
   } as any);
 }
 
-async function makeCamperAndReg(params: { name: string; dob: Date; status: RegistrationStatus; camperId?: string }) {
+async function makeCamperAndReg(params: { name: string; dob: Date; status: RegistrationStatus; camperId?: string; gender?: string }) {
   const parent = await prisma.user.create({
     data: { email: `parent-${Date.now()}-${Math.random()}@test.com`, password: "x", role: "PARENT", organizationId: orgId },
   });
@@ -89,7 +89,7 @@ async function makeCamperAndReg(params: { name: string; dob: Date; status: Regis
             firstName: params.name.split(" ")[0],
             lastName: params.name.split(" ")[1] ?? "",
             dateOfBirth: params.dob,
-            gender: "Male",
+            gender: params.gender ?? "Male",
             userId: parent.id,
             organizationId: orgId,
             homeCampusId: campusId,
@@ -118,6 +118,16 @@ async function withDuplicateConstraintSuspended<T>(fn: () => Promise<T>): Promis
 }
 
 describe("registrationRouter - duplicate detection", () => {
+  it("getAdminListStats returns registration gender totals for the selected scope", async () => {
+    await makeCamperAndReg({ name: "Male Camper", dob: new Date(2012, 0, 1), status: "PENDING", gender: "Male" });
+    await makeCamperAndReg({ name: "Female Camper", dob: new Date(2013, 0, 1), status: "APPROVED", gender: "FEMALE" });
+
+    const stats = await adminCaller().registration.getAdminListStats({ organizationId: orgId, campId });
+
+    expect(stats.maleCount).toBe(1);
+    expect(stats.femaleCount).toBe(1);
+  });
+
   it("getAdminListStats counts a camperId-based duplicate pair", async () => {
     // Camper-id-based duplicates for the same camp are now prevented at the
     // DB level going forward (Registration_camperId_campId_key) — this

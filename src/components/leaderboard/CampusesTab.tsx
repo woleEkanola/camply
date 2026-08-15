@@ -3,14 +3,14 @@
 import { api } from "@/utils/trpc";
 import { Table, type Column } from "@/components/ui/Table";
 
-type Row = { stat: any; campus: any; rankedByWeightedScore?: boolean };
+type Row = { stat: any; campus: any; rankedByWeightedScore?: boolean; displayRank?: number };
 
 export function CampusesTab({ campId }: { campId: string }) {
   const { data, isLoading } = api.leaderboard.campuses.useQuery({ campId }, { refetchInterval: 30_000 });
   const rankedByWeightedScore = !!data?.[0]?.rankedByWeightedScore;
 
   const columns: Column<Row>[] = [
-    { header: "Rank", accessor: (row) => (row.stat?.rank ? `#${row.stat.rank}` : "—") },
+    { header: "Rank", accessor: (row) => (row.displayRank ? `#${row.displayRank}` : row.stat?.rank ? `#${row.stat.rank}` : "—") },
     { header: "Campus", accessor: (row) => row.campus?.name ?? "—", primary: true },
     { header: "Attendance", accessor: (row) => (row.stat?.attendancePct != null ? `${Math.round(row.stat.attendancePct)}%` : "—"), secondary: true },
     { header: "Points", accessor: (row) => `${row.stat?.totalPoints ?? 0} pts` },
@@ -29,7 +29,7 @@ export function CampusesTab({ campId }: { campId: string }) {
       )}
       <Table
         columns={columns}
-        data={data ?? []}
+        data={(data ?? []).map((row: Row, index: number) => ({ ...row, displayRank: rankedByWeightedScore ? index + 1 : row.stat?.rank }))}
         rowKey={(row) => row.stat.id}
         isLoading={isLoading}
         emptyTitle="No campus scores yet"

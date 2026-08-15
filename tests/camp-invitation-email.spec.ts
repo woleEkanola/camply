@@ -108,6 +108,6 @@ test.describe("Communication: Camp Invitation certificate email", () => {
 
     // After toggling, the camp picker replaces the generic audience picker
     await expect(page.getByText("Recipient Type")).not.toBeVisible();
-    await expect(page.getByText("Only APPROVED registrations for this camp will receive the invitation.")).toBeVisible();
+    await expect(page.getByText("APPROVED and CHECKED_IN registrations for this camp are included. Each camper receives a separate personalized email.")).toBeVisible();
   });
 });

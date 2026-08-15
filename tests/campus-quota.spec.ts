@@ -251,15 +251,16 @@ test.describe("Campus registration quota (SignupLink-scoped)", () => {
     const second = await makePendingRegistration(`e2e-quota-wl-b-${stamp}@camply.test`, "Quota WL Second");
 
     await loginWithPassword(page, "admin@camply.com", "password123");
-    const approve = async (id: string) => {
-      const res = await page.request.post("/api/trpc/registration.approve?batch=1", {
+    const approve = (id: string) => page.request.post("/api/trpc/registration.approve?batch=1", {
         data: { "0": { json: { registrationId: id } } },
         headers: { "Content-Type": "application/json" },
       });
-      expect(res.ok()).toBe(true);
-    };
-    await approve(first.registrationId);
-    await approve(second.registrationId);
+    const firstApproval = await approve(first.registrationId);
+    expect(firstApproval.ok()).toBe(true);
+
+    const fullCapacityApproval = await approve(second.registrationId);
+    expect(fullCapacityApproval.ok()).toBe(false);
+    expect(await fullCapacityApproval.text()).toContain("moved to the waitlist instead of being approved");
 
     const r1 = await prisma.registration.findUniqueOrThrow({ where: { id: first.registrationId } });
     const r2 = await prisma.registration.findUniqueOrThrow({ where: { id: second.registrationId } });

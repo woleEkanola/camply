@@ -36,7 +36,7 @@ test.describe("Camper Stat Card Filtering E2E Test", () => {
 
     await prisma.registration.create({
       data: {
-        status: "APPROVED",
+        status: "CHECKED_IN",
         camperId: maleCamper.id,
         campId: ctx.campId,
         campusId: ctx.campusId,
@@ -59,7 +59,7 @@ test.describe("Camper Stat Card Filtering E2E Test", () => {
 
     await prisma.registration.create({
       data: {
-        status: "APPROVED",
+        status: "CHECKED_IN",
         camperId: femaleCamper.id,
         campId: ctx.campId,
         campusId: ctx.campusId,
@@ -91,6 +91,7 @@ test.describe("Camper Stat Card Filtering E2E Test", () => {
     await maleStatCard.click();
     await page.waitForTimeout(300);
     await expect(genderSelect).toHaveValue("Male");
+    await expect(page.locator('select').filter({ has: page.locator('option[value="CHECKED_IN"]') })).toHaveValue("CHECKED_IN");
     await expect(maleStatCard).toHaveClass(/border-accent-500/);
 
     // Click Female StatCard -> Male StatCard MUST be unhighlighted/deselected
@@ -113,15 +114,15 @@ test.describe("Camper Stat Card Filtering E2E Test", () => {
 
     await page.waitForSelector("div.group, table", { timeout: 15000 });
 
-    const approvedStatCard = page.locator('[data-testid="camper-stat-approved"]');
-    await expect(approvedStatCard).toBeVisible();
+    const maleStatCard = page.locator('[data-testid="camper-stat-male"]');
+    await expect(maleStatCard).toBeVisible();
 
-    // Click Approved StatCard
-    await approvedStatCard.click();
+    // Clicking the Male card applies both parts of its definition: male and in camp.
+    await maleStatCard.click();
     await page.waitForTimeout(300);
 
-    const statusSelect = page.locator("select").filter({ has: page.locator('option[value="APPROVED"]') });
-    await expect(statusSelect).toHaveValue("APPROVED");
-    await expect(approvedStatCard).toHaveClass(/border-accent-500/);
+    const statusSelect = page.locator("select").filter({ has: page.locator('option[value="CHECKED_IN"]') });
+    await expect(statusSelect).toHaveValue("CHECKED_IN");
+    await expect(maleStatCard).toHaveClass(/border-accent-500/);
   });
 });

@@ -80,7 +80,7 @@ test.describe("Camp structure soft-delete: Tribe, Department, Hostel/Room/Bed", 
     await row.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
 
-    await expect(page.getByText(/cannot delete a tribe with assigned campers/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/cannot archive a tribe with \d+ assigned campers/i)).toBeVisible({ timeout: 10000 });
 
     // Clear the assignment, then retry.
     await prisma.registration.update({ where: { id: registrationId! }, data: { tribeId: null } });

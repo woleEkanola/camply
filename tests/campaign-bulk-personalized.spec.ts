@@ -16,6 +16,7 @@ test.describe("Campaign: 50 approved users — personalized Camp Invitation + ID
   let tribeId: string;
   let adminId: string;
   let campaignId: string;
+  let heldRegistrationId: string;
   let registrationIds: string[] = [];
   let parentEmails: string[] = [];
   const batchTag = `e2e-bulk-${randomBytes(4).toString("hex")}`;
@@ -55,15 +56,18 @@ test.describe("Campaign: 50 approved users — personalized Camp Invitation + ID
       });
     }
 
-    // Seed 50 APPROVED registrations
+    // Seed 50 eligible registrations. The first two are siblings sharing one
+    // parent/email, and one sibling is already CHECKED_IN.
     const batchIds: string[] = [];
     const emails: string[] = [];
+    let siblingParent: any = null;
     for (let i = 0; i < APPROVED_COUNT; i++) {
-      const email = `${batchTag}-p${i}@camply.test`;
+      const email = i === 1 ? `${batchTag}-p0@camply.test` : `${batchTag}-p${i}@camply.test`;
       emails.push(email);
-      const parent = await (prisma as any).user.create({
+      const parent = i === 1 ? siblingParent : await (prisma as any).user.create({
         data: { email, password: "unused", role: "PARENT", organizationId: orgId, firstName: `Parent${i}` },
       });
+      if (i === 0) siblingParent = parent;
       const camper = await (prisma as any).camper.create({
         data: {
           name: `${batchTag} Camper ${i}`,
@@ -79,13 +83,20 @@ test.describe("Campaign: 50 approved users — personalized Camp Invitation + ID
           campId,
           campusId,
           tribeId,
-          status: "APPROVED",
+          status: i === 1 ? "CHECKED_IN" : "APPROVED",
           registrationNumber: `${batchTag}-REG-${String(i).padStart(3, "0")}`,
           qrToken: `${batchTag}-qr-${String(i).padStart(3, "0")}`,
         },
       });
       batchIds.push(reg.id);
     }
+    const heldEmail = `${batchTag}-p-held@camply.test`;
+    const heldParent = await (prisma as any).user.create({ data: { email: heldEmail, password: "unused", role: "PARENT", organizationId: orgId, firstName: "Held" } });
+    const heldCamper = await (prisma as any).camper.create({ data: { name: `${batchTag} Held Camper`, gender: "Male", userId: heldParent.id, organizationId: orgId, homeCampusId: campusId } });
+    const heldRegistration = await (prisma as any).registration.create({ data: { camperId: heldCamper.id, campId, campusId, status: "APPROVED", registrationNumber: `${batchTag}-HELD`, qrToken: `${batchTag}-held-qr` } });
+    heldRegistrationId = heldRegistration.id;
+    batchIds.push(heldRegistration.id);
+    emails.push(heldEmail);
     registrationIds = batchIds;
     parentEmails = emails;
     console.log(`[bulk-campaign] Seeded ${batchIds.length} APPROVED registrations`);
@@ -130,15 +141,15 @@ test.describe("Campaign: 50 approved users — personalized Camp Invitation + ID
       id: campaignId,
       manualEmails: parentEmails,
     });
-    expect(check.matched).toBe(APPROVED_COUNT);
+    expect(check.matched).toBe(APPROVED_COUNT + 1);
     expect(check.unmatched).toHaveLength(0);
 
-    // Send (will fail at Resend but recipients get created + rendered)
-    try {
-      await caller.communication.campaignSend({ id: campaignId, manualEmails: parentEmails });
-    } catch (err: any) {
-      console.log(`[bulk-campaign] Send threw (expected without RESEND_API_KEY): ${err.message}`);
-    }
+    const readiness: any = await caller.communication.campaignReadiness({ id: campaignId, manualEmails: parentEmails });
+    expect(readiness.ready).toBe(APPROVED_COUNT);
+    expect(readiness.held).toBe(1);
+    expect(readiness.personalizedPdfs).toBe(APPROVED_COUNT);
+
+    await caller.communication.campaignSend({ id: campaignId, manualEmails: parentEmails });
   });
 
   // ═══ Step 2: Verify 50 recipients created ═══
@@ -147,17 +158,34 @@ test.describe("Campaign: 50 approved users — personalized Camp Invitation + ID
       where: { campaignId },
       orderBy: { email: "asc" },
     });
-    expect(recipients).toHaveLength(APPROVED_COUNT);
+    expect(recipients).toHaveLength(APPROVED_COUNT + 1);
     for (const r of recipients) {
-      expect(r.email).toMatch(new RegExp(`^${batchTag}-p\\d+@camply\\.test$`));
+      expect(r.email).toContain(batchTag);
       expect(r.recipientType).toBe("PARENT");
+      expect(r.registrationId).toBeTruthy();
     }
+    expect(recipients.filter((recipient: any) => recipient.deliveryStatus === "QUEUED")).toHaveLength(APPROVED_COUNT);
+    expect(recipients.filter((recipient: any) => recipient.deliveryStatus === "HELD")).toHaveLength(1);
+    expect(recipients.filter((recipient: any) => recipient.email === `${batchTag}-p0@camply.test`)).toHaveLength(2);
+  });
+
+  test("a held camper can be corrected and queued without recreating other recipients", async () => {
+    await (prisma as any).registration.update({ where: { id: heldRegistrationId }, data: { tribeId } });
+    const caller = appRouter.createCaller({
+      prisma,
+      session: { user: { id: adminId, email: "admin@camply.com", role: "ADMIN", organizationId: orgId }, expires: "" },
+    } as any);
+    const result: any = await caller.communication.campaignRetryHeld({ id: campaignId });
+    expect(result).toEqual({ queued: 1, stillHeld: 0 });
+    const recipients = await (prisma as any).emailRecipient.findMany({ where: { campaignId } });
+    expect(recipients).toHaveLength(APPROVED_COUNT + 1);
+    expect(recipients.filter((recipient: any) => recipient.deliveryStatus === "HELD")).toHaveLength(0);
   });
 
   // ═══ Step 3: Verify every registration's personalized variables resolve ═══
   test("every APPROVED registration resolves personalized camp invitation variables", async () => {
     const registrations = await (prisma as any).registration.findMany({
-      where: { id: { in: registrationIds } },
+      where: { id: { in: registrationIds, not: heldRegistrationId } },
       include: CAMP_INVITATION_INCLUDE,
       orderBy: { registrationNumber: "asc" },
     });
@@ -176,10 +204,10 @@ test.describe("Campaign: 50 approved users — personalized Camp Invitation + ID
   });
 
   // ═══ Step 4: Verify ID card sheet route for a sampled subset ═══
-  test("ID card sheet PNG route returns valid 6-card images for every registration", async ({ request }) => {
+  test("ID card sheet PNG route returns valid 8-card images for every registration", async ({ request }) => {
     const sample = Math.min(APPROVED_COUNT, 5); // Check first 5 for speed
     const qrTokens = await (prisma as any).registration.findMany({
-      where: { id: { in: registrationIds } },
+      where: { id: { in: registrationIds, not: heldRegistrationId } },
       select: { qrToken: true, camper: { select: { name: true } } },
       take: sample,
       orderBy: { registrationNumber: "asc" },
@@ -190,20 +218,39 @@ test.describe("Campaign: 50 approved users — personalized Camp Invitation + ID
       expect(resp.status(), `Sheet for ${camper.name}`).toBe(200);
       expect(resp.headers()["content-type"]).toBe("image/png");
       const body = await resp.body();
-      expect(body.length).toBeGreaterThan(50000); // 6-card sheet is ~100KB+
+      expect(body.length).toBeGreaterThan(50000); // 8-card sheet is comfortably over 50KB
       const pngMagic = [0x89, 0x50, 0x4e, 0x47];
       expect(Array.from(body.subarray(0, 4))).toEqual(pngMagic);
     }
   });
 
+  test("token PDF route returns a private printable A4 attachment", async ({ request }) => {
+    const registration = await (prisma as any).registration.findUnique({ where: { id: registrationIds[0] }, select: { qrToken: true } });
+    const response = await request.get(`/api/id-card/${registration.qrToken}/sheet.pdf`);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toBe("application/pdf");
+    expect(response.headers()["cache-control"]).toContain("no-store");
+    const body = await response.body();
+    expect(body.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
   // ═══ Step 5: Verify campaign detail page shows correct stats ═══
-  test("campaign detail page shows 50 recipients", async ({ page }) => {
+  test("campaign detail page shows every ready and recovered recipient", async ({ page }) => {
     await loginWithPassword(page, "admin@camply.com", "password123");
     await page.goto(`/admin/communication/campaigns/${campaignId}`);
     await expect(page.getByText(`${batchTag} Bulk Test`)).toBeVisible({ timeout: 15000 });
 
     // Recipient count somewhere in the stats area
     const bodyText = await page.textContent("main");
-    expect(bodyText).toContain("50");
+    expect(bodyText).toContain(`${APPROVED_COUNT + 1} recipients`);
+  });
+
+  test("Add Attachment opens the operating-system file chooser", async ({ page }) => {
+    await loginWithPassword(page, "admin@camply.com", "password123");
+    await page.goto("/admin/communication/campaigns/new");
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Add Attachment" }).click();
+    const chooser = await chooserPromise;
+    expect(chooser.isMultiple()).toBe(true);
   });
 });

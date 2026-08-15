@@ -1,18 +1,132 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { assertOrgAdmin } from "../trpc/scoping";
+import { assertOrgAdminOrCommand } from "../trpc/scoping";
+
+const assertOrgAdmin = (ctx: any, organizationId: string) =>
+  assertOrgAdminOrCommand(ctx, organizationId, "ACCOMMODATION");
 import * as accommodationEngine from "../../accommodation/engine";
+import { ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES } from "../../assignments/eligibility";
 
 // Hostel/Room/Bed management is admin-only: Campus Representatives do not
 // manage camp operations (per PRD), so there is deliberately no campus-rep
 // carve-out here, unlike most other routers in this app.
 
 export const accommodationRouter = createTRPCRouter({
+  assignmentReadiness: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const camp = await ctx.prisma.camp.findUnique({ where: { id: input.campId } });
+      if (!camp || camp.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+      await assertOrgAdmin(ctx, camp.organizationId);
+
+      const [venues, activeTribes, assignableCampers, approvedTeachers, approvedStaff] = await Promise.all([
+        ctx.prisma.venue.findMany({ where: { campId: camp.id, visible: true, deletedAt: null }, orderBy: [{ name: "asc" }, { id: "asc" }] }),
+        ctx.prisma.tribe.count({ where: { campId: camp.id, status: "ACTIVE", deletedAt: null } }),
+        ctx.prisma.registration.findMany({
+          where: { campId: camp.id, status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] }, deletedAt: null },
+          select: { id: true, status: true, venueId: true, tribeId: true, roomId: true, camper: { select: { gender: true } } },
+        }),
+        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, type: "TEACHER", status: "APPROVED", deletedAt: null }, select: { id: true, assignedVenueId: true, assignedTribeId: true, assignedRoomId: true, gender: true } }),
+        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, status: "APPROVED", deletedAt: null }, select: { id: true, assignedVenueId: true, assignedRoomId: true, gender: true } }),
+      ]);
+
+      const venueSummaries = await Promise.all(venues.map(async (venue) => {
+        const hostels = await ctx.prisma.hostel.findMany({
+          where: { venueId: venue.id, deletedAt: null },
+          include: { rooms: { where: { deletedAt: null }, include: { beds: { where: { deletedAt: null } } } } },
+        });
+        const rooms = hostels.flatMap((hostel) => hostel.rooms);
+        const beds = rooms.flatMap((room) => room.beds);
+        const campers = assignableCampers.filter((person) => person.venueId === venue.id);
+        const staff = approvedStaff.filter((person) => person.assignedVenueId === venue.id);
+        const teachers = approvedTeachers.filter((person) => person.assignedVenueId === venue.id);
+        const unassignedPeople = campers.filter((person) => !person.roomId).length + staff.filter((person) => !person.assignedRoomId).length;
+        const availableBeds = beds.filter((bed) => bed.status === "AVAILABLE" && !bed.registrationId && !bed.staffProfileId).length;
+        const occupiedBeds = beds.filter((bed) => !!bed.registrationId || !!bed.staffProfileId).length;
+        return {
+          id: venue.id,
+          name: venue.name,
+          hostels: hostels.length,
+          rooms: rooms.length,
+          beds: beds.length,
+          availableBeds,
+          occupiedBeds,
+          campers: campers.length,
+          staff: staff.length,
+          unassignedPeople,
+          campersWithoutTribe: campers.filter((person) => !person.tribeId).length,
+          teachersWithoutTribe: teachers.filter((person) => !person.assignedTribeId).length,
+          capacityShortfall: Math.max(0, unassignedPeople - availableBeds),
+        };
+      }));
+
+      const rooms = venueSummaries.reduce((sum, venue) => sum + venue.rooms, 0);
+      const beds = venueSummaries.reduce((sum, venue) => sum + venue.beds, 0);
+      const campersWithoutVenue = assignableCampers.filter((person) => !person.venueId).length;
+      const staffWithoutVenue = approvedStaff.filter((person) => !person.assignedVenueId).length;
+      const campersWithoutTribe = assignableCampers.filter((person) => !person.tribeId).length;
+      const teachersWithoutTribe = approvedTeachers.filter((person) => !person.assignedTribeId).length;
+      const existingBedAssignments = venueSummaries.reduce((sum, venue) => sum + venue.occupiedBeds, 0);
+
+      return {
+        camp: { id: camp.id, name: camp.name, bedAllocationEnabled: camp.bedAllocationEnabled },
+        totals: {
+          venues: venues.length,
+          rooms,
+          beds,
+          activeTribes,
+          approvedCampers: assignableCampers.filter((person) => person.status === "APPROVED").length,
+          checkedInCampers: assignableCampers.filter((person) => person.status === "CHECKED_IN").length,
+          assignableCampers: assignableCampers.length,
+          checkedInCampersWithAssignmentGaps: assignableCampers.filter((person) =>
+            person.status === "CHECKED_IN" && (!person.venueId || !person.tribeId || !person.roomId)
+          ).length,
+          approvedTeachers: approvedTeachers.length,
+          campersWithoutVenue,
+          staffWithoutVenue,
+          campersWithoutTribe,
+          teachersWithoutTribe,
+          existingBedAssignments,
+          unassignedPeople: venueSummaries.reduce((sum, venue) => sum + venue.unassignedPeople, 0),
+        },
+        venues: venueSummaries,
+      };
+    }),
+
+  assignUnassignedStaffToSoleVenue: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const camp = await ctx.prisma.camp.findUnique({ where: { id: input.campId } });
+      if (!camp || camp.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found" });
+      await assertOrgAdmin(ctx, camp.organizationId);
+      const venues = await ctx.prisma.venue.findMany({ where: { campId: camp.id, visible: true, deletedAt: null }, select: { id: true } });
+      if (venues.length !== 1) throw new TRPCError({ code: "BAD_REQUEST", message: "This action is available only when the camp has exactly one venue. Assign venues manually for a multi-venue camp." });
+      const [campers, staff] = await ctx.prisma.$transaction([
+        ctx.prisma.registration.updateMany({
+          where: {
+            campId: camp.id,
+            status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] },
+            venueId: null,
+            deletedAt: null,
+          },
+          data: { venueId: venues[0].id, venueAssignedAt: new Date() },
+        }),
+        ctx.prisma.staffProfile.updateMany({
+          where: { campId: camp.id, status: "APPROVED", assignedVenueId: null, deletedAt: null },
+          data: { assignedVenueId: venues[0].id },
+        }),
+      ]);
+      return { count: campers.count + staff.count, camperCount: campers.count, staffCount: staff.count, venueId: venues[0].id };
+    }),
+
   // ─── Hostels ─────────────────────────────────────────────────────────
   listHostels: protectedProcedure
     .input(z.object({ venueId: z.string() }))
     .query(async ({ ctx, input }) => {
+      const venue = await ctx.prisma.venue.findUnique({ where: { id: input.venueId }, select: { camp: { select: { organizationId: true } }, deletedAt: true } });
+      if (!venue || venue.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, venue.camp.organizationId);
       return ctx.prisma.hostel.findMany({
         where: { venueId: input.venueId, deletedAt: null },
         include: {
@@ -42,7 +156,9 @@ export const accommodationRouter = createTRPCRouter({
     .input(z.object({ organizationId: z.string(), venueId: z.string(), name: z.string(), gender: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       await assertOrgAdmin(ctx, input.organizationId);
-      return ctx.prisma.hostel.create({ data: input });
+      const venue = await ctx.prisma.venue.findFirst({ where: { id: input.venueId, camp: { organizationId: input.organizationId }, deletedAt: null }, select: { id: true } });
+      if (!venue) throw new TRPCError({ code: "BAD_REQUEST", message: "Venue must belong to this organization" });
+      return ctx.prisma.hostel.create({ data: { organizationId: input.organizationId, venueId: input.venueId, name: input.name, gender: input.gender } });
     }),
 
   updateHostel: protectedProcedure
@@ -90,6 +206,9 @@ export const accommodationRouter = createTRPCRouter({
   listRooms: protectedProcedure
     .input(z.object({ hostelId: z.string() }))
     .query(async ({ ctx, input }) => {
+      const hostel = await ctx.prisma.hostel.findUnique({ where: { id: input.hostelId }, select: { organizationId: true, deletedAt: true } });
+      if (!hostel || hostel.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, hostel.organizationId);
       return ctx.prisma.room.findMany({
         where: { hostelId: input.hostelId, deletedAt: null },
         include: { beds: { where: { deletedAt: null } } },
@@ -147,7 +266,7 @@ export const accommodationRouter = createTRPCRouter({
           for (let i = 0; i < floorInput.roomCount; i += 1) {
             const room = await tx.room.create({ data: {
               hostelId: input.hostelId, floorId: floor.id, name: `${floorInput.roomPrefix}${floorInput.startNumber + i}`,
-              capacity: floorInput.bedsPerRoom || null, displayOrder: i,
+              capacity: floorInput.bedsPerRoom, displayOrder: i,
             } });
             roomsCreated += 1;
             if (floorInput.bedsPerRoom) {
@@ -226,6 +345,9 @@ export const accommodationRouter = createTRPCRouter({
   listBeds: protectedProcedure
     .input(z.object({ roomId: z.string() }))
     .query(async ({ ctx, input }) => {
+      const room = await ctx.prisma.room.findUnique({ where: { id: input.roomId }, include: { hostel: { select: { organizationId: true } } } });
+      if (!room || room.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, room.hostel.organizationId);
       return ctx.prisma.bed.findMany({
         where: { roomId: input.roomId, deletedAt: null },
         include: { registration: { include: { camper: true } } },
@@ -302,8 +424,8 @@ export const accommodationRouter = createTRPCRouter({
               skipped.push({ roomId: room.id, roomName: room.name, reason: `Only ${removable.length} available unoccupied bed(s)` });
               continue;
             }
-            await tx.bed.updateMany({ where: { id: { in: removable.map((bed) => bed.id) } }, data: { deletedAt: new Date() } });
-            await tx.room.update({ where: { id: room.id }, data: { capacity: Math.max(0, room.beds.length - removable.length) || null } });
+            await tx.bed.updateMany({ where: { id: { in: removable.map((bed) => bed.id) } }, data: { deletedAt: new Date(), status: "AVAILABLE", registrationId: null, staffProfileId: null } });
+            await tx.room.update({ where: { id: room.id }, data: { capacity: Math.max(0, room.beds.length - removable.length) } });
             bedsChanged += removable.length;
           }
         }
@@ -332,7 +454,7 @@ export const accommodationRouter = createTRPCRouter({
       if (bed.registrationId || bed.staffProfileId) {
         throw new TRPCError({ code: "CONFLICT", message: "Cannot delete this bed: it is currently occupied. Unassign its camper or staff member first." });
       }
-      return ctx.prisma.bed.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
+      return ctx.prisma.bed.update({ where: { id: input.id }, data: { deletedAt: new Date(), status: "AVAILABLE", registrationId: null, staffProfileId: null } });
     }),
 
   // ─── Camper housing assignment ─────────────────────────────────────────
@@ -365,6 +487,7 @@ export const accommodationRouter = createTRPCRouter({
               gender: registration.camper.gender,
               dateOfBirth: registration.camper.dateOfBirth,
               groupId: registration.tribeId,
+              tribeId: registration.tribeId,
               campusId: registration.campusId,
             },
             actorId: ctx.userId,
@@ -400,6 +523,10 @@ export const accommodationRouter = createTRPCRouter({
       const registration = await ctx.prisma.registration.findUnique({ where: { id: input.registrationId }, include: { campus: true } });
       if (!registration) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, registration.campus.organizationId);
+      if (input.roomId) {
+        const room = await ctx.prisma.room.findFirst({ where: { id: input.roomId, hostel: { organizationId: registration.campus.organizationId, deletedAt: null }, deletedAt: null }, select: { id: true } });
+        if (!room) throw new TRPCError({ code: "BAD_REQUEST", message: "Room must belong to this organization" });
+      }
       return ctx.prisma.registration.update({ where: { id: input.registrationId }, data: { roomId: input.roomId } });
     }),
 
@@ -413,6 +540,13 @@ export const accommodationRouter = createTRPCRouter({
       if (!venue) throw new TRPCError({ code: "NOT_FOUND" });
       await assertOrgAdmin(ctx, venue.camp.organizationId);
       const currentUser = ctx.session!.user;
-      return accommodationEngine.bulkAutoAssignBeds({ venueId: input.venueId, actorId: currentUser.id });
+      try {
+        return await accommodationEngine.bulkAutoAssignBeds({ venueId: input.venueId, actorId: currentUser.id });
+      } catch (error) {
+        if (error instanceof accommodationEngine.BedAllocationError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        }
+        throw error;
+      }
     }),
 });

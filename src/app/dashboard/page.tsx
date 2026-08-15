@@ -65,7 +65,8 @@ function UserDashboard() {
     // end. Only send people away when this genuinely isn't one of their areas.
     if (session.user.capabilities?.parent ?? role === "PARENT") return;
 
-    if (role === "OWNER" || role === "ADMIN") router.push("/admin");
+    if (role === "SUPER_ADMIN") router.push("/super-admin");
+    else if (role === "OWNER" || role === "ADMIN") router.push("/admin");
     else if (role === "CAMPUS_REPRESENTATIVE") router.push("/campus-rep-dashboard");
     else if (role === "TEACHER") router.push("/teacher");
     else if (role === "VOLUNTEER") router.push("/volunteer");

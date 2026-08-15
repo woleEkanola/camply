@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { ArrowDownTrayIcon, ShareIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { getPwaPlatform } from "@/lib/pwaPlatform";
 
 export function InstallPwaBanner() {
   const [showAndroidPrompt, setShowAndroidPrompt] = useState(false);
   const [showIosPrompt, setShowIosPrompt] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showChromeNudge, setShowChromeNudge] = useState(false);
+  const [showAndroidInstructions, setShowAndroidInstructions] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -16,12 +19,21 @@ export function InstallPwaBanner() {
       window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true;
     if (isStandalone) return;
 
+    // The install experience (offline QR scanning, camera access) only holds
+    // up on mobile — a portrait-locked, scan-focused PWA isn't useful on
+    // desktop, so don't offer it there at all.
+    const { isIos, isAndroid, isDesktop, isChrome } = getPwaPlatform();
+    if (isDesktop) return;
+
     // Dismissal check (don't bug user if dismissed within 14 days)
     const lastDismissed = localStorage.getItem("camply_pwa_dismissed");
     if (lastDismissed) {
       const daysSince = (Date.now() - parseInt(lastDismissed, 10)) / (1000 * 60 * 60 * 24);
       if (daysSince < 14) return;
     }
+
+    setShowChromeNudge(!isChrome);
+    if (isAndroid && !isChrome) setShowAndroidInstructions(true);
 
     // Android / Chromium prompt listener
     const handleBeforeInstall = (e: Event) => {
@@ -34,7 +46,6 @@ export function InstallPwaBanner() {
 
     // iOS Safari detection
     const ua = window.navigator.userAgent;
-    const isIos = /iphone|ipad|ipod/i.test(ua);
     const isSafari = /safari/i.test(ua) && !/crios|fxios|chrome/i.test(ua);
 
     if (isIos && isSafari && !isStandalone) {
@@ -52,6 +63,9 @@ export function InstallPwaBanner() {
       const choiceResult = await deferredPrompt.userChoice;
       if (choiceResult.outcome === "accepted") {
         setShowAndroidPrompt(false);
+      } else {
+        localStorage.setItem("camply_pwa_dismissed", Date.now().toString());
+        setShowAndroidPrompt(false);
       }
       setDeferredPrompt(null);
     }
@@ -61,12 +75,13 @@ export function InstallPwaBanner() {
     localStorage.setItem("camply_pwa_dismissed", Date.now().toString());
     setShowAndroidPrompt(false);
     setShowIosPrompt(false);
+    setShowAndroidInstructions(false);
   };
 
-  if (!showAndroidPrompt && !showIosPrompt) return null;
+  if (!showAndroidPrompt && !showIosPrompt && !showAndroidInstructions) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 max-w-md mx-auto bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 animate-slide-up">
+    <div data-testid="pwa-install-banner" className="fixed bottom-4 left-4 right-4 z-50 max-w-md mx-auto bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 animate-slide-up">
       <div className="flex items-start justify-between">
         <div className="flex items-center space-x-3">
           <div className="h-10 w-10 rounded-xl bg-teal-500 flex items-center justify-center font-bold text-white text-lg">
@@ -77,7 +92,7 @@ export function InstallPwaBanner() {
             <p className="text-xs text-slate-300">Fast, 100% reliable offline QR scanning</p>
           </div>
         </div>
-        <button onClick={handleDismiss} className="text-slate-400 hover:text-white p-1">
+        <button onClick={handleDismiss} aria-label="Dismiss install prompt" className="text-slate-400 hover:text-white p-1">
           <XMarkIcon className="h-5 w-5" />
         </button>
       </div>
@@ -91,6 +106,9 @@ export function InstallPwaBanner() {
             <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
             Add to Home Screen
           </button>
+          {showChromeNudge && (
+            <p className="mt-2 text-center text-[11px] text-slate-400">Works best in Chrome</p>
+          )}
         </div>
       )}
 
@@ -106,6 +124,17 @@ export function InstallPwaBanner() {
             <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
             <li>Confirm by tapping <strong>Add</strong></li>
           </ol>
+        </div>
+      )}
+
+      {showAndroidInstructions && !showAndroidPrompt && (
+        <div className="mt-3 rounded-xl border border-slate-700 bg-slate-800 p-3 text-xs text-slate-300">
+          <p className="font-medium text-white">To install on Android:</p>
+          <ol className="mt-2 list-inside list-decimal space-y-1">
+            <li>Open your browser menu.</li>
+            <li>Choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+          </ol>
+          {showChromeNudge && <p className="mt-2 text-[11px] text-slate-400">If that option is unavailable, open this page in Chrome.</p>}
         </div>
       )}
     </div>

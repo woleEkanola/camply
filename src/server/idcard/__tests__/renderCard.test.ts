@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { renderCampIdCardPng, renderCampIdCardSheetPng, type CampIdCardData } from "../renderCard";
+import { createCanvas, fitTextBlock, BODY_MAX_WIDTH } from "../cardPrimitives";
 
 const SAMPLE: CampIdCardData = {
   camperName: "James Adelabu",
@@ -65,8 +66,23 @@ describe("renderCampIdCardPng", () => {
   });
 });
 
+describe("fitTextBlock", () => {
+  it("keeps long and unbreakable names inside the reserved text column", () => {
+    const ctx = createCanvas(1011, 638).getContext("2d");
+    for (const name of [
+      "Oluwaseunfunmi Adeyemi-Babatunde Okonkwo-Chukwuemeka",
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    ]) {
+      const fitted = fitTextBlock(ctx, name, BODY_MAX_WIDTH, { start: 92, min: 30, maxLines: 2 });
+      expect(fitted.lines.length).toBeLessThanOrEqual(2);
+      expect(fitted.width).toBeLessThanOrEqual(BODY_MAX_WIDTH);
+      expect(fitted.fontSize).toBeGreaterThanOrEqual(30);
+    }
+  });
+});
+
 describe("renderCampIdCardSheetPng", () => {
-  it("renders a 2×3 grid PNG (six cards on one image)", async () => {
+  it("renders a 2x4 grid PNG (eight cards on one image)", async () => {
     const png = await renderCampIdCardSheetPng(SAMPLE);
     expect(Buffer.isBuffer(png)).toBe(true);
     expect(png.subarray(0, 8)).toEqual(PNG_MAGIC);
@@ -74,6 +90,6 @@ describe("renderCampIdCardSheetPng", () => {
     const width = png.readUInt32BE(16);
     const height = png.readUInt32BE(20);
     expect(width).toBeGreaterThan(1000);
-    expect(height).toBeGreaterThan(900);
+    expect(height).toBeGreaterThan(1200);
   });
 });

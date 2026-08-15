@@ -9,21 +9,22 @@ const MM_TO_PT = 2.8346;
 const CARD_WIDTH = 85.6 * MM_TO_PT; // ~242.6pt
 const CARD_HEIGHT = 53.98 * MM_TO_PT; // ~153.0pt
 
-const MARGIN = 40;
+const MARGIN_X = 40;
 const COLS = 2;
-const ROWS = 3;
-const COL_GUTTER = (PAGE_WIDTH - 2 * MARGIN - COLS * CARD_WIDTH) / (COLS - 1);
-const ROW_GUTTER = 30;
+const ROWS = 4;
+const CARDS_PER_PAGE = COLS * ROWS;
+const COL_GUTTER = (PAGE_WIDTH - 2 * MARGIN_X - COLS * CARD_WIDTH) / (COLS - 1);
+const ROW_GUTTER = 18;
 
 function cardPositions(): { x: number; y: number }[] {
   const positions: { x: number; y: number }[] = [];
   // pdf-lib's y axis is bottom-up; row 0 is the topmost row on the page.
   const totalGridHeight = ROWS * CARD_HEIGHT + (ROWS - 1) * ROW_GUTTER;
-  const topY = PAGE_HEIGHT - MARGIN;
+  const bottomY = (PAGE_HEIGHT - totalGridHeight) / 2;
   for (let row = 0; row < ROWS; row++) {
-    const y = topY - totalGridHeight + (ROWS - 1 - row) * (CARD_HEIGHT + ROW_GUTTER);
+    const y = bottomY + (ROWS - 1 - row) * (CARD_HEIGHT + ROW_GUTTER);
     for (let col = 0; col < COLS; col++) {
-      const x = MARGIN + col * (CARD_WIDTH + COL_GUTTER);
+      const x = MARGIN_X + col * (CARD_WIDTH + COL_GUTTER);
       positions.push({ x, y });
     }
   }
@@ -61,11 +62,9 @@ function drawCropMarks(page: import("pdf-lib").PDFPage, x: number, y: number) {
   }
 }
 
-const CARDS_PER_PAGE = COLS * ROWS; // 6
-
 /**
- * Produces an A4 sheet with 6 identical copies of one camper's ID card (2
- * cols x 3 rows), for print/cut/lamination spares. The card PNG is embedded
+ * Produces an A4 sheet with 8 identical copies of one person's ID card (2
+ * cols x 4 rows), for print/cut/lamination spares. The card PNG is embedded
  * once and drawn 6 times — this, plus renderCampIdCardPng being the only
  * place the card is ever rendered, is what keeps the email image and every
  * printed copy pixel-identical.
@@ -75,7 +74,7 @@ export async function generateCampIdCardSheetPdf(cardPng: Buffer): Promise<Buffe
 }
 
 /**
- * Bulk export path: lays out one card per slot (6 per A4 page), paginating
+ * Bulk export path: lays out one card per slot (8 per A4 page), paginating
  * as needed, rather than repeating a single card 6 times. Reuses the exact
  * grid/crop-mark layout above so bulk sheets are pixel-identical to the
  * single-camper spares sheet.

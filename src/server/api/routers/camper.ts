@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { normalizeGender } from "../../../lib/gender";
 
 // Define organization settings type
 type OrganizationSettings = {
@@ -198,7 +199,7 @@ export const camperRouter = createTRPCRouter({
         deletedAt: null,
         ...(input.campusId && { homeCampusId: input.campusId }),
         ...(input.active !== undefined && { active: input.active }),
-        ...(input.gender && { gender: input.gender }),
+        ...(input.gender && { gender: { equals: normalizeGender(input.gender) ?? input.gender, mode: "insensitive" } }),
         ...((input.status || input.statuses || input.tribeId) && {
           registrations: { some: registrationWhere },
         }),
@@ -286,8 +287,8 @@ export const camperRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
-      const isCampusRep = (currentUser.managedCampuses?.length ?? 0) > 0;
+      const isOrgAdmin = currentUser.role === "SUPER_ADMIN" || (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === input.organizationId);
+      const isCampusRep = (currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId;
       const isStaffOperational = ["TEACHER", "VOLUNTEER"].includes(currentUser.role);
       const hasPermission = isOrgAdmin || isCampusRep || (isStaffOperational && currentUser.organizationId === input.organizationId);
       if (!hasPermission) throw new TRPCError({ code: "FORBIDDEN" });
@@ -304,15 +305,18 @@ export const camperRouter = createTRPCRouter({
 
       const [totalCount, maleCount, femaleCount, otherCount, inCampCount, exitedCampCount, assignedTribeCount, approvedCount, checkedInMaleCount, checkedInFemaleCount] = await Promise.all([
         ctx.prisma.camper.count({ where }),
-        ctx.prisma.camper.count({ where: { ...where, gender: "Male" } }),
-        ctx.prisma.camper.count({ where: { ...where, gender: "Female" } }),
-        ctx.prisma.camper.count({ where: { ...where, gender: { notIn: ["Male", "Female"] } } }),
+        ctx.prisma.camper.count({ where: { ...where, gender: { equals: "MALE", mode: "insensitive" } } }),
+        ctx.prisma.camper.count({ where: { ...where, gender: { equals: "FEMALE", mode: "insensitive" } } }),
+        ctx.prisma.camper.count({ where: { ...where, NOT: [{ gender: { equals: "MALE", mode: "insensitive" } }, { gender: { equals: "FEMALE", mode: "insensitive" } }] } }),
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "CHECKED_IN" } } } }),
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "COMPLETED" } } } }),
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, tribeId: { not: null } } } } }),
         ctx.prisma.camper.count({ where: { ...where, registrations: { some: { ...registrationScope, status: "APPROVED" } } } }),
-        ctx.prisma.camper.count({ where: { ...where, gender: "Male", registrations: { some: { ...registrationScope, status: "CHECKED_IN" } } } }),
-        ctx.prisma.camper.count({ where: { ...where, gender: "Female", registrations: { some: { ...registrationScope, status: "CHECKED_IN" } } } }),
+        // Male/female breakdown covers everyone who has physically come
+        // through camp — still checked in, or already checked out — not
+        // just those currently on-site.
+        ctx.prisma.camper.count({ where: { ...where, gender: { equals: "MALE", mode: "insensitive" }, registrations: { some: { ...registrationScope, status: { in: ["CHECKED_IN", "COMPLETED"] } } } } }),
+        ctx.prisma.camper.count({ where: { ...where, gender: { equals: "FEMALE", mode: "insensitive" }, registrations: { some: { ...registrationScope, status: { in: ["CHECKED_IN", "COMPLETED"] } } } } }),
       ]);
 
       return { totalCount, maleCount, femaleCount, otherCount, inCampCount, exitedCampCount, assignedTribeCount, approvedCount, checkedInMaleCount, checkedInFemaleCount };
@@ -328,12 +332,13 @@ export const camperRouter = createTRPCRouter({
         throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
       }
 
-      // Users can view their own profiles, admins can view any profiles
+      const targetUser = await ctx.prisma.user.findUnique({ where: { id: input.userId }, select: { organizationId: true } });
+      if (!targetUser) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      // Users can view their own profiles; org admins are restricted to their tenant.
       const hasPermission =
         currentUser.id === input.userId ||
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN";
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === targetUser.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -441,8 +446,7 @@ export const camperRouter = createTRPCRouter({
       const hasPermission =
         currentUser.id === profile.user?.id ||
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === profile.organizationId) ||
         isCampusRep ||
         (isStaffOperational && currentUser.organizationId === profile.organizationId);
 
@@ -474,8 +478,7 @@ export const camperRouter = createTRPCRouter({
       const hasPermission =
         currentUser.id === input.profile.userId ||
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN";
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === input.profile.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -483,6 +486,12 @@ export const camperRouter = createTRPCRouter({
           message: "Not authorized to create campers"
         });
       }
+
+      const [targetUser, homeCampus] = await Promise.all([
+        ctx.prisma.user.findFirst({ where: { id: input.profile.userId, organizationId: input.profile.organizationId }, select: { id: true } }),
+        input.profile.homeCampusId ? ctx.prisma.campus.findFirst({ where: { id: input.profile.homeCampusId, organizationId: input.profile.organizationId }, select: { id: true } }) : Promise.resolve({ id: "none" }),
+      ]);
+      if (!targetUser || !homeCampus) throw new TRPCError({ code: "BAD_REQUEST", message: "User and home campus must belong to this organization" });
 
       // Validate DOB against organization settings
       if (input.profile.dateOfBirth) {
@@ -533,7 +542,7 @@ export const camperRouter = createTRPCRouter({
             dateOfBirth: new Date(input.profile.dateOfBirth)
           }),
           ...(input.profile.gender && {
-            gender: input.profile.gender
+            gender: normalizeGender(input.profile.gender) ?? input.profile.gender
           })
         }
       });
@@ -600,8 +609,7 @@ export const camperRouter = createTRPCRouter({
       const hasPermission =
         currentUser.id === profile.user?.id ||
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === profile.organizationId) ||
         !!(
           profile.homeCampusId &&
           await ctx.prisma.campus.findFirst({
@@ -617,6 +625,11 @@ export const camperRouter = createTRPCRouter({
           code: "FORBIDDEN",
           message: "Not authorized to update this camper"
         });
+      }
+
+      if (input.profile.homeCampusId) {
+        const scopedCampus = await ctx.prisma.campus.findFirst({ where: { id: input.profile.homeCampusId, organizationId: profile.organizationId }, select: { id: true } });
+        if (!scopedCampus) throw new TRPCError({ code: "BAD_REQUEST", message: "Home campus must belong to this organization" });
       }
 
       // Update the profile
@@ -635,7 +648,7 @@ export const camperRouter = createTRPCRouter({
             dateOfBirth: new Date(input.profile.dateOfBirth)
           }),
           ...(input.profile.gender && {
-            gender: input.profile.gender
+            gender: normalizeGender(input.profile.gender) ?? input.profile.gender
           }),
           ...(input.profile.dobApproved !== undefined && {
             dobApproved: input.profile.dobApproved
@@ -718,8 +731,7 @@ export const camperRouter = createTRPCRouter({
 
       const hasPermission =
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === profile.organizationId) ||
         !!(profile.homeCampusId &&
           (await ctx.prisma.campus.findFirst({
             where: {
@@ -752,7 +764,7 @@ export const camperRouter = createTRPCRouter({
       // Get the profile to delete
       const profile = await ctx.prisma.camper.findUnique({
         where: { id: input.id },
-        select: { userId: true, deletedAt: true }
+        select: { userId: true, organizationId: true, deletedAt: true }
       });
 
       if (!profile || profile.deletedAt) {
@@ -763,8 +775,7 @@ export const camperRouter = createTRPCRouter({
       const hasPermission =
         currentUser.id === profile.userId ||
         currentUser.role === "SUPER_ADMIN" ||
-        currentUser.role === "OWNER" ||
-        currentUser.role === "ADMIN";
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === profile.organizationId);
 
       if (!hasPermission) {
         throw new TRPCError({
@@ -786,11 +797,6 @@ export const camperRouter = createTRPCRouter({
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
 
-      const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(currentUser.role);
-      if (!isOrgAdmin && !currentUser.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to bulk delete campers" });
-      }
-
       type Detail = { id: string; status: "success" | "failed"; error?: string };
       const details: Detail[] = [];
       let succeeded = 0;
@@ -799,7 +805,7 @@ export const camperRouter = createTRPCRouter({
       for (const id of input.ids) {
         const profile = await ctx.prisma.camper.findUnique({
           where: { id },
-          select: { userId: true, deletedAt: true },
+          select: { userId: true, organizationId: true, deletedAt: true },
         });
 
         if (!profile || profile.deletedAt) {
@@ -811,8 +817,7 @@ export const camperRouter = createTRPCRouter({
         const hasPermission =
           currentUser.id === profile.userId ||
           currentUser.role === "SUPER_ADMIN" ||
-          currentUser.role === "OWNER" ||
-          currentUser.role === "ADMIN";
+          (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === profile.organizationId);
 
         if (!hasPermission) {
           details.push({ id, status: "failed", error: "Not authorized" });

@@ -27,6 +27,10 @@ export const BODY_X = 48;
 export const QR_BOX_SIZE = 440;
 export const QR_BOX_X = CARD_WIDTH - 40 - QR_BOX_SIZE;
 export const BODY_MAX_WIDTH = QR_BOX_X - BODY_X - 58; // gutter between text column and QR
+export const SHEET_COLS = 2;
+export const SHEET_ROWS = 4;
+export const SHEET_GAP = 12;
+export const SHEET_SCALE = 0.5;
 
 export function roundRectPath(ctx: SKRSContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -65,6 +69,53 @@ export function truncateToFit(ctx: SKRSContext2D, text: string, maxWidth: number
     truncated = truncated.slice(0, -1);
   }
   return truncated + "…";
+}
+
+export interface FittedTextBlock {
+  lines: string[];
+  fontSize: number;
+  lineHeight: number;
+  width: number;
+  height: number;
+  truncated: boolean;
+}
+
+/** Fits text into a measurable rectangle: wrap, shrink, then ellipsize. */
+export function fitTextBlock(
+  ctx: SKRSContext2D,
+  text: string,
+  maxWidth: number,
+  opts: { start: number; min: number; step?: number; maxLines?: number; lineHeight?: number }
+): FittedTextBlock {
+  const clean = text.trim().replace(/\s+/g, " ");
+  const step = opts.step ?? 2;
+  const maxLines = opts.maxLines ?? 2;
+  const lineHeightRatio = opts.lineHeight ?? 1.1;
+  for (let size = opts.start; size >= opts.min; size -= step) {
+    ctx.font = `bold ${size}px Inter, sans-serif`;
+    const lines = wrapToLines(ctx, clean, maxWidth, maxLines);
+    if (lines) {
+      const lineHeight = Math.round(size * lineHeightRatio);
+      return { lines, fontSize: size, lineHeight, width: Math.max(0, ...lines.map((line) => ctx.measureText(line).width)), height: size + Math.max(0, lines.length - 1) * lineHeight, truncated: false };
+    }
+  }
+  ctx.font = `bold ${opts.min}px Inter, sans-serif`;
+  const words = clean.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cursor = 0;
+  while (cursor < words.length && lines.length < maxLines) {
+    let line = "";
+    while (cursor < words.length) {
+      const trial = line ? `${line} ${words[cursor]}` : words[cursor];
+      if (ctx.measureText(trial).width <= maxWidth) { line = trial; cursor++; } else break;
+    }
+    if (!line && cursor < words.length) { line = truncateToFit(ctx, words[cursor], maxWidth); cursor++; }
+    lines.push(line);
+  }
+  if (cursor < words.length && lines.length) lines[lines.length - 1] = truncateToFit(ctx, `${lines[lines.length - 1]} ${words.slice(cursor).join(" ")}`, maxWidth);
+  if (!lines.length) lines.push(truncateToFit(ctx, clean, maxWidth));
+  const lineHeight = Math.round(opts.min * lineHeightRatio);
+  return { lines, fontSize: opts.min, lineHeight, width: Math.max(0, ...lines.map((line) => ctx.measureText(line).width)), height: opts.min + Math.max(0, lines.length - 1) * lineHeight, truncated: true };
 }
 
 /** Greedy word wrap at the ctx's current font. Returns null when the text

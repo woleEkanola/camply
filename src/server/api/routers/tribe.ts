@@ -2,9 +2,16 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import * as tribeEngine from "../../tribe/engine";
-import { assertOrgAdminOrCampusRep, assertCanManageCamp } from "../trpc/scoping";
+import { assertOrgAdminOrCampusRep as assertScopedOrgAccess, assertCanManageCamp as assertScopedCampAccess } from "../trpc/scoping";
+
+const assertOrgAdminOrCampusRep = (ctx: any, organizationId: string, campusId?: string | null) =>
+  assertScopedOrgAccess(ctx, organizationId, campusId, "TRIBES");
+const assertCanManageCamp = (ctx: any, campId: string) =>
+  assertScopedCampAccess(ctx, campId, "TRIBES");
 import { assertReportsAccess } from "./scan";
 import { recordScoreEvent } from "../../leaderboard/record";
+import { getCampPointsAccess } from "../../campPoints/access";
+import { logEvent } from "../../audit";
 
 // updatePoints predates ScoreCategory and has no category picker of its own
 // (it's a bare delta+reason form in TribeDashboardPanel) — every award through
@@ -23,11 +30,175 @@ function toTRPCError(error: unknown): TRPCError {
 }
 
 export const tribeRouter = createTRPCRouter({
+  hub: protectedProcedure
+    .input(z.object({ campId: z.string(), tribeId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const access = await getCampPointsAccess(ctx, input.campId);
+      const allowedTribeId = access.isAdmin ? input.tribeId : access.staffProfile?.assignedTribeId ?? undefined;
+      const tribes = await ctx.prisma.tribe.findMany({
+        where: {
+          campId: input.campId,
+          deletedAt: null,
+          ...(!access.isAdmin ? { id: allowedTribeId ?? "__unassigned__" } : {}),
+        },
+        select: { id: true, name: true, code: true, color: true, points: true, maxCapacity: true },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      });
+      const selectedId = allowedTribeId ?? tribes[0]?.id;
+      if (!selectedId) return { access, tribes, tribe: null, eligibleStaff: [] };
+
+      const tribe = await ctx.prisma.tribe.findFirst({
+        where: { id: selectedId, campId: input.campId, deletedAt: null },
+        include: {
+          maleHead: { select: { id: true, firstName: true, lastName: true, photoUrl: true, type: true, gender: true } },
+          femaleHead: { select: { id: true, firstName: true, lastName: true, photoUrl: true, type: true, gender: true } },
+          maleCamperLeader: { select: { id: true, camperId: true, camper: { select: { name: true, photoUrl: true, gender: true } } } },
+          femaleCamperLeader: { select: { id: true, camperId: true, camper: { select: { name: true, photoUrl: true, gender: true } } } },
+          assignedStaff: {
+            where: { status: "APPROVED", deletedAt: null },
+            select: { id: true, firstName: true, lastName: true, photoUrl: true, type: true, gender: true, phone: true },
+            orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+          },
+          registrations: {
+            where: { deletedAt: null, status: { in: ["APPROVED", "CHECKED_IN", "COMPLETED"] } },
+            select: {
+              id: true, camperId: true, registrationNumber: true, status: true,
+              camper: { select: { name: true, photoUrl: true, gender: true } },
+              campus: { select: { name: true } },
+            },
+            orderBy: { camper: { name: "asc" } },
+          },
+        },
+      });
+      if (!tribe) throw new TRPCError({ code: "FORBIDDEN", message: "This tribe is outside your assignment." });
+
+      const dayStart = new Date();
+      dayStart.setHours(0, 0, 0, 0);
+      const [pointTotals, latestSession, pointsToday, eligibleStaff] = await Promise.all([
+        ctx.prisma.scoreEvent.groupBy({
+          by: ["registrationId"],
+          where: { campId: input.campId, tribeId: tribe.id, registrationId: { not: null } },
+          _sum: { points: true },
+        }),
+        ctx.prisma.attendanceSession.findFirst({
+          where: { campId: input.campId, tribeId: tribe.id, date: { gte: dayStart } },
+          orderBy: { createdAt: "desc" },
+          include: { records: { select: { status: true } } },
+        }),
+        ctx.prisma.scoreEvent.aggregate({
+          where: { campId: input.campId, tribeId: tribe.id, occurredAt: { gte: dayStart } },
+          _sum: { points: true },
+        }),
+        access.isAdmin
+          ? ctx.prisma.staffProfile.findMany({
+              where: { campId: input.campId, status: "APPROVED", deletedAt: null },
+              select: { id: true, firstName: true, lastName: true, type: true, gender: true, assignedTribeId: true },
+              orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+            })
+          : Promise.resolve([]),
+      ]);
+      const totals = new Map(pointTotals.map((row: any) => [row.registrationId, row._sum.points ?? 0]));
+      const attendance = { PRESENT: 0, LATE: 0, ABSENT: 0, EXCUSED: 0 } as Record<string, number>;
+      for (const record of latestSession?.records ?? []) attendance[record.status] = (attendance[record.status] ?? 0) + 1;
+      return {
+        access,
+        tribes,
+        eligibleStaff,
+        tribe: {
+          ...tribe,
+          registrations: tribe.registrations.map((registration: any) => ({ ...registration, points: totals.get(registration.id) ?? 0 })),
+          summary: { attendance, attendanceSessionName: latestSession?.name ?? null, pointsToday: pointsToday._sum.points ?? 0 },
+        },
+      };
+    }),
+
+  assignStaffMember: protectedProcedure
+    .input(z.object({ tribeId: z.string(), staffProfileId: z.string(), role: z.enum(["MEMBER", "MALE_HEAD", "FEMALE_HEAD"]) }))
+    .mutation(async ({ ctx, input }) => {
+      const tribe = await ctx.prisma.tribe.findUnique({ where: { id: input.tribeId }, include: { camp: true } });
+      if (!tribe || tribe.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Tribe not found." });
+      const access = await getCampPointsAccess(ctx, tribe.campId);
+      if (!access.isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Only camp administrators can manage tribe membership." });
+      const staff = await ctx.prisma.staffProfile.findFirst({ where: { id: input.staffProfileId, campId: tribe.campId, status: "APPROVED", deletedAt: null } });
+      if (!staff) throw new TRPCError({ code: "NOT_FOUND", message: "Approved teacher or volunteer not found." });
+      const gender = staff.gender?.toUpperCase();
+      if (input.role === "MALE_HEAD" && gender !== "MALE") throw new TRPCError({ code: "BAD_REQUEST", message: "The male tribe head must have male selected on their profile." });
+      if (input.role === "FEMALE_HEAD" && gender !== "FEMALE") throw new TRPCError({ code: "BAD_REQUEST", message: "The female tribe head must have female selected on their profile." });
+
+      return ctx.prisma.$transaction(async (tx) => {
+        await tx.tribe.updateMany({ where: { maleHeadId: staff.id }, data: { maleHeadId: null } });
+        await tx.tribe.updateMany({ where: { femaleHeadId: staff.id }, data: { femaleHeadId: null } });
+        await tx.staffProfile.update({
+          where: { id: staff.id },
+          data: { assignedTribeId: tribe.id, isCampMonitor: input.role !== "MEMBER", isAssistantMonitor: false },
+        });
+        const data = input.role === "MALE_HEAD" ? { maleHeadId: staff.id } : input.role === "FEMALE_HEAD" ? { femaleHeadId: staff.id } : {};
+        const updated = await tx.tribe.update({ where: { id: tribe.id }, data });
+        await logEvent(tx, { organizationId: tribe.camp.organizationId, actorId: ctx.userId, action: "TRIBE_STAFF_ASSIGNED", subjectType: "TRIBE", subjectId: tribe.id, newValue: input });
+        return updated;
+      });
+    }),
+
+  removeStaffMember: protectedProcedure
+    .input(z.object({ tribeId: z.string(), staffProfileId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const tribe = await ctx.prisma.tribe.findUnique({ where: { id: input.tribeId }, include: { camp: true } });
+      if (!tribe || tribe.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      const access = await getCampPointsAccess(ctx, tribe.campId);
+      if (!access.isAdmin) throw new TRPCError({ code: "FORBIDDEN" });
+      return ctx.prisma.$transaction(async (tx) => {
+        await tx.tribe.update({ where: { id: tribe.id }, data: {
+          ...(tribe.maleHeadId === input.staffProfileId ? { maleHeadId: null } : {}),
+          ...(tribe.femaleHeadId === input.staffProfileId ? { femaleHeadId: null } : {}),
+        } });
+        await tx.staffProfile.updateMany({ where: { id: input.staffProfileId, assignedTribeId: tribe.id }, data: { assignedTribeId: null, isCampMonitor: false, isAssistantMonitor: false } });
+        await logEvent(tx, { organizationId: tribe.camp.organizationId, actorId: ctx.userId, action: "TRIBE_STAFF_REMOVED", subjectType: "TRIBE", subjectId: tribe.id, previousValue: { staffProfileId: input.staffProfileId } });
+        return { success: true };
+      });
+    }),
+
+  assignCamperLeader: protectedProcedure
+    .input(z.object({ tribeId: z.string(), registrationId: z.string(), role: z.enum(["MALE_LEADER", "FEMALE_LEADER"]) }))
+    .mutation(async ({ ctx, input }) => {
+      const tribe = await ctx.prisma.tribe.findUnique({ where: { id: input.tribeId }, include: { camp: true } });
+      if (!tribe || tribe.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      const access = await getCampPointsAccess(ctx, tribe.campId);
+      if (!access.isAdmin) throw new TRPCError({ code: "FORBIDDEN" });
+      const registration = await ctx.prisma.registration.findFirst({ where: { id: input.registrationId, tribeId: tribe.id, deletedAt: null }, include: { camper: true } });
+      if (!registration) throw new TRPCError({ code: "BAD_REQUEST", message: "The camper must belong to this tribe." });
+      const gender = registration.camper.gender?.toUpperCase();
+      if (input.role === "MALE_LEADER" && gender !== "MALE") throw new TRPCError({ code: "BAD_REQUEST", message: "The male camper leader must have male selected on their profile." });
+      if (input.role === "FEMALE_LEADER" && gender !== "FEMALE") throw new TRPCError({ code: "BAD_REQUEST", message: "The female camper leader must have female selected on their profile." });
+      const data = input.role === "MALE_LEADER" ? { maleCamperLeaderId: registration.id } : { femaleCamperLeaderId: registration.id };
+      const updated = await ctx.prisma.tribe.update({ where: { id: tribe.id }, data });
+      await logEvent(ctx.prisma, { organizationId: tribe.camp.organizationId, actorId: ctx.userId, action: "TRIBE_CAMPER_LEADER_ASSIGNED", subjectType: "TRIBE", subjectId: tribe.id, registrationId: registration.id, newValue: input });
+      return updated;
+    }),
+
+  clearLeadershipSeat: protectedProcedure
+    .input(z.object({ tribeId: z.string(), seat: z.enum(["MALE_HEAD", "FEMALE_HEAD", "MALE_LEADER", "FEMALE_LEADER"]) }))
+    .mutation(async ({ ctx, input }) => {
+      const tribe = await ctx.prisma.tribe.findUnique({ where: { id: input.tribeId } });
+      if (!tribe || tribe.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      const access = await getCampPointsAccess(ctx, tribe.campId);
+      if (!access.isAdmin) throw new TRPCError({ code: "FORBIDDEN" });
+      const data = input.seat === "MALE_HEAD" ? { maleHeadId: null } : input.seat === "FEMALE_HEAD" ? { femaleHeadId: null } : input.seat === "MALE_LEADER" ? { maleCamperLeaderId: null } : { femaleCamperLeaderId: null };
+      const staffProfileId = input.seat === "MALE_HEAD" ? tribe.maleHeadId : input.seat === "FEMALE_HEAD" ? tribe.femaleHeadId : null;
+      return ctx.prisma.$transaction(async (tx) => {
+        const updated = await tx.tribe.update({ where: { id: tribe.id }, data });
+        if (staffProfileId) {
+          const remainingSeats = await tx.tribe.count({ where: { deletedAt: null, OR: [{ maleHeadId: staffProfileId }, { femaleHeadId: staffProfileId }] } });
+          if (!remainingSeats) await tx.staffProfile.update({ where: { id: staffProfileId }, data: { isCampMonitor: false } });
+        }
+        return updated;
+      });
+    }),
   listByCamp: protectedProcedure
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      await assertCanManageCamp(ctx, input.campId);
       const tribes = await ctx.prisma.tribe.findMany({
         where: { campId: input.campId, deletedAt: null },
         include: { _count: { select: { registrations: { where: { deletedAt: null } } } } },
@@ -94,9 +265,12 @@ export const tribeRouter = createTRPCRouter({
       const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.id } });
       if (tribe.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Tribe not found" });
       await assertCanManageCamp(ctx, tribe.campId);
-      const inUse = await ctx.prisma.registration.count({ where: { tribeId: input.id, deletedAt: null } });
-      if (inUse > 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot delete a tribe with assigned campers. Reassign them first." });
+      const [camperCount, staffCount] = await Promise.all([
+        ctx.prisma.registration.count({ where: { tribeId: input.id, deletedAt: null } }),
+        ctx.prisma.staffProfile.count({ where: { assignedTribeId: input.id, deletedAt: null } }),
+      ]);
+      if (camperCount > 0 || staffCount > 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot archive a tribe with ${camperCount} assigned campers and ${staffCount} assigned staff. Reassign them first.` });
       }
       return ctx.prisma.tribe.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),

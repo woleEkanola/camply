@@ -10,6 +10,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardBody } from "@/components/ui/Card";
+import { StaffDashboardEssentials } from "@/components/staff/shared/StaffDashboardEssentials";
 import {
   SparklesIcon,
   ClipboardDocumentListIcon,
@@ -20,6 +21,8 @@ import {
   CheckCircleIcon,
   ArrowRightIcon,
   ExclamationTriangleIcon,
+  ClipboardDocumentCheckIcon,
+  Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 
 export default function CampusRepDashboard() {
@@ -29,6 +32,8 @@ export default function CampusRepDashboard() {
   const managedCampuses: string[] = session?.user?.managedCampuses || [];
   const organizationId = session?.user?.organizationId ?? "";
   const campusId = managedCampuses[0];
+  const { data: activeCamp } = api.camp.getActiveCamp.useQuery({ organizationId }, { enabled: !!organizationId });
+  const { data: staffProfile } = api.staff.getMyProfile.useQuery();
 
   const { data: registrations = [] } = api.registration.getByOrganizationAndYear.useQuery(
     { organizationId },
@@ -39,6 +44,8 @@ export default function CampusRepDashboard() {
     { id: campusId },
     { enabled: !!campusId }
   );
+  const { data: organizationCampuses = [] } = api.campus.getByOrganization.useQuery({ organizationId }, { enabled: !!organizationId });
+  const assignedCampuses = organizationCampuses.filter((item) => managedCampuses.includes(item.id));
 
   const { data: signupLinks, isLoading: isSignupLinksLoading } = api.signupLink.getByCampusAndCamp.useQuery(
     { campusId },
@@ -74,6 +81,7 @@ export default function CampusRepDashboard() {
         <div className="p-8 text-center text-sm text-neutral-500">
           No managed campuses assigned to your account.
         </div>
+
       </AppShell>
     );
   }
@@ -106,6 +114,8 @@ export default function CampusRepDashboard() {
       )}
 
       <div className="space-y-6">
+        <StaffDashboardEssentials area="campus-rep" organizationId={organizationId} campId={activeCamp?.id} profile={staffProfile?.status === "APPROVED" ? staffProfile : null} mode="photo" />
+
         {/* 1. HERO CAMPUS HEADER & SHAREABLE SIGNUP LINK BOX */}
         <div className="relative overflow-hidden rounded-2xl border border-border-default bg-surface p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -176,12 +186,21 @@ export default function CampusRepDashboard() {
           )}
         </div>
 
+        <StaffDashboardEssentials area="campus-rep" organizationId={organizationId} campId={activeCamp?.id} profile={staffProfile?.status === "APPROVED" ? staffProfile : null} mode="details" />
+
+        <Card>
+          <CardBody className="space-y-3">
+            <div><p className="text-xs font-semibold uppercase tracking-wide text-txt-muted">My assignment</p><p className="mt-1 font-semibold text-txt-primary">Campus Representative</p></div>
+            <div><p className="text-xs font-semibold uppercase tracking-wide text-txt-muted">Assigned campuses</p><div className="mt-2 flex flex-wrap gap-2">{assignedCampuses.map((item) => <span key={item.id} className="rounded-lg border border-border-default bg-surface-raised px-3 py-2 text-sm font-medium text-txt-primary">{item.name}</span>)}</div></div>
+          </CardBody>
+        </Card>
+
         {/* 2. CORE ACTION CARDS GRID */}
         <div>
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-txt-secondary">
             Quick Actions
           </h3>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {/* Review Registrations */}
             <button
               type="button"
@@ -240,7 +259,7 @@ export default function CampusRepDashboard() {
             {/* QR Scanner */}
             <button
               type="button"
-              onClick={() => router.push("/teacher/qr-scan")}
+              onClick={() => router.push("/campus-rep-dashboard/qr-scan")}
               className="group flex flex-col justify-between rounded-2xl border border-border-default bg-surface p-5 text-left transition-all duration-200 hover:border-neutral-700 hover:bg-surface-hover active:scale-[0.98] shadow-2xs"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-500/15 text-accent-400 border border-accent-500/30 group-hover:scale-105 transition-transform">
@@ -255,6 +274,14 @@ export default function CampusRepDashboard() {
                   Scan teenager badges for check-in & station validation.
                 </div>
               </div>
+            </button>
+            <button type="button" onClick={() => router.push("/campus-rep-dashboard/tribe")} className="group flex flex-col justify-between rounded-2xl border border-border-default bg-surface p-5 text-left transition hover:border-accent-500 hover:bg-surface-hover active:scale-[0.98] shadow-2xs">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-500"><ClipboardDocumentCheckIcon className="h-7 w-7" /></div>
+              <div className="mt-4"><div className="flex items-center justify-between text-base font-extrabold text-txt-primary"><span>My Tribe Hub</span><ArrowRightIcon className="h-4 w-4" /></div><div className="mt-0.5 text-xs text-txt-secondary">Open your tribe roster, attendance, and points workspace.</div></div>
+            </button>
+            <button type="button" onClick={() => router.push("/campus-rep-dashboard/departments?view=contacts")} className="group flex flex-col justify-between rounded-2xl border border-border-default bg-surface p-5 text-left transition hover:border-purple-500 hover:bg-surface-hover active:scale-[0.98] shadow-2xs">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-purple-500/30 bg-purple-500/15 text-purple-500"><Squares2X2Icon className="h-7 w-7" /></div>
+              <div className="mt-4"><div className="flex items-center justify-between text-base font-extrabold text-txt-primary"><span>Departments</span><ArrowRightIcon className="h-4 w-4" /></div><div className="mt-0.5 text-xs text-txt-secondary">Find camp teams, leaders, teachers, and volunteers.</div></div>
             </button>
           </div>
         </div>

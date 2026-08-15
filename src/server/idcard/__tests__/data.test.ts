@@ -6,7 +6,12 @@ const base = {
   qrToken: "qr-token-abc",
   registrationNumber: "TC26-LEK-0042",
   camper: { name: "James Adelabu", gender: "Male", userId: "parent1" },
-  camp: { name: "TCN Teens Camp", year: 2026, logoUrl: null, organization: { branding: { logoUrl: null } } },
+  camp: {
+    name: "TCN Teens Camp",
+    year: 2026,
+    logoUrl: null,
+    organization: { branding: { idCardLogoUrl: null, logoUrl: null } },
+  },
   campus: { name: "Igando Campus" },
   tribe: { name: "Pistis", color: "#1E3A8A" },
 } as any;
@@ -30,18 +35,31 @@ describe("buildCampIdCardData", () => {
     expect(result!.tribeColor).toBe("#1E3A8A");
   });
 
-  it("prefers Camp.logoUrl over OrganizationBranding.logoUrl", () => {
+  it("prefers the ID-card override over Camp.logoUrl and OrganizationBranding.logoUrl", () => {
     const result = buildCampIdCardData({
       ...base,
-      camp: { ...base.camp, logoUrl: "https://camp.example/logo.png", organization: { branding: { logoUrl: "https://org.example/logo.png" } } },
+      camp: {
+        ...base.camp,
+        logoUrl: "https://camp.example/logo.png",
+        organization: {
+          branding: {
+            idCardLogoUrl: "https://org.example/id-card-logo.png",
+            logoUrl: "https://org.example/logo.png",
+          },
+        },
+      },
     });
-    expect(result!.logoUrl).toBe("https://camp.example/logo.png");
+    expect(result!.logoUrl).toBe("https://org.example/id-card-logo.png");
   });
 
   it("falls back to OrganizationBranding.logoUrl when Camp.logoUrl is unset", () => {
     const result = buildCampIdCardData({
       ...base,
-      camp: { ...base.camp, logoUrl: null, organization: { branding: { logoUrl: "https://org.example/logo.png" } } },
+      camp: {
+        ...base.camp,
+        logoUrl: null,
+        organization: { branding: { idCardLogoUrl: null, logoUrl: "https://org.example/logo.png" } },
+      },
     });
     expect(result!.logoUrl).toBe("https://org.example/logo.png");
   });

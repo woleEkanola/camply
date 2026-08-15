@@ -31,7 +31,7 @@ export function AttendanceWorkspace({ profile, organizationId }: { profile: any;
 
   const createSession = api.attendance.createSession.useMutation({ onSuccess: (session) => { setActiveSessionId(session.id); setSessionName(""); invalidate(); }, onError: (e) => setError(e.message) });
   const mark = api.attendance.mark.useMutation({ onSuccess: () => invalidate(), onError: (e) => setError(e.message) });
-  const resolve = api.attendance.resolveAndMark.useMutation({ onSuccess: (result) => { setFeedback(`${result.camper.name} marked ${result.record.status.toLowerCase()}.`); setSearch(""); invalidate(); }, onError: (e) => setError(e.message) });
+  const resolve = api.attendance.resolveAndMark.useMutation({ onSuccess: (result) => { setFeedback(`${result.subject.name} marked ${result.record.status.toLowerCase()}.`); setSearch(""); invalidate(); }, onError: (e) => setError(e.message) });
   const close = api.attendance.closeSession.useMutation({ onSuccess: () => { setFeedback("Attendance session closed. Unrecorded campers were marked absent."); invalidate(); }, onError: (e) => setError(e.message) });
 
   if (!tribeId) return <EmptyState title="No tribe assigned" description="You need a tribe assignment before you can take attendance." />;

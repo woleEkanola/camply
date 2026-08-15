@@ -19,13 +19,17 @@ import {
   roundRectPath,
   fitFontSize,
   truncateToFit,
-  wrapToLines,
+  fitTextBlock,
   fillTextTracked,
   drawDotGrid,
   drawChurchGlyph,
   drawPersonGlyph,
   loadLogoOrNull,
   initials,
+  SHEET_COLS,
+  SHEET_ROWS,
+  SHEET_GAP,
+  SHEET_SCALE,
 } from "./cardPrimitives";
 
 export interface CampIdCardData {
@@ -152,13 +156,10 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#FFFFFF";
   const tribeUpper = data.tribeName.toUpperCase();
-  const tribeSize = fitFontSize(ctx, tribeUpper, bandInnerWidth, { start: 60, min: 24, step: 2 });
-  ctx.font = `bold ${tribeSize}px Inter, sans-serif`;
-  ctx.fillText(
-    truncateToFit(ctx, tribeUpper, bandInnerWidth),
-    BAND_X + (CARD_WIDTH - BAND_X) / 2,
-    HEADER_HEIGHT / 2 - 4
-  );
+  const tribeFit = fitTextBlock(ctx, tribeUpper, bandInnerWidth, { start: 60, min: 24, maxLines: 2, lineHeight: 0.95 });
+  ctx.font = `bold ${tribeFit.fontSize}px Inter, sans-serif`;
+  const tribeStartY = HEADER_HEIGHT / 2 - tribeFit.height / 2 + tribeFit.fontSize / 2 - 4;
+  tribeFit.lines.forEach((line, index) => ctx.fillText(line, BAND_X + (CARD_WIDTH - BAND_X) / 2, tribeStartY + index * tribeFit.lineHeight));
 
   // ─── Camper name — the dominant element, wrapping to at most two lines.
   ctx.textAlign = "left";
@@ -166,22 +167,11 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.fillStyle = DARK_TEXT;
   // Starts large enough that a typical two-part name stacks onto two lines,
   // matching the reference artwork's proportions.
-  let nameSize = 92;
-  let nameLines: string[] | null = null;
-  while (nameSize >= 30) {
-    ctx.font = `bold ${nameSize}px Inter, sans-serif`;
-    nameLines = wrapToLines(ctx, data.camperName, BODY_MAX_WIDTH, 2);
-    if (nameLines) break;
-    nameSize -= 2;
-  }
-  if (!nameLines) {
-    // A single unbreakable word wider than the column even at the floor size.
-    nameSize = 30;
-    ctx.font = `bold ${nameSize}px Inter, sans-serif`;
-    nameLines = [truncateToFit(ctx, data.camperName, BODY_MAX_WIDTH)];
-  }
+  const nameFit = fitTextBlock(ctx, data.camperName, BODY_MAX_WIDTH, { start: 92, min: 30, maxLines: 2 });
+  const nameSize = nameFit.fontSize;
+  const nameLines = nameFit.lines;
   ctx.font = `bold ${nameSize}px Inter, sans-serif`;
-  const nameLineHeight = Math.round(nameSize * 1.1);
+  const nameLineHeight = nameFit.lineHeight;
   // Anchor the block so one- and two-line names share the same optical centre:
   // a short single-line name drops lower so the body doesn't sit top-heavy.
   const nameTop = nameLines.length >= 2 ? 232 : 278;
@@ -263,10 +253,6 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   return canvas.encode("png");
 }
 
-const SHEET_COLS = 2;
-const SHEET_ROWS = 3;
-const SHEET_GAP = 12;
-const SHEET_SCALE = 0.5;
 const SHEET_CARD_W = Math.round(CARD_WIDTH * SHEET_SCALE);
 const SHEET_CARD_H = Math.round(CARD_HEIGHT * SHEET_SCALE);
 const SHEET_W = SHEET_CARD_W * SHEET_COLS + SHEET_GAP * (SHEET_COLS + 1);

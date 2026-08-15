@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { assertOrgAdminOrCampusRep } from "../trpc/scoping";
 import { ensureSystemFields } from "../../registration/systemFieldRegistry";
 import { getDepartmentAvailability } from "../../staff/departmentCapacity";
+import { resolveSignupLinkByToken } from "../../registration/resolveSignupLink";
 
 const audienceEnum = z.enum(["CAMPER", "TEACHER", "VOLUNTEER"]);
 const typeEnum = z.enum(["TEXT", "LONG_TEXT", "NUMBER", "DATE", "BOOLEAN", "CHECKBOX", "SELECT", "MULTI_SELECT", "RADIO", "FILE", "PHONE"]);
@@ -19,9 +20,24 @@ const PRIVILEGED_ROLES = new Set(["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRE
 
 export const formFieldRouter = createTRPCRouter({
   list: publicProcedure
-    .input(z.object({ organizationId: z.string(), audience: audienceEnum, campId: z.string().optional() }))
+    .input(z.object({ organizationId: z.string(), audience: audienceEnum, campId: z.string().optional(), signupToken: z.string().max(200).optional() }))
     .query(async ({ ctx, input }) => {
-      await ensureSystemFields(ctx.prisma, input.organizationId, input.audience);
+      const currentUser = ctx.session?.user;
+      const sameOrgUser = !!currentUser && (currentUser.role === "SUPER_ADMIN" || currentUser.organizationId === input.organizationId);
+      if (!sameOrgUser) {
+        if (!input.signupToken) throw new TRPCError({ code: "UNAUTHORIZED", message: "A valid signup link is required." });
+        const camperLink = await resolveSignupLinkByToken(ctx.prisma, input.signupToken);
+        const staffLink = camperLink
+          ? null
+          : await ctx.prisma.staffSignupLink.findUnique({ where: { token: input.signupToken } });
+        const tokenMatches = camperLink
+          ? input.audience === "CAMPER" && camperLink.active && camperLink.campId === input.campId && camperLink.campus.organizationId === input.organizationId
+          : !!staffLink && staffLink.active && staffLink.organizationId === input.organizationId && staffLink.campId === input.campId && staffLink.type === input.audience;
+        if (!tokenMatches) throw new TRPCError({ code: "FORBIDDEN", message: "This signup link does not authorize these fields." });
+      }
+      if (sameOrgUser && currentUser && PRIVILEGED_ROLES.has(currentUser.role)) {
+        await ensureSystemFields(ctx.prisma, input.organizationId, input.audience);
+      }
       const fields = await ctx.prisma.formField.findMany({
         where: { organizationId: input.organizationId, audience: input.audience, deletedAt: null },
         orderBy: { sortOrder: "asc" },

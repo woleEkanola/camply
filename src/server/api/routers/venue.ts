@@ -2,7 +2,10 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { prisma } from "../../db";
 import { TRPCError } from "@trpc/server";
-import { assertOrgAdmin } from "../trpc/scoping";
+import { assertOrgAdminOrCommand } from "../trpc/scoping";
+
+const assertVenueAccess = (ctx: any, organizationId: string) =>
+  assertOrgAdminOrCommand(ctx, organizationId, "ACCOMMODATION");
 
 // Venue: physical camp site, scoped to exactly one Camp. Venue/capacity
 // management is admin-only - Campus Representatives do not manage camp
@@ -38,7 +41,7 @@ export const venueRouter = createTRPCRouter({
     .input(venueSchema)
     .mutation(async ({ input, ctx }) => {
       const organizationId = await getVenueOrgId(input.campId);
-      await assertOrgAdmin(ctx, organizationId);
+      await assertVenueAccess(ctx, organizationId);
       return prisma.venue.create({ data: input });
     }),
 
@@ -47,7 +50,7 @@ export const venueRouter = createTRPCRouter({
     .input(z.object({ campId: z.string() }))
     .query(async ({ input, ctx }) => {
       const organizationId = await getVenueOrgId(input.campId);
-      await assertOrgAdmin(ctx, organizationId);
+      await assertVenueAccess(ctx, organizationId);
       return prisma.venue.findMany({
         where: { campId: input.campId, deletedAt: null },
         orderBy: { name: "asc" },
@@ -65,7 +68,7 @@ export const venueRouter = createTRPCRouter({
       if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
-      await assertOrgAdmin(ctx, venue.camp.organizationId);
+      await assertVenueAccess(ctx, venue.camp.organizationId);
       return venue;
     }),
 
@@ -83,7 +86,7 @@ export const venueRouter = createTRPCRouter({
       if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
-      await assertOrgAdmin(ctx, venue.camp.organizationId);
+      await assertVenueAccess(ctx, venue.camp.organizationId);
 
       const { campId, ...rest } = input.data;
       return prisma.venue.update({ where: { id: input.id }, data: rest });
@@ -114,7 +117,7 @@ export const venueRouter = createTRPCRouter({
       if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
-      await assertOrgAdmin(ctx, venue.camp.organizationId);
+      await assertVenueAccess(ctx, venue.camp.organizationId);
 
       if (input.data.quota != null) {
         const approvedCount = await prisma.registration.count({
@@ -141,7 +144,7 @@ export const venueRouter = createTRPCRouter({
       if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
-      await assertOrgAdmin(ctx, venue.camp.organizationId);
+      await assertVenueAccess(ctx, venue.camp.organizationId);
 
       const registrationCount = await prisma.registration.count({
         where: { venueId: input.id, deletedAt: null },
@@ -173,7 +176,7 @@ export const venueRouter = createTRPCRouter({
       if (!venue || venue.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Venue not found" });
       }
-      await assertOrgAdmin(ctx, venue.camp.organizationId);
+      await assertVenueAccess(ctx, venue.camp.organizationId);
 
       const registrationsCount = await prisma.registration.count({
         where: { venueId: input.venueId, deletedAt: null },

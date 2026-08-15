@@ -14,12 +14,14 @@ const ENTITY_LABEL: Record<EntityKind, string> = {
   campuses: "Campuses",
   tribes: "Tribes",
   departments: "Departments",
+  program_schedule: "Program Schedule",
 };
 
 function rowLabel(raw: Record<string, unknown>): string {
-  const name = raw.name;
-  return typeof name === "string" && name.trim() ? name : "(no name)";
+  const name = raw.activity ?? raw.name;
+  return typeof name === "string" && name.trim() ? name : "(no title)";
 }
+
 
 export function ImportPanel({ organizationId }: { organizationId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,7 +45,7 @@ export function ImportPanel({ organizationId }: { organizationId: string }) {
   });
 
   const totals = validated
-    ? (["campuses", "tribes", "departments"] as EntityKind[]).reduce(
+    ? (["campuses", "tribes", "departments", "program_schedule"] as EntityKind[]).reduce(
         (acc, entity) => {
           for (const row of validated[entity]) {
             if (row.errors.length) acc.invalid++;
@@ -100,6 +102,7 @@ export function ImportPanel({ organizationId }: { organizationId: string }) {
             <option value="campuses">Campuses</option>
             <option value="tribes">Tribes</option>
             <option value="departments">Departments</option>
+            <option value="program_schedule">Program Schedule</option>
           </Select>
 
           <div className="rounded-lg border-2 border-dashed border-neutral-300 p-8 text-center">
@@ -146,7 +149,7 @@ export function ImportPanel({ organizationId }: { organizationId: string }) {
             </span>
           </CardHeader>
           <CardBody className="space-y-6">
-            {(["campuses", "tribes", "departments"] as EntityKind[]).map((entity) => {
+            {(["campuses", "tribes", "departments", "program_schedule"] as EntityKind[]).map((entity) => {
               const rows = validated[entity];
               if (rows.length === 0) return null;
               return (
@@ -208,7 +211,7 @@ export function ImportPanel({ organizationId }: { organizationId: string }) {
             <CardTitle>Import results</CardTitle>
           </CardHeader>
           <CardBody className="space-y-4">
-            {(["campuses", "tribes", "departments"] as EntityKind[]).map((entity) => {
+            {(["campuses", "tribes", "departments", "program_schedule"] as EntityKind[]).map((entity) => {
               const result = importResult[entity];
               if (!result) return null;
               return (

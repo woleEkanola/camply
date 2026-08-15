@@ -5,6 +5,7 @@ import { normalizeScannedQRToken } from "../../../lib/qr";
 import { classifyMedical } from "../../../lib/medical";
 import { isStaffQrToken } from "../../staff/idToken";
 import { enqueueScoreScan, enqueueScoreStaffScan } from "../../leaderboard/queue";
+import { campDayKey } from "../../leaderboard/dayKey";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 
@@ -138,13 +139,22 @@ function utcDayRange(date?: Date): { start: Date; end: Date } {
  */
 export async function computeMealReport(prisma: any, campId: string | null, date?: Date) {
   const { start, end } = utcDayRange(date);
-  if (!campId) return { breakfast: 0, lunch: 0, dinner: 0 };
-  const [breakfast, lunch, dinner] = await Promise.all([
+  if (!campId) return { breakfast: 0, lunch: 0, dinner: 0, camper: { breakfast: 0, lunch: 0, dinner: 0 }, staff: { breakfast: 0, lunch: 0, dinner: 0 } };
+  const [camperBreakfast, camperLunch, camperDinner, staffBreakfast, staffLunch, staffDinner] = await Promise.all([
     prisma.mealDistribution.count({ where: { campId, meal: "BREAKFAST", date: { gte: start, lte: end } } }),
     prisma.mealDistribution.count({ where: { campId, meal: "LUNCH", date: { gte: start, lte: end } } }),
     prisma.mealDistribution.count({ where: { campId, meal: "DINNER", date: { gte: start, lte: end } } }),
+    prisma.staffMealDistribution.count({ where: { campId, meal: "BREAKFAST", date: { gte: start, lte: end } } }),
+    prisma.staffMealDistribution.count({ where: { campId, meal: "LUNCH", date: { gte: start, lte: end } } }),
+    prisma.staffMealDistribution.count({ where: { campId, meal: "DINNER", date: { gte: start, lte: end } } }),
   ]);
-  return { breakfast, lunch, dinner };
+  return {
+    breakfast: camperBreakfast + staffBreakfast,
+    lunch: camperLunch + staffLunch,
+    dinner: camperDinner + staffDinner,
+    camper: { breakfast: camperBreakfast, lunch: camperLunch, dinner: camperDinner },
+    staff: { breakfast: staffBreakfast, lunch: staffLunch, dinner: staffDinner },
+  };
 }
 
 export async function computeArrivalsReport(
@@ -896,7 +906,13 @@ export const scanRouter = createTRPCRouter({
       };
 
       if (lastSyncDate && !isNaN(lastSyncDate.getTime())) {
-        whereClause.updatedAt = { gte: lastSyncDate };
+        // A camper profile can change without touching its Registration row.
+        // Include both timestamps so an incremental refresh does not leave
+        // names, photos, medical details, or contact data stale offline.
+        whereClause.OR = [
+          { updatedAt: { gte: lastSyncDate } },
+          { camper: { updatedAt: { gte: lastSyncDate } } },
+        ];
       }
 
       if (input.campusIds && input.campusIds.length > 0 && input.scope === "SELECTED_CAMPUSES") {
@@ -978,20 +994,65 @@ export const scanRouter = createTRPCRouter({
 
       let deletedRegistrationIds: string[] = [];
       if (lastSyncDate && !isNaN(lastSyncDate.getTime())) {
-        const deletedRegs = await ctx.prisma.registration.findMany({
+        const removedRegs = await ctx.prisma.registration.findMany({
           where: {
             campId,
-            deletedAt: { gte: lastSyncDate },
+            OR: [
+              { deletedAt: { gte: lastSyncDate } },
+              {
+                updatedAt: { gte: lastSyncDate },
+                status: { notIn: ["APPROVED", "CHECKED_IN"] },
+              },
+            ],
           },
           select: { id: true },
         });
-        deletedRegistrationIds = deletedRegs.map((d: any) => d.id);
+        deletedRegistrationIds = removedRegs.map((d: any) => d.id);
       }
 
       return {
         updatedCampers,
         deletedRegistrationIds,
         serverSyncTimestamp,
+      };
+    }),
+
+  getOfflineSyncStatus: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        lastSyncedAt: z.string().nullable(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+
+      const lastSyncDate = input.lastSyncedAt ? new Date(input.lastSyncedAt) : null;
+      if (!lastSyncDate || isNaN(lastSyncDate.getTime())) {
+        return { hasServerChanges: true, changedRecordCount: 0 };
+      }
+
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { activeCampId: true },
+      });
+      if (!org?.activeCampId) {
+        return { hasServerChanges: false, changedRecordCount: 0 };
+      }
+
+      const changedRecordCount = await ctx.prisma.registration.count({
+        where: {
+          campId: org.activeCampId,
+          OR: [
+            { updatedAt: { gt: lastSyncDate } },
+            { camper: { updatedAt: { gt: lastSyncDate } } },
+          ],
+        },
+      });
+
+      return {
+        hasServerChanges: changedRecordCount > 0,
+        changedRecordCount,
       };
     }),
 
@@ -1458,7 +1519,12 @@ export const scanRouter = createTRPCRouter({
         qrToken: z.string().optional(),
         query: z.string().optional(),
         station: z.string(),
-        stationId: z.enum(["STAFF_CHECK_IN", "STAFF_CHECKOUT", "STAFF_LOOKUP"]),
+        stationId: z.enum([
+          "IDENTITY_LOOKUP", "CAMP_ARRIVAL", "PICKUP_POINT", "HOSTEL_ARRIVAL",
+          "BREAKFAST", "LUNCH", "DINNER", "COLLECTIBLES", "CHECKOUT",
+          "EMERGENCY_LOOKUP", "CUSTOM", "STAFF_CHECK_IN", "STAFF_CHECKOUT",
+          "STAFF_LOOKUP",
+        ]),
         device: z.string().optional(),
         location: z.string().optional(),
         timestamp: z.date().optional(),
@@ -1480,6 +1546,11 @@ export const scanRouter = createTRPCRouter({
       const campId = org?.activeCampId;
 
       const rawToken = input.qrToken || input.query || "";
+      const leaderboardSettings = campId
+        ? await ctx.prisma.leaderboardSettings.findUnique({ where: { campId }, select: { timezone: true } })
+        : null;
+      const timezone = leaderboardSettings?.timezone ?? "Africa/Lagos";
+      const localDay = campDayKey(activeTime, timezone);
       const normalizedToken = normalizeScannedQRToken(rawToken);
 
       const include = {
@@ -1532,7 +1603,23 @@ export const scanRouter = createTRPCRouter({
         });
       }
 
-      if (input.stationId === "STAFF_LOOKUP") {
+      const subject = {
+        id: profile.id,
+        name: [profile.firstName, profile.lastName].filter(Boolean).join(" ") || profile.email,
+        role: profile.type as "TEACHER" | "VOLUNTEER",
+        type: profile.type as "TEACHER" | "VOLUNTEER",
+      };
+      const notApplicableMessages: Partial<Record<typeof input.stationId, string>> = {
+        PICKUP_POINT: "Pickup Point is a camper arrival workflow; staff badges are not checked in here.",
+        CHECKOUT: "Camper checkout and guardian release do not apply to staff badges.",
+        EMERGENCY_LOOKUP: "Emergency and medical records are camper-only; use Identity Lookup for this staff badge.",
+      };
+      const notApplicableMessage = notApplicableMessages[input.stationId];
+      if (notApplicableMessage) {
+        return { result: "NOT_APPLICABLE" as const, actionPerformed: "No operational action recorded", message: notApplicableMessage, timestamp: activeTime, subject, profile };
+      }
+
+      if (input.stationId === "STAFF_LOOKUP" || input.stationId === "IDENTITY_LOOKUP") {
         const lookupStaffScanEvent = await ctx.prisma.staffScanEvent.create({
           data: {
             staffProfileId: profile.id,
@@ -1548,20 +1635,52 @@ export const scanRouter = createTRPCRouter({
         if (campId) {
           await enqueueScoreStaffScan({ staffScanEventId: lookupStaffScanEvent.id, stationId: input.stationId, campId });
         }
-        return { result: "SUCCESS" as const, actionPerformed: "Identity Resolved", profile };
+        const history = await ctx.prisma.staffScanEvent.findMany({
+          where: { staffProfileId: profile.id },
+          orderBy: { timestamp: "desc" },
+          take: 20,
+          select: { id: true, station: true, timestamp: true, result: true, location: true },
+        });
+        return { result: "SUCCESS" as const, actionPerformed: `${subject.role} — Identity resolved`, timestamp: activeTime, subject, profile, history };
       }
+
+      if (!campId) throw new TRPCError({ code: "BAD_REQUEST", message: "Select an active camp before recording a staff operation." });
+      if (profile.campId && profile.campId !== campId) throw new TRPCError({ code: "FORBIDDEN", message: "This staff badge is not assigned to the active camp." });
 
       // Per-day, per-station dedupe — same shape as processScan's arrival/
       // collectible checks, scoped to StaffScanEvent instead of ScanEvent.
-      const existing = await ctx.prisma.staffScanEvent.findFirst({
-        where: {
-          staffProfileId: profile.id,
-          station: input.station,
-          result: "SUCCESS",
-          timestamp: { gte: startOfToday, lte: endOfToday },
-        },
-      });
-      if (existing) {
+      const meal = STATION_ID_MEAL[input.stationId];
+      const dedupeKey = `staff:${profile.id}:${input.stationId}:${localDay}`;
+      const successData = {
+        staffProfileId: profile.id,
+        campId,
+        station: input.station,
+        timestamp: activeTime,
+        scannedById: ctx.userId,
+        device: input.device,
+        location: input.location,
+        result: "SUCCESS",
+        dedupeKey,
+        metadata: { stationId: input.stationId, timezone, localDay },
+      };
+      const attempt = meal
+        ? await ctx.prisma.$transaction(async (tx) => {
+            const claimed = await tx.staffMealDistribution.createMany({
+              data: [{ staffProfileId: profile.id, campId, meal, date: new Date(`${localDay}T00:00:00.000Z`), servedById: ctx.userId, servedAt: activeTime }],
+              skipDuplicates: true,
+            });
+            if (!claimed.count) return { created: false, event: null };
+            const event = await tx.staffScanEvent.create({ data: successData });
+            return { created: true, event };
+          })
+        : await ctx.prisma.$transaction(async (tx) => {
+            const inserted = await tx.staffScanEvent.createMany({ data: [successData], skipDuplicates: true });
+            const event = inserted.count ? await tx.staffScanEvent.findUnique({ where: { dedupeKey } }) : null;
+            return { created: inserted.count === 1, event };
+          });
+
+      if (!attempt.created) {
+        const existing = await ctx.prisma.staffScanEvent.findUnique({ where: { dedupeKey } });
         await ctx.prisma.staffScanEvent.create({
           data: {
             staffProfileId: profile.id,
@@ -1572,35 +1691,46 @@ export const scanRouter = createTRPCRouter({
             device: input.device,
             location: input.location,
             result: "DUPLICATE",
+            metadata: { stationId: input.stationId, duplicateOfId: existing?.id, timezone, localDay },
           },
         });
+        const originalTime = existing?.timestamp ?? activeTime;
+        const staffAction = meal
+          ? `${subject.role} — Already collected ${meal.toLowerCase()} at ${new Intl.DateTimeFormat("en-NG", { timeZone: timezone, hour: "numeric", minute: "2-digit" }).format(originalTime)}`
+          : `${subject.role} — Already recorded at this station today`;
+        const actionPerformed = input.stationId === "STAFF_CHECK_IN"
+          ? "Already Checked In"
+          : input.stationId === "STAFF_CHECKOUT"
+            ? "Already Checked Out"
+            : staffAction;
         return {
           result: "DUPLICATE" as const,
-          message: `${input.station} already recorded today.`,
-          originalTime: existing.timestamp,
+          actionPerformed,
+          staffAction,
+          message: staffAction,
+          originalTime,
+          timestamp: activeTime,
+          subject,
           profile,
         };
       }
 
-      const staffScanEvent = await ctx.prisma.staffScanEvent.create({
-        data: {
-          staffProfileId: profile.id,
-          campId,
-          station: input.station,
-          timestamp: activeTime,
-          scannedById: ctx.userId,
-          device: input.device,
-          location: input.location,
-          result: "SUCCESS",
-        },
-      });
-      if (campId) {
-        await enqueueScoreStaffScan({ staffScanEventId: staffScanEvent.id, stationId: input.stationId, campId });
-      }
+      if (attempt.event) await enqueueScoreStaffScan({ staffScanEventId: attempt.event.id, stationId: input.stationId, campId });
+      const actionPerformed = meal
+        ? `${subject.role} — ${meal[0]}${meal.slice(1).toLowerCase()} collected`
+        : `${subject.role} — ${input.stationId === "STAFF_CHECKOUT" ? "Checked out" : input.stationId === "COLLECTIBLES" ? "Item collected" : "Recorded"}`;
+      const legacyAction = input.stationId === "STAFF_CHECK_IN"
+        ? `Checked In at ${input.station}`
+        : input.stationId === "STAFF_CHECKOUT"
+          ? `Checked Out at ${input.station}`
+          : actionPerformed;
 
       return {
         result: "SUCCESS" as const,
-        actionPerformed: `${input.stationId === "STAFF_CHECKOUT" ? "Checked Out" : "Checked In"} at ${input.station}`,
+        actionPerformed: legacyAction,
+        staffAction: actionPerformed,
+        timestamp: activeTime,
+        subject,
         profile,
       };
     }),
@@ -1630,6 +1760,8 @@ export const scanRouter = createTRPCRouter({
           breakfastCount: 0,
           lunchCount: 0,
           dinnerCount: 0,
+          camperMealCounts: { breakfast: 0, lunch: 0, dinner: 0 },
+          staffMealCounts: { breakfast: 0, lunch: 0, dinner: 0 },
           checkedOutCount: 0,
         };
       }
@@ -1647,7 +1779,7 @@ export const scanRouter = createTRPCRouter({
       // `date` with the same UTC boundary.
       const { start: startOfToday, end: endOfToday } = utcDayRange();
 
-      const [registered, checkedIn, breakfastCount, lunchCount, dinnerCount, checkedOutCount] =
+      const [registered, checkedIn, camperBreakfastCount, camperLunchCount, camperDinnerCount, checkedOutCount, staffBreakfastCount, staffLunchCount, staffDinnerCount] =
         await Promise.all([
           // Registered = APPROVED + CHECKED_IN
           ctx.prisma.registration.count({
@@ -1673,6 +1805,9 @@ export const scanRouter = createTRPCRouter({
           ctx.prisma.registration.count({
             where: { ...baseWhere, checkedOutAt: { not: null } },
           }),
+          ctx.prisma.staffMealDistribution.count({ where: { campId, meal: "BREAKFAST", date: { gte: startOfToday, lte: endOfToday } } }),
+          ctx.prisma.staffMealDistribution.count({ where: { campId, meal: "LUNCH", date: { gte: startOfToday, lte: endOfToday } } }),
+          ctx.prisma.staffMealDistribution.count({ where: { campId, meal: "DINNER", date: { gte: startOfToday, lte: endOfToday } } }),
         ]);
 
       const pendingArrival = Math.max(0, registered - checkedIn);
@@ -1681,9 +1816,11 @@ export const scanRouter = createTRPCRouter({
         registered,
         checkedIn,
         pendingArrival,
-        breakfastCount,
-        lunchCount,
-        dinnerCount,
+        breakfastCount: camperBreakfastCount + staffBreakfastCount,
+        lunchCount: camperLunchCount + staffLunchCount,
+        dinnerCount: camperDinnerCount + staffDinnerCount,
+        camperMealCounts: { breakfast: camperBreakfastCount, lunch: camperLunchCount, dinner: camperDinnerCount },
+        staffMealCounts: { breakfast: staffBreakfastCount, lunch: staffLunchCount, dinner: staffDinnerCount },
         checkedOutCount,
       };
     }),

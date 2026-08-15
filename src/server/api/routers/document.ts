@@ -42,7 +42,7 @@ export const documentRouter = createTRPCRouter({
     .input(z.object({
       requirementId: z.string(),
       registrationId: z.string(),
-      url: z.string(),
+      url: z.string().url(),
       fileName: z.string(),
       fileType: z.string(),
       fileSize: z.number(),
@@ -70,7 +70,15 @@ export const documentRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
-      const requirement = await ctx.prisma.documentRequirement.findUniqueOrThrow({ where: { id: input.requirementId } });
+      const requirement = await ctx.prisma.documentRequirement.findFirst({
+        where: { id: input.requirementId, campId: registration.campId, deletedAt: null },
+      });
+      if (!requirement) throw new TRPCError({ code: "BAD_REQUEST", message: "Document requirement does not belong to this camp." });
+      const uploadUrl = new URL(input.url);
+      const trustedUploadHost = uploadUrl.protocol === "https:" && (
+        uploadUrl.hostname === "utfs.io" || uploadUrl.hostname.endsWith(".ufs.sh") || uploadUrl.hostname.endsWith(".uploadthing.com")
+      );
+      if (!trustedUploadHost) throw new TRPCError({ code: "BAD_REQUEST", message: "Document URL must come from the configured upload service." });
 
       // Server-side validation: file size
       const maxBytes = requirement.maxSizeMb * 1024 * 1024;

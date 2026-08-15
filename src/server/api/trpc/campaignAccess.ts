@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { getActiveCampCommandAccess } from "../../auth/campCommand";
 
 const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
@@ -11,6 +12,11 @@ export async function assertCampaignSender(
 
   if (ORG_ADMIN_ROLES.includes(user.role) && user.organizationId === organizationId) {
     return { orgAdmin: true };
+  }
+
+  if (user.organizationId === organizationId) {
+    const commandAccess = await getActiveCampCommandAccess(ctx, organizationId);
+    if (commandAccess?.permissions.includes("COMMUNICATION")) return { orgAdmin: true };
   }
 
   if (user.organizationId === organizationId) {

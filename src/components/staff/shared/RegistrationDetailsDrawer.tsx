@@ -18,6 +18,7 @@ import { DecisionHistory } from "@/app/admin/registrations/components/DecisionHi
 import ReviewProgress from "@/app/admin/registrations/components/ReviewProgress";
 import VerifierAssignment from "@/app/admin/registrations/components/VerifierAssignment";
 import ChangesSinceReview from "@/app/admin/registrations/components/ChangesSinceReview";
+import { formatInTimeZone } from "date-fns-tz";
 import { RegistrationDocumentPanel } from "@/components/staff/shared/RegistrationDocumentPanel";
 import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
 import { CamperPhotoCropperModal } from "@/components/staff/shared/CamperPhotoCropperModal";
@@ -432,7 +433,7 @@ export function RegistrationDetailsDrawer({
                           <div className="text-[11px] text-neutral-500">by Staff Reviewer</div>
                         </div>
                         <div className="text-[11px] text-txt-muted shrink-0 font-medium">
-                          {new Date(item.createdAt).toLocaleDateString("en-GB")}
+                          {formatInTimeZone(new Date(item.createdAt), "UTC", "dd/MM/yyyy")}
                         </div>
                       </div>
                     ))}

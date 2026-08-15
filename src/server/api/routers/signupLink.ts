@@ -4,6 +4,7 @@ import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/t
 import { TRPCError } from "@trpc/server";
 import { randomBytes } from "crypto";
 import { resolveSignupLinkByToken } from "../../registration/resolveSignupLink";
+import { headers } from "next/headers";
 
 // Schema for signup link validation
 const signupLinkSchema = z.object({
@@ -423,9 +424,9 @@ export const signupLinkRouter = createTRPCRouter({
   // Validate a signup link token
   validateToken: publicProcedure
     .input(z.object({
-      token: z.string(),
-      ipAddress: z.string().optional(),
-      userAgent: z.string().optional(),
+      token: z.string().min(1).max(200),
+      ipAddress: z.string().max(64).optional(),
+      userAgent: z.string().max(512).optional(),
     }))
     .query(async ({ ctx, input }) => {
       // Handles both the raw random-hex token and the
@@ -446,14 +447,15 @@ export const signupLinkRouter = createTRPCRouter({
         });
       }
       const quotaReached = await computeQuotaReached(ctx.prisma, signupLink);
+      const requestHeaders = await headers();
 
       // Fire-and-forget click log — never blocks the response
       void ctx.prisma.signupLinkClick.create({
         data: {
           signupLinkId: signupLink.id,
           userId: ctx.session?.user?.id ?? null,
-          ipAddress: input.ipAddress ?? null,
-          userAgent: input.userAgent ?? null,
+          ipAddress: requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? requestHeaders.get("x-real-ip") ?? null,
+          userAgent: requestHeaders.get("user-agent")?.slice(0, 512) ?? null,
         },
       }).catch(() => { /* non-fatal */ });
 
@@ -485,10 +487,10 @@ export const signupLinkRouter = createTRPCRouter({
   // Validate a signup link by slug and camp
   validateSlug: publicProcedure
     .input(z.object({
-      slug: z.string(),
-      camp: z.string(),
-      ipAddress: z.string().optional(),
-      userAgent: z.string().optional(),
+      slug: z.string().min(1).max(120),
+      camp: z.string().min(1).max(200),
+      ipAddress: z.string().max(64).optional(),
+      userAgent: z.string().max(512).optional(),
     }))
     .query(async ({ ctx, input }) => {
       // Find the campus by slug
@@ -530,14 +532,15 @@ export const signupLinkRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "This signup link is for an inactive camp" });
       }
       const quotaReached = await computeQuotaReached(ctx.prisma, signupLink);
+      const requestHeaders = await headers();
 
       // Fire-and-forget click log
       void ctx.prisma.signupLinkClick.create({
         data: {
           signupLinkId: signupLink.id,
           userId: ctx.session?.user?.id ?? null,
-          ipAddress: input.ipAddress ?? null,
-          userAgent: input.userAgent ?? null,
+          ipAddress: requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? requestHeaders.get("x-real-ip") ?? null,
+          userAgent: requestHeaders.get("user-agent")?.slice(0, 512) ?? null,
         },
       }).catch(() => { /* non-fatal */ });
 

@@ -5,7 +5,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { api } from "@/utils/trpc";
 import { offline } from "@/lib/offlineEngine";
-import { DownloadProfile, DownloadScope, saveSyncMeta, mergeDeltaCampers } from "@/lib/offlineDb";
+import { getSyncMeta, saveSyncMeta, mergeDeltaCampers } from "@/lib/offlineDb";
 import { CpuChipIcon, CircleStackIcon, PhotoIcon, XCircleIcon } from "@heroicons/react/24/outline";
 
 interface OfflineDownloadModalProps {
@@ -13,6 +13,9 @@ interface OfflineDownloadModalProps {
   onClose: () => void;
   organizationId: string;
   onSuccess?: () => void;
+  setupGuide?: boolean;
+  onNeverRemind?: () => void;
+  operation?: "download" | "update";
 }
 
 export interface ProgressState {
@@ -31,9 +34,10 @@ export function OfflineDownloadModal({
   onClose,
   organizationId,
   onSuccess,
+  setupGuide = false,
+  onNeverRemind,
+  operation = "download",
 }: OfflineDownloadModalProps) {
-  const [profile, setProfile] = useState<DownloadProfile>("FULL");
-  const [scope, setScope] = useState<DownloadScope>("ENTIRE_CAMP");
   const [includeThumbnails, setIncludeThumbnails] = useState<boolean>(true);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
@@ -51,7 +55,7 @@ export function OfflineDownloadModal({
   const utils = api.useUtils();
 
   const estimateQuery = api.scan.getOfflineDatasetEstimate.useQuery(
-    { organizationId, profile, scope, includeThumbnails },
+    { organizationId, profile: "FULL", scope: "ENTIRE_CAMP", includeThumbnails },
     { enabled: open && progress.status !== "downloading" }
   );
 
@@ -78,7 +82,7 @@ export function OfflineDownloadModal({
   const checkStorage = async () => {
     const est = await offline.estimateStorage();
     if (est && est.remainingBytes < 20 * 1024 * 1024) {
-      setStorageWarning("Storage space is low. Consider choosing Text Data Only or a targeted profile.");
+      setStorageWarning("Storage space is low. Choose Text Data Only for a smaller download.");
     } else {
       setStorageWarning(null);
     }
@@ -113,10 +117,12 @@ export function OfflineDownloadModal({
 
       setProgress((p) => ({ ...p, percentage: 15, stageMessage: "Fetching dataset payload..." }));
 
+      const syncMeta = await getSyncMeta();
       const result = await utils.scan.getDeltaSyncData.fetch({
         organizationId,
-        profile,
-        scope,
+        lastSyncedAt: syncMeta?.lastSyncedAt || undefined,
+        profile: "FULL",
+        scope: "ENTIRE_CAMP",
         includeThumbnails,
       });
 
@@ -140,10 +146,11 @@ export function OfflineDownloadModal({
         const storedCount = await mergeDeltaCampers(result.updatedCampers, result.deletedRegistrationIds);
         await saveSyncMeta({
           lastSyncedAt: result.serverSyncTimestamp,
-          profile,
-          scope,
+          profile: "FULL",
+          scope: "ENTIRE_CAMP",
           camperCount: storedCount,
         });
+        window.dispatchEvent(new CustomEvent("camply:offline-data-ready"));
 
         setProgress({
           status: "complete",
@@ -192,22 +199,14 @@ export function OfflineDownloadModal({
     });
   };
 
-  const profileOptions: { id: DownloadProfile; title: string; desc: string }[] = [
-    { id: "FULL", title: "Full Camp (Recommended)", desc: "All campers, medical alerts, emergency contacts, hostel assignments" },
-    { id: "CHECK_IN", title: "Check-in Station", desc: "Basic badge info & registration numbers for arrival" },
-    { id: "FOOD", title: "Food Station", desc: "Dietary restrictions, allergies & meal distribution" },
-    { id: "HOSTEL", title: "Hostel Station", desc: "Room, hostel, bed assignments & tribe labels" },
-    { id: "TEACHER", title: "Teacher Scope", desc: "Assigned campers & campus teacher details" },
-  ];
-
-  const scopeOptions: { id: DownloadScope; title: string }[] = [
-    { id: "ENTIRE_CAMP", title: "Entire Camp (Recommended for full offline safety)" },
-    { id: "ASSIGNED_CAMPUS", title: "Assigned Campus only" },
-    { id: "CURRENT_STATION", title: "Current Station filter" },
-  ];
-
   return (
-    <BottomSheet open={open} onClose={onClose} title="Download Offline Database">
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      title={setupGuide ? "Complete Offline Setup" : operation === "update" ? "Update Offline Data" : "Download Offline Database"}
+      snap={setupGuide ? "full" : "auto"}
+      testId={setupGuide ? "offline-setup-guide" : "offline-download-modal"}
+    >
       <div className="space-y-5">
         {progress.status === "downloading" ? (
           <div className="space-y-4 py-4">
@@ -217,14 +216,14 @@ export function OfflineDownloadModal({
             </div>
 
             {/* Visual Progress Bar */}
-            <div className="w-full h-3 bg-bg-subtle rounded-full overflow-hidden border border-border-default">
+            <div className="w-full h-3 bg-surface-raised rounded-full overflow-hidden border border-border-default">
               <div
                 className="h-full bg-teal-600 transition-all duration-300 rounded-full"
                 style={{ width: `${progress.percentage}%` }}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs bg-bg-subtle p-3 rounded-xl border border-border-default">
+            <div className="grid grid-cols-2 gap-3 text-xs bg-surface-raised p-3 rounded-xl border border-border-default">
               <div>
                 <span className="text-txt-secondary block">Downloaded Campers</span>
                 <span className="font-bold text-txt-primary text-sm">
@@ -250,77 +249,34 @@ export function OfflineDownloadModal({
           </div>
         ) : (
           <>
-            <div>
-              <h4 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider mb-2">
-                1. Select Profile Scope
-              </h4>
-              <div className="space-y-2">
-                {profileOptions.map((opt) => (
-                  <label
-                    key={opt.id}
-                    onClick={() => setProfile(opt.id)}
-                    className={`flex items-start p-3 rounded-xl border cursor-pointer transition ${
-                      profile === opt.id
-                        ? "border-teal-600 bg-teal-50/50 text-teal-950 font-medium"
-                        : "border-border-default bg-bg-surface hover:bg-bg-subtle text-txt-primary"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="profile"
-                      checked={profile === opt.id}
-                      onChange={() => setProfile(opt.id)}
-                      className="mt-1 text-teal-600 focus:ring-teal-500"
-                    />
-                    <div className="ml-3">
-                      <div className="text-sm font-semibold">{opt.title}</div>
-                      <div className="text-xs text-txt-secondary">{opt.desc}</div>
-                    </div>
-                  </label>
-                ))}
+            {setupGuide && (
+              <div className="rounded-xl border border-teal-500/30 bg-teal-500/10 p-4 text-sm text-txt-primary">
+                <p className="font-bold">One quick step makes Camply ready without internet.</p>
+                <p className="mt-1 text-xs text-txt-secondary">
+                  We always download the complete camp so QR scan and camper search remain reliable at every station.
+                </p>
               </div>
+            )}
+
+            <div className="rounded-xl border border-border-default bg-surface-raised p-3">
+              <div className="text-xs font-semibold uppercase tracking-wider text-txt-muted">Dataset</div>
+              <div className="mt-1 text-sm font-bold text-txt-primary">Entire Camp</div>
+              <div className="mt-0.5 text-xs text-txt-secondary">All campers and the information needed by every QR station.</div>
             </div>
 
             <div>
               <h4 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider mb-2">
-                2. Select Campers Scope
-              </h4>
-              <div className="space-y-2">
-                {scopeOptions.map((opt) => (
-                  <label
-                    key={opt.id}
-                    onClick={() => setScope(opt.id)}
-                    className={`flex items-center p-3 rounded-xl border cursor-pointer transition ${
-                      scope === opt.id
-                        ? "border-teal-600 bg-teal-50/50 text-teal-950 font-medium"
-                        : "border-border-default bg-bg-surface hover:bg-bg-subtle text-txt-primary"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="scope"
-                      checked={scope === opt.id}
-                      onChange={() => setScope(opt.id)}
-                      className="text-teal-600 focus:ring-teal-500"
-                    />
-                    <span className="ml-3 text-sm">{opt.title}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider mb-2">
-                3. Photo Payload Preference
+                Photo Payload Preference
               </h4>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setIncludeThumbnails(true)}
+                  aria-pressed={includeThumbnails}
                   className={`p-3 rounded-xl border text-left flex flex-col justify-between transition ${
                     includeThumbnails
-                      ? "border-teal-600 bg-teal-50/50 text-teal-950 font-medium"
-                      : "border-border-default bg-bg-surface hover:bg-bg-subtle text-txt-primary"
+                      ? "border-teal-500 bg-teal-500/10 text-txt-primary ring-1 ring-teal-500/20 font-medium"
+                      : "border-border-default bg-surface hover:bg-surface-hover text-txt-primary"
                   }`}
                 >
                   <div className="flex items-center space-x-2">
@@ -333,10 +289,11 @@ export function OfflineDownloadModal({
                 <button
                   type="button"
                   onClick={() => setIncludeThumbnails(false)}
+                  aria-pressed={!includeThumbnails}
                   className={`p-3 rounded-xl border text-left flex flex-col justify-between transition ${
                     !includeThumbnails
-                      ? "border-teal-600 bg-teal-50/50 text-teal-950 font-medium"
-                      : "border-border-default bg-bg-surface hover:bg-bg-subtle text-txt-primary"
+                      ? "border-teal-500 bg-teal-500/10 text-txt-primary ring-1 ring-teal-500/20 font-medium"
+                      : "border-border-default bg-surface hover:bg-surface-hover text-txt-primary"
                   }`}
                 >
                   <div className="flex items-center space-x-2">
@@ -364,13 +321,13 @@ export function OfflineDownloadModal({
             </div>
 
             {storageWarning && (
-              <p className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+              <p className="text-xs status-attention p-2.5 rounded-lg border border-current/20">
                 {storageWarning}
               </p>
             )}
 
             {progress.status === "cancelled" && (
-              <p className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+              <p className="text-xs status-attention p-2.5 rounded-lg border border-current/20">
                 Download was cancelled. Select options and try again.
               </p>
             )}
@@ -381,8 +338,17 @@ export function OfflineDownloadModal({
               loading={estimateQuery.isLoading}
               onClick={handleStartDownload}
             >
-              Start Download
+              {operation === "update" ? "Update Offline Data" : "Start Download"}
             </Button>
+            {setupGuide && onNeverRemind && (
+              <button
+                type="button"
+                onClick={onNeverRemind}
+                className="w-full rounded-lg py-2 text-center text-xs font-semibold text-txt-secondary underline-offset-4 hover:text-txt-primary hover:underline"
+              >
+                I don&apos;t need offline access — never remind me again
+              </button>
+            )}
           </>
         )}
       </div>

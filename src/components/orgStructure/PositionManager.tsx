@@ -23,6 +23,9 @@ type PositionNode = {
   departmentId: string | null;
   parentPositionId: string | null;
   displayOrder: number;
+  grantsManageCamp: boolean;
+  grantsAwardPoints: boolean;
+  leadershipRole: "COMMANDANT" | "ASSISTANT_COMMANDANT" | null;
   department: { id: string; name: string } | null;
   assignments: { id: string; staff: { id: string; firstName: string; lastName: string; photoUrl: string | null } }[];
   children: PositionNode[];
@@ -89,6 +92,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
     onError,
   });
   const reorderPositions = api.position.reorderPositions.useMutation({ onSuccess: invalidate, onError });
+  const updatePosition = api.position.update.useMutation({ onSuccess: invalidate, onError });
 
   // limit: 100 (the max adminList allows) — its default of 25 silently
   // truncated this picker on a camp with more staff than that, hiding real
@@ -131,6 +135,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
   }
 
   function move(node: PositionNode, direction: -1 | 1) {
+    if (node.leadershipRole) return;
     const siblings = node.parentPositionId && deptIds.has(node.parentPositionId)
       ? childrenOf.get(node.parentPositionId) ?? []
       : roots;
@@ -149,6 +154,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
 
   function renderNode(node: PositionNode, depth: number): React.ReactNode {
     const occupants = node.assignments;
+    const protectedLeadership = Boolean(node.leadershipRole);
     const siblings = node.parentPositionId && deptIds.has(node.parentPositionId) ? childrenOf.get(node.parentPositionId) ?? [] : roots;
     const idx = siblings.findIndex((s) => s.id === node.id);
 
@@ -162,7 +168,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
           <div className="flex flex-col">
             <button
               type="button"
-              disabled={idx <= 0}
+              disabled={protectedLeadership || idx <= 0}
               onClick={() => move(node, -1)}
               aria-label={`Move ${node.name} up`}
               className="rounded p-0.5 text-txt-muted hover:bg-surface-raised disabled:opacity-30"
@@ -171,7 +177,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
             </button>
             <button
               type="button"
-              disabled={idx === -1 || idx >= siblings.length - 1}
+              disabled={protectedLeadership || idx === -1 || idx >= siblings.length - 1}
               onClick={() => move(node, 1)}
               aria-label={`Move ${node.name} down`}
               className="rounded p-0.5 text-txt-muted hover:bg-surface-raised disabled:opacity-30"
@@ -182,6 +188,8 @@ export function PositionManager({ organizationId, campId, departmentId, departme
 
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-txt-primary truncate">{node.name}</div>
+            {protectedLeadership && <div className="mt-0.5 text-[11px] font-medium text-accent-600">Managed in Settings → Camp Command</div>}
+            {node.grantsAwardPoints && <div className="mt-0.5 text-[11px] font-medium text-accent-600">Can award camper points</div>}
             {occupants.length === 0 ? (
               <div className="text-xs text-txt-muted">Vacant</div>
             ) : (
@@ -190,26 +198,28 @@ export function PositionManager({ organizationId, campId, departmentId, departme
                   <div key={a.id} className="flex items-center gap-1.5">
                     <Avatar name={`${a.staff.firstName} ${a.staff.lastName}`} photoUrl={a.staff.photoUrl} size="xs" />
                     <span className="text-xs text-txt-secondary">{a.staff.firstName} {a.staff.lastName}</span>
-                    <button
-                      type="button"
-                      onClick={() => unassignPosition.mutate({ positionId: node.id, staffId: a.staff.id })}
-                      className="text-[11px] text-[var(--status-danger-fg)] hover:underline"
-                    >
-                      Unassign
-                    </button>
+                    {!protectedLeadership && (
+                      <button
+                        type="button"
+                        onClick={() => unassignPosition.mutate({ positionId: node.id, staffId: a.staff.id })}
+                        className="text-[11px] text-[var(--status-danger-fg)] hover:underline"
+                      >
+                        Unassign
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {occupants.length === 0 && (
+          {occupants.length === 0 && !protectedLeadership && (
             <Button size="sm" variant="secondary" onClick={() => setAssignTarget(node)}>
               Assign
             </Button>
           )}
 
-          <Menu as="div" className="relative shrink-0">
+          {!protectedLeadership && <Menu as="div" className="relative shrink-0">
             <Menu.Button
               aria-label={`${node.name} position options`}
               className="-m-2.5 flex h-11 w-11 items-center justify-center rounded-full text-txt-muted hover:bg-surface-raised hover:text-txt-primary"
@@ -240,9 +250,20 @@ export function PositionManager({ organizationId, campId, departmentId, departme
                     </button>
                   )}
                 </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      type="button"
+                      onClick={() => updatePosition.mutate({ id: node.id, grantsAwardPoints: !node.grantsAwardPoints })}
+                      className={cn("flex w-full min-h-[44px] items-center px-3 text-left", active && "bg-surface-raised")}
+                    >
+                      {node.grantsAwardPoints ? "Remove point access" : "Allow point awards"}
+                    </button>
+                  )}
+                </Menu.Item>
               </Menu.Items>
             </Transition>
-          </Menu>
+          </Menu>}
         </div>
         {(childrenOf.get(node.id) ?? []).map((child) => renderNode(child, depth + 1))}
       </div>

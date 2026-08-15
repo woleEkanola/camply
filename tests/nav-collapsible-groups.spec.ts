@@ -22,11 +22,11 @@ test.describe("Nav: collapsible Communication/Settings groups", () => {
     await expect(nav.getByRole("link", { name: "Campers", exact: true })).toBeVisible();
 
     // Communication's children are hidden until its header is clicked.
-    await expect(nav.getByRole("link", { name: "Campaigns", exact: true })).not.toBeVisible();
+    await expect(nav.getByRole("link", { name: "Campaigns & Alerts", exact: true })).not.toBeVisible();
     const communicationHeader = nav.getByRole("button", { name: "Communication" });
     await expect(communicationHeader).toBeVisible();
     await communicationHeader.click();
-    await expect(nav.getByRole("link", { name: "Campaigns", exact: true })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Campaigns & Alerts", exact: true })).toBeVisible();
 
     // Settings' children are likewise hidden until clicked, independent of Communication.
     await expect(nav.getByRole("link", { name: "Access Control", exact: true })).not.toBeVisible();
@@ -36,7 +36,7 @@ test.describe("Nav: collapsible Communication/Settings groups", () => {
 
     // Collapsing Communication again hides its children without affecting Settings.
     await communicationHeader.click();
-    await expect(nav.getByRole("link", { name: "Campaigns", exact: true })).not.toBeVisible();
+    await expect(nav.getByRole("link", { name: "Campaigns & Alerts", exact: true })).not.toBeVisible();
     await expect(nav.getByRole("link", { name: "Access Control", exact: true })).toBeVisible();
   });
 
@@ -48,6 +48,25 @@ test.describe("Nav: collapsible Communication/Settings groups", () => {
     // (getNavGroups returns [] until `role` is known), so the nav — and the
     // auto-expand effect that depends on it — can take a beat longer here
     // than on a same-session client-side navigation.
-    await expect(nav.getByRole("link", { name: "Campaigns", exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(nav.getByRole("link", { name: "Campaigns & Alerts", exact: true })).toBeVisible({ timeout: 15000 });
+  });
+
+  test("Platform Branding links only Super Admin to the real page", async ({ page }) => {
+    await loginWithPassword(page, "admin@camply.com", "password123");
+    await page.waitForURL(/\/admin/, { timeout: 15000 });
+    const adminNav = page.locator("nav").first();
+    await adminNav.getByRole("button", { name: "Settings" }).click();
+    await expect(adminNav.getByRole("link", { name: "Platform Branding" })).toHaveCount(0);
+
+    await page.context().clearCookies();
+    await loginWithPassword(page, "superadmin@camply.com", "password123");
+    await page.goto("/admin");
+    const superAdminNav = page.locator("nav").first();
+    await superAdminNav.getByRole("button", { name: "Settings" }).click();
+    const brandingLink = superAdminNav.getByRole("link", { name: "Platform Branding" });
+    await expect(brandingLink).toHaveAttribute("href", "/super-admin/branding");
+    await brandingLink.click();
+    await expect(page).toHaveURL(/\/super-admin\/branding/);
+    await expect(page.getByRole("heading", { name: "Platform Branding" })).toBeVisible();
   });
 });

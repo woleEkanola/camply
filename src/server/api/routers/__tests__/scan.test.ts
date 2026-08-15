@@ -106,6 +106,42 @@ afterAll(async () => {
 });
 
 describe("scanRouter - processScan", () => {
+  it("reports when offline camper data is current or behind", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const current = await caller.scan.getOfflineSyncStatus({
+      organizationId: orgId,
+      lastSyncedAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(current.hasServerChanges).toBe(false);
+
+    const behind = await caller.scan.getOfflineSyncStatus({
+      organizationId: orgId,
+      lastSyncedAt: "2000-01-01T00:00:00.000Z",
+    });
+    expect(behind.hasServerChanges).toBe(true);
+    expect(behind.changedRecordCount).toBeGreaterThan(0);
+
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: { status: "REJECTED" },
+    });
+    const delta = await caller.scan.getDeltaSyncData({
+      organizationId: orgId,
+      lastSyncedAt: "2000-01-01T00:00:00.000Z",
+      profile: "FULL",
+      scope: "ENTIRE_CAMP",
+    });
+    expect(delta.deletedRegistrationIds).toContain(registrationId);
+    expect(delta.updatedCampers).toHaveLength(0);
+  });
+
   it("processes standard arrival check-in successfully and updates state", async () => {
     const caller = appRouter.createCaller({
       prisma,
@@ -527,6 +563,64 @@ describe("scanRouter - processScan", () => {
 
     expect(first.result).toBe("SUCCESS");
     expect(second.result).toBe("SUCCESS");
+  });
+});
+
+describe("scanRouter - processStaffScan", () => {
+  async function approvedStaff(type: "TEACHER" | "VOLUNTEER" = "TEACHER") {
+    const user = await prisma.user.create({
+      data: { email: `staff-${Date.now()}-${Math.random()}@test.com`, password: "x", role: type, organizationId: orgId },
+    });
+    return prisma.staffProfile.create({
+      data: {
+        userId: user.id,
+        organizationId: orgId,
+        campId,
+        type,
+        status: "APPROVED",
+        firstName: "Longstaff",
+        lastName: "Teacher",
+        phone: "08000000000",
+        email: user.email,
+        teams: [],
+        skills: [],
+        preferredCampusId: campusId,
+        qrToken: `STF-${Date.now()}-${Math.random()}`,
+        approvedAt: new Date(),
+      },
+    });
+  }
+
+  function caller() {
+    return appRouter.createCaller({
+      prisma,
+      session: { user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId }, expires: "" },
+    });
+  }
+
+  it("atomically serves one teacher lunch across concurrent scanners", async () => {
+    const staff = await approvedStaff("TEACHER");
+    const input = { organizationId: orgId, qrToken: `https://camp.test/badge?token=${staff.qrToken}`, station: "Lunch Station", stationId: "LUNCH" as const };
+    const results = await Promise.all([caller().scan.processStaffScan(input), caller().scan.processStaffScan(input)]);
+
+    expect(results.map((result) => result.result).sort()).toEqual(["DUPLICATE", "SUCCESS"]);
+    expect(results.every((result) => result.subject.role === "TEACHER")).toBe(true);
+    expect(await prisma.staffMealDistribution.count({ where: { staffProfileId: staff.id, meal: "LUNCH" } })).toBe(1);
+    expect(await prisma.staffScanEvent.count({ where: { staffProfileId: staff.id, station: "Lunch Station", result: "SUCCESS" } })).toBe(1);
+  });
+
+  it("identifies volunteers and refuses camper-only operations without an operational write", async () => {
+    const staff = await approvedStaff("VOLUNTEER");
+    const lookup = await caller().scan.processStaffScan({ organizationId: orgId, qrToken: staff.qrToken!, station: "Identity Lookup", stationId: "IDENTITY_LOOKUP" });
+    expect(lookup.result).toBe("SUCCESS");
+    expect(lookup.subject.role).toBe("VOLUNTEER");
+    expect("history" in lookup && (lookup.history?.length ?? 0)).toBeGreaterThan(0);
+
+    const before = await prisma.staffScanEvent.count({ where: { staffProfileId: staff.id } });
+    const unsupported = await caller().scan.processStaffScan({ organizationId: orgId, qrToken: staff.qrToken!, station: "Checkout Desk", stationId: "CHECKOUT" });
+    expect(unsupported.result).toBe("NOT_APPLICABLE");
+    expect(unsupported.message).toMatch(/camper checkout/i);
+    expect(await prisma.staffScanEvent.count({ where: { staffProfileId: staff.id } })).toBe(before);
   });
 });
 

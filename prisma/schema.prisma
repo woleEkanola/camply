@@ -19,6 +19,54 @@ enum UserRole {
   VOLUNTEER
 }
 
+enum CampLeadershipRole {
+  COMMANDANT
+  ASSISTANT_COMMANDANT
+}
+
+enum CommandAccessMode {
+  INHERIT
+  FULL
+  CUSTOM
+}
+
+enum DepartmentRoleKind {
+  HEAD
+  ASSISTANT_HEAD
+  LEAD
+  MEMBER
+}
+
+enum ChecklistRoutine {
+  BEFORE_CAMP
+  DAILY
+  SPECIFIC_DAY
+  BEFORE_PROGRAMME
+  DURING_PROGRAMME
+  AFTER_PROGRAMME
+  BEFORE_MEAL
+  DURING_MEAL
+  AFTER_MEAL
+  END_OF_DAY
+  ARRIVAL
+  AFTER_CHECKOUT
+  AFTER_CAMP
+  ONE_TIME
+}
+
+enum ChecklistAssignmentType {
+  EVERYONE
+  ROLE
+  PERSON
+}
+
+enum ChecklistExecutionStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+  OVERDUE
+}
+
 // LOGIN covers both the parent self-signup/login OTP flow and the staff
 // signup OTP flow — both are "authenticate with a mailed code" and neither
 // can escalate by sharing a bucket, since the OTP model was already a single
@@ -144,23 +192,23 @@ model Organization {
 // never holds camp-operational fields like capacity/quota. See Venue for
 // the temporary, per-Camp physical site those belong to.
 model Campus {
-  id           String  @id @default(cuid())
-  name         String
-  slug         String  @unique
-  address      String
-  city         String
-  state        String?
-  zipCode      String?
-  country      String
-  pastor       String?
-  phone        String?
-  email        String?
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  address         String
+  city            String
+  state           String?
+  zipCode         String?
+  country         String
+  pastor          String?
+  phone           String?
+  email           String?
   suspended       Boolean   @default(false) // halts submit/endorse/approve for this campus without touching its signup link — see src/server/registration/validation.ts and engine.ts
   suspendedAt     DateTime?
   suspendedById   String?
   suspendedReason String?
-  campusCode   String? // short code embedded in registration numbers
-  displayOrder Int     @default(0) // order in dropdowns/lists
+  campusCode      String? // short code embedded in registration numbers
+  displayOrder    Int       @default(0) // order in dropdowns/lists
 
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId      String
@@ -346,32 +394,36 @@ model ProfileFieldValue {
 // attribute of the Camp, not the entity itself - multiple Camps can occur
 // within the same calendar year.
 model Camp {
-  id                   String                @id @default(cuid())
-  name                 String
-  slug                 String
-  year                 Int
-  startDate            DateTime
-  endDate              DateTime
-  active               Boolean               @default(false)
-  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId       String
-  venues               Venue[]
-  registrations        Registration[]
-  activeForOrgs        Organization[]        @relation("ActiveCamp")
-  signupLinks          SignupLink[]
-  documentRequirements DocumentRequirement[]
-  registrationCounters RegistrationCounter[]
-  staffSignupLinks     StaffSignupLink[]
-  staffProfiles        StaffProfile[]
-  attendanceSessions   AttendanceSession[]
-  incidentReports      IncidentReport[]
-  medicalVisits        MedicalVisit[]
-  mealDistributions    MealDistribution[]
-  scanEvents           ScanEvent[]
-  staffScanEvents      StaffScanEvent[]
-  departments          Department[]
-  positions            Position[]
-  teacherCampusQuotas  TeacherCampusQuota[]
+  id                            String                         @id @default(cuid())
+  name                          String
+  slug                          String
+  year                          Int
+  startDate                     DateTime
+  endDate                       DateTime
+  active                        Boolean                        @default(false)
+  organization                  Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId                String
+  venues                        Venue[]
+  registrations                 Registration[]
+  activeForOrgs                 Organization[]                 @relation("ActiveCamp")
+  signupLinks                   SignupLink[]
+  documentRequirements          DocumentRequirement[]
+  registrationCounters          RegistrationCounter[]
+  staffSignupLinks              StaffSignupLink[]
+  staffProfiles                 StaffProfile[]
+  attendanceSessions            AttendanceSession[]
+  incidentReports               IncidentReport[]
+  medicalVisits                 MedicalVisit[]
+  mealDistributions             MealDistribution[]
+  staffMealDistributions        StaffMealDistribution[]
+  scanEvents                    ScanEvent[]
+  staffScanEvents               StaffScanEvent[]
+  departments                   Department[]
+  positions                     Position[]
+  departmentChecklistExecutions DepartmentChecklistExecution[]
+  departmentReports             DepartmentReport[]
+  commandPolicy                 CampCommandPolicy?
+  teacherCampusQuotas           TeacherCampusQuota[]
 
   // Tribe Allocation (PRD Part 4A)
   tribeAllocationEnabled Boolean              @default(false)
@@ -418,6 +470,7 @@ model Camp {
   scoredSessions         ScoredSession[]
   achievementDefinitions AchievementDefinition[]
   leaderboardSettings    LeaderboardSettings?
+  schedules              CampSchedule[]
 
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -541,16 +594,18 @@ model Registration {
   roomId String?
   bed    Bed?
 
-  documents          Document[]
-  auditLogs          AuditLog[]
-  notifications      Notification[]
-  review             RegistrationReview?
-  teacherAssignments TeacherCamperAssignment[]
-  attendanceRecords  AttendanceRecord[]
-  incidentReports    IncidentReport[]
-  medicalVisits      MedicalVisit[]
-  mealDistributions  MealDistribution[]
-  scanEvents         ScanEvent[]
+  documents            Document[]
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  review               RegistrationReview?
+  teacherAssignments   TeacherCamperAssignment[]
+  attendanceRecords    AttendanceRecord[]
+  incidentReports      IncidentReport[]
+  medicalVisits        MedicalVisit[]
+  mealDistributions    MealDistribution[]
+  scanEvents           ScanEvent[]
+  maleLeaderOfTribes   Tribe[]                   @relation("TribeMaleCamperLeader")
+  femaleLeaderOfTribes Tribe[]                   @relation("TribeFemaleCamperLeader")
 
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -732,6 +787,14 @@ model Tribe {
   allocationLogs         TribeAllocationLog[]
   preferredByStaff       StaffProfile[]       @relation("PreferredTribe")
   assignedStaff          StaffProfile[]       @relation("AssignedStaffTribe")
+  maleHead               StaffProfile?        @relation("TribeMaleHead", fields: [maleHeadId], references: [id], onDelete: SetNull)
+  maleHeadId             String?
+  femaleHead             StaffProfile?        @relation("TribeFemaleHead", fields: [femaleHeadId], references: [id], onDelete: SetNull)
+  femaleHeadId           String?
+  maleCamperLeader       Registration?        @relation("TribeMaleCamperLeader", fields: [maleCamperLeaderId], references: [id], onDelete: SetNull)
+  maleCamperLeaderId     String?
+  femaleCamperLeader     Registration?        @relation("TribeFemaleCamperLeader", fields: [femaleCamperLeaderId], references: [id], onDelete: SetNull)
+  femaleCamperLeaderId   String?
   attendanceSessions     AttendanceSession[]
   points                 Int                  @default(0)
   pointsLog              TribePointsLog[]
@@ -745,6 +808,10 @@ model Tribe {
   // prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([campId, name])
   @@index([campId, code])
+  @@index([maleHeadId])
+  @@index([femaleHeadId])
+  @@index([maleCamperLeaderId])
+  @@index([femaleCamperLeaderId])
   @@index([deletedAt])
 }
 
@@ -890,18 +957,27 @@ model ScoredSession {
   graceMinutes Int       @default(0)
   lateCutoff   DateTime?
 
-  stationId  String?
-  tribeId    String?
-  scope      String  @default("CAMP") // CAMP | TRIBE | CAMPUS
-  categoryId String
-  ruleId     String?
-  status     String  @default("SCHEDULED") // SCHEDULED | ACTIVE | CLOSED | CANCELLED
+  stationId   String?
+  tribeId     String?
+  campusId    String?
+  scope       String  @default("CAMP") // CAMP | TRIBE | CAMPUS
+  categoryId  String
+  ruleId      String?
+  // Point-station batches reuse ScoredSession so ScoreEvent.scoredSessionId
+  // remains the single session link for attendance, scheduled scans, and
+  // human-led QR awards. Null on legacy/scheduled sessions.
+  awardPoints Int?
+  // CAMPER | TEACHER | VOLUNTEER | ALL_STAFF. Null preserves legacy rows.
+  subjectAudience String?
+  createdById String?
+  status      String  @default("SCHEDULED") // SCHEDULED | ACTIVE | CLOSED | CANCELLED
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([campId, date])
   @@index([campId, status])
+  @@index([createdById, status])
 }
 
 // The award carries a subjectKey ("T:<id>" / "C:<id>" / "S:<id>") rather
@@ -1195,18 +1271,22 @@ model StaffProfile {
   deactivatedAt   DateTime?
 
   // Assignment (post-approval)
-  assignedVenue   Venue?  @relation("AssignedStaffVenue", fields: [assignedVenueId], references: [id])
-  assignedVenueId String?
-  assignedTribe   Tribe?  @relation("AssignedStaffTribe", fields: [assignedTribeId], references: [id])
-  assignedTribeId String?
+  assignedVenue      Venue?  @relation("AssignedStaffVenue", fields: [assignedVenueId], references: [id])
+  assignedVenueId    String?
+  assignedTribe      Tribe?  @relation("AssignedStaffTribe", fields: [assignedTribeId], references: [id])
+  assignedTribeId    String?
+  maleHeadOfTribes   Tribe[] @relation("TribeMaleHead")
+  femaleHeadOfTribes Tribe[] @relation("TribeFemaleHead")
 
   // Camp Structure: department & position flags
-  department         Department? @relation(fields: [departmentId], references: [id])
-  departmentId       String?
-  isDepartmentHead   Boolean     @default(false)
-  isAssistantHead    Boolean     @default(false)
-  isCampMonitor      Boolean     @default(false)
-  isAssistantMonitor Boolean     @default(false)
+  department            Department? @relation(fields: [departmentId], references: [id])
+  departmentId          String?
+  preferredDepartment   Department? @relation("PreferredStaffDepartment", fields: [preferredDepartmentId], references: [id], onDelete: SetNull)
+  preferredDepartmentId String?
+  isDepartmentHead      Boolean     @default(false)
+  isAssistantHead       Boolean     @default(false)
+  isCampMonitor         Boolean     @default(false)
+  isAssistantMonitor    Boolean     @default(false)
 
   // Camp Structure: reporting hierarchy (exactly one of these two is set, enforced in the router)
   reportsTo       StaffProfile?  @relation("ReportsTo", fields: [reportsToId], references: [id])
@@ -1222,9 +1302,11 @@ model StaffProfile {
   assignedRoomId   String?
   assignedBed      Bed?    @relation("AssignedStaffBed")
 
-  fieldValues         StaffFieldValue[]
-  camperAssignments   TeacherCamperAssignment[]
-  positionAssignments PositionAssignment[]
+  fieldValues                 StaffFieldValue[]
+  camperAssignments           TeacherCamperAssignment[]
+  positionAssignments         PositionAssignment[]
+  assignedChecklistItems      DepartmentChecklistItem[]      @relation("ChecklistItemAssignedStaff")
+  assignedChecklistExecutions DepartmentChecklistExecution[] @relation("ChecklistExecutionAssignedStaff")
 
   // Camp ID card / scan identity — nullable, lazily issued on approval (see
   // ensureStaffQrToken). "STF-" prefixed so the scan resolver can distinguish
@@ -1232,6 +1314,8 @@ model StaffProfile {
   qrToken         String?          @unique
   qrIssuedAt      DateTime?
   staffScanEvents StaffScanEvent[]
+  attendanceRecords StaffAttendanceRecord[]
+  mealDistributions StaffMealDistribution[]
 
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -1242,6 +1326,7 @@ model StaffProfile {
   @@index([userId, campId])
   @@index([organizationId, type, status])
   @@index([deletedAt])
+  @@index([preferredDepartmentId])
 }
 
 // Staff (teacher/volunteer) badge scan log — deliberately parallel to
@@ -1262,6 +1347,7 @@ model StaffScanEvent {
   location       String?
   result         String // SUCCESS | DUPLICATE | ERROR
   metadata       Json?
+  dedupeKey      String?      @unique
 
   @@index([staffProfileId])
   @@index([campId])
@@ -1280,25 +1366,30 @@ model TeacherCamperAssignment {
 }
 
 model AttendanceSession {
-  id          String             @id @default(cuid())
-  camp        Camp               @relation(fields: [campId], references: [id], onDelete: Cascade)
-  campId      String
-  venue       Venue?             @relation(fields: [venueId], references: [id])
-  venueId     String?
-  tribe       Tribe?             @relation(fields: [tribeId], references: [id])
-  tribeId     String?
-  name        String
-  date        DateTime
-  startsAt    DateTime?
-  lateAfterMinutes Int      @default(0)
-  status      String        @default("OPEN") // DRAFT | OPEN | CLOSED | CANCELLED
-  closedAt    DateTime?
-  closedById  String?
-  allowVolunteerAccess Boolean @default(false)
-  createdById String
-  records     AttendanceRecord[]
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id                   String             @id @default(cuid())
+  camp                 Camp               @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId               String
+  venue                Venue?             @relation(fields: [venueId], references: [id])
+  venueId              String?
+  tribe                Tribe?             @relation(fields: [tribeId], references: [id])
+  tribeId              String?
+  // Scalar-only on purpose: Campus already has a large relation surface and
+  // attendance only needs an indexed scope discriminator.
+  campusId             String?
+  name                 String
+  date                 DateTime
+  startsAt             DateTime?
+  lateAfterMinutes     Int                @default(0)
+  status               String             @default("OPEN") // DRAFT | OPEN | CLOSED | CANCELLED
+  closedAt             DateTime?
+  closedById           String?
+  allowVolunteerAccess Boolean            @default(false)
+  audience             String             @default("CAMPER") // CAMPER | TEACHER | VOLUNTEER | ALL_STAFF
+  createdById          String
+  records              AttendanceRecord[]
+  staffRecords         StaffAttendanceRecord[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
   // Additive: one-way optional link to the leaderboard's own scheduled-session
   // concept. AttendanceSession/AttendanceRecord.recordedAt is "when the
@@ -1310,8 +1401,30 @@ model AttendanceSession {
   // Additive: this model previously had zero indexes.
   @@index([campId, date])
   @@index([tribeId, date])
+  @@index([campusId, date])
   @@index([scoredSessionId])
   @@index([status, date])
+}
+
+model StaffAttendanceRecord {
+  id             String            @id @default(cuid())
+  session        AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId      String
+  staffProfile   StaffProfile      @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  staffProfileId String
+  status         String
+  source         String            @default("MANUAL")
+  markedAt       DateTime          @default(now())
+  updatedById    String?
+  notes          String?
+  scoreVersion   Int               @default(0)
+  scoreEventId   String?
+  recordedById   String
+  recordedAt     DateTime          @default(now())
+
+  @@unique([sessionId, staffProfileId])
+  @@index([staffProfileId])
+  @@index([scoreEventId])
 }
 
 model AttendanceRecord {
@@ -1382,31 +1495,73 @@ model MealDistribution {
   @@unique([registrationId, meal, date])
 }
 
+model StaffMealDistribution {
+  id             String       @id @default(cuid())
+  camp           Camp         @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId         String
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  staffProfileId String
+  meal           String
+  date           DateTime     @db.Date
+  servedById     String
+  servedAt       DateTime     @default(now())
+
+  @@unique([staffProfileId, meal, date])
+  @@index([campId, date])
+}
+
 // ─── Camp Structure & Organogram ────────────────────────────────────────────
 
 model Department {
-  id               String                   @id @default(cuid())
-  organizationId   String
-  camp             Camp?                    @relation(fields: [campId], references: [id], onDelete: Cascade)
-  campId           String? // per-camp instance, matching Tribe; null = org-wide template
-  name             String
-  description      String?
-  responsibilities String[]                 @default([])
-  status           String                   @default("ACTIVE") // ACTIVE | INACTIVE
-  maxCapacity      Int? // null = unlimited; mirrors Tribe.maxCapacity
-  positions        Position[]
-  announcements    DepartmentAnnouncement[]
-  documents        DepartmentDocument[]
-  activityLogs     DepartmentActivityLog[]
-  staff            StaffProfile[]
-  deletedAt        DateTime?
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
+  id                                   String                         @id @default(cuid())
+  organizationId                       String
+  camp                                 Camp?                          @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId                               String? // per-camp instance, matching Tribe; null = org-wide template
+  name                                 String
+  systemKey                            String? // CAMP_COMMAND for the protected leadership department
+  description                          String?
+  purpose                              String?
+  responsibilities                     String[]                       @default([])
+  authority                            String[]                       @default([])
+  successMeasures                      String[]                       @default([])
+  workingRelationships                 String[]                       @default([])
+  parentDepartmentId                   String?
+  parentDepartment                     Department?                    @relation("DepartmentHierarchy", fields: [parentDepartmentId], references: [id], onDelete: SetNull)
+  childDepartments                     Department[]                   @relation("DepartmentHierarchy")
+  displayOrder                         Int                            @default(0)
+  allowMembersAddChecklistItems        Boolean                        @default(false)
+  allowMembersEditChecklistItems       Boolean                        @default(false)
+  allowMembersDeactivateChecklistItems Boolean                        @default(false)
+  enableRoutineChecklists              Boolean                        @default(true)
+  enableProgrammeTriggeredTasks        Boolean                        @default(false)
+  enableDeadlineReminders              Boolean                        @default(true)
+  status                               String                         @default("ACTIVE") // ACTIVE | INACTIVE | ARCHIVED
+  maxCapacity                          Int? // null = unlimited; mirrors Tribe.maxCapacity
+  jdKey                                String? // stable identity from the JD document; null for admin-authored departments
+  mergedIntoId                         String?
+  mergedInto                           Department?                    @relation("DepartmentMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom                           Department[]                   @relation("DepartmentMerge")
+  positions                            Position[]
+  announcements                        DepartmentAnnouncement[]
+  documents                            DepartmentDocument[]
+  activityLogs                         DepartmentActivityLog[]
+  checklistItems                       DepartmentChecklistItem[]
+  checklistExecutions                  DepartmentChecklistExecution[]
+  reports                              DepartmentReport[]
+  staff                                StaffProfile[]
+  preferredByStaff                     StaffProfile[]                 @relation("PreferredStaffDepartment")
+  deletedAt                            DateTime?
+  createdAt                            DateTime                       @default(now())
+  updatedAt                            DateTime                       @updatedAt
 
   // Partial unique index (WHERE "deletedAt" IS NULL) —
   // Department_organizationId_campId_name_key, added by
   // prisma/migrations/20260728000000_partial_unique_indexes.
   @@index([organizationId, campId, name])
+  @@index([campId, systemKey])
+  @@index([campId, jdKey])
+  @@index([parentDepartmentId, displayOrder])
+  @@index([mergedIntoId])
   @@index([deletedAt])
 }
 
@@ -1431,18 +1586,18 @@ model Hostel {
 }
 
 model HostelFloor {
-  id              String   @id @default(cuid())
-  hostel          Hostel   @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  hostel          Hostel    @relation(fields: [hostelId], references: [id], onDelete: Cascade)
   hostelId        String
   name            String
   code            String?
-  level           Int      @default(0)
+  level           Int       @default(0)
   roomNumberStart Int?
-  displayOrder    Int      @default(0)
+  displayOrder    Int       @default(0)
   rooms           Room[]
   deletedAt       DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([hostelId, displayOrder])
   @@index([deletedAt])
@@ -1452,13 +1607,13 @@ model Room {
   id            String         @id @default(cuid())
   hostel        Hostel         @relation(fields: [hostelId], references: [id], onDelete: Cascade)
   hostelId      String
-  floor         HostelFloor? @relation(fields: [floorId], references: [id], onDelete: SetNull)
+  floor         HostelFloor?   @relation(fields: [floorId], references: [id], onDelete: SetNull)
   floorId       String?
   name          String // e.g. "Room 12"
   capacity      Int?
-  roomType      RoomType      @default(STANDARD)
+  roomType      RoomType       @default(STANDARD)
   locationLabel String?
-  displayOrder  Int           @default(0)
+  displayOrder  Int            @default(0)
   beds          Bed[]
   registrations Registration[]
   staffAssigned StaffProfile[] @relation("AssignedStaffRoom")
@@ -1557,49 +1712,176 @@ model RegistrationConfig {
 }
 
 model Position {
-  id               String               @id @default(cuid())
-  name             String // e.g. "Camp Director", "Registration Head"
-  campId           String
-  camp             Camp                 @relation(fields: [campId], references: [id], onDelete: Cascade)
-  departmentId     String? // Nullable for top-level admin roles outside departments
-  department       Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  parentPositionId String?
-  parentPosition   Position?            @relation("PositionHierarchy", fields: [parentPositionId], references: [id], onDelete: SetNull)
-  childPositions   Position[]           @relation("PositionHierarchy")
-  displayOrder     Int                  @default(0)
-  status           String               @default("ACTIVE") // ACTIVE | ARCHIVED
-  assignments      PositionAssignment[]
+  id                  String                         @id @default(cuid())
+  name                String // e.g. "Camp Director", "Registration Head"
+  campId              String
+  camp                Camp                           @relation(fields: [campId], references: [id], onDelete: Cascade)
+  departmentId        String? // Nullable for top-level admin roles outside departments
+  department          Department?                    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  parentPositionId    String?
+  parentPosition      Position?                      @relation("PositionHierarchy", fields: [parentPositionId], references: [id], onDelete: SetNull)
+  childPositions      Position[]                     @relation("PositionHierarchy")
+  displayOrder        Int                            @default(0)
+  status              String                         @default("ACTIVE") // ACTIVE | ARCHIVED
+  roleKind            DepartmentRoleKind             @default(MEMBER)
+  purpose             String?
+  responsibilities    String[]                       @default([])
+  authority           String[]                       @default([])
+  successMeasures     String[]                       @default([])
+  assignments         PositionAssignment[]
+  checklistItems      DepartmentChecklistItem[]
+  checklistExecutions DepartmentChecklistExecution[]
   // Additive: the "Camp Head" leaderboard-admin grant (src/server/api/trpc/
   // scoping.ts's assertCanManageCamp) — whoever currently holds a Position
   // with this flag set, for this camp, gets leaderboard-admin rights
   // without needing an ADMIN/OWNER/SUPER_ADMIN role. Defaults false, so
   // every existing Position row is unaffected.
-  grantsManageCamp Boolean              @default(false)
-  deletedAt        DateTime?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  grantsManageCamp    Boolean                        @default(false)
+  // Narrower than grantsManageCamp: intended for Tribe Heads and Assistant
+  // Tribe Heads who may award campers in their assigned tribe without gaining
+  // leaderboard settings, structure, or other camp-admin powers.
+  grantsAwardPoints   Boolean                        @default(false)
+  leadershipRole      CampLeadershipRole?
+  deletedAt           DateTime?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
 
   @@index([campId])
+  @@index([campId, leadershipRole])
   @@index([departmentId])
   @@index([parentPositionId])
   @@index([deletedAt])
 }
 
 model PositionAssignment {
-  id         String       @id @default(cuid())
-  positionId String
-  position   Position     @relation(fields: [positionId], references: [id], onDelete: Cascade)
-  staffId    String
-  staff      StaffProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  startDate  DateTime     @default(now())
-  endDate    DateTime?
-  isCurrent  Boolean      @default(true)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id          String             @id @default(cuid())
+  positionId  String
+  position    Position           @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  staffId     String
+  staff       StaffProfile       @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  startDate   DateTime           @default(now())
+  endDate     DateTime?
+  isCurrent   Boolean            @default(true)
+  isPrimary   Boolean            @default(false) // whether this is the staff member's primary department (vs. a secondary one)
+  accessMode  CommandAccessMode?
+  permissions String[]           @default([])
+  reason      String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   @@index([positionId])
   @@index([staffId])
   @@index([isCurrent])
+  @@index([staffId, isCurrent, isPrimary])
+}
+
+model DepartmentChecklistItem {
+  id              String                         @id @default(cuid())
+  department      Department                     @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  departmentId    String
+  title           String
+  description     String?
+  routine         ChecklistRoutine               @default(ONE_TIME)
+  sourceGroup     String?
+  contextLabel    String?
+  assignmentType  ChecklistAssignmentType        @default(EVERYONE)
+  position        Position?                      @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  positionId      String?
+  assignedStaff   StaffProfile?                  @relation("ChecklistItemAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  assignedStaffId String?
+  dueTime         String?
+  specificDate    DateTime?                      @db.Date
+  required        Boolean                        @default(true)
+  active          Boolean                        @default(true)
+  sortOrder       Int                            @default(0)
+  version         Int                            @default(1)
+  createdById     String?
+  updatedById     String?
+  executions      DepartmentChecklistExecution[]
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+
+  @@index([departmentId, active, routine])
+  @@index([positionId])
+  @@index([assignedStaffId])
+}
+
+model DepartmentChecklistExecution {
+  id                   String                   @id @default(cuid())
+  executionKey         String                   @unique
+  checklistItem        DepartmentChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: SetNull)
+  checklistItemId      String?
+  department           Department               @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  departmentId         String
+  camp                 Camp                     @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId               String
+  date                 DateTime                 @db.Date
+  contextType          String?
+  contextId            String?
+  contextName          String?
+  contextStartsAt      DateTime?
+  taskTitle            String
+  taskDescription      String?
+  routine              ChecklistRoutine
+  sourceGroup          String?
+  assignmentType       ChecklistAssignmentType
+  position             Position?                @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  positionId           String?
+  roleNameSnapshot     String?
+  assignedStaff        StaffProfile?            @relation("ChecklistExecutionAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  assignedStaffId      String?
+  assignedNameSnapshot String?
+  dueAt                DateTime?
+  required             Boolean                  @default(true)
+  definitionVersion    Int                      @default(1)
+  status               ChecklistExecutionStatus @default(PENDING)
+  completedById        String?
+  completedAt          DateTime?
+  skippedById          String?
+  skippedAt            DateTime?
+  note                 String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  @@index([departmentId, date, status])
+  @@index([campId, date, status])
+  @@index([assignedStaffId, date, status])
+  @@index([positionId, date, status])
+  @@index([contextId])
+}
+
+model DepartmentReport {
+  id              String     @id @default(cuid())
+  department      Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  departmentId    String
+  camp            Camp       @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId          String
+  date            DateTime   @db.Date
+  completedWork   String
+  outstandingWork String?
+  issues          String?
+  escalations     String?
+  notes           String?
+  submittedById   String
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([departmentId, date, submittedById])
+  @@index([campId, date])
+  @@index([departmentId, date])
+}
+
+model CampCommandPolicy {
+  id                          String            @id @default(cuid())
+  camp                        Camp              @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId                      String            @unique
+  commandantMode              CommandAccessMode @default(FULL)
+  commandantPermissions       String[]          @default([])
+  assistantDefaultMode        CommandAccessMode @default(CUSTOM)
+  assistantDefaultPermissions String[]          @default([])
+  updatedById                 String?
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
 }
 
 model DepartmentAnnouncement {
@@ -1973,4 +2255,81 @@ model WebPushLog {
   createdAt      DateTime @default(now())
 
   @@index([organizationId, createdAt])
+}
+
+// ─── Camp Program Schedule & Live Time Management ─────────────────────────────
+
+enum ScheduleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ScheduleEventKind {
+  TIMED
+  MILESTONE
+}
+
+model CampSchedule {
+  id              String              @id @default(cuid())
+  camp            Camp                @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId          String
+  revision        Int                 @default(1)
+  status          ScheduleStatus      @default(DRAFT)
+  timezone        String              @default("Africa/Lagos")
+  reminderMinutes Int[]               @default([5, 3, 2])
+  version         Int                 @default(1)
+  sourceMetadata  Json?
+  publishMetadata Json?
+  events          CampScheduleEvent[]
+  changes         CampScheduleChange[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([campId, status])
+  @@unique([campId, revision])
+}
+
+model CampScheduleEvent {
+  id             String               @id @default(cuid())
+  schedule       CampSchedule         @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId     String
+  dayNumber      Int
+  eventDate      DateTime             @db.Date
+  kind           ScheduleEventKind    @default(TIMED)
+  title          String
+  facilitator    String?
+  location       String?
+  notes          String?
+  plannedStart   DateTime
+  plannedEnd     DateTime?
+  effectiveStart DateTime
+  effectiveEnd   DateTime?
+  actualStart    DateTime?
+  actualEnd      DateTime?
+  sortOrder      Int                  @default(0)
+  cancelled      Boolean              @default(false)
+  changes        CampScheduleChange[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([scheduleId, dayNumber])
+  @@index([scheduleId, sortOrder])
+}
+
+model CampScheduleChange {
+  id          String             @id @default(cuid())
+  schedule    CampSchedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId  String
+  event       CampScheduleEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  eventId     String?
+  actorId     String
+  changeType  String
+  minuteDelta Int?
+  beforeState Json?
+  afterState  Json?
+  reason      String?
+  createdAt   DateTime           @default(now())
+
+  @@index([scheduleId, createdAt])
 }

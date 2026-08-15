@@ -33,7 +33,10 @@ export const configBundleDescriptor: ExportDescriptor<ConfigBundleFilters> = {
       stage: "Generating file…",
     });
 
-    const stamp = new Date().toISOString().slice(0, 10);
+    // Millisecond precision, not just the date — multiple config-bundle
+    // exports on the same day (a normal occurrence) previously collided on
+    // an identical filename, making them indistinguishable in Job History.
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     if (format === "JSON") {
       const bundle = toJsonBundle(data);
       return {
@@ -64,7 +67,10 @@ export const configBundleDescriptor: ExportDescriptor<ConfigBundleFilters> = {
     return { fileName: `camply-export-${stamp}.csv`, mimeType: "text/csv", data: Buffer.from(combined, "utf-8") };
   },
   fileName(_params, format) {
-    const stamp = new Date().toISOString().slice(0, 10);
+    // Millisecond precision, not just the date — multiple config-bundle
+    // exports on the same day (a normal occurrence) previously collided on
+    // an identical filename, making them indistinguishable in Job History.
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     return `camply-export-${stamp}.${format.toLowerCase()}`;
   },
 };

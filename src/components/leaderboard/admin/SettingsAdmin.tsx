@@ -18,6 +18,7 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
 
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
+  const [publicEnabledOverride, setPublicEnabledOverride] = useState<boolean | null>(null);
 
   const update = api.leaderboard.settings.update.useMutation({
     // Optimistic update: this page's toggles/inputs are directly bound to
@@ -27,8 +28,11 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
     // still-stale query cache before the mutation round-trip completes —
     // confirmed by a real Playwright failure ("Clicking the checkbox did
     // not change its state") before this was added.
-    onMutate: async (patch) => {
-      await utils.leaderboard.settings.get.cancel({ campId });
+    onMutate: (patch) => {
+      // Keep controlled inputs responsive in the same tick as the browser
+      // event. Awaiting cancellation here lets React briefly re-render the
+      // old checked/value state, which can make a checkbox reject a click.
+      void utils.leaderboard.settings.get.cancel({ campId });
       const previous = utils.leaderboard.settings.get.getData({ campId });
       utils.leaderboard.settings.get.setData({ campId }, (old: any) => (old ? { ...old, ...patch } : old));
       return { previous };
@@ -37,17 +41,26 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
       if (context?.previous) utils.leaderboard.settings.get.setData({ campId }, context.previous);
       toast.error(err.message || "Failed to update settings.");
     },
-    onSuccess: () => {
+    onSuccess: (saved, patch) => {
+      // The mutation response is authoritative. Merge only the fields this
+      // request changed so overlapping edits cannot overwrite one another
+      // when their responses arrive out of order.
+      utils.leaderboard.settings.get.setData({ campId }, (old: any) => {
+        if (!old) return saved;
+        const changed = Object.fromEntries(
+          Object.keys(patch)
+            .filter((key) => key !== "campId")
+            .map((key) => [key, (saved as any)[key]])
+        );
+        return { ...old, ...changed };
+      });
       toast.success("Settings updated.");
-    },
-    onSettled: () => {
-      utils.leaderboard.settings.get.invalidate({ campId });
     },
   });
 
   const rotateToken = api.leaderboard.rotatePublicToken.useMutation({
-    onSuccess: () => {
-      utils.leaderboard.settings.get.invalidate({ campId });
+    onSuccess: (saved) => {
+      utils.leaderboard.settings.get.setData({ campId }, saved);
       toast.success("Public link rotated — the old link no longer works.");
       setConfirmRotate(false);
     },
@@ -160,8 +173,22 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={settings.publicEnabled}
-              onChange={(e) => update.mutate({ campId, publicEnabled: e.target.checked } as any)}
+              checked={publicEnabledOverride ?? settings.publicEnabled}
+              onChange={(e) => {
+                const publicEnabled = e.target.checked;
+                // A controlled checkbox must reflect the native click in the
+                // same render turn. Mutation lifecycle callbacks run later,
+                // so keep this tiny local override until the cache contains
+                // the server-confirmed value.
+                setPublicEnabledOverride(publicEnabled);
+                update.mutate(
+                  { campId, publicEnabled } as any,
+                  {
+                    onSuccess: () => setPublicEnabledOverride(null),
+                    onError: () => setPublicEnabledOverride(null),
+                  }
+                );
+              }}
               className="h-4 w-4 rounded border-input-border"
             />
             Enable the public, no-login leaderboard page

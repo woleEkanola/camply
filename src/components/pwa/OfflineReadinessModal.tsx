@@ -59,7 +59,7 @@ export function OfflineReadinessModal({ open, onClose, onOpenDownloadModal }: Of
   return (
     <BottomSheet open={open} onClose={onClose} title="Offline Readiness Checklist">
       <div className="space-y-4">
-        <div className={`p-4 rounded-xl border flex items-center justify-between ${readiness.isReadyForOffline ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-amber-50 border-amber-200 text-amber-900"}`}>
+        <div className={`p-4 rounded-xl border flex items-center justify-between ${readiness.isReadyForOffline ? "status-success border-current/20" : "status-attention border-current/20"}`}>
           <div>
             <h4 className="font-bold text-base">
               {readiness.isReadyForOffline ? "Ready for Offline Operation" : "Pre-Camp Action Required"}

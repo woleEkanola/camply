@@ -2,15 +2,31 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { hasStaffCapability } from "../../auth/capabilities";
+import { assertOrgAdminOrCommand } from "../trpc/scoping";
+import { DepartmentMergeError, mergeDepartmentInTx } from "../../departments/merge";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
 async function assertOrgAdmin(ctx: { session: any }, organizationId: string) {
+  try {
+    return await assertOrgAdminOrCommand(ctx as any, organizationId, "CAMP_STRUCTURE");
+  } catch {
+    // Preserve the original role-specific error below for non-command users.
+  }
   const currentUser = ctx.session?.user;
   if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
   // Departments are org-wide (not centre-scoped) — LOCATION_ADMIN gets read-only, not write access.
   if (ADMIN_ROLES.includes(currentUser.role) && currentUser.organizationId === organizationId) return currentUser;
   throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage departments for this organization" });
+}
+
+async function deletionBlockers(prisma: any, departmentId: string) {
+  const [staffCount, assignmentCount, childCount] = await Promise.all([
+    prisma.staffProfile.count({ where: { departmentId, deletedAt: null, status: { in: ["PENDING", "APPROVED"] } } }),
+    prisma.positionAssignment.count({ where: { isCurrent: true, position: { departmentId, deletedAt: null } } }),
+    prisma.department.count({ where: { parentDepartmentId: departmentId, deletedAt: null } }),
+  ]);
+  return { staffCount, assignmentCount, childCount, blocked: Boolean(staffCount || assignmentCount || childCount) };
 }
 
 async function assertOrgMember(ctx: { session: any; userId: string }, organizationId: string) {
@@ -69,6 +85,7 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department is managed automatically." });
       await assertOrgAdmin(ctx, dept.organizationId);
       const { id, ...data } = input;
       return ctx.prisma.department.update({ where: { id }, data });
@@ -82,8 +99,65 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be deleted." });
       await assertOrgAdmin(ctx, dept.organizationId);
+      const blockers = await deletionBlockers(ctx.prisma, dept.id);
+      if (blockers.blocked) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Move or remove this department's ${blockers.staffCount} active people, ${blockers.assignmentCount} current role assignments, and ${blockers.childCount} child departments before deleting it.`,
+        });
+      }
       return ctx.prisma.department.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
+    }),
+
+  // Bulk delete (soft — Trash-recoverable) and bulk archive. Each id is
+  // checked independently and contributes its own pass/fail result so one
+  // blocked department doesn't stop the rest of the batch from being deleted.
+  bulkDelete: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+      for (const id of input.ids) {
+        try {
+          const dept = await ctx.prisma.department.findUnique({ where: { id } });
+          if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Department not found." });
+          if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be deleted." });
+          await assertOrgAdmin(ctx, dept.organizationId);
+          const blockers = await deletionBlockers(ctx.prisma, id);
+          if (blockers.blocked) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: `${blockers.staffCount} active people, ${blockers.assignmentCount} current role assignments, ${blockers.childCount} child departments still attached.` });
+          }
+          await ctx.prisma.department.update({ where: { id }, data: { deletedAt: new Date() } });
+          results.push({ id, ok: true });
+        } catch (error) {
+          results.push({ id, ok: false, error: error instanceof TRPCError ? error.message : "Failed to delete this department." });
+        }
+      }
+      return { results };
+    }),
+
+  bulkArchive: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session!.user;
+      const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+      for (const id of input.ids) {
+        try {
+          const dept = await ctx.prisma.department.findUnique({ where: { id } });
+          if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Department not found." });
+          if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be archived." });
+          await assertOrgAdmin(ctx, dept.organizationId);
+          await ctx.prisma.$transaction(async (tx) => {
+            await tx.department.update({ where: { id }, data: { status: "ARCHIVED" } });
+            await tx.departmentActivityLog.create({ data: { departmentId: id, action: "DEPT_ARCHIVED", actorId: currentUser.id } });
+          });
+          results.push({ id, ok: true });
+        } catch (error) {
+          results.push({ id, ok: false, error: error instanceof TRPCError ? error.message : "Failed to archive this department." });
+        }
+      }
+      return { results };
     }),
 
   updateResponsibilities: protectedProcedure
@@ -91,6 +165,7 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department is managed automatically." });
       await assertOrgAdmin(ctx, dept.organizationId);
       return ctx.prisma.department.update({ where: { id: input.id }, data: { responsibilities: input.responsibilities } });
     }),
@@ -101,6 +176,7 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const sourceDept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!sourceDept || sourceDept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (sourceDept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be duplicated." });
       await assertOrgAdmin(ctx, sourceDept.organizationId);
 
       const currentUser = ctx.session!.user;
@@ -179,47 +255,22 @@ export const departmentRouter = createTRPCRouter({
       if (!sourceDept || sourceDept.deletedAt || !targetDept || targetDept.deletedAt) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Source or Target department not found." });
       }
+      if (sourceDept.systemKey === "CAMP_COMMAND" || targetDept.systemKey === "CAMP_COMMAND") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be merged." });
+      }
       await assertOrgAdmin(ctx, sourceDept.organizationId);
 
-      const currentUser = ctx.session!.user;
-
-      return ctx.prisma.$transaction(async (tx) => {
-        // Move all positions from source to target department
-        const sourcePositions = await tx.position.findMany({
-          where: { departmentId: sourceDept.id, deletedAt: null },
-        });
-
-        for (const pos of sourcePositions) {
-          await tx.position.update({
-            where: { id: pos.id },
-            data: { departmentId: targetDept.id },
-          });
+      try {
+        return await ctx.prisma.$transaction(
+          (tx) => mergeDepartmentInTx(tx, { sourceId: input.sourceId, targetId: input.targetId, actorId: ctx.userId }),
+          { timeout: 30_000 }
+        );
+      } catch (error) {
+        if (error instanceof DepartmentMergeError) {
+          throw new TRPCError({ code: error.code as any, message: error.message });
         }
-
-        // Update legacy department references on StaffProfile directly
-        await tx.staffProfile.updateMany({
-          where: { departmentId: sourceDept.id, deletedAt: null },
-          data: { departmentId: targetDept.id },
-        });
-
-        // Archive source department
-        await tx.department.update({
-          where: { id: sourceDept.id },
-          data: { status: "ARCHIVED" },
-        });
-
-        // Log activity in target department
-        await tx.departmentActivityLog.create({
-          data: {
-            departmentId: targetDept.id,
-            action: "STAFF_ASSIGNED", // fallback category
-            actorId: currentUser.id,
-            details: { message: `Merged department "${sourceDept.name}" into this department.` },
-          },
-        });
-
-        return { success: true };
-      });
+        throw error;
+      }
     }),
 
   // Archive a department
@@ -228,6 +279,7 @@ export const departmentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
       if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      if (dept.systemKey === "CAMP_COMMAND") throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Command department cannot be archived." });
       await assertOrgAdmin(ctx, dept.organizationId);
 
       const currentUser = ctx.session!.user;

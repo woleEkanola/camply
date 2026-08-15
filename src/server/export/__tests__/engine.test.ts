@@ -21,6 +21,14 @@ function makeStubDescriptor(): ExportDescriptor<any> {
   buildSpy = vi.fn(async (_ctx, params: ExportEnqueueParams, _format, onProgress) => {
     if (params.filters?.fail) throw new Error("Simulated build failure: timeout");
     await onProgress({ processed: 1, total: 2, stage: "Working…" });
+    if (params.filters?.cancelMidBuild) {
+      const running = await prisma.exportJob.findFirstOrThrow({
+        where: { organizationId: params.organizationId, status: "RUNNING" },
+        orderBy: { createdAt: "desc" },
+      });
+      const { cancelExportJob } = await import("../engine");
+      await cancelExportJob(running.id);
+    }
     await onProgress({ processed: 2, total: 2, stage: "Done" });
     return { fileName: "test.csv", mimeType: "text/csv", data: Buffer.from("a,b\n1,2\n") };
   });
@@ -172,6 +180,64 @@ describe("enqueueExportJob / processExportJob", () => {
     });
     await processExportJob(doneJob.id);
     expect(buildSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("cancellation", () => {
+  it("stops at the next progress checkpoint when a running export is cancelled", async () => {
+    const { enqueueExportJob } = await import("../engine");
+    const params = { ...baseParams, organizationId: orgId, filters: { cancelMidBuild: true } };
+    const job = await enqueueExportJob(
+      { prisma, session: { user: { id: adminId, role: "ADMIN", organizationId: orgId } } },
+      params,
+      "Cancelled during build",
+    );
+
+    let row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    for (let i = 0; i < 20 && row.status !== "CANCELLED"; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    }
+
+    expect(row.status).toBe("CANCELLED");
+    expect(row.stage).toBe("Cancelled");
+    expect(row.errorHint).toMatch(/retry/i);
+    expect(row.completedAt).not.toBeNull();
+    expect(row.fileData).toBeNull();
+  });
+
+  it("cancels only active jobs and reports when a job already finished", async () => {
+    const { cancelExportJob } = await import("../engine");
+    const running = await prisma.exportJob.create({
+      data: {
+        organizationId: orgId,
+        userId: adminId,
+        kind: "TEMPLATE",
+        format: "CSV",
+        label: "Running",
+        params: { ...baseParams, organizationId: orgId } as any,
+        status: "RUNNING",
+        progress: 95,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    const done = await prisma.exportJob.create({
+      data: {
+        organizationId: orgId,
+        userId: adminId,
+        kind: "TEMPLATE",
+        format: "CSV",
+        label: "Done",
+        params: { ...baseParams, organizationId: orgId } as any,
+        status: "DONE",
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    await expect(cancelExportJob(running.id)).resolves.toEqual({ cancelled: true });
+    await expect(cancelExportJob(done.id)).resolves.toEqual({ cancelled: false });
+    expect((await prisma.exportJob.findUniqueOrThrow({ where: { id: running.id } })).status).toBe("CANCELLED");
+    expect((await prisma.exportJob.findUniqueOrThrow({ where: { id: done.id } })).status).toBe("DONE");
   });
 });
 

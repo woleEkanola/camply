@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
+import { assertOrgAdmin, assertSameOrg } from "../trpc/scoping";
 
 export const pushRouter = createTRPCRouter({
   /**
@@ -20,6 +21,7 @@ export const pushRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session!.user.id;
+      assertSameOrg(ctx, input.organizationId);
 
       const sub = await ctx.prisma.pushSubscription.upsert({
         where: { endpoint: input.endpoint },
@@ -80,6 +82,7 @@ export const pushRouter = createTRPCRouter({
       if (role !== "ADMIN" && role !== "OWNER" && role !== "SUPER_ADMIN") {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Only admins can send broadcasts" });
       }
+      await assertOrgAdmin(ctx, input.organizationId);
 
       // Fetch matching subscriptions
       const whereClause: any = { organizationId: input.organizationId };
@@ -118,8 +121,10 @@ export const pushRouter = createTRPCRouter({
    * Get VAPID Public Key for client subscription setup.
    */
   getVapidPublicKey: protectedProcedure.query(() => {
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!publicKey) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Web Push is not configured." });
     return {
-      publicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "BEl62iUYgUivxIkv69yViEuiBIa-m9GYV2H5vGZ-x7Z2x9G9a6vGZ7u8Z0",
+      publicKey,
     };
   }),
 });

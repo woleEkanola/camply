@@ -1,13 +1,15 @@
 import type { PrismaClient } from "@prisma/client";
 import type { TribeWithCounts, AllocationUnit } from "./types";
 import { calculateAge } from "../../registration/validation";
+import { normalizeGender } from "../../../lib/gender";
+import { ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES } from "../../assignments/eligibility";
 
 async function loadTribes(tx: PrismaClient, campId: string): Promise<TribeWithCounts[]> {
   const tribes = await tx.tribe.findMany({
     where: { campId, status: "ACTIVE", deletedAt: null },
     include: {
       registrations: {
-        where: { deletedAt: null },
+        where: { deletedAt: null, status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] } },
         select: { id: true, camper: true, campusId: true },
       },
     },
@@ -39,13 +41,13 @@ async function loadTribes(tx: PrismaClient, campId: string): Promise<TribeWithCo
 async function loadUnits(
   tx: PrismaClient,
   campId: string,
-  scope: "approved" | "all",
+  scope: "approved" | "active" | "all",
 ): Promise<AllocationUnit[]> {
   const registrations = await tx.registration.findMany({
     where: {
       campId,
-      status: scope === "all"
-        ? { in: ["APPROVED", "CHECKED_IN"] }
+      status: scope === "active" || scope === "all"
+        ? { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] }
         : { in: ["APPROVED"] },
       tribeId: null,
       deletedAt: null,
@@ -80,7 +82,7 @@ async function loadUnits(
       id: r.camper.id,
       name: r.camper.name,
       dateOfBirth: r.camper.dateOfBirth as Date | null,
-      gender: (r.camper.gender as string | null) ?? null,
+      gender: normalizeGender(r.camper.gender),
       userId: r.camper.userId,
       school: (r.camper.school as string | null) ?? null,
       church: (r.camper.church as string | null) ?? null,
@@ -94,7 +96,7 @@ async function loadUnits(
 export async function loadAllocationInput(
   tx: PrismaClient,
   campId: string,
-  scope: "approved" | "all" = "approved",
+  scope: "approved" | "active" | "all" = "approved",
 ) {
   const [tribes, units] = await Promise.all([
     loadTribes(tx, campId),

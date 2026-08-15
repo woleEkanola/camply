@@ -53,6 +53,12 @@ test.describe("PWA Offline Engine & Search Features", () => {
         const modalTitle = page.locator("text=Download Offline Database");
         await expect(modalTitle).toBeVisible();
 
+        // Full-camp data is now fixed by design. Operators only choose whether
+        // photos are included; station/camper scope choices must not return.
+        await expect(page.getByText("Select Profile Scope")).toHaveCount(0);
+        await expect(page.getByText("Select Campers Scope")).toHaveCount(0);
+        await expect(page.getByText("Entire Camp", { exact: true })).toBeVisible();
+
         // Verify photo thumbnail option buttons
         const textOnlyBtn = page.locator('button:has-text("Text Data Only")').first();
         const withPhotosBtn = page.locator('button:has-text("With Photos")').first();

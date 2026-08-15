@@ -120,7 +120,7 @@ test.describe("Comprehensive Recent Features E2E Verification", () => {
     await expect(bottomNav).toBeVisible({ timeout: 15000 });
 
     await expect(bottomNav.getByText("Dashboard")).toBeVisible();
-    await expect(bottomNav.getByText("Contact")).toBeVisible();
+    await expect(bottomNav.getByText("Departments")).toBeVisible();
     await expect(bottomNav.getByText("QR Scan")).toBeVisible();
     await expect(bottomNav.getByText("Campers")).toBeVisible();
     await expect(bottomNav.getByText("Leaderboard")).toBeVisible();

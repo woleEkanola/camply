@@ -8,6 +8,13 @@ const MAX_ATTEMPTS = 3;
 const EXPORT_TTL_HOURS = 24;
 const STALE_RUNNING_MINUTES = 10;
 
+class ExportCancelledError extends Error {
+  constructor() {
+    super("Export cancelled");
+    this.name = "ExportCancelledError";
+  }
+}
+
 /**
  * Creates the job row, authorizes it against the caller, and fires off
  * generation immediately (un-awaited) so a normal export starts within
@@ -50,13 +57,12 @@ export async function enqueueExportJob(
  * src/server/registration/effects.ts's processSideEffect.
  */
 export async function processExportJob(id: string) {
-  const job = await prisma.exportJob.findUnique({ where: { id } });
-  if (!job || job.status === "DONE" || job.status === "CANCELLED") return;
-
-  await prisma.exportJob.update({
-    where: { id },
+  const claimed = await prisma.exportJob.updateMany({
+    where: { id, status: "QUEUED", runAfter: { lte: new Date() } },
     data: { status: "RUNNING", startedAt: new Date(), stage: "Preparing export…" },
   });
+  if (claimed.count !== 1) return;
+  const job = await prisma.exportJob.findUniqueOrThrow({ where: { id } });
 
   try {
     const descriptor = getExportDescriptor(job.kind as any);
@@ -74,10 +80,14 @@ export async function processExportJob(id: string) {
 
     let latestProgress = job.progress;
     const onProgress = async (p: ExportProgress) => {
-      latestProgress =
-        p.total && p.total > 0 ? Math.round(((p.processed ?? 0) / p.total) * 100) : latestProgress;
-      await prisma.exportJob.update({
-        where: { id },
+      // Row preparation is not the end of the export: workbook/PDF generation
+      // and artifact persistence still remain. Reserve 100% for a downloadable
+      // artifact so the UI never looks complete while generation is ongoing.
+      latestProgress = p.total && p.total > 0
+        ? Math.min(95, Math.round(((p.processed ?? 0) / p.total) * 100))
+        : latestProgress;
+      const progressUpdate = await prisma.exportJob.updateMany({
+        where: { id, status: "RUNNING" },
         data: {
           ...(p.processed !== undefined ? { processed: p.processed } : {}),
           ...(p.total !== undefined ? { total: p.total } : {}),
@@ -85,21 +95,31 @@ export async function processExportJob(id: string) {
           progress: latestProgress,
         },
       });
+      // Cancelling changes the status immediately. Builders report progress at
+      // their natural checkpoints, so this also cooperatively stops expensive
+      // row/card generation instead of continuing invisibly in the background.
+      if (progressUpdate.count !== 1) throw new ExportCancelledError();
     };
 
     const artifact = await descriptor.build({ prisma }, params, job.format as any, onProgress);
+    const stillRunning = await prisma.exportJob.findFirst({ where: { id, status: "RUNNING" }, select: { id: true } });
+    if (!stillRunning) return;
     await artifactStore.put(id, artifact);
 
-    await prisma.exportJob.update({
-      where: { id },
+    const completed = await prisma.exportJob.updateMany({
+      where: { id, status: "RUNNING" },
       data: { status: "DONE", progress: 100, stage: "Ready", completedAt: new Date() },
     });
+    // Cancellation can race with artifact persistence. Never retain bytes for
+    // a job that did not make the guarded RUNNING -> DONE transition.
+    if (completed.count !== 1) await artifactStore.delete(id);
   } catch (error) {
+    if (error instanceof ExportCancelledError) return;
     const attempts = job.attempts + 1;
     const backoffMinutes = Math.min(2 ** attempts, 30);
     const message = error instanceof Error ? error.message : String(error);
-    await prisma.exportJob.update({
-      where: { id },
+    await prisma.exportJob.updateMany({
+      where: { id, status: "RUNNING" },
       data: {
         attempts,
         status: attempts >= MAX_ATTEMPTS ? "FAILED" : "QUEUED",
@@ -123,20 +143,45 @@ function hintForError(message: string): string | undefined {
 
 /** Resets a FAILED (or CANCELLED) job back to QUEUED and kicks it off again. */
 export async function retryExportJob(id: string) {
-  await prisma.exportJob.update({
-    where: { id },
-    data: { status: "QUEUED", attempts: 0, error: null, errorHint: null, runAfter: new Date() },
+  const reset = await prisma.exportJob.updateMany({
+    where: { id, status: { in: ["FAILED", "CANCELLED"] } },
+    data: {
+      status: "QUEUED",
+      attempts: 0,
+      progress: 0,
+      processed: null,
+      total: null,
+      stage: "Queued",
+      error: null,
+      errorHint: null,
+      startedAt: null,
+      completedAt: null,
+      fileName: null,
+      mimeType: null,
+      fileSize: null,
+      fileData: null,
+      runAfter: new Date(),
+    },
   });
+  if (reset.count !== 1) return { retried: false };
   void processExportJob(id).catch((error) => {
     console.error(`[export] retry kick-off failed for job ${id}:`, error);
   });
+  return { retried: true };
 }
 
 export async function cancelExportJob(id: string) {
-  await prisma.exportJob.updateMany({
+  const result = await prisma.exportJob.updateMany({
     where: { id, status: { in: ["QUEUED", "RUNNING"] } },
-    data: { status: "CANCELLED" },
+    data: {
+      status: "CANCELLED",
+      stage: "Cancelled",
+      error: null,
+      errorHint: "Cancelled by you. You can retry this export at any time.",
+      completedAt: new Date(),
+    },
   });
+  return { cancelled: result.count === 1 };
 }
 
 /**

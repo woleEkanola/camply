@@ -19,7 +19,9 @@ export default function AccommodationPage() {
   });
 
   useEffect(() => {
-    if (status === "authenticated" && !ADMIN_ROLES.includes((session?.user as any)?.role ?? "")) {
+    const user = session?.user as any;
+    const hasCampCommandAppointment = (user?.capabilities?.campCommand?.length ?? 0) > 0;
+    if (status === "authenticated" && !ADMIN_ROLES.includes(user?.role ?? "") && !hasCampCommandAppointment) {
       router.push("/admin");
     }
   }, [session, status, router]);

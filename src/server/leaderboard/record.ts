@@ -124,6 +124,8 @@ async function checkAndConsumeCap(
   input: RecordScoreEventInput,
   day: string
 ): Promise<{ allowed: boolean }> {
+  const lockKey = [input.ruleId, input.tribeId, input.registrationId, input.staffProfileId, day].filter(Boolean).join(":");
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
   const rule = await tx.scoreRule.findUnique({ where: { id: input.ruleId! } });
   if (!rule) return { allowed: true };
 
@@ -135,7 +137,7 @@ async function checkAndConsumeCap(
   if (rule.maxPerDay == null && rule.maxPointsPerDay == null) return { allowed: true };
 
   const todays = await tx.scoreEvent.findMany({
-    where: { ruleId: input.ruleId!, day: new Date(`${day}T00:00:00.000Z`), ...subjectFilter },
+    where: { ruleId: input.ruleId!, day: new Date(`${day}T00:00:00.000Z`), points: { gt: 0 }, ...subjectFilter },
     select: { points: true },
   });
 

@@ -27,6 +27,7 @@ import { STATIONS, resolveInitialStation, getStationLabel, type StationId } from
 import { computeStationStats, computeStationProgress, EMPTY_SESSION_STATS, type SessionScanStats } from "@/lib/stationStats";
 import { classifyMedical } from "@/lib/medical";
 import { playScanCue, vibrateForCue } from "@/lib/scanCues";
+import { normalizeScannedQRToken } from "@/lib/qr";
 import {
   MagnifyingGlassIcon,
   CheckCircleIcon,
@@ -48,6 +49,7 @@ export function ScanCenterShell({
   organizationId,
   defaultStationId,
   homeCampusId,
+  pointsHref,
 }: {
   organizationId: string;
   defaultStationId?: string;
@@ -55,6 +57,9 @@ export function ScanCenterShell({
    * StaffProfile.preferredCampusId) — pre-highlighted in the Pickup Point
    * campus picker. Admins have no personal campus and omit this. */
   homeCampusId?: string;
+  /** Opens the role-appropriate Camp Points workspace without mixing point
+   * awards into operational arrival, meal, medical, or checkout scans. */
+  pointsHref?: string;
 }) {
   const router = useRouter();
   useSession({ required: true, onUnauthenticated: () => router.push("/login") });
@@ -91,6 +96,9 @@ export function ScanCenterShell({
 
   // Hook for Offline capabilities
   const offlineScanner = useOfflineScanner(organizationId);
+  useEffect(() => {
+    if (offlineScanner.syncError) toast.error(offlineScanner.syncError);
+  }, [offlineScanner.syncError]);
   const utils = api.useUtils();
 
   // Overlays & Dialogs State
@@ -271,6 +279,11 @@ export function ScanCenterShell({
   // Deliberately does not go through useOfflineScanner — staff stations
   // require connectivity in this build.
   const handleStaffScanSubmit = async (payload: { qrToken?: string; query?: string }) => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      toast.error("Staff badge scanning requires connectivity to verify attendance and meal entitlement across devices.");
+      setScannerActive(true);
+      return;
+    }
     setScannerActive(false);
     const targetStationName = activeStationLabel;
     try {
@@ -279,12 +292,19 @@ export function ScanCenterShell({
         qrToken: payload.qrToken,
         query: payload.query,
         station: targetStationName,
-        stationId: activeStation as "STAFF_CHECK_IN" | "STAFF_CHECKOUT",
+        stationId: activeStation,
         device: deviceIdentifier || undefined,
         location: stationLocation || undefined,
       });
 
       setSessionStats((prev) => ({ ...prev, scansToday: prev.scansToday + 1 }));
+
+      if (response.result === "NOT_APPLICABLE") {
+        playScanCue("duplicate");
+        vibrateForCue("duplicate");
+        setStaffScanData({ ...response, notApplicable: true, duplicate: false });
+        return;
+      }
 
       if (response.result === "DUPLICATE") {
         playScanCue("duplicate");
@@ -311,7 +331,8 @@ export function ScanCenterShell({
 
   // Perform the core scan operation
   const handleScanSubmit = async (payload: { qrToken?: string; query?: string; acknowledgedMedical?: boolean; checkoutDetails?: any }) => {
-    if (activeStation === "STAFF_CHECK_IN" || activeStation === "STAFF_CHECKOUT") {
+    const normalizedToken = normalizeScannedQRToken(payload.qrToken ?? "");
+    if (normalizedToken.toUpperCase().startsWith("STF-") || activeStation === "STAFF_CHECK_IN" || activeStation === "STAFF_CHECKOUT") {
       return handleStaffScanSubmit(payload);
     }
 
@@ -583,6 +604,11 @@ export function ScanCenterShell({
             {offlineScanner.isOnline ? "Online" : `Offline · ${offlineScanner.offlineQueueCount} waiting`}
           </Badge>
         </button>
+        {pointsHref && (
+          <Button variant="secondary" size="sm" onClick={() => router.push(pointsHref)}>
+            Award Camp Points
+          </Button>
+        )}
       </div>
 
       <OfflineSheet
@@ -786,11 +812,13 @@ export function ScanCenterShell({
             setScannerActive(true);
           }}
           className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 text-white cursor-pointer animate-fade-in ${
-            staffScanData.duplicate ? "bg-blue-600" : "bg-sky-700"
+            staffScanData.notApplicable ? "bg-amber-700" : staffScanData.duplicate ? "bg-blue-600" : "bg-sky-700"
           }`}
         >
           <div className="flex flex-col items-center max-w-lg text-center space-y-6">
-            {staffScanData.duplicate ? (
+            {staffScanData.notApplicable ? (
+              <ExclamationTriangleIcon className="h-24 w-24 md:h-32 md:w-32" />
+            ) : staffScanData.duplicate ? (
               <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
             ) : (
               <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
@@ -798,7 +826,7 @@ export function ScanCenterShell({
 
             <div className="space-y-2">
               <h1 className="text-4xl md:text-5xl font-black tracking-tight">
-                {staffScanData.duplicate ? STATIONS[activeStation].duplicateVerb : staffScanData.actionPerformed}
+                {staffScanData.actionPerformed ?? staffScanData.staffAction}
               </h1>
               <p className="text-2xl md:text-3xl font-bold opacity-90">
                 {`${staffScanData.profile.firstName} ${staffScanData.profile.lastName}`.trim()}
@@ -807,6 +835,8 @@ export function ScanCenterShell({
                 {staffScanData.profile.type} · {staffScanData.profile.preferredCampus?.name ?? "—"}
               </p>
             </div>
+
+            {staffScanData.message && <p className="max-w-md text-base font-medium opacity-90">{staffScanData.message}</p>}
 
             <div className="grid grid-cols-2 gap-4 w-full bg-surface/10 backdrop-blur rounded-xl p-4 text-left text-sm border border-white/10">
               {staffScanData.profile.department?.name && (

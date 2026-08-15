@@ -7,6 +7,7 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { formatInTimeZone } from "date-fns-tz";
 
 export function SessionsAdmin({ campId }: { campId: string }) {
   const utils = api.useUtils();
@@ -36,7 +37,7 @@ export function SessionsAdmin({ campId }: { campId: string }) {
 
   const columns: Column<any>[] = [
     { header: "Name", accessor: "name", primary: true },
-    { header: "Date", accessor: (row) => new Date(row.date).toLocaleDateString(), secondary: true },
+    { header: "Date", accessor: (row) => formatInTimeZone(new Date(row.date), "UTC", "dd MMM yyyy"), secondary: true },
     { header: "Starts", accessor: (row) => new Date(row.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
     { header: "Station", accessor: (row) => row.stationId ?? "—" },
     { header: "Status", accessor: "status" },

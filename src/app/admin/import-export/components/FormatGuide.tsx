@@ -2,7 +2,7 @@
 
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { CAMPUS_COLUMNS, DEPARTMENT_COLUMNS, TRIBE_COLUMNS, type EntityKind } from "../../../../lib/import-export/types";
+import { CAMPUS_COLUMNS, DEPARTMENT_COLUMNS, SCHEDULE_COLUMNS, TRIBE_COLUMNS, type EntityKind } from "../../../../lib/import-export/types";
 import { templateCsv, templateJson, templateMarkdown, templateXlsx } from "../../../../lib/import-export/templates";
 import { downloadBlob } from "../../../../lib/import-export/serialize";
 
@@ -10,13 +10,16 @@ const ENTITY_LABEL: Record<EntityKind, string> = {
   campuses: "Campuses",
   tribes: "Tribes",
   departments: "Departments",
+  program_schedule: "Program Schedule",
 };
 
 const COLUMNS_FOR: Record<EntityKind, { key: string; required: boolean; type: string; example: string }[]> = {
   campuses: CAMPUS_COLUMNS,
   tribes: TRIBE_COLUMNS,
   departments: DEPARTMENT_COLUMNS,
+  program_schedule: SCHEDULE_COLUMNS,
 };
+
 
 function downloadTemplate(entity: EntityKind, format: "csv" | "json" | "md") {
   const filename = `camply-${entity}-template.${format}`;
@@ -104,27 +107,27 @@ export function FormatGuide() {
             </li>
             <li>
               <strong>XLSX</strong> — a workbook with sheets named exactly <code>Campuses</code>, <code>Tribes</code>,
-              and/or <code>Departments</code> (any subset). A single unnamed sheet also works if you select the
+              <code>Departments</code>, and/or <code>Program Schedule</code> (any subset). A single unnamed sheet also works if you select the
               entity manually.
             </li>
             <li>
-              <strong>JSON</strong> — either a full export bundle (<code>{"{ campuses: [...], tribes: [...], departments: [...] }"}</code>)
+              <strong>JSON</strong> — either a full export bundle (<code>{"{ campuses: [...], tribes: [...], departments: [...], program_schedule: [...] }"}</code>)
               or a bare array of rows for one entity.
             </li>
             <li>
-              <strong>Markdown</strong> — a <code>## Campuses</code>, <code>## Tribes</code>, and/or{" "}
-              <code>## Departments</code> heading, each followed by a GFM table whose header row matches the column
+              <strong>Markdown</strong> — a <code>## Campuses</code>, <code>## Tribes</code>,{" "}
+              <code>## Departments</code>, and/or <code>## Program Schedule</code> heading, each followed by a GFM table whose header row matches the column
               names below. A literal <code>|</code> inside a cell must be escaped as <code>\|</code>.
             </li>
           </ul>
           <p>
             Rows are matched by name to update existing records (case-insensitive) — re-importing the same file is
-            safe and won't create duplicates. Tribes and camp-scoped Departments are attached to your organization's{" "}
-            <strong>active camp</strong>; set one before importing tribes.
+            safe and won't create duplicates. Tribes, camp-scoped Departments, and Program Schedule are attached to your organization's{" "}
+            <strong>active camp</strong>; set one before importing.
           </p>
           <div>
             <Button size="sm" variant="secondary" onClick={downloadXlsxTemplate}>
-              Download combined XLSX template (all 3 entities)
+              Download combined XLSX template (all entities)
             </Button>
           </div>
         </CardBody>
@@ -133,6 +136,7 @@ export function FormatGuide() {
       <EntitySection entity="campuses" />
       <EntitySection entity="tribes" />
       <EntitySection entity="departments" />
+      <EntitySection entity="program_schedule" />
     </div>
   );
 }

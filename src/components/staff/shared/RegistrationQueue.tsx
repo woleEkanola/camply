@@ -169,6 +169,8 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const awaitingFinalCount = (statsData as any)?.awaitingFinal ?? 0;
   const duplicateCount = (statsData as any)?.duplicateCount ?? 0;
   const statsTotalCount = (statsData as any)?.totalCount ?? 0;
+  const maleCount = (statsData as any)?.maleCount ?? 0;
+  const femaleCount = (statsData as any)?.femaleCount ?? 0;
 
   const invalidateRegistrations = () => {
     setSelectedIds([]);
@@ -360,6 +362,8 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             awaitingVettingCount,
             awaitingFinalCount,
             duplicateCount,
+            maleCount,
+            femaleCount,
           }}
           registrations={registrations}
           selectedIds={selectedIds}
@@ -421,6 +425,8 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
       ) : (
         <div>
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            <StatCard data-testid="registration-stat-male" label="Male" value={maleCount} tone="info" />
+            <StatCard data-testid="registration-stat-female" label="Female" value={femaleCount} tone="attention" />
             <StatCard
               label="Total Registrations"
               value={statsTotalCount}

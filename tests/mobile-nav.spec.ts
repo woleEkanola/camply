@@ -12,34 +12,34 @@ test.describe("Bottom tab nav — mobile", () => {
     const nav = page.getByRole("navigation", { name: "Primary" });
     await expect(nav).toBeVisible();
     await expect(nav.getByRole("link", { name: "Dashboard" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Contact" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Departments" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "QR Scan" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Campers" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Leaderboard" })).toBeVisible();
     await expect(nav.getByRole("button", { name: "More" })).toHaveCount(0);
 
-    await nav.getByRole("link", { name: "Contact" }).click();
-    await page.waitForURL(/\/admin\/camp-structure/);
-    await expect(nav.getByRole("link", { name: "Contact" })).toHaveAttribute("aria-current", "page");
+    await nav.getByRole("link", { name: "Departments" }).click();
+    await page.waitForURL(/\/admin\/departments/);
+    await expect(nav.getByRole("link", { name: "Departments" })).toHaveAttribute("aria-current", "page");
     await expect(nav.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current", "page");
-    await expect(page.getByRole("heading", { name: "Camp Contact" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Departments" })).toBeVisible();
   });
 
-  test("teacher sees the five requested destinations without More", async ({ page }) => {
+  test("teacher sees five core destinations and operational tools in the full menu", async ({ page }) => {
     await loginWithPassword(page, "teacher@camply.com", "password123");
     await page.waitForURL(/\/teacher/, { timeout: 15000 });
 
     const nav = page.getByRole("navigation", { name: "Primary" });
     await expect(nav.getByRole("link", { name: "Dashboard" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Contact" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Leaderboard" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "QR Scan" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Campers" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Attendance" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Departments" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "My Tribe" })).toBeVisible();
     await expect(nav.getByRole("button", { name: "More" })).toHaveCount(0);
 
-    await nav.getByRole("link", { name: "Contact" }).click();
-    await page.waitForURL(/\/teacher\/camp-contact/);
-    await expect(page.getByRole("heading", { name: "Camp Contact" })).toBeVisible();
+    await nav.getByRole("link", { name: "Departments" }).click();
+    await page.waitForURL(/\/teacher\/departments/);
+    await expect(page.getByRole("heading", { name: "Departments" })).toBeVisible();
     await expect(page.getByRole("button", { name: /department options/i })).toHaveCount(0);
 
     await page.getByRole("tab", { name: "Organogram" }).click();
@@ -50,6 +50,34 @@ test.describe("Bottom tab nav — mobile", () => {
     await page.getByRole("button", { name: "Chart", exact: true }).click();
     await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Zoom out" })).toBeVisible();
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Incidents" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Campers" })).toBeVisible();
+  });
+
+  test("volunteer sees the same six destinations", async ({ page }) => {
+    await loginWithPassword(page, "volunteer@camply.com", "password123");
+    const nav = page.getByRole("navigation", { name: "Primary" });
+    for (const name of ["Dashboard", "Schedule", "Leaderboard", "QR Scan", "Departments", "My Tribe"]) await expect(nav.getByRole("link", { name })).toBeVisible();
+    await expect(nav.getByRole("link")).toHaveCount(6);
+    await expect(nav.getByRole("button", { name: "More" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Incidents" })).toBeVisible();
+  });
+
+  test("campus representative sees the same six destinations", async ({ page }) => {
+    await loginWithPassword(page, "campusrep@camply.com", "password123");
+    const nav = page.getByRole("navigation", { name: "Primary" });
+    for (const name of ["Dashboard", "Schedule", "Leaderboard", "QR Scan", "Departments", "My Tribe"]) await expect(nav.getByRole("link", { name })).toBeVisible();
+    await expect(nav.getByRole("link")).toHaveCount(6);
+    await expect(nav.getByRole("button", { name: "More" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await expect(page.getByRole("link", { name: "Registrations" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Campers" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Incidents" })).toBeVisible();
   });
 });
 

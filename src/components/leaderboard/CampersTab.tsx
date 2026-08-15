@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
 import { Table, type Column } from "@/components/ui/Table";
 
-type Row = { stat: any; registration: any; rankedByWeightedScore?: boolean };
+type Row = { stat: any; registration: any; rankedByWeightedScore?: boolean; displayRank?: number };
 
 export function CampersTab({ campId }: { campId: string }) {
   const router = useRouter();
@@ -14,7 +14,7 @@ export function CampersTab({ campId }: { campId: string }) {
   const columns: Column<Row>[] = [
     {
       header: "Rank",
-      accessor: (row) => (row.stat?.rank ? `#${row.stat.rank}` : "—"),
+      accessor: (row) => (row.displayRank ? `#${row.displayRank}` : row.stat?.rank ? `#${row.stat.rank}` : "—"),
       primary: false,
     },
     {
@@ -42,7 +42,7 @@ export function CampersTab({ campId }: { campId: string }) {
       )}
       <Table
         columns={columns}
-        data={data ?? []}
+        data={(data ?? []).map((row: Row, index: number) => ({ ...row, displayRank: rankedByWeightedScore ? index + 1 : row.stat?.rank }))}
         rowKey={(row) => row.stat.id}
         // `stat.subjectId` is the Registration id and is always present;
         // `row.registration` can be null when the join misses a soft-deleted

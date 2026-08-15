@@ -316,28 +316,11 @@ export function CampersList({
     </div>
   );
 
-  if (!isLoading && allItems.length === 0 && !responseData) {
-    return <EmptyState title={emptyTitle} description={emptyDescription} />;
-  }
-
   return (
     <Card>
       <CardBody>
         {title && <h3 className="mb-4 text-lg font-medium text-neutral-900">{title}</h3>}
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <StatCard
-            data-testid="camper-stat-approved"
-            label="Approved"
-            value={statsData?.approvedCount ?? 0}
-            tone="success"
-            selected={statusFilter === "APPROVED" && genderFilter === ""}
-            onClick={() => {
-              setCursor(undefined);
-              setAllItems([]);
-              setGenderFilter("");
-              setStatusFilter((prev) => (prev === "APPROVED" ? "" : "APPROVED"));
-            }}
-          />
+        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
             data-testid="camper-stat-in-camp"
             label="In Camp"
@@ -355,24 +338,26 @@ export function CampersList({
             data-testid="camper-stat-male"
             label="Male"
             value={statsData?.checkedInMaleCount ?? 0}
-            selected={genderFilter === "Male" && statusFilter === ""}
+            selected={genderFilter === "Male" && statusFilter === "CHECKED_IN"}
             onClick={() => {
               setCursor(undefined);
               setAllItems([]);
-              setStatusFilter("");
-              setGenderFilter((prev) => (prev === "Male" ? "" : "Male"));
+              const selected = genderFilter === "Male" && statusFilter === "CHECKED_IN";
+              setStatusFilter(selected ? "" : "CHECKED_IN");
+              setGenderFilter(selected ? "" : "Male");
             }}
           />
           <StatCard
             data-testid="camper-stat-female"
             label="Female"
             value={statsData?.checkedInFemaleCount ?? 0}
-            selected={genderFilter === "Female" && statusFilter === ""}
+            selected={genderFilter === "Female" && statusFilter === "CHECKED_IN"}
             onClick={() => {
               setCursor(undefined);
               setAllItems([]);
-              setStatusFilter("");
-              setGenderFilter((prev) => (prev === "Female" ? "" : "Female"));
+              const selected = genderFilter === "Female" && statusFilter === "CHECKED_IN";
+              setStatusFilter(selected ? "" : "CHECKED_IN");
+              setGenderFilter(selected ? "" : "Female");
             }}
           />
           <StatCard

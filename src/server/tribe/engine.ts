@@ -7,6 +7,7 @@ import { passesHardConstraints } from "./allocator/constraints";
 import { scoreCandidate, computeTargetSize } from "./allocator/scoring";
 import { rankCandidates } from "./allocator/selector";
 import { runAllocationPipeline, simulateAllocation } from "./allocator/pipeline";
+import { ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES } from "../assignments/eligibility";
 
 export { simulateAllocation, runAllocationPipeline };
 export { normalizeRules, DEFAULT_RULES_V2 };
@@ -200,30 +201,49 @@ export async function suggestTribe(tx: TxClient, registrationId: string): Promis
 
 async function assignTribeInTx(
   tx: Prisma.TransactionClient,
-  params: { registrationId: string; tribeId: string; actorId: string | null; method: "AUTOMATIC" | "MANUAL" | "HYBRID_OVERRIDE"; rules?: unknown },
+  params: { registrationId: string; tribeId: string; actorId: string | null; method: "AUTOMATIC" | "MANUAL" | "HYBRID_OVERRIDE"; rules?: unknown; preserveExistingAssignment?: boolean },
 ) {
   const registration = await tx.registration.findUniqueOrThrow({
     where: { id: params.registrationId },
     include: { camper: true },
   });
 
-  const tribe = await tx.tribe.findUniqueOrThrow({ where: { id: params.tribeId }, include: { registrations: true } });
+  await tx.$queryRaw`SELECT "id" FROM "Tribe" WHERE "id" = ${params.tribeId} FOR UPDATE`;
+  const tribe = await tx.tribe.findUniqueOrThrow({ where: { id: params.tribeId } });
   if (tribe.campId !== registration.campId) {
     throw new TribeAllocationError("WRONG_CAMP", "This tribe does not belong to the same camp as the registration.");
   }
   if (tribe.status !== "ACTIVE") {
     throw new TribeAllocationError("TRIBE_INACTIVE", "This tribe is not active.");
   }
-  const currentCount = tribe.registrations.filter((r) => r.id !== registration.id).length;
+  const currentCount = await tx.registration.count({
+    where: {
+      tribeId: tribe.id,
+      id: { not: registration.id },
+      deletedAt: null,
+      status: { in: ["SUBMITTED", "PENDING", "REQUIRES_ACTION", "APPROVED", "CHECKED_IN", "COMPLETED"] },
+    },
+  });
   if (tribe.maxCapacity != null && currentCount >= tribe.maxCapacity) {
     throw new TribeAllocationError("TRIBE_FULL", "This tribe has reached its maximum capacity.");
   }
 
   const previousTribeId = registration.tribeId;
-  const updated = await tx.registration.update({
-    where: { id: registration.id },
+  if (params.preserveExistingAssignment && previousTribeId) return null;
+
+  const updatedResult = await tx.registration.updateMany({
+    where: {
+      id: registration.id,
+      ...(params.preserveExistingAssignment ? {
+        tribeId: null,
+        status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] },
+        deletedAt: null,
+      } : {}),
+    },
     data: { tribeId: params.tribeId, tribeAssignedAt: new Date(), tribeAssignmentMethod: params.method },
   });
+  if (updatedResult.count === 0) return null;
+  const updated = await tx.registration.findUniqueOrThrow({ where: { id: registration.id } });
 
   await logEvent(tx, {
     organizationId: registration.camper.organizationId,
@@ -492,6 +512,7 @@ export async function autoAssignTribeOnApproval(registrationId: string) {
 export async function reassignTribe(params: { registrationId: string; tribeId: string; actorId: string; reason?: string }) {
   const result = await prisma.$transaction(async (tx) => {
     const updated = await assignTribeInTx(tx, { ...params, method: "MANUAL" });
+    if (!updated) throw new TribeAllocationError("ASSIGNMENT_NOT_APPLIED", "The tribe assignment was not applied.");
     return tx.registration.update({
       where: { id: updated.id },
       data: { tribeRecommendationStatus: "MANUAL_OVERRIDE" },
@@ -539,12 +560,12 @@ export async function clearTribeAssignment(params: { registrationId: string; act
 export async function bulkAutoAssignTribes(params: { campId: string; actorId: string }) {
   // The admin button promises a complete one-click allocation. Previously it
   // only applied already-existing suggestions, so a fresh camp always
-  // reported "Assigned 0 of 0 campers". Build the eligible approved set,
+  // reported "Assigned 0 of 0 campers". Build the eligible active set,
   // generate recommendations for that exact set, then apply them.
   const eligible = await prisma.registration.findMany({
     where: {
       campId: params.campId,
-      status: "APPROVED",
+      status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] },
       tribeId: null,
       deletedAt: null,
     },
@@ -554,16 +575,24 @@ export async function bulkAutoAssignTribes(params: { campId: string; actorId: st
   const registrationIds = eligible.map((registration) => registration.id);
   if (registrationIds.length === 0) return [];
 
-  const simulation = await runAllocationPipeline(prisma, params.campId, { scope: "approved" });
+  const simulation = await runAllocationPipeline(prisma, params.campId, { scope: "active" });
   const eligibleIds = new Set(registrationIds);
-  const results: { registrationId: string; tribeId?: string; error?: string }[] = [];
+  const results: { registrationId: string; tribeId?: string; preserved?: boolean; error?: string }[] = [];
   // The pipeline maintains an in-memory population after every decision, so
   // recommendations are balanced without re-querying the entire camp for
   // every camper. Persist only the eligible rows selected above.
   for (const assignment of simulation.assignments.filter((item) => eligibleIds.has(item.registrationId))) {
     try {
-      const updated = await assignTribe({ registrationId: assignment.registrationId, tribeId: assignment.tribeId, actorId: params.actorId, method: "AUTOMATIC" });
-      results.push({ registrationId: assignment.registrationId, tribeId: updated.tribeId ?? undefined });
+      const updated = await prisma.$transaction((tx) => assignTribeInTx(tx, {
+        registrationId: assignment.registrationId,
+        tribeId: assignment.tribeId,
+        actorId: params.actorId,
+        method: "AUTOMATIC",
+        preserveExistingAssignment: true,
+      }));
+      results.push(updated
+        ? { registrationId: assignment.registrationId, tribeId: updated.tribeId ?? undefined }
+        : { registrationId: assignment.registrationId, preserved: true });
     } catch (error) {
       results.push({ registrationId: assignment.registrationId, error: error instanceof Error ? error.message : String(error) });
     }
