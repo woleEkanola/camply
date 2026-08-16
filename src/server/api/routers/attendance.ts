@@ -226,20 +226,25 @@ export const attendanceRouter = createTRPCRouter({
     }),
 
   todaySummary: protectedProcedure
-    .input(z.object({ organizationId: z.string(), campId: z.string() }))
+    .input(z.object({ organizationId: z.string().optional(), campId: z.string().optional().nullable() }))
     .query(async ({ ctx, input }) => {
-      const access = await getCampPointsAccess(ctx, input.campId);
-      const tribeId = access.staffProfile?.assignedTribeId;
-      if (!tribeId) return { total: 0, present: 0, absent: 0, late: 0 };
-      const start = new Date(); start.setHours(0, 0, 0, 0);
-      const end = new Date(); end.setHours(23, 59, 59, 999);
-      const session = await ctx.prisma.attendanceSession.findFirst({ where: { campId: input.campId, tribeId, date: { gte: start, lte: end } }, include: { records: true } });
-      if (!session) return { total: 0, present: 0, absent: 0, late: 0 };
-      return {
-        total: session.records.length,
-        present: session.records.filter((record: any) => record.status === "PRESENT").length,
-        absent: session.records.filter((record: any) => record.status === "ABSENT").length,
-        late: session.records.filter((record: any) => record.status === "LATE").length,
-      };
+      if (!input.campId) return { total: 0, present: 0, absent: 0, late: 0 };
+      try {
+        const access = await getCampPointsAccess(ctx, input.campId);
+        const tribeId = access.staffProfile?.assignedTribeId;
+        if (!tribeId) return { total: 0, present: 0, absent: 0, late: 0 };
+        const start = new Date(); start.setHours(0, 0, 0, 0);
+        const end = new Date(); end.setHours(23, 59, 59, 999);
+        const session = await ctx.prisma.attendanceSession.findFirst({ where: { campId: input.campId, tribeId, date: { gte: start, lte: end } }, include: { records: true } });
+        if (!session) return { total: 0, present: 0, absent: 0, late: 0 };
+        return {
+          total: session.records.length,
+          present: session.records.filter((record: any) => record.status === "PRESENT").length,
+          absent: session.records.filter((record: any) => record.status === "ABSENT").length,
+          late: session.records.filter((record: any) => record.status === "LATE").length,
+        };
+      } catch {
+        return { total: 0, present: 0, absent: 0, late: 0 };
+      }
     }),
 });

@@ -37,7 +37,7 @@ export function StaffTodayPanel({
 
   const { data: summary } = api.attendance.todaySummary.useQuery(
     { organizationId, campId: campId ?? "" },
-    { enabled: !!organizationId }
+    { enabled: !!organizationId && !!campId }
   );
   const { data: notifications = [] } = api.notification.listMine.useQuery(undefined, { enabled: true });
 
