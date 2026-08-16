@@ -159,6 +159,7 @@ model User {
   pushSubscriptions        PushSubscription[]
   scanEvents               ScanEvent[]
   staffScanEventsPerformed StaffScanEvent[]   @relation("StaffScanScannedBy")
+  uploadedCampResources    CampResource[]
   deletedAt                DateTime?
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
@@ -424,6 +425,7 @@ model Camp {
   departmentReports             DepartmentReport[]
   commandPolicy                 CampCommandPolicy?
   teacherCampusQuotas           TeacherCampusQuota[]
+  resources                     CampResource[]
 
   // Tribe Allocation (PRD Part 4A)
   tribeAllocationEnabled Boolean              @default(false)
@@ -2333,3 +2335,30 @@ model CampScheduleChange {
 
   @@index([scheduleId, createdAt])
 }
+
+// ─── Downloadable Camp Resources & Handbooks ────────────────────────────────
+model CampResource {
+  id             String    @id @default(cuid())
+  organizationId String
+  campId         String
+  camp           Camp      @relation(fields: [campId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  fileUrl        String
+  fileName       String
+  fileSize       Int?
+  fileType       String?
+  category       String    @default("GENERAL") // GENERAL | GUIDELINES | PACKING | SCHEDULE | FORMS | MEDICAL
+  audience       String    @default("ALL") // PARENTS | TEACHERS | VOLUNTEERS | ALL
+  isPublished    Boolean   @default(true)
+  displayOrder   Int       @default(0)
+  uploadedById   String?
+  uploadedBy     User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([campId, deletedAt])
+  @@index([organizationId, deletedAt])
+}
+

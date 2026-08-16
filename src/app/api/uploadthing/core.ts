@@ -37,9 +37,28 @@ export const ourFileRouter = {
   })
     .middleware(async () => {
       const session = await getServerSession(authOptions);
-      // Campaign composition is an admin-only feature — previously any
-      // logged-in user (including a PARENT) could upload arbitrary blobs up
-      // to 8MB here with no role check and no ownership record.
+      if (!session?.user || !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(session.user.role)) {
+        throw new UploadThingError("Unauthorized");
+      }
+      return { userId: session.user.id };
+    })
+    .onUploadComplete(async ({ metadata, file }) => {
+      return {
+        url: file.ufsUrl,
+        uploadedBy: metadata.userId,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+      };
+    }),
+
+  campResourceUploader: f({
+    pdf: { maxFileSize: "16MB", maxFileCount: 5 },
+    image: { maxFileSize: "8MB", maxFileCount: 5 },
+    blob: { maxFileSize: "16MB", maxFileCount: 5 },
+  })
+    .middleware(async () => {
+      const session = await getServerSession(authOptions);
       if (!session?.user || !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(session.user.role)) {
         throw new UploadThingError("Unauthorized");
       }
