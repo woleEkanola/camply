@@ -356,7 +356,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: ownerEmail },
-    update: {}, // No updates if exists
+    update: {
+      password: ownerPassword,
+      active: true,
+      role: "OWNER",
+      organizationId: organization.id,
+    },
     create: {
       email: ownerEmail,
       password: ownerPassword,
@@ -374,7 +379,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: adminEmail },
-    update: {}, // No updates if exists
+    update: {
+      password: adminPassword,
+      active: true,
+      role: "ADMIN",
+      organizationId: organization.id,
+    },
     create: {
       email: adminEmail,
       password: adminPassword,
@@ -432,7 +442,12 @@ async function main() {
 
   const campusRep = await prisma.user.upsert({
     where: { email: campusRepEmail },
-    update: {},
+    update: {
+      password: campusRepPassword,
+      active: true,
+      role: "CAMPUS_REPRESENTATIVE",
+      organizationId: organization.id,
+    },
     create: {
       email: campusRepEmail,
       password: campusRepPassword,
@@ -492,7 +507,12 @@ async function main() {
   const teacherPassword = await bcrypt.hash("password123", 10);
   const teacherUser = await prisma.user.upsert({
     where: { email: teacherEmail },
-    update: {},
+    update: {
+      password: teacherPassword,
+      active: true,
+      role: "TEACHER",
+      organizationId: organization.id,
+    },
     create: {
       email: teacherEmail,
       password: teacherPassword,
@@ -528,7 +548,12 @@ async function main() {
   const volunteerPassword = await bcrypt.hash("password123", 10);
   const volunteerUser = await prisma.user.upsert({
     where: { email: volunteerEmail },
-    update: {},
+    update: {
+      password: volunteerPassword,
+      active: true,
+      role: "VOLUNTEER",
+      organizationId: organization.id,
+    },
     create: {
       email: volunteerEmail,
       password: volunteerPassword,
