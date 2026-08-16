@@ -537,6 +537,13 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
     { enabled: !!assignBed && !!campId && camperQuery.length > 1 }
   );
 
+  // Names behind "N to assign" — previously only visible as a raw count
+  // (assignmentReadiness discarded the list), so there was no way to see
+  // *who* still needed a bed without running full auto-assign first.
+  const { data: readiness } = api.accommodation.assignmentReadiness.useQuery({ campId }, { enabled: !!campId });
+  const venueReadiness = readiness?.venues.find((v) => v.id === venueId);
+  const [showUnassignedList, setShowUnassignedList] = useState(false);
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -592,6 +599,27 @@ export function AccommodationManager({ organizationId, campId }: { organizationI
           {venues.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
         </Select>
       </div>
+
+      {venueId && venueReadiness && venueReadiness.unassignedPeople > 0 && (
+        <div className="mb-4 rounded-md border border-border-default p-3 text-sm">
+          <button type="button" className="font-medium text-txt-primary underline decoration-dotted underline-offset-2" onClick={() => setShowUnassignedList((v) => !v)}>
+            {venueReadiness.unassignedPeople} unassigned camper{venueReadiness.unassignedPeople === 1 ? "" : "s"} at this venue
+          </button>
+          {showUnassignedList && (
+            <>
+              <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-txt-secondary">
+                {venueReadiness.unassignedPeopleList.map((person) => (
+                  <li key={person.id} className="flex items-center justify-between gap-2">
+                    <span>{person.name}</span>
+                    <span className="text-xs text-txt-muted">{person.kind === "STAFF" ? "Staff" : "Camper"}{person.tribeName ? ` · ${person.tribeName}` : ""}{person.gender ? ` · ${person.gender}` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-txt-muted">Click a free bed below to assign someone, or use "Assign Unassigned Rooms &amp; Beds" above.</p>
+            </>
+          )}
+        </div>
+      )}
 
       {!venueId ? (
         <p className="text-sm text-neutral-500">Select a venue to manage its hostels.</p>

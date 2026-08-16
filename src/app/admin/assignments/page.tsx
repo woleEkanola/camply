@@ -60,6 +60,7 @@ export default function AssignmentSetupPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [bedExceptions, setBedExceptions] = useState<BedAssignmentResult[]>([]);
+  const [expandedVenueId, setExpandedVenueId] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "authenticated" && !ADMIN_ROLES.includes(role)) router.push("/admin");
@@ -168,7 +169,31 @@ export default function AssignmentSetupPage() {
               </ul>
               {venue.missingGenderPeople.length > 0 && <p className="text-xs">No gender on file: {venue.missingGenderPeople.map((person) => person.name).join(", ")}</p>}
             </div>)}
-            <div className="space-y-2">{data.venues.map((venue) => <div key={venue.id} className="flex flex-col justify-between gap-3 rounded-lg border border-border-default p-4 sm:flex-row sm:items-center"><div><div className="font-semibold text-txt-primary">{venue.name}</div><div className="text-sm text-txt-muted">{venue.unassignedPeople} to assign · {venue.occupiedBeds} preserved · {venue.availableBeds} beds available</div></div><Button loading={assignBeds.isPending} disabled={venue.unassignedPeople === 0 || genderAwareShortfall(venue) > 0} onClick={() => window.confirm(`Assign ${venue.unassignedPeople} unassigned people at ${venue.name} and preserve all existing assignments?`) && assignBeds.mutate({ venueId: venue.id })}>{venue.unassignedPeople === 0 ? "Venue complete" : "Assign this venue"}</Button></div>)}</div>
+            <div className="space-y-2">{data.venues.map((venue) => <div key={venue.id} data-testid={`assignment-venue-row-${venue.id}`} className="rounded-lg border border-border-default p-4">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <div className="font-semibold text-txt-primary">{venue.name}</div>
+                  <div className="text-sm text-txt-muted">
+                    {venue.unassignedPeople > 0 ? (
+                      <button type="button" className="underline decoration-dotted underline-offset-2 hover:text-txt-primary" onClick={() => setExpandedVenueId(expandedVenueId === venue.id ? null : venue.id)}>
+                        {venue.unassignedPeople} to assign
+                      </button>
+                    ) : "0 to assign"} · {venue.occupiedBeds} preserved · {venue.availableBeds} beds available
+                  </div>
+                </div>
+                <Button loading={assignBeds.isPending} disabled={venue.unassignedPeople === 0 || genderAwareShortfall(venue) > 0} onClick={() => window.confirm(`Assign ${venue.unassignedPeople} unassigned people at ${venue.name} and preserve all existing assignments?`) && assignBeds.mutate({ venueId: venue.id })}>{venue.unassignedPeople === 0 ? "Venue complete" : "Assign this venue"}</Button>
+              </div>
+              {expandedVenueId === venue.id && venue.unassignedPeopleList.length > 0 && (
+                <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto border-t border-border-subtle pt-3 text-sm text-txt-secondary">
+                  {venue.unassignedPeopleList.map((person) => (
+                    <li key={person.id} className="flex items-center justify-between gap-2">
+                      <span>{person.name}</span>
+                      <span className="text-xs text-txt-muted">{person.kind === "STAFF" ? "Staff" : "Camper"}{person.tribeName ? ` · ${person.tribeName}` : ""}{person.gender ? ` · ${person.gender}` : ""}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>)}</div>
 
             {bedExceptions.length > 0 && <div className="space-y-2 rounded-lg border border-border-default p-4">
               <p className="text-sm font-semibold text-txt-primary">{bedExceptions.length} could not be placed</p>

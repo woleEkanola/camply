@@ -10,7 +10,7 @@ import { interpolateSubject } from "../../email/interpolate";
 import { validateTemplate } from "../../email/validateTemplate";
 import { audienceFilterSchema } from "../../email/audience/filters";
 import { previewAudience } from "../../email/audience/resolver";
-import { getCampaignReadiness, retryHeldCampaignRecipients, sendCampaign, scheduleCampaign } from "../../email/campaign/sender";
+import { getCampaignReadiness, retryHeldCampaignRecipients, sendCampaign, scheduleCampaign, assessRegistration } from "../../email/campaign/sender";
 import { sweepPendingSideEffects } from "../../registration/effects";
 import { validateCampaignAttachments } from "../../../lib/email/campaignAttachments";
 import { assertCampaignSender } from "../trpc/campaignAccess";
@@ -1431,7 +1431,7 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   campaignSend: protectedProcedure
-    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional() }))
+    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional(), registrationIds: z.array(z.string()).optional() }))
     .mutation(async ({ ctx, input }) => {
       const oid = orgId(ctx);
       await assertCampaignSender(ctx, oid);
@@ -1443,16 +1443,16 @@ export const communicationRouter = createTRPCRouter({
         data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "CAMPAIGN_SENT", targetType: "CAMPAIGN", targetId: input.id, metadata: { name: campaign.name } },
       });
 
-      return sendCampaign(ctx.prisma, input.id, { manualEmails: input.manualEmails });
+      return sendCampaign(ctx.prisma, input.id, { manualEmails: input.manualEmails, registrationIds: input.registrationIds });
     }),
 
   campaignReadiness: protectedProcedure
-    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional() }))
+    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional(), registrationIds: z.array(z.string()).optional() }))
     .query(async ({ ctx, input }) => {
       await requireAdmin(ctx);
       const campaign = await ctx.prisma.emailCampaign.findFirst({ where: { id: input.id, organizationId: orgId(ctx) } });
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
-      return getCampaignReadiness(ctx.prisma, input.id, { manualEmails: input.manualEmails });
+      return getCampaignReadiness(ctx.prisma, input.id, { manualEmails: input.manualEmails, registrationIds: input.registrationIds });
     }),
 
   campaignRetryHeld: protectedProcedure
@@ -1654,32 +1654,221 @@ export const communicationRouter = createTRPCRouter({
       });
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
 
+      const emailWhere = { OR: input.manualEmails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })) };
+
       if (campaign.personalizeEvent && campaign.personalizeCampId) {
         const registrations = await (ctx.prisma as any).registration.findMany({
           where: {
             campId: campaign.personalizeCampId,
             status: { in: ["APPROVED", "CHECKED_IN"] },
             deletedAt: null,
-            camper: { user: { email: { in: input.manualEmails } } },
+            camper: { user: emailWhere },
           },
           include: { camper: { select: { user: { select: { email: true } } } } },
         });
-        const matchedEmails = new Set(registrations.map((r: any) => r.camper?.user?.email).filter(Boolean));
+        const matchedEmails = new Set(registrations.map((r: any) => r.camper?.user?.email?.toLowerCase()).filter(Boolean));
         return {
           matched: registrations.length,
-          unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e)),
+          unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e.toLowerCase())),
         };
       }
 
       const users = await ctx.prisma.user.findMany({
-        where: { email: { in: input.manualEmails }, organizationId: oid },
+        where: { organizationId: oid, ...emailWhere },
         select: { email: true },
       });
-      const matchedEmails = new Set(users.map((u) => u.email));
+      const matchedEmails = new Set(users.map((u) => u.email.toLowerCase()));
       return {
         matched: matchedEmails.size,
-        unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e)),
+        unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e.toLowerCase())),
       };
+    }),
+
+  /** Typeahead source for the invitation recipient picker — a lightweight
+   * per-registration row (camper, parent email, tribe, bed, readiness, last
+   * send) for a single camp, not the heavy admin registrations list. */
+  invitationCandidates: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      q: z.string().optional(),
+      onlyUnsent: z.boolean().optional(),
+      cursor: z.string().optional(),
+      limit: z.number().min(1).max(50).default(20),
+    }))
+    .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const { forcedCampusId } = await assertCampaignSender(ctx, oid);
+      const camp = await ctx.prisma.camp.findFirst({ where: { id: input.campId, organizationId: oid } });
+      if (!camp) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const where: Record<string, unknown> = {
+        campId: input.campId,
+        status: { in: ["APPROVED", "CHECKED_IN"] },
+        deletedAt: null,
+        campus: { organizationId: oid },
+        ...(forcedCampusId && { campusId: forcedCampusId }),
+        ...(input.q && {
+          OR: [
+            { registrationNumber: { contains: input.q, mode: "insensitive" } },
+            { camper: { name: { contains: input.q, mode: "insensitive" } } },
+            { camper: { user: { email: { contains: input.q, mode: "insensitive" } } } },
+            { camper: { user: { firstName: { contains: input.q, mode: "insensitive" } } } },
+            { camper: { user: { lastName: { contains: input.q, mode: "insensitive" } } } },
+          ],
+        }),
+      };
+
+      const registrations = await (ctx.prisma as any).registration.findMany({
+        where,
+        include: {
+          camper: { include: { user: { select: { email: true } } } },
+          campus: { select: { name: true } },
+          camp: {
+            select: {
+              name: true,
+              year: true,
+              logoUrl: true,
+              organization: { select: { branding: { select: { idCardLogoUrl: true, logoUrl: true } } } },
+            },
+          },
+          tribe: { select: { name: true, color: true } },
+          room: { select: { name: true, hostel: { select: { name: true } } } },
+          bed: { select: { label: true } },
+        },
+        orderBy: { createdAt: "asc" },
+        take: input.limit + 1,
+        ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+      });
+
+      let nextCursor: string | undefined;
+      if (registrations.length > input.limit) {
+        const next = registrations.pop();
+        nextCursor = next?.id;
+      }
+
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: oid },
+        select: { branding: { select: { idCardEnabled: true } } },
+      });
+      const commonIssues = org?.branding?.idCardEnabled ? [] : ["Camp ID cards are disabled in Communication settings."];
+
+      const registrationIds = registrations.map((r: any) => r.id);
+      const lastInvites = registrationIds.length > 0
+        ? await (ctx.prisma as any).emailRecipient.findMany({
+            where: { registrationId: { in: registrationIds }, campaign: { personalizeEvent: "CAMP_INVITATION" } },
+            orderBy: { createdAt: "desc" },
+            select: { registrationId: true, sentAt: true, deliveryStatus: true, openedAt: true },
+          })
+        : [];
+      const lastInviteByReg = new Map<string, (typeof lastInvites)[number]>();
+      for (const recipient of lastInvites) {
+        if (!lastInviteByReg.has(recipient.registrationId)) lastInviteByReg.set(recipient.registrationId, recipient);
+      }
+
+      const items = registrations
+        .map((registration: any) => {
+          const lastInvitation = lastInviteByReg.get(registration.id) ?? null;
+          return {
+            registrationId: registration.id,
+            camperName: registration.camper?.name ?? "",
+            parentEmail: registration.camper?.user?.email ?? "",
+            registrationNumber: registration.registrationNumber,
+            tribeName: registration.tribe?.name ?? null,
+            hostelName: registration.room?.hostel?.name ?? null,
+            roomName: registration.room?.name ?? null,
+            bedLabel: registration.bed?.label ?? null,
+            readinessIssues: assessRegistration(registration, commonIssues),
+            lastInvitation: lastInvitation
+              ? { sentAt: lastInvitation.sentAt, deliveryStatus: lastInvitation.deliveryStatus, openedAt: lastInvitation.openedAt }
+              : null,
+          };
+        })
+        .filter((item: any) => !input.onlyUnsent || !item.lastInvitation);
+
+      return { items, nextCursor };
+    }),
+
+  /** One-off targeted resend: always creates a fresh DRAFT campaign scoped to
+   * exactly the given registrations, so it works regardless of whether those
+   * registrations already received the original campaign (sendCampaign's
+   * dedupe is per-campaign, and campaignSend refuses non-draft campaigns —
+   * both of which make re-sending the *same* campaign a dead end). Leaves the
+   * original campaign's stats untouched. */
+  invitationResend: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      registrationIds: z.array(z.string()).min(1).max(200),
+      sourceCampaignId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const { forcedCampusId } = await assertCampaignSender(ctx, oid);
+
+      const camp = await ctx.prisma.camp.findFirst({ where: { id: input.campId, organizationId: oid } });
+      if (!camp) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const matchedRegistrations = await (ctx.prisma as any).registration.findMany({
+        where: {
+          id: { in: input.registrationIds },
+          campId: input.campId,
+          deletedAt: null,
+          campus: { organizationId: oid },
+          ...(forcedCampusId && { campusId: forcedCampusId }),
+        },
+        select: { id: true },
+      });
+      if (matchedRegistrations.length !== input.registrationIds.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "One or more selected registrations could not be found in this camp." });
+      }
+
+      let source: { subject: string; previewText: string | null; body: unknown; senderMode: string; customFromLocalPart: string | null; replyTo: string | null; attachments: unknown } | null = null;
+      if (input.sourceCampaignId) {
+        source = await ctx.prisma.emailCampaign.findFirst({
+          where: { id: input.sourceCampaignId, organizationId: oid, personalizeCampId: input.campId },
+          select: { subject: true, previewText: true, body: true, senderMode: true, customFromLocalPart: true, replyTo: true, attachments: true },
+        });
+        if (!source) throw new TRPCError({ code: "NOT_FOUND", message: "Source campaign not found." });
+      } else {
+        source = await ctx.prisma.emailCampaign.findFirst({
+          where: { organizationId: oid, personalizeCampId: input.campId, personalizeEvent: "CAMP_INVITATION", status: "COMPLETED" },
+          orderBy: { completedAt: "desc" },
+          select: { subject: true, previewText: true, body: true, senderMode: true, customFromLocalPart: true, replyTo: true, attachments: true },
+        });
+      }
+
+      const template = DEFAULT_TEMPLATES.CAMP_INVITATION;
+
+      const campaign = await ctx.prisma.emailCampaign.create({
+        data: {
+          organizationId: oid,
+          createdById: ctx.session!.user!.id,
+          name: `Invitation resend — ${camp.name} — ${new Date().toISOString().slice(0, 10)}`,
+          subject: source?.subject ?? template.subject,
+          previewText: source?.previewText ?? template.previewText,
+          body: (source?.body ?? template.content) as any,
+          audienceFilter: (forcedCampusId ? { recipientType: "PARENTS", filters: { campusId: forcedCampusId } } : { recipientType: "PARENTS" }) as any,
+          senderMode: source?.senderMode ?? "ORG_SLUG",
+          customFromLocalPart: source?.customFromLocalPart ?? null,
+          replyTo: source?.replyTo ?? null,
+          attachments: (source?.attachments ?? undefined) as any,
+          personalizeEvent: "CAMP_INVITATION",
+          personalizeCampId: input.campId,
+        },
+      });
+
+      await ctx.prisma.emailAuditLog.create({
+        data: {
+          organizationId: oid,
+          userId: ctx.session!.user!.id,
+          action: "CAMPAIGN_SENT",
+          targetType: "CAMPAIGN",
+          targetId: campaign.id,
+          metadata: { name: campaign.name, registrationIds: input.registrationIds, sourceCampaignId: input.sourceCampaignId ?? null },
+        },
+      });
+
+      const result = await sendCampaign(ctx.prisma, campaign.id, { registrationIds: input.registrationIds });
+      return { ...result, campaignId: campaign.id };
     }),
 
   campaignSendToNonOpeners: protectedProcedure

@@ -76,6 +76,7 @@ function RegistrationsPage() {
   const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
+  const [unassignedBedOnly, setUnassignedBedOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -217,6 +218,14 @@ function RegistrationsPage() {
     },
   });
 
+  const bulkInvitationResendMut = api.communication.invitationResend.useMutation({
+    onSuccess: (res) => {
+      setBulkResult({ message: `Invitation resend queued for ${res.recipientCount} registration(s).`, type: res.blockingErrors.length > 0 || res.held > 0 ? "error" : "success" });
+      setSelectedIds([]);
+    },
+    onError: (err) => setBulkResult({ message: err.message, type: "error" }),
+  });
+
   const bulkSuggestMut = api.tribe.bulkSuggest.useMutation({
     onSuccess: (res) => {
       setBulkResult({ message: `Generated tribe recommendations for ${res.length} registration(s).`, type: "success" });
@@ -260,7 +269,7 @@ function RegistrationsPage() {
   useEffect(() => {
     setCursor(undefined);
     setAccumulatedItems([]);
-  }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery, duplicatesOnly]);
+  }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery, duplicatesOnly, unassignedBedOnly]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -280,6 +289,7 @@ function RegistrationsPage() {
       status: filterStatus || undefined,
       reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
       duplicatesOnly: duplicatesOnly || undefined,
+      accommodationState: unassignedBedOnly ? "UNASSIGNED" : undefined,
       q: debouncedSearchQuery || undefined,
       cursor,
       limit: 50,
@@ -317,6 +327,7 @@ function RegistrationsPage() {
   const statsTotalCount = statsData?.totalCount ?? 0;
   const maleCount = statsData?.maleCount ?? 0;
   const femaleCount = statsData?.femaleCount ?? 0;
+  const unassignedBedCount = statsData?.unassignedBedCount ?? 0;
 
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -486,6 +497,23 @@ function RegistrationsPage() {
             )}
           </div>
         ),
+      });
+    }
+
+    if (visibleColumns.includes("bed")) {
+      cols.push({
+        header: renderSortableHeader("Bed", "bed"),
+        mobileHidden: true,
+        accessor: (row) =>
+          row.bed?.label ? (
+            <span className="text-txt-secondary">{row.room?.hostel?.name ? `${row.room.hostel.name} · ` : ""}{row.room?.name ? `${row.room.name} · ` : ""}{row.bed.label}</span>
+          ) : row.roomId ? (
+            <Badge tone="warning">Room only</Badge>
+          ) : ["APPROVED", "CHECKED_IN"].includes(row.status) ? (
+            <Badge tone="warning">No bed</Badge>
+          ) : (
+            <span className="text-txt-muted">—</span>
+          ),
       });
     }
 
@@ -674,11 +702,12 @@ function RegistrationsPage() {
             <StatCard
               label="Total Registrations"
               value={statsTotalCount}
-              selected={filterStatus === "" && reviewStateFilter === "" && !duplicatesOnly}
+              selected={filterStatus === "" && reviewStateFilter === "" && !duplicatesOnly && !unassignedBedOnly}
               onClick={() => {
                 setReviewStateFilter("");
                 setFilterStatus("");
                 setDuplicatesOnly(false);
+                setUnassignedBedOnly(false);
               }}
             />
             <StatCard data-testid="registration-stat-male" label="Male" value={maleCount} tone="info" />
@@ -690,7 +719,21 @@ function RegistrationsPage() {
               onClick={() => {
                 setReviewStateFilter("");
                 setFilterStatus("");
+                setUnassignedBedOnly(false);
                 setDuplicatesOnly(!duplicatesOnly);
+              }}
+            />
+            <StatCard
+              data-testid="registration-stat-unassigned-bed"
+              label="No Bed Assigned"
+              value={unassignedBedCount}
+              tone="warning"
+              selected={unassignedBedOnly}
+              onClick={() => {
+                setReviewStateFilter("");
+                setFilterStatus("");
+                setDuplicatesOnly(false);
+                setUnassignedBedOnly(!unassignedBedOnly);
               }}
             />
             {isTwoStep && (
@@ -702,6 +745,7 @@ function RegistrationsPage() {
                   onClick={() => {
                     setFilterStatus("");
                     setDuplicatesOnly(false);
+                    setUnassignedBedOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_VETTING" ? "" : "AWAITING_VETTING");
                   }}
                 />
@@ -712,6 +756,7 @@ function RegistrationsPage() {
                   onClick={() => {
                     setFilterStatus("");
                     setDuplicatesOnly(false);
+                    setUnassignedBedOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_FINAL" ? "" : "AWAITING_FINAL");
                   }}
                 />
@@ -729,6 +774,7 @@ function RegistrationsPage() {
                 onClick={() => {
                   setReviewStateFilter("");
                   setDuplicatesOnly(false);
+                  setUnassignedBedOnly(false);
                   setFilterStatus(filterStatus === s ? "" : s);
                 }}
               />
@@ -787,6 +833,19 @@ function RegistrationsPage() {
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setBulkReassignOpen(true)}>
               Reassign Campus
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={bulkInvitationResendMut.isPending}
+              disabled={!activeCamp?.id}
+              onClick={() => {
+                if (window.confirm(`Resend the camp invitation (with ID card) to ${selectedIds.length} selected registration${selectedIds.length === 1 ? "" : "s"}?`)) {
+                  bulkInvitationResendMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds });
+                }
+              }}
+            >
+              Resend Camp Invitation
             </Button>
             <Button size="sm" variant="danger" data-testid="bulk-delete-button" loading={bulkSoftDelete.isPending} onClick={() => setBulkAction("DELETE")}>
               Delete
@@ -891,6 +950,7 @@ function RegistrationsPage() {
                               { key: "regNumber", label: "Registration #" },
                               { key: "status", label: "Status" },
                               { key: "tribe", label: "Assigned Tribe" },
+                              { key: "bed", label: "Bed" },
                               { key: "gender", label: "Gender" },
                               { key: "dob", label: "Date of Birth" },
                               { key: "updated", label: "Updated Date" },

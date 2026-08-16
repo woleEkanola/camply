@@ -82,7 +82,11 @@ function campaignFilter(campaign: any): AudienceFilter {
   return (campaign.savedAudience?.filterDefinition || campaign.audienceFilter || { recipientType: "ALL" }) as AudienceFilter;
 }
 
-function personalizedWhere(campaign: any, filter: AudienceFilter, manualEmails: string[]) {
+function caseInsensitiveEmailWhere(emails: string[]) {
+  return { OR: emails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })) };
+}
+
+function personalizedWhere(campaign: any, filter: AudienceFilter, manualEmails: string[], registrationIds: string[]) {
   const where: Record<string, unknown> = {
     campId: campaign.personalizeCampId,
     status: { in: PERSONALIZED_STATUSES },
@@ -91,11 +95,18 @@ function personalizedWhere(campaign: any, filter: AudienceFilter, manualEmails: 
   };
   const campusId = (filter.filters as { campusId?: string } | undefined)?.campusId;
   if (campusId) where.campusId = campusId;
-  if (manualEmails.length > 0) where.camper = { user: { email: { in: manualEmails } } };
+  // registrationIds is the precise selector (used by targeted resends) and
+  // takes priority over manualEmails — it survives a parent having more than
+  // one camper in the camp, where an email match cannot distinguish them.
+  if (registrationIds.length > 0) {
+    where.id = { in: registrationIds };
+  } else if (manualEmails.length > 0) {
+    where.camper = { user: caseInsensitiveEmailWhere(manualEmails) };
+  }
   return where;
 }
 
-function assessRegistration(registration: any, commonIssues: string[]): string[] {
+export function assessRegistration(registration: any, commonIssues: string[]): string[] {
   const reasons = [...commonIssues];
   if (!registration.camper?.user?.email) reasons.push("Parent email is missing.");
   if (!registration.registrationNumber) reasons.push("Registration number is missing.");
@@ -110,7 +121,8 @@ async function resolvePersonalizedRecipients(
   prisma: TxClient,
   campaign: any,
   filter: AudienceFilter,
-  manualEmails: string[]
+  manualEmails: string[],
+  registrationIds: string[]
 ): Promise<ResolvedPersonalizedUser[]> {
   const brandingEnabled = !!campaign.organization?.branding?.idCardEnabled;
   const appUrl = publicAppUrl();
@@ -119,7 +131,7 @@ async function resolvePersonalizedRecipients(
     ...(appUrl.error ? [appUrl.error] : []),
   ];
   const registrations = await (prisma as any).registration.findMany({
-    where: personalizedWhere(campaign, filter, manualEmails),
+    where: personalizedWhere(campaign, filter, manualEmails, registrationIds),
     include: CAMP_INVITATION_INCLUDE,
     orderBy: { createdAt: "asc" },
   });
@@ -143,14 +155,14 @@ async function loadCampaign(prisma: TxClient, campaignId: string) {
   });
 }
 
-async function resolveRecipients(prisma: TxClient, campaign: any, manualEmails: string[]) {
+async function resolveRecipients(prisma: TxClient, campaign: any, manualEmails: string[], registrationIds: string[] = []) {
   const filter = campaignFilter(campaign);
   if (campaign.personalizeEvent && campaign.personalizeCampId) {
-    return resolvePersonalizedRecipients(prisma, campaign, filter, manualEmails);
+    return resolvePersonalizedRecipients(prisma, campaign, filter, manualEmails, registrationIds);
   }
   if (manualEmails.length > 0) {
     const users = await (prisma as any).user.findMany({
-      where: { email: { in: manualEmails }, organizationId: campaign.organizationId },
+      where: { organizationId: campaign.organizationId, ...caseInsensitiveEmailWhere(manualEmails) },
     });
     return users.map((user: any) => ({ ...user, readinessIssues: [] }));
   }
@@ -161,14 +173,15 @@ async function resolveRecipients(prisma: TxClient, campaign: any, manualEmails: 
 export async function getCampaignReadiness(
   prisma: TxClient,
   campaignId: string,
-  opts?: { manualEmails?: string[] }
+  opts?: { manualEmails?: string[]; registrationIds?: string[] }
 ): Promise<CampaignReadiness> {
   const campaign = await loadCampaign(prisma, campaignId);
   if (!campaign) throw new Error("Campaign not found");
   const attachments = (campaign.attachments || []) as CampaignAttachment[];
   const blockingErrors = validateCampaignAttachments(attachments);
   const manualEmails = [...new Set((opts?.manualEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean))];
-  const recipients = await resolveRecipients(prisma, campaign, manualEmails);
+  const registrationIds = [...new Set(opts?.registrationIds ?? [])];
+  const recipients = await resolveRecipients(prisma, campaign, manualEmails, registrationIds);
   const issues: CampaignReadinessIssue[] = recipients
     .filter((recipient: any) => recipient.readinessIssues.length > 0)
     .map((recipient: any) => ({
@@ -351,7 +364,7 @@ async function sendPreparedEmail(payload: CreateEmailOptions, idempotencyKey: st
 export async function sendCampaign(
   prisma: TxClient,
   campaignId: string,
-  opts?: { manualEmails?: string[] }
+  opts?: { manualEmails?: string[]; registrationIds?: string[] }
 ): Promise<SendCampaignResult> {
   const campaign = await loadCampaign(prisma, campaignId);
   if (!campaign) throw new Error("Campaign not found");
@@ -360,7 +373,8 @@ export async function sendCampaign(
   if (attachmentErrors.length > 0) throw new Error(attachmentErrors.join(" "));
 
   const manualEmails = [...new Set((opts?.manualEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean))];
-  const users = await resolveRecipients(prisma, campaign, manualEmails);
+  const registrationIds = [...new Set(opts?.registrationIds ?? [])];
+  const users = await resolveRecipients(prisma, campaign, manualEmails, registrationIds);
   if (["DRAFT", "SCHEDULED"].includes(campaign.status)) {
     const claimed = await (prisma as any).emailCampaign.updateMany({
       where: { id: campaignId, status: campaign.status },
@@ -436,7 +450,7 @@ export async function sendCampaign(
       .catch((error) => console.error(`[sendCampaign] immediate kick failed for campaign ${campaignId}:`, error));
   }
 
-  const readiness = await getCampaignReadiness(prisma, campaignId, { manualEmails });
+  const readiness = await getCampaignReadiness(prisma, campaignId, { manualEmails, registrationIds });
   return { ...readiness, recipientCount: existingRecipients.length + newUsers.length };
 }
 

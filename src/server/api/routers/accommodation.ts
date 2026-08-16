@@ -33,10 +33,10 @@ export const accommodationRouter = createTRPCRouter({
         ctx.prisma.tribe.count({ where: { campId: camp.id, status: "ACTIVE", deletedAt: null } }),
         ctx.prisma.registration.findMany({
           where: { campId: camp.id, status: { in: [...ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES] }, deletedAt: null },
-          select: { id: true, status: true, venueId: true, tribeId: true, roomId: true, camper: { select: { name: true, gender: true } } },
+          select: { id: true, status: true, venueId: true, tribeId: true, roomId: true, camper: { select: { name: true, gender: true } }, tribe: { select: { name: true } } },
         }),
-        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, type: "TEACHER", status: "APPROVED", deletedAt: null }, select: { id: true, firstName: true, lastName: true, assignedVenueId: true, assignedTribeId: true, assignedRoomId: true, gender: true } }),
-        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, status: "APPROVED", deletedAt: null }, select: { id: true, firstName: true, lastName: true, assignedVenueId: true, assignedRoomId: true, gender: true } }),
+        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, type: "TEACHER", status: "APPROVED", deletedAt: null }, select: { id: true, firstName: true, lastName: true, assignedVenueId: true, assignedTribeId: true, assignedRoomId: true, gender: true, assignedTribe: { select: { name: true } } } }),
+        ctx.prisma.staffProfile.findMany({ where: { campId: camp.id, status: "APPROVED", deletedAt: null }, select: { id: true, firstName: true, lastName: true, assignedVenueId: true, assignedRoomId: true, gender: true, assignedTribe: { select: { name: true } } } }),
       ]);
 
       const venueSummaries = await Promise.all(venues.map(async (venue) => {
@@ -90,6 +90,26 @@ export const accommodationRouter = createTRPCRouter({
           UNKNOWN: Math.max(0, unassignedByGender.UNKNOWN - availableBedsByGender.MIXED),
         };
 
+        // Names behind the unassignedPeople count — previously computed and
+        // discarded here, leaving no way to see *who* still needs a bed
+        // short of the transient post-auto-assign exception list.
+        const unassignedPeopleList = [
+          ...unassignedCampers.map((person) => ({
+            id: person.id,
+            name: person.camper.name,
+            kind: "CAMPER" as const,
+            gender: person.camper.gender ?? null,
+            tribeName: person.tribe?.name ?? null,
+          })),
+          ...unassignedStaff.map((person) => ({
+            id: person.id,
+            name: `${person.firstName} ${person.lastName}`.trim(),
+            kind: "STAFF" as const,
+            gender: person.gender ?? null,
+            tribeName: person.assignedTribe?.name ?? null,
+          })),
+        ].slice(0, 500);
+
         return {
           id: venue.id,
           name: venue.name,
@@ -101,6 +121,7 @@ export const accommodationRouter = createTRPCRouter({
           campers: campers.length,
           staff: staff.length,
           unassignedPeople,
+          unassignedPeopleList,
           campersWithoutTribe: campers.filter((person) => !person.tribeId).length,
           teachersWithoutTribe: teachers.filter((person) => !person.assignedTribeId).length,
           capacityShortfall: Math.max(0, unassignedPeople - availableBeds),

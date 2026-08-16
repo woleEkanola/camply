@@ -2025,6 +2025,10 @@ export const registrationRouter = createTRPCRouter({
       });
       const { duplicateRegIds } = computeDuplicateGroups(allRegsInScope);
 
+      const unassignedBedCount = await ctx.prisma.registration.count({
+        where: { ...baseWhere, status: { in: ["APPROVED", "CHECKED_IN"] }, roomId: null },
+      });
+
       return {
         countsByStatus,
         awaitingVetting,
@@ -2033,6 +2037,7 @@ export const registrationRouter = createTRPCRouter({
         totalCount,
         maleCount,
         femaleCount,
+        unassignedBedCount,
       };
     }),
 
@@ -2047,6 +2052,9 @@ export const registrationRouter = createTRPCRouter({
       // endorsed by a rep" vs "endorsed, waiting on an admin's final approve".
       reviewState: z.enum(["AWAITING_VETTING", "AWAITING_FINAL", "AWAITING_DOCUMENT_REPLACEMENT"]).optional(),
       duplicatesOnly: z.boolean().optional(),
+      // UNASSIGNED = no room; ROOM_ONLY = room set but no bed within it
+      // (reachable via accommodation.assignCamperToRoomOnly); ASSIGNED = has a bed.
+      accommodationState: z.enum(["UNASSIGNED", "ROOM_ONLY", "ASSIGNED"]).optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
       limit: z.number().min(1).max(100).default(25),
@@ -2095,6 +2103,9 @@ export const registrationRouter = createTRPCRouter({
         ...baseWhere,
         ...(input.duplicatesOnly && { id: { in: Array.from(duplicateRegIds) } }),
         ...(input.status && { status: input.status }),
+        ...(input.accommodationState === "UNASSIGNED" && { roomId: null }),
+        ...(input.accommodationState === "ROOM_ONLY" && { roomId: { not: null }, bed: null }),
+        ...(input.accommodationState === "ASSIGNED" && { bed: { isNot: null } }),
         ...(input.reviewState === "AWAITING_VETTING" && { status: "PENDING", ...notEndorsedFilter }),
         ...(input.reviewState === "AWAITING_FINAL" && { status: "PENDING", ...endorsedFilter }),
         ...(input.reviewState === "AWAITING_DOCUMENT_REPLACEMENT" && {
@@ -2127,6 +2138,8 @@ export const registrationRouter = createTRPCRouter({
           select: { id: true, status: true, fileName: true, requirementId: true },
         },
         review: { select: { verificationStatus: true, recommendation: true, verifiedById: true, verifiedAt: true, assignedToId: true } },
+        room: { select: { name: true, hostel: { select: { name: true } } } },
+        bed: { select: { label: true } },
       } as const;
 
       let rawItems: Awaited<ReturnType<typeof ctx.prisma.registration.findMany>>;

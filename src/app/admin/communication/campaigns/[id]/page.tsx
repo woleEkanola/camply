@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Dialog } from "@/components/ui/Dialog";
+import { InvitationRecipientPicker } from "@/components/communication/InvitationRecipientPicker";
 import Link from "next/link";
 
 function statusTone(status: string): "success" | "warning" | "danger" | "neutral" | "info" {
@@ -36,7 +37,10 @@ export default function CampaignDetail() {
   const retryFailedMut = api.communication.campaignRetryFailed.useMutation();
   const kickMut = api.communication.campaignKickQueue.useMutation();
   const nonOpenerMut = api.communication.campaignSendToNonOpeners.useMutation();
+  const invitationResendMut = api.communication.invitationResend.useMutation();
   const [showNonOpener, setShowNonOpener] = useState(false);
+  const [showResendPicker, setShowResendPicker] = useState(false);
+  const [resendRegistrationIds, setResendRegistrationIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
 
   if (isLoading) {
@@ -108,6 +112,9 @@ export default function CampaignDetail() {
           )}
           {(campaign.status === "DRAFT" || campaign.status === "SCHEDULED") && <Button variant="danger" size="sm" onClick={() => { cancelMut.mutate({ id }); utils.communication.campaignGet.invalidate({ id }); }}>Cancel</Button>}
           <Link href={`/admin/communication/campaigns/new?id=${id}`}><Button variant="secondary" size="sm">Duplicate</Button></Link>
+          {isPersonalized && campaign.personalizeCampId && (
+            <Button variant="secondary" size="sm" onClick={() => { setResendRegistrationIds([]); setShowResendPicker(true); }}>Resend to specific parents</Button>
+          )}
         </div>
 
         {["SENDING", "PAUSED", "NEEDS_ATTENTION"].includes(campaign.status) && (
@@ -186,6 +193,48 @@ export default function CampaignDetail() {
           <div className="text-sm space-y-2">
             <p>A new draft campaign will be created with the same content, targeting only the <strong>{nonOpenerCount}</strong> recipients who never opened this campaign.</p>
             <p className="text-txt-secondary">You can review and edit the follow-up before sending.</p>
+          </div>
+        </Dialog>
+
+        <Dialog
+          open={showResendPicker}
+          onClose={() => setShowResendPicker(false)}
+          title="Resend to specific parents"
+          size="lg"
+          footer={
+            <div className="flex gap-2 justify-end">
+              <Button variant="secondary" onClick={() => setShowResendPicker(false)}>Cancel</Button>
+              <Button
+                loading={invitationResendMut.isPending}
+                disabled={resendRegistrationIds.length === 0}
+                onClick={async () => {
+                  const result = await invitationResendMut.mutateAsync({
+                    campId: campaign.personalizeCampId!,
+                    registrationIds: resendRegistrationIds,
+                    sourceCampaignId: campaign.id,
+                  });
+                  setShowResendPicker(false);
+                  router.push(`/admin/communication/campaigns/${result.campaignId}`);
+                }}
+              >
+                Resend to {resendRegistrationIds.length || ""}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3 text-sm">
+            <p className="text-txt-secondary">
+              Search and select campers to resend this exact invitation (subject, message, attachments, ID card) to
+              — this creates a new campaign scoped to only these recipients, so it works even though this campaign
+              already sent to them once.
+            </p>
+            {campaign.personalizeCampId && (
+              <InvitationRecipientPicker
+                campId={campaign.personalizeCampId}
+                value={resendRegistrationIds}
+                onChange={setResendRegistrationIds}
+              />
+            )}
           </div>
         </Dialog>
       </div>
