@@ -2,7 +2,7 @@ import { z } from "zod";
 import { normalizeGender } from "../../../lib/gender";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { assertOrgAdminOrCommand, assertOrgAdminOrCampusRep as assertScopedOrgAccess } from "../trpc/scoping";
+import { assertOrgAdminOrCommand, assertOrgAdminOrCampusRep as assertScopedOrgAccess, assertSameOrg } from "../trpc/scoping";
 
 const assertOrgAdminOrCampusRep = (ctx: any, organizationId: string, campusId?: string | null) =>
   assertScopedOrgAccess(ctx, organizationId, campusId, "STAFF");
@@ -297,7 +297,7 @@ export const staffRouter = createTRPCRouter({
         },
       });
       if (!profile || profile.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+      assertSameOrg(ctx, profile.organizationId);
       return profile;
     }),
 

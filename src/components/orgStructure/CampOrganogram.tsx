@@ -33,6 +33,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input, Select } from "@/components/ui/Input";
+import { StaffProfileSheet } from "./StaffProfileSheet";
+import type { StaffChip } from "@/server/api/routers/_shared/staffChip";
 import { cn } from "@/lib/cn";
 
 const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
@@ -43,8 +45,53 @@ type StaffOccupant = {
   lastName: string;
   preferredName: string | null;
   photoUrl: string | null;
+  phone?: string | null;
+  email?: string | null;
   type: "TEACHER" | "VOLUNTEER";
+  status?: string | null;
+  gender?: string | null;
+  departmentId?: string | null;
+  isDepartmentHead?: boolean;
+  isAssistantHead?: boolean;
+  preferredCampus?: { id: string; name: string } | null;
+  assignedTribe?: { id: string; name: string } | null;
+  assignedHostel?: { id: string; name: string } | null;
+  reportsTo?: { firstName: string; lastName: string } | null;
+  reportsToUser?: { firstName: string | null; lastName: string | null; email: string } | null;
 };
+
+function toOrganogramStaffChip(staff: any, node: OrganogramNode): StaffChip {
+  const reportsToName = staff.reportsTo
+    ? `${staff.reportsTo.firstName} ${staff.reportsTo.lastName}`
+    : staff.reportsToUser
+      ? `${staff.reportsToUser.firstName ?? ""} ${staff.reportsToUser.lastName ?? ""}`.trim() || staff.reportsToUser.email
+      : null;
+  return {
+    id: staff.id,
+    firstName: staff.firstName,
+    lastName: staff.lastName,
+    preferredName: staff.preferredName ?? null,
+    displayName: `${staff.preferredName || staff.firstName} ${staff.lastName}`.trim(),
+    photoUrl: staff.photoUrl ?? null,
+    phone: staff.phone || "",
+    email: staff.email || "",
+    type: staff.type || "TEACHER",
+    status: staff.status || "APPROVED",
+    gender: staff.gender ?? null,
+    departmentId: staff.departmentId ?? node.departmentId ?? null,
+    departmentName: node.department?.name ?? null,
+    campusId: staff.preferredCampus?.id ?? null,
+    campusName: staff.preferredCampus?.name ?? null,
+    tribeName: staff.assignedTribe?.name ?? null,
+    hostelName: staff.assignedHostel?.name ?? null,
+    reportsToName,
+    positionTitle: node.name,
+    positionTitles: [node.name],
+    isDepartmentHead: staff.isDepartmentHead ?? false,
+    isAssistantHead: staff.isAssistantHead ?? false,
+    roleRank: staff.isDepartmentHead ? 0 : staff.isAssistantHead ? 1 : 2,
+  };
+}
 
 export type OrganogramNode = {
   id: string;
@@ -118,6 +165,7 @@ function PositionCard({
   readOnly = false,
   isDuplicate = false,
   onSelect,
+  onSelectContact,
 }: {
   node: OrganogramNode;
   compact?: boolean;
@@ -126,6 +174,7 @@ function PositionCard({
   readOnly?: boolean;
   isDuplicate?: boolean;
   onSelect: (node: OrganogramNode) => void;
+  onSelectContact?: (chip: StaffChip) => void;
 }) {
   // Only the Commandant is pinned at the top of the hierarchy — Assistant
   // Commandants are ordinary draggable/droppable nodes like any other role,
@@ -139,6 +188,14 @@ function PositionCard({
   };
   const occupant = node.assignments[0]?.staff;
   const transform = draggable.transform;
+
+  function handleClick() {
+    if (readOnly && occupant && onSelectContact) {
+      onSelectContact(toOrganogramStaffChip(occupant, node));
+    } else {
+      onSelect(node);
+    }
+  }
 
   return (
     <article
@@ -166,7 +223,7 @@ function PositionCard({
         </span>
       )}
       <div className="flex items-start gap-2">
-        <button type="button" onClick={() => onSelect(node)} className="min-w-0 flex-1 text-left">
+        <button type="button" onClick={handleClick} className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
             <Avatar name={occupant ? occupantName(node) : node.name} photoUrl={occupant?.photoUrl} size={compact ? "xs" : "sm"} />
             <div className="min-w-0 flex-1">
@@ -197,6 +254,7 @@ function ChartBranch({
   readOnly,
   duplicateIds,
   onSelect,
+  onSelectContact,
 }: {
   node: OrganogramNode;
   activeDragId: string | null;
@@ -205,6 +263,7 @@ function ChartBranch({
   readOnly: boolean;
   duplicateIds: Set<string>;
   onSelect: (node: OrganogramNode) => void;
+  onSelectContact?: (chip: StaffChip) => void;
 }) {
   return (
     <div className="flex min-w-max flex-col items-center">
@@ -215,6 +274,7 @@ function ChartBranch({
         readOnly={readOnly}
         isDuplicate={duplicateIds.has(node.id)}
         onSelect={onSelect}
+        onSelectContact={onSelectContact}
       />
       {node.children.length > 0 && (
         <>
@@ -222,7 +282,7 @@ function ChartBranch({
           <div className="relative flex items-start gap-8 px-3 before:absolute before:left-[calc(0.75rem+7rem)] before:right-[calc(0.75rem+7rem)] before:top-0 before:border-t-2 before:border-border-default">
             {node.children.map((child) => (
               <div key={child.id} className="relative pt-6 before:absolute before:left-1/2 before:top-0 before:h-6 before:border-l-2 before:border-border-default">
-                <ChartBranch node={child} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedId} readOnly={readOnly} duplicateIds={duplicateIds} onSelect={onSelect} />
+                <ChartBranch node={child} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedId} readOnly={readOnly} duplicateIds={duplicateIds} onSelect={onSelect} onSelectContact={onSelectContact} />
               </div>
             ))}
           </div>
@@ -243,6 +303,7 @@ function NestedBranch({
   duplicateIds,
   onToggle,
   onSelect,
+  onSelectContact,
 }: {
   node: OrganogramNode;
   depth: number;
@@ -254,6 +315,7 @@ function NestedBranch({
   duplicateIds: Set<string>;
   onToggle: (id: string) => void;
   onSelect: (node: OrganogramNode) => void;
+  onSelectContact?: (chip: StaffChip) => void;
 }) {
   const isExpanded = expanded.has(node.id);
   return (
@@ -277,6 +339,7 @@ function NestedBranch({
             readOnly={readOnly}
             isDuplicate={duplicateIds.has(node.id)}
             onSelect={onSelect}
+            onSelectContact={onSelectContact}
           />
         </div>
       </div>
@@ -295,6 +358,7 @@ function NestedBranch({
               duplicateIds={duplicateIds}
               onToggle={onToggle}
               onSelect={onSelect}
+              onSelectContact={onSelectContact}
             />
           ))}
         </div>
@@ -626,6 +690,7 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
     }
     return invalid;
   }, [activeDraggedNode]);
+  const [contactChip, setContactChip] = useState<StaffChip | null>(null);
   const selectedCurrent = selectedNode ? byId.get(selectedNode.id) ?? selectedNode : null;
   const assignTarget = assignTargetId ? byId.get(assignTargetId) ?? null : null;
   const assignTargetIsLeadership = Boolean(assignTarget?.leadershipRole);
@@ -737,7 +802,7 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
                   <div ref={chartContentRef} className="min-w-max origin-top-left" style={{ zoom }}>
                     {!readOnly && <RootDropZone active={!!activeDragId} />}
                     <div className="flex min-w-max items-start justify-center gap-14">
-                      {visibleRoots.map((root) => <ChartBranch key={root.id} node={root} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} duplicateIds={duplicateIds} onSelect={setSelectedNode} />)}
+                      {visibleRoots.map((root) => <ChartBranch key={root.id} node={root} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} duplicateIds={duplicateIds} onSelect={setSelectedNode} onSelectContact={setContactChip} />)}
                     </div>
                   </div>
                 </div>
@@ -750,7 +815,7 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
                 </div>
                 {!readOnly && <RootDropZone active={!!activeDragId} />}
                 {visibleRoots.map((root) => (
-                  <NestedBranch key={root.id} node={root} depth={0} expanded={nestedExpanded} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} duplicateIds={duplicateIds} onToggle={(id) => setExpanded((current) => { const next = new Set(current ?? []); next.has(id) ? next.delete(id) : next.add(id); return next; })} onSelect={setSelectedNode} />
+                  <NestedBranch key={root.id} node={root} depth={0} expanded={nestedExpanded} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} duplicateIds={duplicateIds} onToggle={(id) => setExpanded((current) => { const next = new Set(current ?? []); next.has(id) ? next.delete(id) : next.add(id); return next; })} onSelect={setSelectedNode} onSelectContact={setContactChip} />
                 ))}
               </div>
             )}
@@ -765,9 +830,26 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
           <div className="space-y-4">
             <div className="rounded-xl bg-surface-raised p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-txt-muted">Current holder</div>
-              <div className="mt-2 flex items-center gap-3">
-                <Avatar name={occupantName(selectedCurrent)} photoUrl={selectedCurrent.assignments[0]?.staff.photoUrl} size="md" />
-                <div><div className="font-semibold text-txt-primary">{occupantName(selectedCurrent)}</div><div className="text-xs text-txt-secondary">{selectedCurrent.department?.name ?? "Camp leadership"}</div></div>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Avatar name={occupantName(selectedCurrent)} photoUrl={selectedCurrent.assignments[0]?.staff.photoUrl} size="md" />
+                  <div>
+                    <div className="font-semibold text-txt-primary">{occupantName(selectedCurrent)}</div>
+                    <div className="text-xs text-txt-secondary">{selectedCurrent.department?.name ?? "Camp leadership"}</div>
+                  </div>
+                </div>
+                {selectedCurrent.assignments[0]?.staff && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setContactChip(toOrganogramStaffChip(selectedCurrent.assignments[0].staff, selectedCurrent));
+                      setSelectedNode(null);
+                    }}
+                  >
+                    Contact / Profile
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -1006,6 +1088,13 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
           </div>
         )}
       </Dialog>
+
+      <StaffProfileSheet
+        chip={contactChip}
+        organizationId={organizationId}
+        campId={campId}
+        onClose={() => setContactChip(null)}
+      />
     </DndContext>
   );
 }

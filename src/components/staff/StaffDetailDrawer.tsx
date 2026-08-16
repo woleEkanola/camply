@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { api } from "@/utils/trpc";
 import { Drawer } from "@/components/ui/Drawer";
 import { Tabs } from "@/components/ui/Tabs";
@@ -9,30 +10,47 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Select } from "@/components/ui/Input";
 import { SearchBar } from "@/components/ui/SearchBar";
 
-export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: { staffId: string; organizationId: string; campId: string; onClose: () => void }) {
+export function StaffDetailDrawer({
+  staffId,
+  organizationId,
+  campId,
+  readOnly,
+  onClose,
+}: {
+  staffId: string;
+  organizationId: string;
+  campId: string;
+  readOnly?: boolean;
+  onClose: () => void;
+}) {
+  const { data: session } = useSession();
+  const role = session?.user?.role;
+  const isOrgAdmin = role === "SUPER_ADMIN" || role === "OWNER" || role === "ADMIN";
+  const canManage = readOnly !== undefined ? !readOnly : isOrgAdmin;
+
   const utils = api.useUtils();
   const { data: profile } = api.staff.getById.useQuery({ id: staffId });
-  const { data: venues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: !!campId });
-  const { data: tribes = [] } = api.tribe.listByCamp.useQuery({ campId }, { enabled: !!campId && profile?.type === "TEACHER" });
-  const { data: departments = [] } = api.department.list.useQuery({ organizationId, campId }, { enabled: !!organizationId && !!campId });
+  const { data: venues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: canManage && !!campId });
+  const { data: tribes = [] } = api.tribe.listByCamp.useQuery({ campId }, { enabled: canManage && !!campId && profile?.type === "TEACHER" });
+  const { data: departments = [] } = api.department.list.useQuery({ organizationId, campId }, { enabled: canManage && !!organizationId && !!campId });
   const { data: memberships = [] } = api.departmentOperations.staffDepartmentMemberships.useQuery({ staffId }, { enabled: !!staffId });
   const { data: reportsToOptions } = api.staff.listReportsToOptions.useQuery(
     { organizationId, campId, excludeStaffId: staffId },
-    { enabled: !!organizationId && !!campId }
+    { enabled: canManage && !!organizationId && !!campId }
   );
   const { data: hostels = [] } = api.accommodation.listHostels.useQuery(
     { venueId: profile?.assignedVenueId ?? "" },
-    { enabled: !!profile?.assignedVenueId && profile?.type === "TEACHER" }
+    { enabled: canManage && !!profile?.assignedVenueId && profile?.type === "TEACHER" }
   );
 
   const { data: allCampuses = [] } = api.campus.getAll.useQuery(
     { organizationId },
-    { enabled: !!organizationId }
+    { enabled: canManage && !!organizationId }
   );
 
   const { data: userData, refetch: refetchUser } = api.user.getById.useQuery(
     { id: profile?.userId ?? "" },
-    { enabled: !!profile?.userId }
+    { enabled: canManage && !!profile?.userId }
   );
 
   const [rejectReason, setRejectReason] = useState("");
@@ -83,6 +101,12 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
     return <Drawer open onClose={onClose} title="Loading…"><div className="p-6 text-sm text-neutral-500">Loading…</div></Drawer>;
   }
 
+  const reportsToDisplay = profile.reportsTo
+    ? `${profile.reportsTo.firstName} ${profile.reportsTo.lastName}`.trim()
+    : profile.reportsToUser
+      ? `${profile.reportsToUser.firstName ?? ""} ${profile.reportsToUser.lastName ?? ""}`.trim() || profile.reportsToUser.email
+      : "Unassigned";
+
   const profileTab = (
     <div className="space-y-4">
       {actionError && <div className="rounded-md status-danger">{actionError}</div>}
@@ -116,30 +140,36 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
         </div>
       )}
 
-      <div>
-        <h3 className="mb-2 text-sm font-semibold text-neutral-900">Review</h3>
-        {profile.status === "PENDING" && (
-          <>
-            <div className="mb-3 flex flex-wrap gap-2">
-              <Button variant="primary" size="sm" loading={approve.isPending} onClick={() => approve.mutate({ id: staffId })}>Approve</Button>
-            </div>
-            <div className="flex gap-2">
-              <SearchBar containerClassName="flex-1" placeholder="Rejection reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
-              <Button variant="danger" size="sm" disabled={!rejectReason} loading={reject.isPending} onClick={() => reject.mutate({ id: staffId, reason: rejectReason })}>Reject</Button>
-            </div>
-          </>
-        )}
-        {profile.status === "APPROVED" && (
-          <Button variant="secondary" size="sm" loading={deactivate.isPending} onClick={() => deactivate.mutate({ id: staffId })}>Deactivate</Button>
-        )}
-        {profile.status === "DEACTIVATED" && (
-          <Button variant="secondary" size="sm" loading={reactivate.isPending} onClick={() => reactivate.mutate({ id: staffId })}>Reactivate</Button>
-        )}
-      </div>
+      {canManage && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-neutral-900">Review</h3>
+          {profile.status === "PENDING" && (
+            <>
+              <div className="mb-3 flex flex-wrap gap-2">
+                <Button variant="primary" size="sm" loading={approve.isPending} onClick={() => approve.mutate({ id: staffId })}>Approve</Button>
+              </div>
+              <div className="flex gap-2">
+                <SearchBar containerClassName="flex-1" placeholder="Rejection reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                <Button variant="danger" size="sm" disabled={!rejectReason} loading={reject.isPending} onClick={() => reject.mutate({ id: staffId, reason: rejectReason })}>Reject</Button>
+              </div>
+            </>
+          )}
+          {profile.status === "APPROVED" && (
+            <Button variant="secondary" size="sm" loading={deactivate.isPending} onClick={() => deactivate.mutate({ id: staffId })}>Deactivate</Button>
+          )}
+          {profile.status === "DEACTIVATED" && (
+            <Button variant="secondary" size="sm" loading={reactivate.isPending} onClick={() => reactivate.mutate({ id: staffId })}>Reactivate</Button>
+          )}
+        </div>
+      )}
     </div>
   );
 
-  const assignmentTab = (
+  const secondaryMemberships = memberships.filter((membership) => !membership.isPrimary);
+  const takenIds = new Set(memberships.map((membership) => membership.departmentId));
+  const addableDepartments = departments.filter((department: any) => !takenIds.has(department.id));
+
+  const assignmentTab = canManage ? (
     <div className="space-y-4">
       <div>
         <label className="mb-1 block text-sm font-medium text-neutral-700">Venue</label>
@@ -167,40 +197,33 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
         </Select>
       </div>
 
-      {(() => {
-        const secondaryMemberships = memberships.filter((membership) => !membership.isPrimary);
-        const takenIds = new Set(memberships.map((membership) => membership.departmentId));
-        const addableDepartments = departments.filter((department: any) => !takenIds.has(department.id));
-        return (
-          <div>
-            <label className="mb-1 block text-sm font-medium text-neutral-700">Secondary departments</label>
-            {secondaryMemberships.length === 0 ? (
-              <p className="text-sm text-neutral-500">None</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {secondaryMemberships.map((membership) => (
-                  <li key={membership.departmentId} className="flex items-center justify-between gap-2 rounded-lg bg-surface-raised px-2.5 py-1.5 text-sm">
-                    <span className="text-neutral-900">{membership.departmentName}</span>
-                    <div className="flex items-center gap-1.5">
-                      <button type="button" className="text-xs font-medium text-accent-700 hover:underline" onClick={() => setPrimaryDepartment.mutate({ staffId, departmentId: membership.departmentId })}>Make primary</button>
-                      <button type="button" className="text-xs font-medium text-danger-700 hover:underline" onClick={() => membership.roles.forEach((role) => removePerson.mutate({ assignmentId: role.assignmentId }))}>Remove</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {profile.departmentId && (
-              <div className="mt-2 flex items-center gap-2">
-                <Select value={addSecondaryId} onChange={(e) => setAddSecondaryId(e.target.value)}>
-                  <option value="">Add to another department…</option>
-                  {addableDepartments.map((department: any) => <option key={department.id} value={department.id}>{department.name}</option>)}
-                </Select>
-                <Button variant="secondary" disabled={!addSecondaryId} loading={addSecondaryDepartment.isPending} onClick={() => addSecondaryDepartment.mutate({ staffId, departmentId: addSecondaryId })}>Add</Button>
-              </div>
-            )}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-neutral-700">Secondary departments</label>
+        {secondaryMemberships.length === 0 ? (
+          <p className="text-sm text-neutral-500">None</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {secondaryMemberships.map((membership) => (
+              <li key={membership.departmentId} className="flex items-center justify-between gap-2 rounded-lg bg-surface-raised px-2.5 py-1.5 text-sm">
+                <span className="text-neutral-900">{membership.departmentName}</span>
+                <div className="flex items-center gap-1.5">
+                  <button type="button" className="text-xs font-medium text-accent-700 hover:underline" onClick={() => setPrimaryDepartment.mutate({ staffId, departmentId: membership.departmentId })}>Make primary</button>
+                  <button type="button" className="text-xs font-medium text-danger-700 hover:underline" onClick={() => membership.roles.forEach((role) => removePerson.mutate({ assignmentId: role.assignmentId }))}>Remove</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {profile.departmentId && (
+          <div className="mt-2 flex items-center gap-2">
+            <Select value={addSecondaryId} onChange={(e) => setAddSecondaryId(e.target.value)}>
+              <option value="">Add to another department…</option>
+              {addableDepartments.map((department: any) => <option key={department.id} value={department.id}>{department.name}</option>)}
+            </Select>
+            <Button variant="secondary" disabled={!addSecondaryId} loading={addSecondaryDepartment.isPending} onClick={() => addSecondaryDepartment.mutate({ staffId, departmentId: addSecondaryId })}>Add</Button>
           </div>
-        );
-      })()}
+        )}
+      </div>
 
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-sm text-neutral-700">
@@ -239,6 +262,7 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
                 onChange={(e) => setTribeMonitor.mutate({ id: staffId, isAssistantMonitor: e.target.checked })}
                 className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
               />
+              Assistant Camp Monitor
             </label>
           </>
         )}
@@ -277,9 +301,32 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
         </div>
       </div>
     </div>
+  ) : (
+    <div className="space-y-4 text-sm">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <div><span className="text-neutral-500">Venue</span><div className="font-medium text-neutral-900">{profile.assignedVenue?.name || "Unassigned"}</div></div>
+        {profile.type === "TEACHER" && <div><span className="text-neutral-500">Tribe</span><div className="font-medium text-neutral-900">{profile.assignedTribe?.name || "Unassigned"}</div></div>}
+        <div><span className="text-neutral-500">Department</span><div className="font-medium text-neutral-900">{profile.department?.name || "Unassigned"}</div></div>
+        <div><span className="text-neutral-500">Campus</span><div className="font-medium text-neutral-900">{profile.preferredCampus?.name || "Unassigned"}</div></div>
+        {(profile.isDepartmentHead || profile.isAssistantHead) && (
+          <div className="col-span-2"><span className="text-neutral-500">Leadership</span><div className="font-medium text-neutral-900">{profile.isDepartmentHead ? "Department Head" : "Assistant Department Head"}</div></div>
+        )}
+      </div>
+
+      {secondaryMemberships.length > 0 && (
+        <div className="border-t border-border-subtle pt-3">
+          <span className="text-neutral-500">Secondary Departments</span>
+          <ul className="mt-1 space-y-1">
+            {secondaryMemberships.map((m) => (
+              <li key={m.departmentId} className="font-medium text-neutral-900">{m.departmentName}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 
-  const hierarchyTab = (
+  const hierarchyTab = canManage ? (
     <div className="space-y-4">
       <div>
         <label className="mb-1 block text-sm font-medium text-neutral-700">Reports To</label>
@@ -322,9 +369,28 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
         )}
       </div>
     </div>
+  ) : (
+    <div className="space-y-4 text-sm">
+      <div>
+        <span className="text-neutral-500">Reports To</span>
+        <div className="font-medium text-neutral-900">{reportsToDisplay}</div>
+      </div>
+      <div>
+        <span className="text-neutral-500">Direct Reports</span>
+        {profile.directReports && profile.directReports.length > 0 ? (
+          <ul className="mt-1 space-y-1 font-medium text-neutral-900">
+            {profile.directReports.map((r: any) => (
+              <li key={r.id}>{r.firstName} {r.lastName}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-neutral-500">No direct reports.</p>
+        )}
+      </div>
+    </div>
   );
 
-  const accommodationTab = (
+  const accommodationTab = canManage ? (
     <div className="space-y-4">
       {!profile.assignedVenueId ? (
         <p className="text-sm text-neutral-500">Assign a venue first to pick a hostel.</p>
@@ -356,6 +422,12 @@ export function StaffDetailDrawer({ staffId, organizationId, campId, onClose }: 
           )}
         </>
       )}
+    </div>
+  ) : (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+      <div><span className="text-neutral-500">Hostel</span><div className="font-medium text-neutral-900">{profile.assignedHostel?.name || "Unassigned"}</div></div>
+      <div><span className="text-neutral-500">Room</span><div className="font-medium text-neutral-900">{profile.assignedRoom?.name || "Unassigned"}</div></div>
+      <div><span className="text-neutral-500">Bed</span><div className="font-medium text-neutral-900">{profile.assignedBed?.label || "Unassigned"}</div></div>
     </div>
   );
 
