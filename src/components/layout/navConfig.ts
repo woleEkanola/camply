@@ -135,6 +135,12 @@ const ADMIN_GROUPS: NavGroup[] = [
         icon: HomeIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
+      {
+        name: "Accommodation Roster",
+        href: "/admin/accommodation/roster",
+        icon: HomeIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
     ],
   },
   {
@@ -206,6 +212,12 @@ const ADMIN_GROUPS: NavGroup[] = [
     name: "Settings",
     collapsible: true,
     items: [
+      {
+        name: "Users",
+        href: "/admin/users",
+        icon: UsersIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
+      },
       {
         name: "Access Control",
         href: "/admin/access-control",

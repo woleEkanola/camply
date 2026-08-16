@@ -978,7 +978,7 @@ export const userRouter = createTRPCRouter({
           createdAt: true,
           organizationId: true,
           campers: {
-            select: { id: true }
+            select: { id: true, name: true }
           }
         },
         orderBy: { createdAt: 'desc' }

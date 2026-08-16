@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   DndContext,
   DragOverlay,
@@ -20,6 +21,7 @@ import {
   Bars3Icon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ExclamationTriangleIcon,
   MagnifyingGlassIcon,
   MinusIcon,
   PlusIcon,
@@ -32,6 +34,8 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input, Select } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
+
+const ORG_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
 type StaffOccupant = {
   id: string;
@@ -112,6 +116,7 @@ function PositionCard({
   selected,
   invalidDrop,
   readOnly = false,
+  isDuplicate = false,
   onSelect,
 }: {
   node: OrganogramNode;
@@ -119,10 +124,14 @@ function PositionCard({
   selected?: boolean;
   invalidDrop?: boolean;
   readOnly?: boolean;
+  isDuplicate?: boolean;
   onSelect: (node: OrganogramNode) => void;
 }) {
-  const protectedLeadership = Boolean(node.leadershipRole);
-  const draggable = useDraggable({ id: node.id, data: { node }, disabled: readOnly || protectedLeadership });
+  // Only the Commandant is pinned at the top of the hierarchy — Assistant
+  // Commandants are ordinary draggable/droppable nodes like any other role,
+  // just still subject to the leadership-parent rule enforced server-side.
+  const pinnedRoot = node.leadershipRole === "COMMANDANT";
+  const draggable = useDraggable({ id: node.id, data: { node }, disabled: readOnly || pinnedRoot });
   const droppable = useDroppable({ id: node.id, data: { node }, disabled: readOnly || invalidDrop });
   const setRef = (element: HTMLElement | null) => {
     draggable.setNodeRef(element);
@@ -147,6 +156,15 @@ function PositionCard({
         node.leadershipRole === "ASSISTANT_COMMANDANT" && "border-accent-300",
       )}
     >
+      {isDuplicate && (
+        <span
+          data-testid={`organogram-duplicate-badge-${node.id}`}
+          title="Possible duplicate role"
+          className="absolute -right-1.5 -top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-warning-500 text-white shadow"
+        >
+          <ExclamationTriangleIcon className="h-3 w-3" />
+        </span>
+      )}
       <div className="flex items-start gap-2">
         <button type="button" onClick={() => onSelect(node)} className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
@@ -165,7 +183,7 @@ function PositionCard({
             </div>
           )}
         </button>
-        {!readOnly && !protectedLeadership && <DragHandle listeners={draggable.listeners} attributes={draggable.attributes} />}
+        {!readOnly && !pinnedRoot && <DragHandle listeners={draggable.listeners} attributes={draggable.attributes} />}
       </div>
     </article>
   );
@@ -177,6 +195,7 @@ function ChartBranch({
   invalidDropIds,
   selectedId,
   readOnly,
+  duplicateIds,
   onSelect,
 }: {
   node: OrganogramNode;
@@ -184,6 +203,7 @@ function ChartBranch({
   invalidDropIds: Set<string>;
   selectedId: string | null;
   readOnly: boolean;
+  duplicateIds: Set<string>;
   onSelect: (node: OrganogramNode) => void;
 }) {
   return (
@@ -193,6 +213,7 @@ function ChartBranch({
         selected={node.id === selectedId}
         invalidDrop={invalidDropIds.has(node.id)}
         readOnly={readOnly}
+        isDuplicate={duplicateIds.has(node.id)}
         onSelect={onSelect}
       />
       {node.children.length > 0 && (
@@ -201,7 +222,7 @@ function ChartBranch({
           <div className="relative flex items-start gap-8 px-3 before:absolute before:left-[calc(0.75rem+7rem)] before:right-[calc(0.75rem+7rem)] before:top-0 before:border-t-2 before:border-border-default">
             {node.children.map((child) => (
               <div key={child.id} className="relative pt-6 before:absolute before:left-1/2 before:top-0 before:h-6 before:border-l-2 before:border-border-default">
-                <ChartBranch node={child} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedId} readOnly={readOnly} onSelect={onSelect} />
+                <ChartBranch node={child} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedId} readOnly={readOnly} duplicateIds={duplicateIds} onSelect={onSelect} />
               </div>
             ))}
           </div>
@@ -219,6 +240,7 @@ function NestedBranch({
   invalidDropIds,
   selectedId,
   readOnly,
+  duplicateIds,
   onToggle,
   onSelect,
 }: {
@@ -229,6 +251,7 @@ function NestedBranch({
   invalidDropIds: Set<string>;
   selectedId: string | null;
   readOnly: boolean;
+  duplicateIds: Set<string>;
   onToggle: (id: string) => void;
   onSelect: (node: OrganogramNode) => void;
 }) {
@@ -252,6 +275,7 @@ function NestedBranch({
             selected={node.id === selectedId}
             invalidDrop={invalidDropIds.has(node.id)}
             readOnly={readOnly}
+            isDuplicate={duplicateIds.has(node.id)}
             onSelect={onSelect}
           />
         </div>
@@ -268,6 +292,7 @@ function NestedBranch({
               invalidDropIds={invalidDropIds}
               selectedId={selectedId}
               readOnly={readOnly}
+              duplicateIds={duplicateIds}
               onToggle={onToggle}
               onSelect={onSelect}
             />
@@ -280,14 +305,25 @@ function NestedBranch({
 
 export function CampOrganogram({ organizationId, campId, readOnly = false }: { organizationId: string; campId: string; readOnly?: boolean }) {
   const utils = api.useUtils();
+  const { data: session } = useSession();
+  // Filling/vacating a Camp Command seat is OWNER/ADMIN-only even from the
+  // organogram — the server (campCommand.appointToPosition /
+  // createAssistantRole / assertCampCommandAppointer) is the real gate; this
+  // just avoids rendering a button that would always 403 for anyone else,
+  // including a sitting Commandant.
+  const canAppointLeadership = !readOnly && ORG_ADMIN_ROLES.includes((session?.user as any)?.role ?? "");
+
   const { data: hierarchy = [], isLoading } = api.position.getHierarchy.useQuery({ campId });
   const { data: reportingOptions } = api.staff.listReportsToOptions.useQuery(
     { organizationId, campId },
     { enabled: !readOnly }
   );
+  const { data: duplicateGroups = [] } = api.position.duplicateGroups.useQuery({ campId }, { enabled: !readOnly });
+  const { data: commandOverview } = api.campCommand.overview.useQuery({ campId }, { enabled: canAppointLeadership });
   const nodes = hierarchy as OrganogramNode[];
   const flat = useMemo(() => flattenTree(nodes), [nodes]);
   const byId = useMemo(() => new Map(flat.map((node) => [node.id, node])), [flat]);
+  const duplicateIds = useMemo(() => new Set(duplicateGroups.flatMap((group: any) => group.rows.map((row: any) => row.id))), [duplicateGroups]);
 
   const [view, setView] = useState<ViewMode>("chart");
   const [query, setQuery] = useState("");
@@ -301,6 +337,13 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [createParent, setCreateParent] = useState<OrganogramNode | "root" | null>(null);
   const [positionName, setPositionName] = useState("");
+  const [renameTarget, setRenameTarget] = useState<OrganogramNode | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<OrganogramNode | null>(null);
+  const [mergeGroupKey, setMergeGroupKey] = useState<string | null>(null);
+  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; undo?: MoveRequest } | null>(null);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(1);
@@ -335,6 +378,9 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
   const invalidate = () => {
     void utils.position.getHierarchy.invalidate({ campId });
     void utils.orgStructure.getCampDirectory.invalidate({ organizationId, campId });
+    void utils.position.duplicateGroups.invalidate({ campId });
+    void utils.campCommand.overview.invalidate({ campId });
+    void utils.department.deletionPreview.invalidate();
   };
 
   const movePosition = api.position.movePosition.useMutation({ onSuccess: invalidate });
@@ -346,7 +392,16 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
       invalidate();
     },
   });
+  const appointToPosition = api.campCommand.appointToPosition.useMutation({
+    onSuccess: () => {
+      setAssignOpen(false);
+      setAssignTargetId(null);
+      setSelectedStaffId("");
+      invalidate();
+    },
+  });
   const unassignPosition = api.position.unassignPosition.useMutation({ onSuccess: invalidate });
+  const removeCommandAssignment = api.campCommand.remove.useMutation({ onSuccess: invalidate });
   const createPosition = api.position.create.useMutation({
     onSuccess: () => {
       setCreateParent(null);
@@ -354,6 +409,38 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
       invalidate();
     },
   });
+  const createAssistantRole = api.campCommand.createAssistantRole.useMutation({
+    onSuccess: () => {
+      setCreateParent(null);
+      setPositionName("");
+      invalidate();
+    },
+  });
+  const updatePosition = api.position.update.useMutation({
+    onSuccess: () => {
+      setRenameTarget(null);
+      setRenameValue("");
+      invalidate();
+    },
+  });
+  const deletePosition = api.position.delete.useMutation({
+    onSuccess: (result) => {
+      setDeleteTarget(null);
+      setSelectedNode(null);
+      setFeedback({ message: result.promotedChildCount > 0 ? `Role deleted — ${result.promotedChildCount} reporting role${result.promotedChildCount === 1 ? "" : "s"} moved up a level.` : "Role deleted." });
+      invalidate();
+    },
+  });
+  const mergePosition = api.position.merge.useMutation({
+    onSuccess: () => {
+      setMergeGroupKey(null);
+      setMergeSourceId("");
+      setMergeTargetId("");
+      invalidate();
+    },
+  });
+  const archiveDepartment = api.department.archive.useMutation({ onSuccess: () => { setSelectedNode(null); invalidate(); } });
+  const deleteDepartment = api.department.delete.useMutation({ onSuccess: () => { setSelectedNode(null); invalidate(); } });
 
   const visibleRoots = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -374,9 +461,17 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
   }
 
   function requestMove(id: string, parentPositionId: string | null) {
-    if (byId.get(id)?.leadershipRole) {
-      setFeedback({ message: "Camp Command positions stay fixed at the top of the hierarchy." });
+    const node = byId.get(id);
+    if (node?.leadershipRole === "COMMANDANT") {
+      setFeedback({ message: "The Camp Commandant is the top of the hierarchy and cannot be moved." });
       return;
+    }
+    if (node?.leadershipRole === "ASSISTANT_COMMANDANT") {
+      const target = parentPositionId ? byId.get(parentPositionId) : null;
+      if (!target?.leadershipRole) {
+        setFeedback({ message: "An Assistant Commandant can only report to the Commandant or another Assistant Commandant." });
+        return;
+      }
     }
     if (isInvalidParent(id, parentPositionId)) {
       setFeedback({ message: "A position cannot report to itself or one of its descendants." });
@@ -407,6 +502,10 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
     const overId = event.over ? String(event.over.id) : null;
     setActiveDragId(null);
     if (!event.over) return;
+    if (overId === "organogram-root-drop" && byId.get(id)?.leadershipRole === "ASSISTANT_COMMANDANT") {
+      setFeedback({ message: "An Assistant Commandant can only report to the Commandant or another Assistant Commandant." });
+      return;
+    }
     requestMove(id, overId === "organogram-root-drop" ? null : overId);
   }
 
@@ -529,7 +628,13 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
   }, [activeDraggedNode]);
   const selectedCurrent = selectedNode ? byId.get(selectedNode.id) ?? selectedNode : null;
   const assignTarget = assignTargetId ? byId.get(assignTargetId) ?? null : null;
+  const assignTargetIsLeadership = Boolean(assignTarget?.leadershipRole);
   const nestedExpanded = query.trim() ? new Set(flat.map((node) => node.id)) : expanded ?? new Set<string>();
+  const mergeGroup = mergeGroupKey ? duplicateGroups.find((g: any) => g.key === mergeGroupKey) ?? null : null;
+  const { data: departmentPreview } = api.department.deletionPreview.useQuery(
+    { id: selectedCurrent?.department?.id ?? "" },
+    { enabled: !readOnly && !!selectedCurrent?.department?.id }
+  );
   if (isLoading) return <div className="rounded-2xl border border-border-default bg-surface p-10 text-center text-sm text-txt-muted">Loading organogram…</div>;
 
   return (
@@ -582,6 +687,13 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
           </div>
         )}
 
+        {!readOnly && duplicateGroups.length > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900" data-testid="organogram-duplicates-banner">
+            <span className="font-semibold">{duplicateGroups.length} possible duplicate role{duplicateGroups.length === 1 ? "" : "s"} found.</span>
+            <button type="button" className="font-semibold underline" onClick={() => setShowDuplicates(true)}>Review</button>
+          </div>
+        )}
+
         {nodes.length > 1 && !query.trim() && (
           <div className="rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900">
             <span className="font-semibold">{nodes.length} top-level branches.</span>{" "}
@@ -625,7 +737,7 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
                   <div ref={chartContentRef} className="min-w-max origin-top-left" style={{ zoom }}>
                     {!readOnly && <RootDropZone active={!!activeDragId} />}
                     <div className="flex min-w-max items-start justify-center gap-14">
-                      {visibleRoots.map((root) => <ChartBranch key={root.id} node={root} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} onSelect={setSelectedNode} />)}
+                      {visibleRoots.map((root) => <ChartBranch key={root.id} node={root} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} duplicateIds={duplicateIds} onSelect={setSelectedNode} />)}
                     </div>
                   </div>
                 </div>
@@ -638,7 +750,7 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
                 </div>
                 {!readOnly && <RootDropZone active={!!activeDragId} />}
                 {visibleRoots.map((root) => (
-                  <NestedBranch key={root.id} node={root} depth={0} expanded={nestedExpanded} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} onToggle={(id) => setExpanded((current) => { const next = new Set(current ?? []); next.has(id) ? next.delete(id) : next.add(id); return next; })} onSelect={setSelectedNode} />
+                  <NestedBranch key={root.id} node={root} depth={0} expanded={nestedExpanded} activeDragId={activeDragId} invalidDropIds={invalidDropIds} selectedId={selectedCurrent?.id ?? null} readOnly={readOnly} duplicateIds={duplicateIds} onToggle={(id) => setExpanded((current) => { const next = new Set(current ?? []); next.has(id) ? next.delete(id) : next.add(id); return next; })} onSelect={setSelectedNode} />
                 ))}
               </div>
             )}
@@ -658,14 +770,97 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
                 <div><div className="font-semibold text-txt-primary">{occupantName(selectedCurrent)}</div><div className="text-xs text-txt-secondary">{selectedCurrent.department?.name ?? "Camp leadership"}</div></div>
               </div>
             </div>
-            {!readOnly && !selectedCurrent.leadershipRole && <div className="grid gap-2 sm:grid-cols-2">
-              <Button variant="secondary" onClick={() => { setMoveParentId(selectedCurrent.parentPositionId ?? ""); setMoveRequest({ id: selectedCurrent.id, parentPositionId: selectedCurrent.parentPositionId }); setSelectedNode(null); }}>Move under…</Button>
-              <Button variant="secondary" icon={<UserPlusIcon className="h-4 w-4" />} onClick={() => { setAssignTargetId(selectedCurrent.id); setAssignOpen(true); setSelectedNode(null); }}>{selectedCurrent.assignments.length ? "Replace holder" : "Assign person"}</Button>
-              <Button variant="secondary" onClick={() => { setCreateParent(selectedCurrent); setPositionName(""); setSelectedNode(null); }}>Add child role</Button>
-              {selectedCurrent.assignments[0] && <Button variant="danger" loading={unassignPosition.isPending} onClick={() => unassignPosition.mutate({ positionId: selectedCurrent.id, staffId: selectedCurrent.assignments[0].staff.id })}>Mark vacant</Button>}
-            </div>}
-            {!readOnly && selectedCurrent.leadershipRole && (
-              <p className="rounded-lg bg-surface-raised px-3 py-2 text-xs text-txt-secondary">Appointments and access for this protected role are managed in Settings → Camp Command.</p>
+
+            {/* Ordinary role — unchanged behaviour plus Delete role */}
+            {!readOnly && !selectedCurrent.leadershipRole && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button variant="secondary" onClick={() => { setMoveParentId(selectedCurrent.parentPositionId ?? ""); setMoveRequest({ id: selectedCurrent.id, parentPositionId: selectedCurrent.parentPositionId }); setSelectedNode(null); }}>Move under…</Button>
+                <Button variant="secondary" icon={<UserPlusIcon className="h-4 w-4" />} onClick={() => { setAssignTargetId(selectedCurrent.id); setAssignOpen(true); setSelectedNode(null); }}>{selectedCurrent.assignments.length ? "Replace holder" : "Assign person"}</Button>
+                <Button variant="secondary" onClick={() => { setCreateParent(selectedCurrent); setPositionName(""); setSelectedNode(null); }}>Add child role</Button>
+                <Button variant="secondary" onClick={() => { setRenameTarget(selectedCurrent); setRenameValue(selectedCurrent.name); setSelectedNode(null); }}>Rename</Button>
+                {selectedCurrent.assignments[0] && <Button variant="danger" loading={unassignPosition.isPending} onClick={() => unassignPosition.mutate({ positionId: selectedCurrent.id, staffId: selectedCurrent.assignments[0].staff.id })}>Mark vacant</Button>}
+                <Button variant="danger" data-testid="organogram-delete-role" onClick={() => { setDeleteTarget(selectedCurrent); setSelectedNode(null); }}>Delete role</Button>
+              </div>
+            )}
+
+            {/* Assistant Commandant — fluid: rename, move under any leadership row, appoint, delete */}
+            {!readOnly && selectedCurrent.leadershipRole === "ASSISTANT_COMMANDANT" && (
+              <div className="space-y-2">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button variant="secondary" onClick={() => { setMoveParentId(selectedCurrent.parentPositionId ?? ""); setMoveRequest({ id: selectedCurrent.id, parentPositionId: selectedCurrent.parentPositionId }); setSelectedNode(null); }}>Move under…</Button>
+                  <Button variant="secondary" onClick={() => { setRenameTarget(selectedCurrent); setRenameValue(selectedCurrent.name); setSelectedNode(null); }}>Rename</Button>
+                  {canAppointLeadership && (
+                    <Button variant="secondary" icon={<UserPlusIcon className="h-4 w-4" />} onClick={() => { setAssignTargetId(selectedCurrent.id); setAssignOpen(true); setSelectedNode(null); }}>{selectedCurrent.assignments.length ? "Replace holder" : "Appoint"}</Button>
+                  )}
+                  {canAppointLeadership && selectedCurrent.assignments[0] && (
+                    <Button variant="danger" loading={removeCommandAssignment.isPending} onClick={() => removeCommandAssignment.mutate({ assignmentId: selectedCurrent.assignments[0].id })}>Mark vacant</Button>
+                  )}
+                  {canAppointLeadership && (
+                    <Button variant="secondary" onClick={() => { setCreateParent(selectedCurrent); setPositionName(""); setSelectedNode(null); }}>Add assistant role</Button>
+                  )}
+                  {canAppointLeadership && (
+                    <Button variant="danger" data-testid="organogram-delete-role" onClick={() => { setDeleteTarget(selectedCurrent); setSelectedNode(null); }}>Delete role</Button>
+                  )}
+                </div>
+                {!canAppointLeadership && <p className="rounded-lg bg-surface-raised px-3 py-2 text-xs text-txt-secondary">Only an Owner or Admin can appoint, replace, or remove a Camp Command role.</p>}
+              </div>
+            )}
+
+            {/* Commandant — fixed at the top; appoint/replace or vacate only */}
+            {!readOnly && selectedCurrent.leadershipRole === "COMMANDANT" && (
+              <div className="space-y-2">
+                <p className="rounded-lg bg-surface-raised px-3 py-2 text-xs text-txt-secondary">The Camp Commandant is the fixed top of the hierarchy — it can&apos;t be renamed, moved, or deleted.</p>
+                {canAppointLeadership ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button variant="secondary" icon={<UserPlusIcon className="h-4 w-4" />} onClick={() => { setAssignTargetId(selectedCurrent.id); setAssignOpen(true); setSelectedNode(null); }}>{selectedCurrent.assignments.length ? "Replace holder" : "Appoint"}</Button>
+                    {selectedCurrent.assignments[0] && (
+                      <Button variant="danger" loading={removeCommandAssignment.isPending} onClick={() => removeCommandAssignment.mutate({ assignmentId: selectedCurrent.assignments[0].id })}>Mark vacant</Button>
+                    )}
+                    <Button variant="secondary" onClick={() => { setCreateParent(selectedCurrent); setPositionName(""); setSelectedNode(null); }}>Add assistant role</Button>
+                  </div>
+                ) : (
+                  <p className="rounded-lg bg-surface-raised px-3 py-2 text-xs text-txt-secondary">Only an Owner or Admin can appoint, replace, or remove the Commandant.</p>
+                )}
+              </div>
+            )}
+
+            {readOnly && selectedCurrent.leadershipRole && (
+              <p className="rounded-lg bg-surface-raised px-3 py-2 text-xs text-txt-secondary">Appointments for this protected role are managed from the organogram by an Owner or Admin.</p>
+            )}
+
+            {/* Department actions — same detail dialog, when this role sits in a department */}
+            {!readOnly && selectedCurrent.department && departmentPreview && (
+              <div className="space-y-2 border-t border-border-subtle pt-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-txt-muted">Department: {selectedCurrent.department.name}</div>
+                {departmentPreview.isSystem ? (
+                  <p className="text-xs text-txt-secondary">The Camp Command department is managed automatically and cannot be archived or deleted.</p>
+                ) : (
+                  <>
+                    {departmentPreview.blocked && (
+                      <p className="text-xs text-warning-800">
+                        Move or remove {departmentPreview.staffCount} active people, {departmentPreview.assignmentCount} current role assignments, and {departmentPreview.childCount} child departments before deleting it.
+                      </p>
+                    )}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Button
+                        variant="secondary"
+                        loading={archiveDepartment.isPending}
+                        onClick={() => selectedCurrent.department && archiveDepartment.mutate({ id: selectedCurrent.department.id })}
+                      >
+                        Archive department
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={departmentPreview.blocked}
+                        loading={deleteDepartment.isPending}
+                        onClick={() => selectedCurrent.department && deleteDepartment.mutate({ id: selectedCurrent.department.id })}
+                      >
+                        Delete department
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -676,8 +871,11 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
           <div className="space-y-4">
             <p className="text-sm text-txt-secondary">Choose the position that <strong>{byId.get(moveRequest.id)?.name}</strong> should report to.</p>
             <Select id="organogram-move-parent" label="Reports to" value={moveParentId} onChange={(event) => setMoveParentId(event.target.value)}>
-              <option value="">None — top level</option>
-              {flat.filter((candidate) => !isInvalidParent(moveRequest.id, candidate.id)).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}{candidate.department ? ` — ${candidate.department.name}` : ""}</option>)}
+              {byId.get(moveRequest.id)?.leadershipRole !== "ASSISTANT_COMMANDANT" && <option value="">None — top level</option>}
+              {flat
+                .filter((candidate) => !isInvalidParent(moveRequest.id, candidate.id))
+                .filter((candidate) => byId.get(moveRequest.id)?.leadershipRole !== "ASSISTANT_COMMANDANT" || Boolean(candidate.leadershipRole))
+                .map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}{candidate.department ? ` — ${candidate.department.name}` : ""}</option>)}
             </Select>
             <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setMoveRequest(null)}>Cancel</Button><Button loading={movePosition.isPending} onClick={() => confirmMove({ id: moveRequest.id, parentPositionId: moveParentId || null })}>Confirm move</Button></div>
           </div>
@@ -686,19 +884,127 @@ export function CampOrganogram({ organizationId, campId, readOnly = false }: { o
 
       <Dialog open={assignOpen} onClose={() => { setAssignOpen(false); setAssignTargetId(null); }} title={`Assign — ${assignTarget?.name ?? "position"}`} size="sm">
         <div className="space-y-4">
-          <Select id="organogram-position-holder" label="Teacher or volunteer" value={selectedStaffId} onChange={(event) => setSelectedStaffId(event.target.value)}>
+          <Select id="organogram-position-holder" label={assignTargetIsLeadership ? "Teacher" : "Teacher or volunteer"} value={selectedStaffId} onChange={(event) => setSelectedStaffId(event.target.value)}>
             <option value="">Select a person…</option>
-            {reportingOptions?.staff.map((staff) => <option key={staff.id} value={staff.id}>{staff.firstName} {staff.lastName} ({staff.type})</option>)}
+            {assignTargetIsLeadership
+              ? commandOverview?.teachers.map((teacher: any) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)
+              : reportingOptions?.staff.map((staff) => <option key={staff.id} value={staff.id}>{staff.firstName} {staff.lastName} ({staff.type})</option>)}
           </Select>
-          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setAssignOpen(false)}>Cancel</Button><Button disabled={!selectedStaffId || !assignTarget} loading={assignPosition.isPending} onClick={() => assignTarget && assignPosition.mutate({ positionId: assignTarget.id, staffId: selectedStaffId })}>Assign</Button></div>
+          {assignTargetIsLeadership && <p className="text-xs text-txt-secondary">Only approved teachers can hold a Camp Command role.</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setAssignOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!selectedStaffId || !assignTarget}
+              loading={assignPosition.isPending || appointToPosition.isPending}
+              onClick={() => {
+                if (!assignTarget) return;
+                if (assignTargetIsLeadership) appointToPosition.mutate({ positionId: assignTarget.id, staffId: selectedStaffId });
+                else assignPosition.mutate({ positionId: assignTarget.id, staffId: selectedStaffId });
+              }}
+            >
+              Assign
+            </Button>
+          </div>
         </div>
       </Dialog>
 
       <Dialog open={!!createParent} onClose={() => setCreateParent(null)} title={createParent === "root" ? "New top-level role" : `New role under ${createParent?.name ?? ""}`} size="sm">
         <div className="space-y-4">
           <Input id="organogram-position-name" label="Position name" value={positionName} onChange={(event) => setPositionName(event.target.value)} placeholder="e.g. Deputy Camp Commandant" />
-          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setCreateParent(null)}>Cancel</Button><Button disabled={!positionName.trim()} loading={createPosition.isPending} onClick={() => createPosition.mutate({ campId, name: positionName.trim(), departmentId: createParent && createParent !== "root" ? createParent.departmentId : null, parentPositionId: createParent && createParent !== "root" ? createParent.id : null })}>Create role</Button></div>
+          {createParent !== "root" && createParent?.leadershipRole && <p className="text-xs text-txt-secondary">This creates a distinct, individually-nameable Assistant Commandant role.</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setCreateParent(null)}>Cancel</Button>
+            <Button
+              disabled={!positionName.trim()}
+              loading={createPosition.isPending || createAssistantRole.isPending}
+              onClick={() => {
+                if (createParent !== "root" && createParent?.leadershipRole) {
+                  createAssistantRole.mutate({ campId, name: positionName.trim(), parentPositionId: createParent.id });
+                } else {
+                  createPosition.mutate({ campId, name: positionName.trim(), departmentId: createParent && createParent !== "root" ? createParent.departmentId : null, parentPositionId: createParent && createParent !== "root" ? createParent.id : null });
+                }
+              }}
+            >
+              Create role
+            </Button>
+          </div>
         </div>
+      </Dialog>
+
+      <Dialog open={!!renameTarget} onClose={() => { setRenameTarget(null); setRenameValue(""); }} title={`Rename ${renameTarget?.name ?? "role"}`} size="sm">
+        <div className="space-y-4">
+          <Input id="organogram-rename-value" label="Role name" value={renameValue} onChange={(event) => setRenameValue(event.target.value)} />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setRenameTarget(null)}>Cancel</Button>
+            <Button disabled={!renameValue.trim()} loading={updatePosition.isPending} onClick={() => renameTarget && updatePosition.mutate({ id: renameTarget.id, name: renameValue.trim() })}>Save</Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title={`Delete ${deleteTarget?.name ?? "role"}?`} size="sm">
+        {deleteTarget && (
+          <div className="space-y-4">
+            <p className="text-sm text-txt-secondary">
+              {deleteTarget.children.length > 0
+                ? `${deleteTarget.children.length} reporting role${deleteTarget.children.length === 1 ? "" : "s"} will move up to report to ${byId.get(deleteTarget.parentPositionId ?? "")?.name ?? "the top level"}.`
+                : "This role has no reporting roles beneath it."}
+              {deleteTarget.assignments.length > 0 && " Its current holder will be marked vacant."}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button variant="danger" data-testid="organogram-delete-confirm" loading={deletePosition.isPending} onClick={() => deletePosition.mutate({ id: deleteTarget.id })}>Delete role</Button>
+            </div>
+          </div>
+        )}
+      </Dialog>
+
+      <Dialog open={showDuplicates} onClose={() => setShowDuplicates(false)} title="Possible duplicate roles" size="md">
+        <div className="space-y-3">
+          {duplicateGroups.length === 0 ? (
+            <p className="text-sm text-txt-secondary">No duplicates found.</p>
+          ) : (
+            duplicateGroups.map((group: any) => (
+              <div key={group.key} className="rounded-xl border border-border-default p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-semibold text-txt-primary">{group.name}</span>
+                  <span className="text-xs text-txt-muted">{group.rows.length} rows</span>
+                </div>
+                <ul className="mb-2 space-y-1 text-xs text-txt-secondary">
+                  {group.rows.map((row: any) => (
+                    <li key={row.id} className="flex items-center justify-between">
+                      <span>{row.name}{row.leadershipRole ? ` (${row.leadershipRole})` : ""} — {row.occupantCount} occupant{row.occupantCount === 1 ? "" : "s"}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => { setMergeGroupKey(group.key); setMergeSourceId(group.rows[0].id); setMergeTargetId(group.rows[1]?.id ?? ""); setShowDuplicates(false); }}
+                >
+                  Merge into…
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+      </Dialog>
+
+      <Dialog open={!!mergeGroup} onClose={() => setMergeGroupKey(null)} title="Merge roles" size="sm" testId="organogram-merge-dialog">
+        {mergeGroup && (
+          <div className="space-y-4">
+            <Select id="organogram-merge-source" label="Merge this role" value={mergeSourceId} onChange={(event) => setMergeSourceId(event.target.value)}>
+              {mergeGroup.rows.map((row: any) => <option key={row.id} value={row.id}>{row.name} ({row.occupantCount} occupant{row.occupantCount === 1 ? "" : "s"})</option>)}
+            </Select>
+            <Select id="organogram-merge-target" label="Into this role" value={mergeTargetId} onChange={(event) => setMergeTargetId(event.target.value)}>
+              <option value="">Select target…</option>
+              {mergeGroup.rows.filter((row: any) => row.id !== mergeSourceId).map((row: any) => <option key={row.id} value={row.id}>{row.name} ({row.occupantCount} occupant{row.occupantCount === 1 ? "" : "s"})</option>)}
+            </Select>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setMergeGroupKey(null)}>Cancel</Button>
+              <Button disabled={!mergeTargetId || mergeTargetId === mergeSourceId} loading={mergePosition.isPending} onClick={() => mergePosition.mutate({ sourceId: mergeSourceId, targetId: mergeTargetId })}>Merge</Button>
+            </div>
+          </div>
+        )}
       </Dialog>
     </DndContext>
   );

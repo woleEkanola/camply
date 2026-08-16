@@ -19,6 +19,10 @@ export const EXPORT_KINDS = [
   "TEMPLATE",
   "LEADERBOARD_SCORES",
   "PROGRAM_SCHEDULE",
+  "ROOMING_LIST",
+  "ROOM_DOOR_SHEETS",
+  "STAFF_ROOMING_LIST",
+  "STAFF_DUPLICATES",
 ] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];
 

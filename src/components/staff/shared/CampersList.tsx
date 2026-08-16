@@ -41,7 +41,12 @@ export type StaffCamperItem = {
     status: string;
     registrationNumber?: string | null;
     tribe: { id: string; name: string } | null;
-    room: { id: string; name: string } | null;
+    room: {
+      id: string;
+      name: string;
+      floor?: { id: string; name: string } | null;
+      hostel?: { id: string; name: string; gender: string | null } | null;
+    } | null;
     bed: { id: string; label: string } | null;
     campus: { id: string; name: string } | null;
   }>;
@@ -201,18 +206,8 @@ export function CampersList({
         },
       },
       {
-        header: "Tribe / Room",
-        accessor: (item) => {
-          const reg = item.registrations[0];
-          return (
-            <div className="text-sm text-txt-secondary">
-              {reg?.tribe ? <div>Tribe: {reg.tribe.name}</div> : null}
-              {reg?.room ? <div>Room: {reg.room.name}</div> : null}
-              {reg?.bed ? <div>Bed: {reg.bed.label}</div> : null}
-              {!reg?.tribe && !reg?.room && !reg?.bed && <span>—</span>}
-            </div>
-          );
-        },
+        header: "Tribe",
+        accessor: (item) => item.registrations[0]?.tribe?.name ?? "—",
         filter: tribesData?.length
           ? {
               value: tribeFilter,
@@ -221,6 +216,19 @@ export function CampersList({
               placeholder: "All Tribes",
             }
           : undefined,
+      },
+      {
+        header: "Room / Bed",
+        accessor: (item) => {
+          const reg = item.registrations[0];
+          if (!reg?.room && !reg?.bed) return <span className="text-txt-secondary">—</span>;
+          return (
+            <div className="text-sm text-txt-secondary">
+              {reg?.room?.hostel && <div className="text-xs text-txt-muted">{reg.room.hostel.name}{reg.room.floor ? ` · ${reg.room.floor.name}` : ""}</div>}
+              {reg?.room ? <div>{reg.room.name}{reg.bed ? ` / ${reg.bed.label}` : " (room only)"}</div> : null}
+            </div>
+          );
+        },
       },
       {
         header: "Gender",

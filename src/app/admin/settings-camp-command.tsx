@@ -49,6 +49,7 @@ export default function CampCommandSettings({ campId }: { campId: string }) {
   const [editMode, setEditMode] = useState<Mode>("INHERIT");
   const [editPermissions, setEditPermissions] = useState<CampCommandPermission[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [repairReport, setRepairReport] = useState<{ adopted: any[]; splits: number; ambiguous: any[] } | null>(null);
 
   useEffect(() => {
     if (!data?.policy) return;
@@ -63,7 +64,19 @@ export default function CampCommandSettings({ campId }: { campId: string }) {
     await utils.position.getHierarchy.invalidate({ campId });
     await utils.orgStructure.getCampDirectory.invalidate();
   };
-  const ensure = api.campCommand.ensureStructure.useMutation({ onSuccess: invalidate });
+  const ensure = api.campCommand.ensureStructure.useMutation({
+    onSuccess: async (result) => {
+      // Only surface the report dialog when there's actually something to
+      // report — the very first "Set up Camp Command" click (empty-state
+      // button, also wired to this mutation) has nothing adopted/split/
+      // ambiguous and shouldn't pop a "nothing to repair" modal in front of
+      // the admin mid-setup.
+      if (result.adopted.length > 0 || result.splits > 0 || result.ambiguous.length > 0) {
+        setRepairReport({ adopted: result.adopted, splits: result.splits, ambiguous: result.ambiguous });
+      }
+      await invalidate();
+    },
+  });
   const savePolicy = api.campCommand.updatePolicy.useMutation({
     onSuccess: async () => { setMessage("Camp Command access settings saved."); await invalidate(); },
   });
@@ -106,9 +119,14 @@ export default function CampCommandSettings({ campId }: { campId: string }) {
 
   return (
     <div className="space-y-7" data-testid="camp-command-settings">
-      <div>
-        <h3 className="text-lg font-bold text-txt-primary">Camp Command</h3>
-        <p className="text-sm text-txt-secondary">Appoint approved teachers and control their camp-level access. Owner and administrator security controls are never delegated.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-txt-primary">Camp Command</h3>
+          <p className="text-sm text-txt-secondary">Appoint approved teachers and control their camp-level access. Owner and administrator security controls are never delegated.</p>
+        </div>
+        <Button variant="secondary" size="sm" loading={ensure.isPending} onClick={() => ensure.mutate({ campId })}>
+          Repair Camp Command structure
+        </Button>
       </div>
 
       {message && <p className="rounded-lg status-success px-3 py-2 text-sm">{message}</p>}
@@ -204,6 +222,29 @@ export default function CampCommandSettings({ campId }: { campId: string }) {
             <Button loading={updateAccess.isPending} onClick={() => editingAssignment && updateAccess.mutate({ assignmentId: editingAssignment.id, accessMode: editMode, permissions: editPermissions })}>Save access</Button>
           </div>
         </div>
+      </Dialog>
+
+      <Dialog open={!!repairReport} onClose={() => setRepairReport(null)} title="Camp Command structure repair" size="sm">
+        {repairReport && (
+          <div className="space-y-3 text-sm text-txt-secondary">
+            {repairReport.adopted.length === 0 && repairReport.splits === 0 && repairReport.ambiguous.length === 0 ? (
+              <p>Structure already clean — nothing to repair.</p>
+            ) : (
+              <>
+                {repairReport.adopted.length > 0 && (
+                  <p>Adopted {repairReport.adopted.length} previously-untagged role{repairReport.adopted.length === 1 ? "" : "s"} instead of creating duplicates: {repairReport.adopted.map((a: any) => a.name).join(", ")}.</p>
+                )}
+                {repairReport.splits > 0 && (
+                  <p>Split {repairReport.splits} shared assistant assignment{repairReport.splits === 1 ? "" : "s"} into distinct, individually-manageable roles.</p>
+                )}
+                {repairReport.ambiguous.length > 0 && (
+                  <p className="text-warning-800">{repairReport.ambiguous.length} role{repairReport.ambiguous.length === 1 ? "" : "s"} look like duplicates but couldn&apos;t be auto-resolved — review and merge them from the Organogram tab.</p>
+                )}
+              </>
+            )}
+            <div className="flex justify-end"><Button variant="secondary" onClick={() => setRepairReport(null)}>Close</Button></div>
+          </div>
+        )}
       </Dialog>
     </div>
   );

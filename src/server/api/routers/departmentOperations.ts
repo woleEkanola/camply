@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { logEvent } from "../../audit";
 import { seedTeenCampDepartments } from "../../departments/jdSeed";
+import { ensureCampCommandStructure } from "../../campCommand/structure";
 import { DepartmentMergeError, mergeDepartmentInTx } from "../../departments/merge";
 import {
   activeStaffProfileForUser,
@@ -88,6 +89,11 @@ export const departmentOperationsRouter = createTRPCRouter({
           actorId: ctx.userId,
           overwriteExisting: input.overwriteExisting,
         });
+        // Tag the JD-seeded "Camp Commandant" position (created with
+        // leadershipRole left null, matched by name only) as the real
+        // Commandant instead of leaving campCommand.ensureStructure to
+        // create a second, untagged-vs-tagged duplicate later.
+        await ensureCampCommandStructure(tx, input.campId, camp.organizationId, { reparentOrphans: false, actorId: ctx.userId });
         await writeAudit(tx, {
           organizationId: camp.organizationId,
           actorId: ctx.userId,

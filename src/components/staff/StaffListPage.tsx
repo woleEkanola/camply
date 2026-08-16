@@ -30,12 +30,14 @@ import { cn } from "@/lib/cn";
 import AppShell from "@/components/layout/AppShell";
 import { StatCard } from "@/components/ui/StatCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Badge } from "@/components/ui/Badge";
 import { Table, type Column } from "@/components/ui/Table";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Select, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { StaffLinkCard } from "@/components/staff/StaffLinkCard";
+import { StaffDuplicatesPanel } from "@/components/staff/StaffDuplicatesPanel";
 import { StaffCardGrid } from "@/components/staff/StaffCardGrid";
 import { ViewModeToggle, type StaffViewMode } from "@/components/staff/ViewModeToggle";
 import { TeacherRecruitmentPanel } from "@/components/staff/TeacherRecruitmentPanel";
@@ -110,8 +112,16 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [assignmentFilter, setAssignmentFilter] = useState("");
+  const [hostelFilter, setHostelFilter] = useState("");
+  const [floorFilter, setFloorFilter] = useState("");
+  const [roomFilter, setRoomFilter] = useState("");
+  const [bedStatusFilter, setBedStatusFilter] = useState<"" | "ASSIGNED" | "UNASSIGNED">("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(50);
+  // hostel/room/bed/tribe are hideable but off by default (same pattern as
+  // the columns above) — widening every row by four extra columns pushed a
+  // plain row-center click (staff-admin-approval.spec.ts) onto the inline
+  // Department <select>, opening its dropdown instead of navigating.
   const [visibleColumnIds, setVisibleColumnIds] = useState(["campus", "preference", "department", "skills", "status", "approval-email"]);
 
   useEffect(() => {
@@ -144,7 +154,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   useEffect(() => {
     setCursor(undefined);
     setAllLoadedItems([]);
-  }, [debouncedSearchQuery, statusFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter, departmentFilter, assignmentFilter, pageSize]);
+  }, [debouncedSearchQuery, statusFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter, departmentFilter, assignmentFilter, hostelFilter, floorFilter, roomFilter, bedStatusFilter, pageSize]);
 
   const { data: stats } = api.staff.stats.useQuery({ organizationId, campId, type }, { enabled: !!organizationId && !!campId });
   const { data, isLoading } = api.staff.adminList.useQuery(
@@ -161,6 +171,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       departmentId: departmentFilter || undefined,
       assignmentStatus: assignmentFilter ? assignmentFilter as "ASSIGNED" | "UNASSIGNED" : undefined,
       volunteerCategory: type === "VOLUNTEER" ? (categoryFilter || undefined) : undefined,
+      hostelId: hostelFilter || undefined,
+      floorId: floorFilter || undefined,
+      roomId: roomFilter || undefined,
+      bedStatus: bedStatusFilter || undefined,
       limit: pageSize,
       cursor,
     },
@@ -170,6 +184,13 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const { data: filterCampuses = [] } = api.campus.getAll.useQuery({ organizationId }, { enabled: !!organizationId });
   const { data: filterVenues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: !!campId });
   const { data: filterTribes = [] } = api.tribe.listByCamp.useQuery({ campId }, { enabled: !!campId && type === "TEACHER" });
+  const { data: structureData } = api.accommodation.listStructureOptions.useQuery(
+    { organizationId, campId: campId || undefined },
+    { enabled: !!organizationId }
+  );
+  const selectedHostel = structureData?.find((h) => h.id === hostelFilter);
+  const floorOptions = selectedHostel?.floors ?? [];
+  const roomOptions = (selectedHostel?.rooms ?? []).filter((r) => !floorFilter || r.floorId === floorFilter);
   const { data: departments = [] } = api.department.list.useQuery({ organizationId, campId }, { enabled: !!organizationId && !!campId && type === "TEACHER" });
   const { data: departmentMetrics } = api.staff.departmentAssignmentMetrics.useQuery(
     { organizationId, campId },
@@ -328,6 +349,39 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
         }]
       : []),
     {
+      id: "tribe",
+      header: "Tribe",
+      hideable: true,
+      accessor: (row: any) => row.assignedTribe?.name || <span className="text-txt-muted">—</span>,
+    },
+    {
+      id: "hostel",
+      header: "Hostel",
+      hideable: true,
+      accessor: (row: any) => row.assignedHostel ? (
+        <div className="text-sm text-neutral-700">
+          <div>{row.assignedHostel.name}</div>
+          {row.assignedRoom?.floor && <div className="text-xs text-txt-muted">{row.assignedRoom.floor.name}</div>}
+        </div>
+      ) : <span className="text-txt-muted">—</span>,
+    },
+    {
+      id: "room",
+      header: "Room",
+      hideable: true,
+      accessor: (row: any) => {
+        if (row.assignedRoom && !row.assignedBed) return <Badge tone="warning">Room only: {row.assignedRoom.name}</Badge>;
+        if (row.assignedRoom) return <span className="text-sm text-neutral-700">{row.assignedRoom.name}</span>;
+        return <Badge tone="neutral">Unassigned</Badge>;
+      },
+    },
+    {
+      id: "bed",
+      header: "Bed",
+      hideable: true,
+      accessor: (row: any) => row.assignedBed?.label || <span className="text-txt-muted">—</span>,
+    },
+    {
       id: "skills",
       header: "Skills",
       hideable: true,
@@ -407,7 +461,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     </div>
   );
 
-  const hasActiveFilters = campusFilter || venueFilter || genderFilter || tribeFilter || categoryFilter || departmentFilter || assignmentFilter;
+  const hasActiveFilters = campusFilter || venueFilter || genderFilter || tribeFilter || categoryFilter || departmentFilter || assignmentFilter || hostelFilter || floorFilter || roomFilter || bedStatusFilter;
   const totalItems = data?.totalCount ?? allLoadedItems.length;
 
   return (
@@ -456,10 +510,18 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 gender: genderFilter || undefined,
                 tribeId: tribeFilter || undefined,
                 volunteerCategory: categoryFilter || undefined,
+                search: debouncedSearchQuery || undefined,
+                hostelId: hostelFilter || undefined,
+                floorId: floorFilter || undefined,
+                roomId: roomFilter || undefined,
+                bedStatus: bedStatusFilter || undefined,
               }}
               options={[
                 { kind: "STAFF", label: type === "TEACHER" ? "Teachers" : "Volunteers", description: "Staff roster as a spreadsheet" },
                 { kind: "STAFF_ID_CARDS", label: "ID Cards", description: "Printable A4 sheet of staff badges" },
+                { kind: "STAFF_ROOMING_LIST", label: "Rooming List", description: "Hostel/room/bed roster as a spreadsheet" },
+                { kind: "ROOM_DOOR_SHEETS", label: "Room Door Sheets", description: "Printable per-room sheet to post on each door" },
+                { kind: "STAFF_DUPLICATES", label: "Duplicate Registrations", description: "One row per member of every detected duplicate group" },
               ]}
             />
             <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto" onClick={() => setIsAddOpen(true)}>
@@ -476,6 +538,8 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           <StatCard label="Assigned" value={stats?.assigned ?? 0} icon={<UserCircleIcon className="h-5 w-5" />} tone="info" insight="With roles" />
           <StatCard label="Unassigned" value={stats?.unassigned ?? 0} icon={<UserMinusIcon className="h-5 w-5" />} tone="neutral" insight="No role yet" />
         </div>
+
+        {!!organizationId && !!campId && <StaffDuplicatesPanel organizationId={organizationId} campId={campId} type={type} />}
 
         {type === "TEACHER" && departmentMetrics && (
           <div className="mb-6 grid gap-3 rounded-xl border border-border-default bg-surface p-4 sm:grid-cols-4">
@@ -554,6 +618,27 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 {type === "TEACHER" && <Select value={tribeFilter} onChange={(event) => setTribeFilter(event.target.value)} aria-label="Filter by tribe"><option value="">All tribes</option>{filterTribes.map((tribe: any) => <option key={tribe.id} value={tribe.id}>{tribe.name}</option>)}</Select>}
                 {type === "TEACHER" && <Select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)} aria-label="Filter by department"><option value="">All departments</option>{departments.map((department: any) => <option key={department.id} value={department.id}>{department.name}</option>)}</Select>}
                 {type === "TEACHER" && <Select value={assignmentFilter} onChange={(event) => setAssignmentFilter(event.target.value)} aria-label="Filter by assignment status"><option value="">Any assignment</option><option value="ASSIGNED">Assigned</option><option value="UNASSIGNED">Unassigned</option></Select>}
+                <Select value={hostelFilter} onChange={(event) => { setHostelFilter(event.target.value); setFloorFilter(""); setRoomFilter(""); }} aria-label="Filter by hostel">
+                  <option value="">All hostels</option>
+                  {(structureData ?? []).map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </Select>
+                {floorOptions.length > 0 && (
+                  <Select value={floorFilter} onChange={(event) => { setFloorFilter(event.target.value); setRoomFilter(""); }} aria-label="Filter by floor">
+                    <option value="">All floors</option>
+                    {floorOptions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </Select>
+                )}
+                {hostelFilter && roomOptions.length > 0 && (
+                  <Select value={roomFilter} onChange={(event) => setRoomFilter(event.target.value)} aria-label="Filter by room">
+                    <option value="">All rooms</option>
+                    {roomOptions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </Select>
+                )}
+                <Select value={bedStatusFilter} onChange={(event) => setBedStatusFilter(event.target.value as "" | "ASSIGNED" | "UNASSIGNED")} aria-label="Filter by bed status">
+                  <option value="">Any bed status</option>
+                  <option value="ASSIGNED">Bed assigned</option>
+                  <option value="UNASSIGNED">No bed</option>
+                </Select>
               </div>
             )}
 
@@ -565,7 +650,10 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 {genderFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{genderFilter}</span>}
                 {tribeFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{filterTribes.find((t: any) => t.id === tribeFilter)?.name}</span>}
                 {categoryFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{categoryFilter}</span>}
-                <button onClick={() => { setCampusFilter(""); setVenueFilter(""); setGenderFilter(""); setTribeFilter(""); setCategoryFilter(""); setDepartmentFilter(""); setAssignmentFilter(""); }} className="text-accent-600 hover:underline">Clear all</button>
+                {hostelFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{structureData?.find((h) => h.id === hostelFilter)?.name}</span>}
+                {roomFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{roomOptions.find((r) => r.id === roomFilter)?.name}</span>}
+                {bedStatusFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{bedStatusFilter === "ASSIGNED" ? "Bed assigned" : "No bed"}</span>}
+                <button onClick={() => { setCampusFilter(""); setVenueFilter(""); setGenderFilter(""); setTribeFilter(""); setCategoryFilter(""); setDepartmentFilter(""); setAssignmentFilter(""); setHostelFilter(""); setFloorFilter(""); setRoomFilter(""); setBedStatusFilter(""); }} className="text-accent-600 hover:underline">Clear all</button>
               </div>
             )}
 

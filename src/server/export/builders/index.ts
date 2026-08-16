@@ -11,6 +11,10 @@ import "./staff";
 import "./staffIdCards";
 import "./leaderboardScores";
 import "./schedule";
+import "./roomingList";
+import "./roomDoorSheets";
+import "./staffRoomingList";
+import "./staffDuplicates";
 
 export {};
 

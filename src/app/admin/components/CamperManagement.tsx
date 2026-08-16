@@ -73,7 +73,12 @@ interface CamperType {
     status: string;
     registrationNumber?: string | null;
     tribe: { id: string; name: string } | null;
-    room: { id: string; name: string } | null;
+    room: {
+      id: string;
+      name: string;
+      floor: { id: string; name: string } | null;
+      hostel: { id: string; name: string; gender: string | null } | null;
+    } | null;
     bed: { id: string; label: string } | null;
     campus: { id: string; name: string } | null;
   }>;
@@ -117,6 +122,11 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   const [statusFilter, setStatusFilter] = useState("");
   const [genderFilter, setGenderFilter] = useState("");
   const [tribeFilter, setTribeFilter] = useState("");
+  const [hostelFilter, setHostelFilter] = useState("");
+  const [floorFilter, setFloorFilter] = useState("");
+  const [roomFilter, setRoomFilter] = useState("");
+  const [bedStatusFilter, setBedStatusFilter] = useState<"" | "ASSIGNED" | "UNASSIGNED">("");
+  const [visibleColumnIds, setVisibleColumnIds] = useState(["hostel", "room", "bed", "tribe"]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [profileCamperId, setProfileCamperId] = useState<string | null>(null);
@@ -138,6 +148,17 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
     }
   }, [openCamperParam, queryParam]);
 
+  useEffect(() => {
+    const savedColumns = localStorage.getItem("camply-camper-columns");
+    if (savedColumns) {
+      try { setVisibleColumnIds(JSON.parse(savedColumns)); } catch { /* keep defaults */ }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("camply-camper-columns", JSON.stringify(visibleColumnIds));
+  }, [visibleColumnIds]);
+
   // Pagination states
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [allCampers, setAllCampers] = useState<CamperType[]>([]);
@@ -154,7 +175,7 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
   useEffect(() => {
     setCursor(undefined);
     setAllCampers([]);
-  }, [debouncedSearchTerm, campusFilter, statusFilter, genderFilter, tribeFilter, campId]);
+  }, [debouncedSearchTerm, campusFilter, statusFilter, genderFilter, tribeFilter, hostelFilter, floorFilter, roomFilter, bedStatusFilter, campId]);
 
   // Get campers
   const { data: responseData, refetch: refetchProfiles, error: profilesError, isLoading } = api.camper.adminList.useQuery(
@@ -166,6 +187,10 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       gender: genderFilter || undefined,
       tribeId: tribeFilter || undefined,
       status: statusFilter || undefined,
+      hostelId: hostelFilter || undefined,
+      floorId: floorFilter || undefined,
+      roomId: roomFilter || undefined,
+      bedStatus: bedStatusFilter || undefined,
       limit: 50,
       cursor,
     },
@@ -173,6 +198,15 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
       enabled: !!organizationId,
     }
   );
+
+  // Hostel → floor → room structure for the accommodation filter selects.
+  const { data: structureData } = api.accommodation.listStructureOptions.useQuery(
+    { organizationId, campId: campId || undefined },
+    { enabled: !!organizationId }
+  );
+  const selectedHostel = structureData?.find((h) => h.id === hostelFilter);
+  const floorOptions = selectedHostel?.floors ?? [];
+  const roomOptions = (selectedHostel?.rooms ?? []).filter((r) => !floorFilter || r.floorId === floorFilter);
 
   // Update campers when data changes
   useEffect(() => {
@@ -350,18 +384,43 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
         },
       },
       {
-        header: "Tribe / Room",
+        id: "hostel",
+        header: "Hostel",
+        hideable: true,
         accessor: (item) => {
           const reg = item.registrations[0];
-          return (
+          return reg?.room?.hostel ? (
             <div className="text-sm text-txt-secondary">
-              {reg?.tribe ? <div>Tribe: {reg.tribe.name}</div> : null}
-              {reg?.room ? <div>Room: {reg.room.name}</div> : null}
-              {reg?.bed ? <div>Bed: {reg.bed.label}</div> : null}
-              {!reg?.tribe && !reg?.room && !reg?.bed && <span>—</span>}
+              <div>{reg.room.hostel.name}</div>
+              {reg.room.floor && <div className="text-xs text-txt-muted">{reg.room.floor.name}</div>}
             </div>
+          ) : (
+            <span className="text-txt-muted">—</span>
           );
         },
+      },
+      {
+        id: "room",
+        header: "Room",
+        hideable: true,
+        accessor: (item) => {
+          const reg = item.registrations[0];
+          if (reg?.room && !reg?.bed) return <Badge tone="warning">Room only: {reg.room.name}</Badge>;
+          if (reg?.room) return <span className="text-sm text-txt-secondary">{reg.room.name}</span>;
+          return <Badge tone="neutral">Unassigned</Badge>;
+        },
+      },
+      {
+        id: "bed",
+        header: "Bed",
+        hideable: true,
+        accessor: (item) => item.registrations[0]?.bed?.label ?? <span className="text-txt-muted">—</span>,
+      },
+      {
+        id: "tribe",
+        header: "Tribe",
+        hideable: true,
+        accessor: (item) => item.registrations[0]?.tribe?.name ?? <span className="text-txt-muted">—</span>,
       },
       {
         header: "Gender",
@@ -442,10 +501,57 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             ))}
           </Select>
         )}
-        {(campusFilter !== "all" || statusFilter || genderFilter || tribeFilter) && (
+        <Select
+          aria-label="Filter by Hostel"
+          value={hostelFilter}
+          onChange={(e) => { setHostelFilter(e.target.value); setFloorFilter(""); setRoomFilter(""); }}
+          className="w-36"
+        >
+          <option value="">All hostels</option>
+          {(structureData ?? []).map((h) => (
+            <option key={h.id} value={h.id}>{h.name}</option>
+          ))}
+        </Select>
+        {floorOptions.length > 0 && (
+          <Select
+            aria-label="Filter by Floor"
+            value={floorFilter}
+            onChange={(e) => { setFloorFilter(e.target.value); setRoomFilter(""); }}
+            className="w-32"
+          >
+            <option value="">All floors</option>
+            {floorOptions.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </Select>
+        )}
+        {hostelFilter && roomOptions.length > 0 && (
+          <Select
+            aria-label="Filter by Room"
+            value={roomFilter}
+            onChange={(e) => setRoomFilter(e.target.value)}
+            className="w-32"
+          >
+            <option value="">All rooms</option>
+            {roomOptions.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </Select>
+        )}
+        <Select
+          aria-label="Filter by Bed Status"
+          value={bedStatusFilter}
+          onChange={(e) => setBedStatusFilter(e.target.value as "" | "ASSIGNED" | "UNASSIGNED")}
+          className="w-36"
+        >
+          <option value="">Any bed status</option>
+          <option value="ASSIGNED">Bed assigned</option>
+          <option value="UNASSIGNED">No bed</option>
+        </Select>
+        {(campusFilter !== "all" || statusFilter || genderFilter || tribeFilter || hostelFilter || floorFilter || roomFilter || bedStatusFilter) && (
           <button
             type="button"
-            onClick={() => { setCampusFilter("all"); setStatusFilter(""); setGenderFilter(""); setTribeFilter(""); }}
+            onClick={() => { setCampusFilter("all"); setStatusFilter(""); setGenderFilter(""); setTribeFilter(""); setHostelFilter(""); setFloorFilter(""); setRoomFilter(""); setBedStatusFilter(""); }}
             className="text-xs font-medium text-accent-600 hover:underline shrink-0"
           >
             Clear all
@@ -494,11 +600,17 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
             tribeId: tribeFilter || undefined,
             campId: campId || undefined,
             search: debouncedSearchTerm || undefined,
+            hostelId: hostelFilter || undefined,
+            floorId: floorFilter || undefined,
+            roomId: roomFilter || undefined,
+            bedStatus: bedStatusFilter || undefined,
           }}
           options={[
             { kind: "CAMPERS", label: "Campers", description: "Camper roster as a spreadsheet" },
             { kind: "ID_CARDS", label: "ID Cards", description: "Printable A4 sheet of camp ID badges" },
             { kind: "ATTENDANCE_SHEET", label: "Attendance Sheet", description: "Printable check-in sheet" },
+            { kind: "ROOMING_LIST", label: "Rooming List", description: "Hostel/room/bed roster as a spreadsheet" },
+            { kind: "ROOM_DOOR_SHEETS", label: "Room Door Sheets", description: "Printable per-room sheet to post on each door" },
             ...(canManageCampers
               ? [{ kind: "CAMPERS_MEDICAL" as const, label: "Medical Summary", description: "Allergies, conditions, and emergency contacts" }]
               : []),
@@ -619,6 +731,10 @@ const CamperManagement: React.FC<CamperManagementProps> = ({
           data={allCampers}
           rowKey={(profile) => profile.id}
           actions={actions}
+          columnVisibility={{
+            visibleIds: visibleColumnIds,
+            onToggle: (id) => setVisibleColumnIds((current) => (current.includes(id) ? current.filter((c) => c !== id) : [...current, id])),
+          }}
           selectable
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}

@@ -6,6 +6,7 @@ import { assertOrgAdminOrCommand } from "../trpc/scoping";
 const assertOrgAdmin = (ctx: any, organizationId: string) =>
   assertOrgAdminOrCommand(ctx, organizationId, "ACCOMMODATION");
 import * as accommodationEngine from "../../accommodation/engine";
+import { fetchRoomsWithOccupancy } from "../../accommodation/roster";
 import { ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES } from "../../assignments/eligibility";
 import { normalizeGender } from "../../../lib/gender";
 
@@ -189,6 +190,128 @@ export const accommodationRouter = createTRPCRouter({
         }),
       ]);
       return { count: campers.count + staff.count, camperCount: campers.count, staffCount: staff.count, venueId: venues[0].id };
+    }),
+
+  // Light hostel→floor→room tree for filter dropdowns on the campers/staff
+  // pages. Deliberately open to the same audience as camper.adminList /
+  // staff.adminList (org admins, campus reps, and TEACHER/VOLUNTEER staff)
+  // rather than admin-only like the CRUD procedures below — it's read-only
+  // structural metadata (no occupant PII), and those pages' filter UIs are
+  // visible to that whole audience. Campus is not part of the accommodation
+  // chain (hostels hang off Venue, shared across all campuses in a camp), so
+  // there is no per-campus scoping to apply here, unlike camper.adminList.
+  listStructureOptions: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session!.user;
+      const isOrgAdmin =
+        currentUser.role === "SUPER_ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === input.organizationId);
+      const isCampusRep = (currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId;
+      const isStaffOperational = ["TEACHER", "VOLUNTEER"].includes(currentUser.role);
+      const hasPermission = isOrgAdmin || isCampusRep || (isStaffOperational && currentUser.organizationId === input.organizationId);
+      if (!hasPermission) throw new TRPCError({ code: "FORBIDDEN" });
+
+      return ctx.prisma.hostel.findMany({
+        where: {
+          organizationId: input.organizationId,
+          deletedAt: null,
+          ...(input.campId ? { venue: { campId: input.campId, deletedAt: null } } : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          gender: true,
+          venueId: true,
+          floors: {
+            where: { deletedAt: null },
+            orderBy: [{ displayOrder: "asc" }, { level: "asc" }],
+            select: { id: true, name: true, level: true, displayOrder: true },
+          },
+          rooms: {
+            where: { deletedAt: null },
+            orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+            select: {
+              id: true,
+              name: true,
+              floorId: true,
+              capacity: true,
+              _count: { select: { beds: { where: { deletedAt: null } } } },
+            },
+          },
+        },
+        orderBy: { name: "asc" },
+      });
+    }),
+
+  // Hostel → floor → room → occupant tree for the Accommodation Roster page.
+  // Admin-only, same as the rest of this router (see file-top comment) —
+  // unlike listStructureOptions, this exposes occupant names/status/tribe.
+  // Filters map onto room *structure* (which rooms are included); a bed's
+  // occupant is always shown once its room passes — narrowing by tribe or
+  // occupant type belongs to the ROOMING_LIST/STAFF_ROOMING_LIST exports,
+  // which are flat per-occupant lists and don't have this ambiguity.
+  roster: protectedProcedure
+    .input(z.object({
+      organizationId: z.string(),
+      campId: z.string().optional(),
+      venueId: z.string().optional(),
+      hostelId: z.string().optional(),
+      floorId: z.string().optional(),
+      gender: z.string().optional(),
+      flaggedOnly: z.boolean().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertOrgAdmin(ctx, input.organizationId);
+      const rooms = await fetchRoomsWithOccupancy(ctx.prisma, input.organizationId, {
+        campId: input.campId,
+        venueId: input.venueId,
+        hostelId: input.hostelId,
+        floorId: input.floorId,
+        gender: input.gender,
+      });
+
+      const withOccupancy = input.flaggedOnly
+        ? rooms.map((room) => ({
+            ...room,
+            beds: room.beds.filter((b) => !b.occupant || b.occupant.flags.length > 0),
+            roomOnlyOccupants: room.roomOnlyOccupants.filter((o) => o.flags.length > 0),
+          }))
+        : rooms;
+
+      const hostelsMap = new Map<string, { id: string; name: string; gender: string | null; floors: Map<string, { id: string; name: string; rooms: typeof withOccupancy }> }>();
+      for (const room of withOccupancy) {
+        if (!hostelsMap.has(room.hostelId)) {
+          hostelsMap.set(room.hostelId, { id: room.hostelId, name: room.hostelName, gender: room.hostelGender, floors: new Map() });
+        }
+        const hostel = hostelsMap.get(room.hostelId)!;
+        const floorKey = room.floorId ?? "__none__";
+        if (!hostel.floors.has(floorKey)) {
+          hostel.floors.set(floorKey, { id: room.floorId ?? "", name: room.floorName ?? "No floor", rooms: [] as any });
+        }
+        hostel.floors.get(floorKey)!.rooms.push(room);
+      }
+
+      const hostels = Array.from(hostelsMap.values()).map((hostel) => ({
+        id: hostel.id,
+        name: hostel.name,
+        gender: hostel.gender,
+        floors: Array.from(hostel.floors.values()),
+      }));
+
+      // Totals always reflect the true (unfiltered) room state — flaggedOnly
+      // narrows which beds/occupants are *displayed*, not the underlying counts.
+      const totalBeds = rooms.reduce((sum, r) => sum + r.beds.length, 0);
+      const occupiedBeds = rooms.reduce((sum, r) => sum + r.occupied, 0);
+      const flaggedCount = rooms.reduce(
+        (sum, r) => sum + r.beds.filter((b) => b.occupant?.flags.length).length + r.roomOnlyOccupants.filter((o) => o.flags.length).length,
+        0
+      );
+
+      return {
+        hostels,
+        totals: { rooms: withOccupancy.length, beds: totalBeds, occupiedBeds, freeBeds: totalBeds - occupiedBeds, flaggedCount },
+      };
     }),
 
   // ─── Hostels ─────────────────────────────────────────────────────────
