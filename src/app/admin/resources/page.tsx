@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
 import AppShell from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Dialog } from "@/components/ui/Dialog";
-import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useUploadThing } from "@/utils/uploadthing-hook";
 import {
@@ -22,6 +21,7 @@ import {
   CheckCircleIcon,
   EyeSlashIcon,
   ArrowUpTrayIcon,
+  FunnelIcon,
 } from "@heroicons/react/24/outline";
 
 const CATEGORIES = [
@@ -34,8 +34,8 @@ const CATEGORIES = [
 ];
 
 const AUDIENCES = [
-  { value: "ALL", label: "Everyone (Parents & Staff)" },
-  { value: "PARENTS", label: "Parents Only" },
+  { value: "ALL", label: "Everyone (Parents & All Staff)" },
+  { value: "PARENTS", label: "Parents & Campers Only" },
   { value: "TEACHERS", label: "Teachers Only" },
   { value: "VOLUNTEERS", label: "Volunteers Only" },
 ];
@@ -58,6 +58,19 @@ function getCategoryColor(cat: string) {
   }
 }
 
+function getAudienceBadge(aud: string) {
+  switch (aud) {
+    case "PARENTS":
+      return { label: "Parents Only", color: "bg-cyan-50 text-cyan-700 border-cyan-200" };
+    case "TEACHERS":
+      return { label: "Teachers Only", color: "bg-amber-50 text-amber-700 border-amber-200" };
+    case "VOLUNTEERS":
+      return { label: "Volunteers Only", color: "bg-purple-50 text-purple-700 border-purple-200" };
+    default:
+      return { label: "Everyone", color: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  }
+}
+
 export default function AdminResourcesPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -76,6 +89,8 @@ export default function AdminResourcesPage() {
 
   const [selectedCampId, setSelectedCampId] = useState<string>("");
   const campId = selectedCampId || activeCamp?.id || "";
+
+  const [audienceFilter, setAudienceFilter] = useState<string>("ALL_FILTER");
 
   const utils = api.useUtils();
   const { data: resources = [], isLoading } = api.campResource.listAdmin.useQuery(
@@ -114,7 +129,6 @@ export default function AdminResourcesPage() {
           fileType: file.type,
         });
         if (!uploadTitle) {
-          // Default title from filename minus extension
           const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
           setUploadTitle(nameWithoutExt);
         }
@@ -183,6 +197,11 @@ export default function AdminResourcesPage() {
     });
   }
 
+  const filteredResources = useMemo(() => {
+    if (audienceFilter === "ALL_FILTER") return resources;
+    return resources.filter((r: any) => r.audience === audienceFilter);
+  }, [resources, audienceFilter]);
+
   if (!isAdmin) {
     return (
       <AppShell area="admin">
@@ -197,7 +216,7 @@ export default function AdminResourcesPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <PageHeader
             title="Camp Resources & Downloads"
-            description="Upload handbooks, packing lists, rules, and schedules for parents and staff to download from their dashboard."
+            description="Upload handbooks, packing lists, rules, and schedules. Choose which documents parents, teachers, and volunteers can download."
           />
           <Button
             variant="primary"
@@ -211,20 +230,81 @@ export default function AdminResourcesPage() {
           </Button>
         </div>
 
-        {/* Camp Filter Bar */}
-        <div className="flex items-center gap-3 rounded-2xl border border-border-default bg-surface p-3 shadow-xs">
-          <label className="text-xs font-semibold text-txt-secondary uppercase tracking-wide">Camp:</label>
-          <Select
-            value={campId}
-            onChange={(e) => setSelectedCampId(e.target.value)}
-            className="w-64"
-          >
-            {camps.map((c: any) => (
-              <option key={c.id} value={c.id}>
-                {c.name} {c.id === activeCamp?.id ? "(Active)" : ""}
-              </option>
-            ))}
-          </Select>
+        {/* Filters Bar: Camp Selector & Audience Tabs */}
+        <div className="flex flex-col gap-3 rounded-2xl border border-border-default bg-surface p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <label className="text-xs font-semibold text-txt-secondary uppercase tracking-wide">Camp:</label>
+            <Select
+              value={campId}
+              onChange={(e) => setSelectedCampId(e.target.value)}
+              className="w-56"
+            >
+              {camps.map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.id === activeCamp?.id ? "(Active)" : ""}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {/* Audience Filter Tabs */}
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-surface-raised p-1 border border-border-subtle text-xs">
+            <button
+              type="button"
+              onClick={() => setAudienceFilter("ALL_FILTER")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                audienceFilter === "ALL_FILTER"
+                  ? "bg-white text-txt-primary shadow-xs"
+                  : "text-txt-secondary hover:text-txt-primary"
+              }`}
+            >
+              All ({resources.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudienceFilter("PARENTS")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                audienceFilter === "PARENTS"
+                  ? "bg-white text-cyan-700 shadow-xs font-bold"
+                  : "text-txt-secondary hover:text-txt-primary"
+              }`}
+            >
+              Parents Only ({resources.filter((r: any) => r.audience === "PARENTS").length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudienceFilter("TEACHERS")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                audienceFilter === "TEACHERS"
+                  ? "bg-white text-amber-700 shadow-xs font-bold"
+                  : "text-txt-secondary hover:text-txt-primary"
+              }`}
+            >
+              Teachers Only ({resources.filter((r: any) => r.audience === "TEACHERS").length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudienceFilter("VOLUNTEERS")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                audienceFilter === "VOLUNTEERS"
+                  ? "bg-white text-purple-700 shadow-xs font-bold"
+                  : "text-txt-secondary hover:text-txt-primary"
+              }`}
+            >
+              Volunteers Only ({resources.filter((r: any) => r.audience === "VOLUNTEERS").length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudienceFilter("ALL")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                audienceFilter === "ALL"
+                  ? "bg-white text-emerald-700 shadow-xs font-bold"
+                  : "text-txt-secondary hover:text-txt-primary"
+              }`}
+            >
+              Everyone ({resources.filter((r: any) => r.audience === "ALL").length})
+            </button>
+          </div>
         </div>
 
         {/* Resources List */}
@@ -232,10 +312,10 @@ export default function AdminResourcesPage() {
           <div className="rounded-2xl border border-border-default bg-surface p-12 text-center text-sm text-txt-muted">
             Loading camp resources…
           </div>
-        ) : resources.length === 0 ? (
+        ) : filteredResources.length === 0 ? (
           <EmptyState
-            title="No camp resources uploaded yet"
-            description="Upload your first parent handbook, packing guide, or camp rules document. It will be immediately available in the parents' Documents dashboard."
+            title="No camp resources found"
+            description="Upload handbooks, packing lists, rules, or schedules for parents, teachers, and volunteers to download from their dashboard."
             action={
               <Button
                 variant="primary"
@@ -250,80 +330,84 @@ export default function AdminResourcesPage() {
           />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {resources.map((resource: any) => (
-              <Card key={resource.id} className="flex flex-col justify-between">
-                <CardBody className="space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-700">
-                      <DocumentTextIcon className="h-6 w-6" />
+            {filteredResources.map((resource: any) => {
+              const audBadge = getAudienceBadge(resource.audience);
+              return (
+                <Card key={resource.id} className="flex flex-col justify-between">
+                  <CardBody className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-700">
+                        <DocumentTextIcon className="h-6 w-6" />
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getCategoryColor(resource.category)}`}>
+                          {CATEGORIES.find((c) => c.value === resource.category)?.label || resource.category}
+                        </span>
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${audBadge.color}`}>
+                          {audBadge.label}
+                        </span>
+                        {resource.isPublished ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-semibold text-success-700">
+                            <CheckCircleIcon className="h-3 w-3" /> Live
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold text-neutral-600">
+                            <EyeSlashIcon className="h-3 w-3" /> Draft
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getCategoryColor(resource.category)}`}>
-                        {CATEGORIES.find((c) => c.value === resource.category)?.label || resource.category}
-                      </span>
-                      {resource.isPublished ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-semibold text-success-700">
-                          <CheckCircleIcon className="h-3 w-3" /> Live
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold text-neutral-600">
-                          <EyeSlashIcon className="h-3 w-3" /> Draft
-                        </span>
+
+                    <div>
+                      <h3 className="font-semibold text-txt-primary">{resource.title}</h3>
+                      {resource.description && (
+                        <p className="mt-1 line-clamp-2 text-xs text-txt-secondary">{resource.description}</p>
                       )}
                     </div>
-                  </div>
 
-                  <div>
-                    <h3 className="font-semibold text-txt-primary">{resource.title}</h3>
-                    {resource.description && (
-                      <p className="mt-1 line-clamp-2 text-xs text-txt-secondary">{resource.description}</p>
-                    )}
-                  </div>
-
-                  <div className="border-t border-border-subtle pt-2 text-xs text-txt-muted space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span>Audience:</span>
-                      <span className="font-medium text-txt-primary">
-                        {AUDIENCES.find((a) => a.value === resource.audience)?.label || resource.audience}
-                      </span>
+                    <div className="border-t border-border-subtle pt-2 text-xs text-txt-muted space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span>Target Audience:</span>
+                        <span className="font-semibold text-txt-primary">{audBadge.label}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>File size:</span>
+                        <span className="font-medium text-txt-primary">{formatBytes(resource.fileSize)}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span>File size:</span>
-                      <span className="font-medium text-txt-primary">{formatBytes(resource.fileSize)}</span>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center justify-between gap-2 border-t border-border-subtle pt-3">
-                    <a
-                      href={resource.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-border-default px-2.5 py-1.5 text-xs font-semibold text-txt-primary hover:bg-surface-raised transition"
-                    >
-                      <ArrowDownTrayIcon className="h-3.5 w-3.5" /> Download
-                    </a>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setEditTarget(resource)}
-                        className="rounded-lg p-1.5 text-txt-secondary hover:bg-surface-raised hover:text-txt-primary"
-                        title="Edit resource"
+                    <div className="flex items-center justify-between gap-2 border-t border-border-subtle pt-3">
+                      <a
+                        href={resource.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border-default px-2.5 py-1.5 text-xs font-semibold text-txt-primary hover:bg-surface-raised transition"
                       >
-                        <PencilSquareIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(resource)}
-                        className="rounded-lg p-1.5 text-danger-600 hover:bg-danger-50"
-                        title="Delete resource"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
+                        <ArrowDownTrayIcon className="h-3.5 w-3.5" /> Download
+                      </a>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditTarget(resource)}
+                          className="rounded-lg p-1.5 text-txt-secondary hover:bg-surface-raised hover:text-txt-primary"
+                          title="Edit resource"
+                        >
+                          <PencilSquareIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(resource)}
+                          className="rounded-lg p-1.5 text-danger-600 hover:bg-danger-50"
+                          title="Delete resource"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
+                  </CardBody>
+                </Card>
+              );
+            })}
           </div>
         )}
 
@@ -383,7 +467,7 @@ export default function AdminResourcesPage() {
 
             <Input
               label="Document Title"
-              placeholder="e.g. Teen Camp 2026 Packing List & Guidelines"
+              placeholder="e.g. Teacher Manual 2026 or Teen Packing List"
               value={uploadTitle}
               onChange={(e) => setUploadTitle(e.target.value)}
               required
@@ -401,7 +485,7 @@ export default function AdminResourcesPage() {
               </Select>
 
               <Select
-                label="Target Audience"
+                label="Who Can See & Download?"
                 value={uploadAudience}
                 onChange={(e) => setUploadAudience(e.target.value as any)}
               >
@@ -462,7 +546,7 @@ export default function AdminResourcesPage() {
                 </Select>
 
                 <Select
-                  label="Target Audience"
+                  label="Who Can See & Download?"
                   value={editTarget.audience}
                   onChange={(e) => setEditTarget({ ...editTarget, audience: e.target.value })}
                 >
@@ -524,7 +608,7 @@ export default function AdminResourcesPage() {
           {deleteTarget && (
             <div className="space-y-4">
               <p className="text-sm text-txt-secondary">
-                Are you sure you want to delete <strong className="text-txt-primary">{deleteTarget.title}</strong>? Parents and staff will no longer be able to download this file.
+                Are you sure you want to delete <strong className="text-txt-primary">{deleteTarget.title}</strong>? Users will no longer be able to download this file.
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" onClick={() => setDeleteTarget(null)}>

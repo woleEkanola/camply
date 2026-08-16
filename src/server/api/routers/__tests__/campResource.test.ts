@@ -8,6 +8,8 @@ let organizationId = "";
 let campId = "";
 let ownerId = "";
 let parentId = "";
+let teacherId = "";
+let volunteerId = "";
 
 function caller(id: string, role: UserRole, email: string) {
   return appRouter.createCaller({ prisma, session: { user: { id, role, email, organizationId }, expires: "" } });
@@ -53,6 +55,26 @@ beforeAll(async () => {
     },
   });
   parentId = parent.id;
+
+  const teacher = await prisma.user.create({
+    data: {
+      email: `resource-teacher-${stamp}@camply.test`,
+      password: "x",
+      role: "TEACHER",
+      organizationId,
+    },
+  });
+  teacherId = teacher.id;
+
+  const volunteer = await prisma.user.create({
+    data: {
+      email: `resource-volunteer-${stamp}@camply.test`,
+      password: "x",
+      role: "VOLUNTEER",
+      organizationId,
+    },
+  });
+  volunteerId = volunteer.id;
 });
 
 afterAll(async () => {
@@ -122,6 +144,78 @@ describe("campResource router", () => {
 
     const parentListAfter = await parent.campResource.listForAudience({ campId, audience: "PARENTS" });
     expect(parentListAfter.length).toBe(0);
+  });
+
+  it("filters resources accurately per audience (PARENTS, TEACHERS, VOLUNTEERS, ALL)", async () => {
+    const admin = caller(ownerId, "OWNER", `resource-owner-${stamp}@camply.test`);
+    const parent = caller(parentId, "PARENT", `resource-parent-${stamp}@camply.test`);
+    const teacher = caller(teacherId, "TEACHER", `resource-teacher-${stamp}@camply.test`);
+    const volunteer = caller(volunteerId, "VOLUNTEER", `resource-volunteer-${stamp}@camply.test`);
+
+    // Create 4 distinct documents
+    await admin.campResource.create({
+      campId,
+      organizationId,
+      title: "General Camp Rules",
+      fileUrl: "https://example.com/general.pdf",
+      fileName: "general.pdf",
+      audience: "ALL",
+      isPublished: true,
+    });
+
+    await admin.campResource.create({
+      campId,
+      organizationId,
+      title: "Parent Handbook",
+      fileUrl: "https://example.com/parents.pdf",
+      fileName: "parents.pdf",
+      audience: "PARENTS",
+      isPublished: true,
+    });
+
+    await admin.campResource.create({
+      campId,
+      organizationId,
+      title: "Teacher Manual",
+      fileUrl: "https://example.com/teachers.pdf",
+      fileName: "teachers.pdf",
+      audience: "TEACHERS",
+      isPublished: true,
+    });
+
+    await admin.campResource.create({
+      campId,
+      organizationId,
+      title: "Volunteer Duty Guide",
+      fileUrl: "https://example.com/volunteers.pdf",
+      fileName: "volunteers.pdf",
+      audience: "VOLUNTEERS",
+      isPublished: true,
+    });
+
+    // Parent sees ALL + PARENTS (2 items)
+    const parentDocs = await parent.campResource.listForAudience({ campId, audience: "PARENTS" });
+    const parentTitles = parentDocs.map((d) => d.title);
+    expect(parentTitles).toContain("General Camp Rules");
+    expect(parentTitles).toContain("Parent Handbook");
+    expect(parentTitles).not.toContain("Teacher Manual");
+    expect(parentTitles).not.toContain("Volunteer Duty Guide");
+
+    // Teacher sees ALL + TEACHERS (2 items)
+    const teacherDocs = await teacher.campResource.listForAudience({ campId, audience: "TEACHERS" });
+    const teacherTitles = teacherDocs.map((d) => d.title);
+    expect(teacherTitles).toContain("General Camp Rules");
+    expect(teacherTitles).toContain("Teacher Manual");
+    expect(teacherTitles).not.toContain("Parent Handbook");
+    expect(teacherTitles).not.toContain("Volunteer Duty Guide");
+
+    // Volunteer sees ALL + VOLUNTEERS (2 items)
+    const volunteerDocs = await volunteer.campResource.listForAudience({ campId, audience: "VOLUNTEERS" });
+    const volunteerTitles = volunteerDocs.map((d) => d.title);
+    expect(volunteerTitles).toContain("General Camp Rules");
+    expect(volunteerTitles).toContain("Volunteer Duty Guide");
+    expect(volunteerTitles).not.toContain("Parent Handbook");
+    expect(volunteerTitles).not.toContain("Teacher Manual");
   });
 
   it("blocks non-admins from creating camp resources", async () => {
