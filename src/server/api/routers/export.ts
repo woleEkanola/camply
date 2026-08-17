@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { EXPORT_FORMATS, EXPORT_KINDS, EXPORT_SCOPES } from "../../export/types";
 import { getExportDescriptor, listExportDescriptors } from "../../export/registry";
-import { enqueueExportJob, retryExportJob, cancelExportJob } from "../../export/engine";
+import { enqueueExportJob, retryExportJob, cancelExportJob, deleteExportJob } from "../../export/engine";
 import "../../export/builders";
 
 const exportKindSchema = z.enum(EXPORT_KINDS);
@@ -88,11 +88,26 @@ export const exportRouter = createTRPCRouter({
           updatedAt: true,
           completedAt: true,
           expiresAt: true,
+          partRefs: true,
         },
         orderBy: { createdAt: "desc" },
         take: 50,
       });
-      return jobs;
+      // A job with more than one staged part never gets promoted to a single
+      // artifact (see engine.ts's finalizeResumableJob) — the client needs to
+      // know the count to render one download link per part instead of one.
+      // partRefs itself (blob URLs) never leaves the server — see
+      // blobStore.ts's privacy note on why those URLs must not reach the client.
+      return jobs.map(({ partRefs, ...job }) => {
+        const parts = Array.isArray(partRefs) ? (partRefs as { size?: number }[]) : [];
+        return {
+          ...job,
+          partCount: parts.length,
+          // job.fileSize is only set for a promoted single-file artifact —
+          // a genuinely multi-part job never gets one, so sum the parts.
+          fileSize: job.fileSize ?? (parts.length > 0 ? parts.reduce((sum, p) => sum + (p.size ?? 0), 0) : null),
+        };
+      });
     }),
 
   get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
@@ -115,7 +130,7 @@ export const exportRouter = createTRPCRouter({
 
   dismiss: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     await assertOwnsJob(ctx, input.id);
-    await ctx.prisma.exportJob.delete({ where: { id: input.id } });
+    await deleteExportJob(input.id);
     return { success: true };
   }),
 });

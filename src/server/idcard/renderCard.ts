@@ -26,6 +26,7 @@ import {
   drawPersonGlyph,
   loadLogoOrNull,
   initials,
+  type RenderCardOptions,
   SHEET_COLS,
   SHEET_ROWS,
   SHEET_GAP,
@@ -44,12 +45,12 @@ export interface CampIdCardData {
   qrToken: string;
 }
 
-export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer> {
+export async function renderCampIdCardPng(data: CampIdCardData, options?: RenderCardOptions): Promise<Buffer> {
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   const ctx = canvas.getContext("2d");
 
   const [logo, qrBuffer] = await Promise.all([
-    loadLogoOrNull(data.logoUrl),
+    loadLogoOrNull(data.logoUrl, options?.logoCache),
     QRCode.toBuffer(data.qrToken, { width: 600, margin: 1 }),
   ]);
   const qrImage = await loadImage(qrBuffer);
@@ -250,6 +251,7 @@ export async function renderCampIdCardPng(data: CampIdCardData): Promise<Buffer>
   ctx.lineWidth = 3;
   ctx.stroke();
 
+  if (options?.encodeAs === "jpeg") return canvas.encode("jpeg", options.jpegQuality ?? 90);
   return canvas.encode("png");
 }
 

@@ -4,6 +4,7 @@ import type { CreateBatchEmailOptions, CreateEmailOptions } from "resend";
 import { resolveAudience, type ResolvedUser } from "../audience/resolver";
 import type { AudienceFilter } from "../audience/filters";
 import { injectTracking } from "../tracking/injectTracking";
+import { publicAppUrl, configuredRequestsPerSecond, estimateSendSeconds } from "../appUrl";
 import { buildCampIdCardData } from "../../idcard/data";
 import {
   type CampaignAttachment,
@@ -42,14 +43,14 @@ interface SendCampaignResult extends CampaignReadiness {
 }
 
 const PERSONALIZED_STATUSES = ["APPROVED", "CHECKED_IN"];
-const DEFAULT_REQUESTS_PER_SECOND = 4;
-let nextResendRequestAt = 0;
-let requestSpacingMs = Math.ceil(1000 / configuredRequestsPerSecond());
 
-function configuredRequestsPerSecond(): number {
-  const parsed = Number(process.env.RESEND_MAX_REQUESTS_PER_SECOND ?? DEFAULT_REQUESTS_PER_SECOND);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 5) : DEFAULT_REQUESTS_PER_SECOND;
-}
+// The floor requestSpacingMs decays back to once rate-limit pressure eases —
+// never a moving target, or a single 429 permanently slows every future send
+// in this process (the bug this replaced: `Math.max(requestSpacingMs, ...)`
+// used the mutable value as its own floor, so it could only ever ratchet up).
+const BASELINE_REQUEST_SPACING_MS = Math.ceil(1000 / configuredRequestsPerSecond());
+let nextResendRequestAt = 0;
+let requestSpacingMs = BASELINE_REQUEST_SPACING_MS;
 
 function recipientTypeForRole(role: string): string {
   if (role === "PARENT") return "PARENT";
@@ -59,24 +60,15 @@ function recipientTypeForRole(role: string): string {
   return "ADMIN";
 }
 
-function publicAppUrl(): { url: string; error?: string } {
-  const raw = (process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3001").replace(/\/$/, "");
-  try {
-    const url = new URL(raw);
-    if (process.env.NODE_ENV === "production" && (url.protocol !== "https:" || ["localhost", "127.0.0.1"].includes(url.hostname))) {
-      return { url: raw, error: "APP_URL must be a public HTTPS address before personalized ID-card emails can be sent." };
-    }
-    return { url: raw };
-  } catch {
-    return { url: raw, error: "APP_URL is not a valid absolute URL." };
-  }
-}
-
 function campaignFilter(campaign: any): AudienceFilter {
   return (campaign.savedAudience?.filterDefinition || campaign.audienceFilter || { recipientType: "ALL" }) as AudienceFilter;
 }
 
-function personalizedWhere(campaign: any, filter: AudienceFilter, manualEmails: string[]) {
+function caseInsensitiveEmailWhere(emails: string[]) {
+  return { OR: emails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })) };
+}
+
+function personalizedWhere(campaign: any, filter: AudienceFilter, manualEmails: string[], registrationIds: string[]) {
   const where: Record<string, unknown> = {
     campId: campaign.personalizeCampId,
     status: { in: PERSONALIZED_STATUSES },
@@ -85,11 +77,18 @@ function personalizedWhere(campaign: any, filter: AudienceFilter, manualEmails: 
   };
   const campusId = (filter.filters as { campusId?: string } | undefined)?.campusId;
   if (campusId) where.campusId = campusId;
-  if (manualEmails.length > 0) where.camper = { user: { email: { in: manualEmails } } };
+  // registrationIds is the precise selector (used by targeted resends) and
+  // takes priority over manualEmails — it survives a parent having more than
+  // one camper in the camp, where an email match cannot distinguish them.
+  if (registrationIds.length > 0) {
+    where.id = { in: registrationIds };
+  } else if (manualEmails.length > 0) {
+    where.camper = { user: caseInsensitiveEmailWhere(manualEmails) };
+  }
   return where;
 }
 
-function assessRegistration(registration: any, commonIssues: string[]): string[] {
+export function assessRegistration(registration: any, commonIssues: string[]): string[] {
   const reasons = [...commonIssues];
   if (!registration.camper?.user?.email) reasons.push("Parent email is missing.");
   if (!registration.registrationNumber) reasons.push("Registration number is missing.");
@@ -104,7 +103,8 @@ async function resolvePersonalizedRecipients(
   prisma: TxClient,
   campaign: any,
   filter: AudienceFilter,
-  manualEmails: string[]
+  manualEmails: string[],
+  registrationIds: string[]
 ): Promise<ResolvedPersonalizedUser[]> {
   const brandingEnabled = !!campaign.organization?.branding?.idCardEnabled;
   const appUrl = publicAppUrl();
@@ -113,7 +113,7 @@ async function resolvePersonalizedRecipients(
     ...(appUrl.error ? [appUrl.error] : []),
   ];
   const registrations = await (prisma as any).registration.findMany({
-    where: personalizedWhere(campaign, filter, manualEmails),
+    where: personalizedWhere(campaign, filter, manualEmails, registrationIds),
     include: CAMP_INVITATION_INCLUDE,
     orderBy: { createdAt: "asc" },
   });
@@ -137,14 +137,14 @@ async function loadCampaign(prisma: TxClient, campaignId: string) {
   });
 }
 
-async function resolveRecipients(prisma: TxClient, campaign: any, manualEmails: string[]) {
+async function resolveRecipients(prisma: TxClient, campaign: any, manualEmails: string[], registrationIds: string[] = []) {
   const filter = campaignFilter(campaign);
   if (campaign.personalizeEvent && campaign.personalizeCampId) {
-    return resolvePersonalizedRecipients(prisma, campaign, filter, manualEmails);
+    return resolvePersonalizedRecipients(prisma, campaign, filter, manualEmails, registrationIds);
   }
   if (manualEmails.length > 0) {
     const users = await (prisma as any).user.findMany({
-      where: { email: { in: manualEmails }, organizationId: campaign.organizationId },
+      where: { organizationId: campaign.organizationId, ...caseInsensitiveEmailWhere(manualEmails) },
     });
     return users.map((user: any) => ({ ...user, readinessIssues: [] }));
   }
@@ -155,14 +155,15 @@ async function resolveRecipients(prisma: TxClient, campaign: any, manualEmails: 
 export async function getCampaignReadiness(
   prisma: TxClient,
   campaignId: string,
-  opts?: { manualEmails?: string[] }
+  opts?: { manualEmails?: string[]; registrationIds?: string[] }
 ): Promise<CampaignReadiness> {
   const campaign = await loadCampaign(prisma, campaignId);
   if (!campaign) throw new Error("Campaign not found");
   const attachments = (campaign.attachments || []) as CampaignAttachment[];
   const blockingErrors = validateCampaignAttachments(attachments);
   const manualEmails = [...new Set((opts?.manualEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean))];
-  const recipients = await resolveRecipients(prisma, campaign, manualEmails);
+  const registrationIds = [...new Set(opts?.registrationIds ?? [])];
+  const recipients = await resolveRecipients(prisma, campaign, manualEmails, registrationIds);
   const issues: CampaignReadinessIssue[] = recipients
     .filter((recipient: any) => recipient.readinessIssues.length > 0)
     .map((recipient: any) => ({
@@ -180,7 +181,7 @@ export async function getCampaignReadiness(
     total: recipients.length,
     sharedAttachments: attachments.length,
     personalizedPdfs: personalized ? ready : 0,
-    estimatedSeconds: ready === 0 ? 0 : individual ? Math.ceil(ready / configuredRequestsPerSecond()) : Math.ceil(ready / (configuredRequestsPerSecond() * 100)),
+    estimatedSeconds: estimateSendSeconds(ready, individual),
     blockingErrors,
     issues,
   };
@@ -306,11 +307,25 @@ async function waitForRateSlot() {
 function applyRateHeaders(headers: Record<string, string> | null) {
   if (!headers) return;
   const limit = Number(headers["ratelimit-limit"] ?? headers["x-ratelimit-limit"]);
-  if (Number.isFinite(limit) && limit > 0) requestSpacingMs = Math.max(requestSpacingMs, Math.ceil(1000 / limit));
+  // Recomputed fresh from the latest header each call, floored at our own
+  // configured baseline — so spacing tracks Resend's *current* advertised
+  // limit in both directions instead of only ever growing.
+  if (Number.isFinite(limit) && limit > 0) requestSpacingMs = Math.max(BASELINE_REQUEST_SPACING_MS, Math.ceil(1000 / limit));
   const remaining = Number(headers["ratelimit-remaining"] ?? headers["x-ratelimit-remaining"]);
   const retryAfter = Number(headers["retry-after"]);
   if (remaining === 0 && Number.isFinite(retryAfter)) nextResendRequestAt = Math.max(nextResendRequestAt, Date.now() + retryAfter * 1000);
 }
+
+// Test-only access to module-private rate-limit state — there's no
+// meaningful way to exercise the requestSpacingMs decay fix by driving it
+// through an actual Resend call (would require mocking the network client),
+// so tests call applyRateHeaders directly with fabricated header objects.
+export const __testing__ = {
+  applyRateHeaders,
+  getRequestSpacingMs: () => requestSpacingMs,
+  resetRequestSpacingMs: () => { requestSpacingMs = BASELINE_REQUEST_SPACING_MS; },
+  BASELINE_REQUEST_SPACING_MS,
+};
 
 function resendError(result: { error: any; headers: Record<string, string> | null }): ResendCampaignError {
   const retryAfter = Number(result.headers?.["retry-after"]);
@@ -331,7 +346,7 @@ async function sendPreparedEmail(payload: CreateEmailOptions, idempotencyKey: st
 export async function sendCampaign(
   prisma: TxClient,
   campaignId: string,
-  opts?: { manualEmails?: string[] }
+  opts?: { manualEmails?: string[]; registrationIds?: string[] }
 ): Promise<SendCampaignResult> {
   const campaign = await loadCampaign(prisma, campaignId);
   if (!campaign) throw new Error("Campaign not found");
@@ -340,7 +355,8 @@ export async function sendCampaign(
   if (attachmentErrors.length > 0) throw new Error(attachmentErrors.join(" "));
 
   const manualEmails = [...new Set((opts?.manualEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean))];
-  const users = await resolveRecipients(prisma, campaign, manualEmails);
+  const registrationIds = [...new Set(opts?.registrationIds ?? [])];
+  const users = await resolveRecipients(prisma, campaign, manualEmails, registrationIds);
   if (["DRAFT", "SCHEDULED"].includes(campaign.status)) {
     const claimed = await (prisma as any).emailCampaign.updateMany({
       where: { id: campaignId, status: campaign.status },
@@ -402,7 +418,21 @@ export async function sendCampaign(
     },
   });
 
-  const readiness = await getCampaignReadiness(prisma, campaignId, { manualEmails });
+  // Best-effort immediate kick, mirroring runSideEffectsNow for registration
+  // emails (effects.ts) — without this, a freshly-sent campaign sits queued
+  // doing nothing until a cron tick or a manual "Send queued now" click.
+  // Fire-and-forget: sendCampaign's own result must never depend on this
+  // succeeding, since sweepPendingSideEffects (the cron path) is still the
+  // safety net if it fails or the process dies mid-send. Dynamic import
+  // avoids a static circular dependency (effects.ts already imports from
+  // this module).
+  if (queuedCount > 0) {
+    import("../../registration/effects")
+      .then(({ sweepPendingSideEffects }) => sweepPendingSideEffects())
+      .catch((error) => console.error(`[sendCampaign] immediate kick failed for campaign ${campaignId}:`, error));
+  }
+
+  const readiness = await getCampaignReadiness(prisma, campaignId, { manualEmails, registrationIds });
   return { ...readiness, recipientCount: existingRecipients.length + newUsers.length };
 }
 

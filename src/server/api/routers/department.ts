@@ -111,6 +111,21 @@ export const departmentRouter = createTRPCRouter({
       return ctx.prisma.department.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
     }),
 
+  // Read-only preview of what blocks (or wouldn't block) deleting a
+  // department, so a caller (e.g. the organogram) can explain/disable a
+  // Delete button before the mutation throws, rather than only finding out
+  // after clicking it.
+  deletionPreview: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const dept = await ctx.prisma.department.findUnique({ where: { id: input.id } });
+      if (!dept || dept.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, dept.organizationId);
+      const isSystem = dept.systemKey === "CAMP_COMMAND";
+      const blockers = await deletionBlockers(ctx.prisma, dept.id);
+      return { ...blockers, isSystem };
+    }),
+
   // Bulk delete (soft — Trash-recoverable) and bulk archive. Each id is
   // checked independently and contributes its own pass/fail result so one
   // blocked department doesn't stop the rest of the batch from being deleted.

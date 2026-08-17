@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { logEvent } from "../../audit";
 import { seedTeenCampDepartments } from "../../departments/jdSeed";
+import { ensureCampCommandStructure } from "../../campCommand/structure";
 import { DepartmentMergeError, mergeDepartmentInTx } from "../../departments/merge";
 import {
   activeStaffProfileForUser,
@@ -12,7 +13,7 @@ import {
 } from "../../departments/operations";
 import { suggestDepartmentMatch } from "../../departments/reconciliation";
 import { syncStaffProfileFromPositions } from "../../utils/hierarchySync";
-import { assertCanManageCamp } from "../trpc/scoping";
+import { assertCanManageCamp, assertSameOrg } from "../trpc/scoping";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
@@ -88,6 +89,11 @@ export const departmentOperationsRouter = createTRPCRouter({
           actorId: ctx.userId,
           overwriteExisting: input.overwriteExisting,
         });
+        // Tag the JD-seeded "Camp Commandant" position (created with
+        // leadershipRole left null, matched by name only) as the real
+        // Commandant instead of leaving campCommand.ensureStructure to
+        // create a second, untagged-vs-tagged duplicate later.
+        await ensureCampCommandStructure(tx, input.campId, camp.organizationId, { reparentOrphans: false, actorId: ctx.userId });
         await writeAudit(tx, {
           organizationId: camp.organizationId,
           actorId: ctx.userId,
@@ -495,9 +501,7 @@ export const departmentOperationsRouter = createTRPCRouter({
     .input(z.object({ staffId: z.string() }))
     .query(async ({ ctx, input }) => {
       const staff = await ctx.prisma.staffProfile.findUniqueOrThrow({ where: { id: input.staffId }, select: { id: true, organizationId: true, campId: true, departmentId: true } });
-      if (!isAdmin(ctx, staff.organizationId)) {
-        try { await assertCanManageCamp(ctx, staff.campId, "CAMP_STRUCTURE"); } catch { throw new TRPCError({ code: "FORBIDDEN" }); }
-      }
+      assertSameOrg(ctx, staff.organizationId);
       const assignments = await ctx.prisma.positionAssignment.findMany({
         where: { staffId: input.staffId, isCurrent: true, OR: [{ endDate: null }, { endDate: { gte: new Date() } }], position: { departmentId: { not: null }, deletedAt: null } },
         select: { id: true, isPrimary: true, position: { select: { id: true, name: true, roleKind: true, departmentId: true } } },

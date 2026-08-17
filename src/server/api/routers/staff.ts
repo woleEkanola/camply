@@ -2,7 +2,7 @@ import { z } from "zod";
 import { normalizeGender } from "../../../lib/gender";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { assertOrgAdminOrCommand, assertOrgAdminOrCampusRep as assertScopedOrgAccess } from "../trpc/scoping";
+import { assertOrgAdminOrCommand, assertOrgAdminOrCampusRep as assertScopedOrgAccess, assertSameOrg } from "../trpc/scoping";
 
 const assertOrgAdminOrCampusRep = (ctx: any, organizationId: string, campusId?: string | null) =>
   assertScopedOrgAccess(ctx, organizationId, campusId, "STAFF");
@@ -16,6 +16,9 @@ import { isCompleteNigerianPhone } from "../../../lib/phone";
 import { ensureStaffQrToken, regenerateStaffQrToken } from "../../staff/idToken";
 import { assertDepartmentHasCapacity, DepartmentCapacityError, getDepartmentAvailability } from "../../staff/departmentCapacity";
 import { loadAutoAssignContext, rankDepartmentCandidates, resolvePreferredDepartmentId, simulateAssignmentPlan } from "../../staff/departmentAssignment";
+import { buildDuplicateReport } from "../../staff/duplicateDetection";
+import { mergeStaffProfilesInTx, StaffMergeError, type MergeStaffProfilesResult } from "../../staff/merge";
+import { rebuildLeaderboard } from "../../leaderboard/aggregate";
 
 
 async function requireStaffProfile(ctx: { prisma: any; userId: string }) {
@@ -177,6 +180,10 @@ export const staffRouter = createTRPCRouter({
       departmentId: z.string().optional(),
       assignmentStatus: z.enum(["ASSIGNED", "UNASSIGNED"]).optional(),
       volunteerCategory: z.string().optional(),
+      hostelId: z.string().optional(),
+      floorId: z.string().optional(),
+      roomId: z.string().optional(),
+      bedStatus: z.enum(["ASSIGNED", "UNASSIGNED"]).optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
       limit: z.number().min(1).max(200).default(25),
@@ -198,6 +205,11 @@ export const staffRouter = createTRPCRouter({
         ...(input.assignmentStatus === "ASSIGNED" && { departmentId: { not: null } }),
         ...(input.assignmentStatus === "UNASSIGNED" && { departmentId: null }),
         ...(input.volunteerCategory && { volunteerCategory: input.volunteerCategory }),
+        ...(input.hostelId && { assignedHostelId: input.hostelId }),
+        ...(input.floorId && { assignedRoom: { floorId: input.floorId } }),
+        ...(input.roomId && { assignedRoomId: input.roomId }),
+        ...(input.bedStatus === "ASSIGNED" && { assignedBed: { isNot: null } }),
+        ...(input.bedStatus === "UNASSIGNED" && { assignedBed: { is: null } }),
         ...(input.q && {
           OR: [
             { firstName: { contains: input.q, mode: "insensitive" } },
@@ -211,7 +223,16 @@ export const staffRouter = createTRPCRouter({
       const [items, totalCount] = await Promise.all([
         ctx.prisma.staffProfile.findMany({
           where,
-          include: { assignedVenue: true, assignedTribe: true, preferredCampus: true, department: true, preferredDepartment: true },
+          include: {
+            assignedVenue: true,
+            assignedTribe: true,
+            preferredCampus: true,
+            department: true,
+            preferredDepartment: true,
+            assignedHostel: { select: { id: true, name: true, gender: true } },
+            assignedRoom: { select: { id: true, name: true, floor: { select: { id: true, name: true } } } },
+            assignedBed: { select: { id: true, label: true } },
+          },
           orderBy: { createdAt: "desc" },
           take: input.limit + 1,
           ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
@@ -276,7 +297,7 @@ export const staffRouter = createTRPCRouter({
         },
       });
       if (!profile || profile.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+      assertSameOrg(ctx, profile.organizationId);
       return profile;
     }),
 
@@ -1082,6 +1103,164 @@ export const staffRouter = createTRPCRouter({
         }
       }
       return { success: true, count, preferenceMatched, fallbackAssigned, unassigned: teachers.length - count, strategy: input.strategy, mode: input.mode };
+    }),
+
+  // ─── Duplicate detection (Part B) ─────────────────────────────────────
+  // Read-only visibility is fine for campus reps (matches adminList's auth);
+  // only the merge mutation (staff.mergeProfiles) tightens to org-admin-only,
+  // since the whole point of these duplicates is that they often straddle
+  // two different campuses, where campus scoping has no correct answer.
+  duplicateReport: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        campId: z.string(),
+        type: z.enum(["TEACHER", "VOLUNTEER"]).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
+      return buildDuplicateReport(ctx.prisma, { organizationId: input.organizationId, campId: input.campId, type: input.type });
+    }),
+
+  // Runs the real merge logic inside a transaction that always rolls back,
+  // so the preview can never drift from what mergeProfiles will actually do
+  // — one implementation, not two kept in sync by hand.
+  previewMerge: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        sourceId: z.string(),
+        targetId: z.string(),
+        allowCrossType: z.boolean().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertOrgAdminOrCampusRep(ctx, input.organizationId);
+
+      const [source, target] = await Promise.all([
+        ctx.prisma.staffProfile.findUnique({ where: { id: input.sourceId } }),
+        ctx.prisma.staffProfile.findUnique({ where: { id: input.targetId } }),
+      ]);
+      if (!source || !target) throw new TRPCError({ code: "NOT_FOUND", message: "Staff profile not found." });
+      if (source.organizationId !== input.organizationId || target.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      class PreviewRollback extends Error {}
+      let captured: MergeStaffProfilesResult | undefined;
+      try {
+        await ctx.prisma.$transaction(async (tx: any) => {
+          captured = await mergeStaffProfilesInTx(tx, {
+            sourceId: input.sourceId,
+            targetId: input.targetId,
+            actorId: ctx.userId,
+            allowCrossType: input.allowCrossType,
+          });
+          throw new PreviewRollback();
+        });
+      } catch (error) {
+        if (!(error instanceof PreviewRollback)) {
+          if (error instanceof StaffMergeError) throw new TRPCError({ code: error.code as any, message: error.message });
+          throw error;
+        }
+      }
+      const result = captured!;
+
+      return {
+        source: {
+          id: source.id,
+          userId: source.userId,
+          firstName: source.firstName,
+          lastName: source.lastName,
+          email: source.email,
+          status: source.status,
+          hasQrToken: Boolean(source.qrToken),
+        },
+        target: {
+          id: target.id,
+          userId: target.userId,
+          firstName: target.firstName,
+          lastName: target.lastName,
+          email: target.email,
+          status: target.status,
+          hasQrToken: Boolean(target.qrToken),
+        },
+        sameLoginAccount: source.userId === target.userId,
+        // The losing login account is left fully active per product decision
+        // — this is the email that person can still sign in with and find no
+        // profile at, so the merge dialog must surface it plainly.
+        leftoverEmail: source.userId !== target.userId ? source.email : null,
+        pointsToMove: result.pointsMoved,
+        statusWillBePromoted: result.statusPromoted,
+        idCardWillBeRetired: result.qrTokenRetired,
+        idCardWillBeAdopted: result.qrTokenAdopted,
+        counts: result,
+      };
+    }),
+
+  // Org-admin only (not campus-rep) — the defining feature of these
+  // duplicates is that they often straddle two different campuses, where
+  // campus scoping has no correct answer and a rep could merge away someone
+  // in another rep's campus. Detection/preview stay open to reps; only the
+  // actual write tightens.
+  mergeProfiles: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        sourceId: z.string(),
+        targetId: z.string(),
+        allowCrossType: z.boolean().optional(),
+        acknowledgeIdCardRetirement: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertOrgAdmin(ctx, input.organizationId);
+
+      const [source, target] = await Promise.all([
+        ctx.prisma.staffProfile.findUnique({ where: { id: input.sourceId } }),
+        ctx.prisma.staffProfile.findUnique({ where: { id: input.targetId } }),
+      ]);
+      if (!source || !target) throw new TRPCError({ code: "NOT_FOUND", message: "Staff profile not found." });
+      if (source.organizationId !== input.organizationId || target.organizationId !== input.organizationId) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      // The warning is a contract, not a UI courtesy — enforced server-side.
+      // Both sides already having an issued physical card is exactly the
+      // case where the merge retires one of them.
+      if (source.qrToken && target.qrToken && !input.acknowledgeIdCardRetirement) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Both profiles have an issued ID card — acknowledge that one will be retired before merging.",
+        });
+      }
+
+      let result: MergeStaffProfilesResult;
+      try {
+        result = await ctx.prisma.$transaction((tx: any) =>
+          mergeStaffProfilesInTx(tx, {
+            sourceId: input.sourceId,
+            targetId: input.targetId,
+            actorId: ctx.userId,
+            allowCrossType: input.allowCrossType,
+          })
+        );
+      } catch (error) {
+        if (error instanceof StaffMergeError) throw new TRPCError({ code: error.code as any, message: error.message });
+        throw error;
+      }
+
+      // Fired after the merge transaction commits, never from inside it —
+      // the ledger (ScoreEvent) is the source of truth, and a rebuild
+      // failure must never roll back an already-committed merge.
+      try {
+        await ctx.prisma.$transaction((tx: any) => rebuildLeaderboard(tx, source.campId));
+      } catch (error) {
+        console.error("Post-merge leaderboard rebuild failed (non-fatal):", error);
+      }
+
+      return result;
     }),
 });
 

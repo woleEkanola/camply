@@ -21,6 +21,12 @@ services:
     sync: false
   - key: RESEND_API_KEY
     sync: false
+  # Signing secret for the Resend webhook (src/app/api/webhooks/resend/route.ts).
+  # Copy it from the webhook's own page in the Resend dashboard — it is NOT the
+  # API key. The route fails closed, so while this is unset every delivery/open/
+  # bounce event 401s and campaign stats read 0% delivered forever.
+  - key: RESEND_WEBHOOK_SECRET
+    sync: false
   - key: CRON_SECRET
     sync: false
   - key: APP_URL

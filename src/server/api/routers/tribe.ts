@@ -391,11 +391,16 @@ export const tribeRouter = createTRPCRouter({
     }),
 
   bulkApply: protectedProcedure
-    .input(z.object({ campId: z.string(), registrationIds: z.array(z.string()).optional() }))
+    .input(z.object({ campId: z.string(), registrationIds: z.array(z.string()).optional(), allowReassign: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
       const currentUser = ctx.session?.user;
       await assertCanManageCamp(ctx, input.campId);
-      return tribeEngine.bulkApplySuggestedTribes({ campId: input.campId, registrationIds: input.registrationIds, actorId: currentUser!.id });
+      return tribeEngine.bulkApplySuggestedTribes({
+        campId: input.campId,
+        registrationIds: input.registrationIds,
+        actorId: currentUser!.id,
+        allowReassign: input.allowReassign,
+      });
     }),
 
   bulkAutoAssign: protectedProcedure

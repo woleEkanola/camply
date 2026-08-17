@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Dialog } from "@/components/ui/Dialog";
+import { InvitationRecipientPicker } from "@/components/communication/InvitationRecipientPicker";
 import Link from "next/link";
 
 function statusTone(status: string): "success" | "warning" | "danger" | "neutral" | "info" {
@@ -18,6 +19,20 @@ function statusTone(status: string): "success" | "warning" | "danger" | "neutral
     COMPLETED: "success", PAUSED: "warning", NEEDS_ATTENTION: "danger", CANCELLED: "neutral", FAILED: "danger",
   };
   return map[status] ?? "neutral";
+}
+
+/**
+ * One stat tile. Carries a stable `data-testid` so specs can assert the actual
+ * number rather than merely that the label rendered — the old spec only checked
+ * label visibility, which passed no matter what the counts said.
+ */
+function StatTile({ testId, label, value, tone }: { testId: string; label: string; value: number | string; tone: string }) {
+  return (
+    <div className="rounded-lg bg-surface-raised p-3 text-center" data-testid={`stat-${testId}`}>
+      <div className={`text-xl font-bold ${tone}`} data-testid={`stat-${testId}-value`}>{value}</div>
+      <div className="text-xs text-txt-secondary">{label}</div>
+    </div>
+  );
 }
 
 export default function CampaignDetail() {
@@ -36,7 +51,10 @@ export default function CampaignDetail() {
   const retryFailedMut = api.communication.campaignRetryFailed.useMutation();
   const kickMut = api.communication.campaignKickQueue.useMutation();
   const nonOpenerMut = api.communication.campaignSendToNonOpeners.useMutation();
+  const invitationResendMut = api.communication.invitationResend.useMutation();
   const [showNonOpener, setShowNonOpener] = useState(false);
+  const [showResendPicker, setShowResendPicker] = useState(false);
+  const [resendRegistrationIds, setResendRegistrationIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
 
   if (isLoading) {
@@ -48,10 +66,13 @@ export default function CampaignDetail() {
   }
 
   const s = (campaign as any).stats;
-  const nonOpenerCount = Math.max(0, s.delivered - s.opened);
+  // Counts, rates, and the ETA all come from the server (see server/email/stats.ts
+  // and server/email/appUrl.ts) so this page can't drift from the dashboard the
+  // way it did when each computed its own "Success Rate" from a different base.
+  const nonOpenerCount = s.nonOpeners;
+  const estimatedSeconds = s.estimatedSeconds;
   const isPersonalized = !!campaign.personalizeEvent;
-  const individualDelivery = isPersonalized || ((campaign.attachments as any[])?.length ?? 0) > 0;
-  const estimatedSeconds = Math.ceil((s.queued + s.processing) / (individualDelivery ? 4 : 400));
+  const pct = (value: number | null) => (value === null ? "—" : `${value}%`);
   const lastActivity = s.lastActivityAt ? new Date(s.lastActivityAt) : null;
   const stale = campaign.status === "SENDING" && lastActivity && Date.now() - lastActivity.getTime() > 2 * 60 * 1000;
   const refresh = async (message?: string) => {
@@ -75,20 +96,20 @@ export default function CampaignDetail() {
         />
 
         {notice && <div className="rounded-lg border border-accent-200 bg-accent-50 px-4 py-2 text-sm text-accent-800">{notice}</div>}
-        {stale && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">No campaign progress has been recorded for more than two minutes. Use “Send queued now” or verify the email-effects scheduler.</div>}
+        {stale && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">No campaign progress has been recorded for more than two minutes — sending appears to have stalled. Use “Send queued now” below to nudge it, or check back shortly.</div>}
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-neutral-900">{s.total}</div><div className="text-xs text-txt-secondary">Total</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-amber-600">{s.queued}</div><div className="text-xs text-txt-secondary">Queued</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-blue-600">{s.processing}</div><div className="text-xs text-txt-secondary">Processing</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-amber-700">{s.held}</div><div className="text-xs text-txt-secondary">Held</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-cyan-700">{s.sent}</div><div className="text-xs text-txt-secondary">Accepted</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-green-600">{s.delivered}</div><div className="text-xs text-txt-secondary">Delivered</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-red-600">{s.failed + s.bounced}</div><div className="text-xs text-txt-secondary">Failed/Bounced</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-indigo-600">{s.opened}</div><div className="text-xs text-txt-secondary">Opened</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-rose-600">{s.clicked}</div><div className="text-xs text-txt-secondary">Clicked</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-txt-secondary">{s.total > 0 ? Math.round((s.delivered / s.total) * 100) : 0}%</div><div className="text-xs text-txt-secondary">Success Rate</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-cyan-600">{s.delivered > 0 ? Math.round((s.opened / s.delivered) * 100) : 0}%</div><div className="text-xs text-txt-secondary">Open Rate</div></div>
+          <StatTile testId="total" label="Total" value={s.total} tone="text-neutral-900" />
+          <StatTile testId="queued" label="Queued" value={s.queued} tone="text-amber-600" />
+          <StatTile testId="processing" label="Processing" value={s.processing} tone="text-blue-600" />
+          <StatTile testId="held" label="Held" value={s.held} tone="text-amber-700" />
+          <StatTile testId="sent" label="Accepted" value={s.sent} tone="text-cyan-700" />
+          <StatTile testId="delivered" label="Delivered" value={s.delivered} tone="text-green-600" />
+          <StatTile testId="failed" label="Failed/Bounced" value={s.failed + s.bounced} tone="text-red-600" />
+          <StatTile testId="opened" label="Opened" value={s.opened} tone="text-indigo-600" />
+          <StatTile testId="clicked" label="Clicked" value={s.clicked} tone="text-rose-600" />
+          <StatTile testId="success-rate" label="Success Rate" value={pct(s.successRate)} tone="text-txt-secondary" />
+          <StatTile testId="open-rate" label="Open Rate" value={pct(s.openRate)} tone="text-cyan-600" />
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -96,7 +117,10 @@ export default function CampaignDetail() {
           {campaign.status === "SCHEDULED" && <Button variant="danger" onClick={() => { cancelMut.mutate({ id }); utils.communication.campaignGet.invalidate({ id }); }}>Cancel Schedule</Button>}
           {campaign.status === "SENDING" && <Button variant="secondary" loading={pauseMut.isPending} onClick={async () => { await pauseMut.mutateAsync({ id }); await refresh("Campaign paused. Messages already accepted by Resend are unchanged."); }}>Pause</Button>}
           {campaign.status === "PAUSED" && <Button loading={resumeMut.isPending} onClick={async () => { await resumeMut.mutateAsync({ id }); await refresh("Campaign resumed."); }}>Resume</Button>}
-          {campaign.status === "SENDING" && s.queued > 0 && <Button variant="secondary" loading={kickMut.isPending} onClick={async () => { const result = await kickMut.mutateAsync({ id }); await refresh(`Processed ${result.processed} queued items.`); }}>Send queued now</Button>}
+          {/* Sending is automatic (fires immediately on send, then self-continues
+              until the queue drains) — this is a break-glass nudge for when
+              progress has visibly stalled, not something a healthy send needs. */}
+          {campaign.status === "SENDING" && s.queued > 0 && stale && <Button variant="secondary" loading={kickMut.isPending} onClick={async () => { const result = await kickMut.mutateAsync({ id }); await refresh(`Processed ${result.processed} queued items.`); }}>Send queued now</Button>}
           {s.held > 0 && <Button variant="secondary" loading={retryHeldMut.isPending} onClick={async () => { const result = await retryHeldMut.mutateAsync({ id }); await refresh(`${result.queued} held campers are now queued; ${result.stillHeld} still need attention.`); }}>Retry held campers</Button>}
           {s.failed > 0 && <Button variant="secondary" loading={retryFailedMut.isPending} onClick={async () => { const result = await retryFailedMut.mutateAsync({ id }); await refresh(`${result.retried} failed messages queued for retry.`); }}>Retry failed</Button>}
           {["SENDING", "PAUSED", "NEEDS_ATTENTION"].includes(campaign.status) && <Button variant="danger" size="sm" loading={cancelMut.isPending} onClick={async () => { await cancelMut.mutateAsync({ id }); await refresh("Remaining unsent messages cancelled."); }}>Cancel remaining</Button>}
@@ -105,6 +129,9 @@ export default function CampaignDetail() {
           )}
           {(campaign.status === "DRAFT" || campaign.status === "SCHEDULED") && <Button variant="danger" size="sm" onClick={() => { cancelMut.mutate({ id }); utils.communication.campaignGet.invalidate({ id }); }}>Cancel</Button>}
           <Link href={`/admin/communication/campaigns/new?id=${id}`}><Button variant="secondary" size="sm">Duplicate</Button></Link>
+          {isPersonalized && campaign.personalizeCampId && (
+            <Button variant="secondary" size="sm" onClick={() => { setResendRegistrationIds([]); setShowResendPicker(true); }}>Resend to specific parents</Button>
+          )}
         </div>
 
         {["SENDING", "PAUSED", "NEEDS_ATTENTION"].includes(campaign.status) && (
@@ -183,6 +210,48 @@ export default function CampaignDetail() {
           <div className="text-sm space-y-2">
             <p>A new draft campaign will be created with the same content, targeting only the <strong>{nonOpenerCount}</strong> recipients who never opened this campaign.</p>
             <p className="text-txt-secondary">You can review and edit the follow-up before sending.</p>
+          </div>
+        </Dialog>
+
+        <Dialog
+          open={showResendPicker}
+          onClose={() => setShowResendPicker(false)}
+          title="Resend to specific parents"
+          size="lg"
+          footer={
+            <div className="flex gap-2 justify-end">
+              <Button variant="secondary" onClick={() => setShowResendPicker(false)}>Cancel</Button>
+              <Button
+                loading={invitationResendMut.isPending}
+                disabled={resendRegistrationIds.length === 0}
+                onClick={async () => {
+                  const result = await invitationResendMut.mutateAsync({
+                    campId: campaign.personalizeCampId!,
+                    registrationIds: resendRegistrationIds,
+                    sourceCampaignId: campaign.id,
+                  });
+                  setShowResendPicker(false);
+                  router.push(`/admin/communication/campaigns/${result.campaignId}`);
+                }}
+              >
+                Resend to {resendRegistrationIds.length || ""}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3 text-sm">
+            <p className="text-txt-secondary">
+              Search and select campers to resend this exact invitation (subject, message, attachments, ID card) to
+              — this creates a new campaign scoped to only these recipients, so it works even though this campaign
+              already sent to them once.
+            </p>
+            {campaign.personalizeCampId && (
+              <InvitationRecipientPicker
+                campId={campaign.personalizeCampId}
+                value={resendRegistrationIds}
+                onChange={setResendRegistrationIds}
+              />
+            )}
           </div>
         </Dialog>
       </div>

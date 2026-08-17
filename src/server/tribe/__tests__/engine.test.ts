@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import * as regEngine from "../../registration/engine";
 import * as tribeEngine from "../engine";
+import * as effects from "../../registration/effects";
 
 const prisma = new PrismaClient();
 
@@ -87,6 +88,10 @@ afterEach(async () => {
   // left ~19 throwaway orgs sitting in the dev DB permanently. User has no
   // cascade from Organization (restrict), so delete it first; Organization's
   // cascade then takes care of Campus/Camp/Venue/Tribe/etc.
+  // SideEffect has no FK/cascade relation to Registration (plain nullable
+  // id column), so TRIBE_CHANGED effects enqueued by these tests would
+  // otherwise leak into the DB permanently once their org is gone.
+  await prisma.sideEffect.deleteMany({ where: { organizationId: orgId } });
   await prisma.user.deleteMany({ where: { organizationId: orgId } });
   await prisma.organization.deleteMany({ where: { id: orgId } });
 });
@@ -276,7 +281,177 @@ describe("v3 Recommendation Engine (Decoupled Recommendation vs Assignment)", ()
     expect(suggestResults[0].suggestedTribeId).toBe(tribe.id);
 
     const applyResults = await tribeEngine.bulkApplySuggestedTribes({ campId, actorId: parentId });
-    expect(applyResults.length).toBeGreaterThan(0);
-    expect(applyResults[0].tribeId).toBe(tribe.id);
+    expect(applyResults.assigned.length).toBeGreaterThan(0);
+    expect(applyResults.assigned[0].tribeId).toBe(tribe.id);
+  });
+
+  it("bulkApplySuggestedTribes does not move an already-assigned camper even when passed explicit registrationIds — the reported bug", async () => {
+    const originalTribe = await prisma.tribe.create({ data: { campId, name: "Original" } });
+    const otherTribe = await prisma.tribe.create({ data: { campId, name: "Other" } });
+    const camper = await makeCamper();
+    const registration = await approvedRegistrationFor(camper.id);
+    await tribeEngine.assignTribe({ registrationId: registration.id, tribeId: originalTribe.id, actorId: parentId });
+
+    // Suggest a *different* tribe for the already-assigned registration, then
+    // try to apply it via the exact call shape the admin UI's "Apply Tribes"
+    // button makes (explicit registrationIds) — this used to reassign
+    // regardless of the existing tribeId.
+    await prisma.registration.update({ where: { id: registration.id }, data: { suggestedTribeId: otherTribe.id } });
+
+    const result = await tribeEngine.bulkApplySuggestedTribes({ campId, registrationIds: [registration.id], actorId: parentId });
+
+    expect(result.assigned).toHaveLength(0);
+    expect(result.skippedAlreadyAssigned).toEqual([registration.id]);
+    const unchanged = await prisma.registration.findUniqueOrThrow({ where: { id: registration.id } });
+    expect(unchanged.tribeId).toBe(originalTribe.id);
+  });
+
+  it("bulkApplySuggestedTribes still assigns tribeless registrations in the same selection as a skipped one", async () => {
+    // MANUAL approval mode: submitting alone doesn't reach APPROVED, so
+    // autoAssignTribeOnApproval never fires for either registration below —
+    // this camp has tribeAllocationEnabled, and under the default AUTO mode
+    // submitRegistration auto-approves, which would auto-assign a tribe
+    // before this test gets to it, defeating the "tribeless" premise.
+    await prisma.camp.update({ where: { id: campId }, data: { approvalMode: "MANUAL" } });
+    const originalTribe = await prisma.tribe.create({ data: { campId, name: "Original" } });
+    const targetTribe = await prisma.tribe.create({ data: { campId, name: "Target" } });
+
+    const assignedCamper = await makeCamper();
+    const assignedReg = await approvedRegistrationFor(assignedCamper.id);
+    await tribeEngine.assignTribe({ registrationId: assignedReg.id, tribeId: originalTribe.id, actorId: parentId });
+    await prisma.registration.update({ where: { id: assignedReg.id }, data: { suggestedTribeId: targetTribe.id } });
+
+    const freshCamper = await makeCamper();
+    const freshReg = await approvedRegistrationFor(freshCamper.id);
+    await prisma.registration.update({ where: { id: freshReg.id }, data: { suggestedTribeId: targetTribe.id } });
+
+    const result = await tribeEngine.bulkApplySuggestedTribes({
+      campId,
+      registrationIds: [assignedReg.id, freshReg.id],
+      actorId: parentId,
+    });
+
+    expect(result.skippedAlreadyAssigned).toEqual([assignedReg.id]);
+    expect(result.assigned.map((r) => r.registrationId)).toEqual([freshReg.id]);
+  });
+
+  it("bulkApplySuggestedTribes with allowReassign:true moves an already-assigned camper and writes a TRIBE_CHANGED audit row", async () => {
+    const originalTribe = await prisma.tribe.create({ data: { campId, name: "Original" } });
+    const targetTribe = await prisma.tribe.create({ data: { campId, name: "Target" } });
+    const camper = await makeCamper();
+    const registration = await approvedRegistrationFor(camper.id);
+    await tribeEngine.assignTribe({ registrationId: registration.id, tribeId: originalTribe.id, actorId: parentId });
+    await prisma.registration.update({ where: { id: registration.id }, data: { suggestedTribeId: targetTribe.id } });
+
+    const result = await tribeEngine.bulkApplySuggestedTribes({
+      campId,
+      registrationIds: [registration.id],
+      actorId: parentId,
+      allowReassign: true,
+    });
+
+    expect(result.assigned.map((r) => r.registrationId)).toEqual([registration.id]);
+    const updated = await prisma.registration.findUniqueOrThrow({ where: { id: registration.id } });
+    expect(updated.tribeId).toBe(targetTribe.id);
+
+    const changeLog = await prisma.auditLog.findFirst({
+      where: { registrationId: registration.id, action: "TRIBE_CHANGED" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(changeLog).toBeTruthy();
+    expect((changeLog!.previousValue as any).tribeId).toBe(originalTribe.id);
+    expect((changeLog!.newValue as any).tribeId).toBe(targetTribe.id);
+  });
+
+  it("isTribeLocked blocks a reassignment attempt unless explicitly overridden", async () => {
+    const originalTribe = await prisma.tribe.create({ data: { campId, name: "Original" } });
+    const targetTribe = await prisma.tribe.create({ data: { campId, name: "Target" } });
+    const camper = await makeCamper();
+    const registration = await approvedRegistrationFor(camper.id);
+    await tribeEngine.assignTribe({ registrationId: registration.id, tribeId: originalTribe.id, actorId: parentId });
+    await prisma.registration.update({ where: { id: registration.id }, data: { isTribeLocked: true, suggestedTribeId: targetTribe.id } });
+
+    const result = await tribeEngine.bulkApplySuggestedTribes({
+      campId,
+      registrationIds: [registration.id],
+      actorId: parentId,
+      allowReassign: true,
+    });
+
+    expect(result.assigned).toHaveLength(0);
+    expect(result.skippedLocked).toEqual([registration.id]);
+    const unchanged = await prisma.registration.findUniqueOrThrow({ where: { id: registration.id } });
+    expect(unchanged.tribeId).toBe(originalTribe.id);
+
+    // A direct assignTribe call for a locked registration is rejected the same way.
+    await expect(
+      tribeEngine.assignTribe({ registrationId: registration.id, tribeId: targetTribe.id, actorId: parentId })
+    ).rejects.toThrow(/locked/i);
+  });
+
+  it("enqueues a TRIBE_CHANGED side effect only on a real reassignment, not on first-time assignment", async () => {
+    // Approve before any tribe exists in the camp — approveRegistrationInTx
+    // unconditionally calls confirmAssignmentInTx (not gated by
+    // tribeAllocationEnabled), and suggestTribe returns null with nothing to
+    // suggest, so the registration genuinely reaches APPROVED with no tribe.
+    // Creating tribeA/B beforehand would let that same call auto-assign one
+    // of them at approval time, making the "first assignment" below actually
+    // a reassignment.
+    const camper = await makeCamper();
+    const registration = await approvedRegistrationFor(camper.id);
+    const tribeA = await prisma.tribe.create({ data: { campId, name: "Tribe A" } });
+    const tribeB = await prisma.tribe.create({ data: { campId, name: "Tribe B" } });
+
+    // First-time assignment: covered by the approval email, no correction needed.
+    await tribeEngine.assignTribe({ registrationId: registration.id, tribeId: tribeA.id, actorId: parentId });
+    const afterFirst = await prisma.sideEffect.count({ where: { registrationId: registration.id, type: "TRIBE_CHANGED" } });
+    expect(afterFirst).toBe(0);
+
+    // Real reassignment: the correction email is warranted. Enqueueing also
+    // kicks off processing immediately (fire-and-forget via setImmediate —
+    // see enqueueTribeChangedEffect's doc comment), so don't assert a
+    // specific status here; just confirm a TRIBE_CHANGED effect exists with
+    // the right snapshot. The debounce test below exercises the QUEUED
+    // window itself directly.
+    await tribeEngine.reassignTribe({ registrationId: registration.id, tribeId: tribeB.id, actorId: parentId });
+    const effect = await prisma.sideEffect.findFirst({ where: { registrationId: registration.id, type: "TRIBE_CHANGED" } });
+    expect(effect).toBeTruthy();
+    expect((effect!.payload as any).previousTribeId).toBe(tribeA.id);
+    expect((effect!.payload as any).previousTribeName).toBe("Tribe A");
+  });
+
+  it("debounces enqueuing a TRIBE_CHANGED effect while one is already queued, refreshing the snapshot instead of duplicating", async () => {
+    // Exercises enqueueTribeChangedEffect's own debounce branch directly,
+    // against a manually-seeded QUEUED row — the real call path also kicks
+    // off fire-and-forget processing (see its doc comment), which would
+    // otherwise race this test's "still queued" premise: two reassignments
+    // moments apart could easily land after the first has already finished
+    // processing, in which case there's genuinely nothing left to debounce
+    // against (a real duplicate is then correct, not a bug).
+    const camper = await makeCamper();
+    const registration = await approvedRegistrationFor(camper.id);
+    const tribeA = await prisma.tribe.create({ data: { campId, name: "Tribe A" } });
+    const tribeB = await prisma.tribe.create({ data: { campId, name: "Tribe B" } });
+
+    await prisma.sideEffect.create({
+      data: {
+        registrationId: registration.id,
+        type: "TRIBE_CHANGED",
+        status: "QUEUED",
+        payload: { previousTribeId: tribeA.id, previousTribeName: "Tribe A" },
+      },
+    });
+
+    // The debounce path itself also kicks a fire-and-forget process of the
+    // (now-updated) row, same as a fresh enqueue — but that kick needs
+    // several sequential DB round trips (find, claim, run, mark done),
+    // while the assertions below are one query immediately after a single
+    // `await`, well ahead of it in practice.
+    await effects.enqueueTribeChangedEffect({ registrationId: registration.id, previousTribeId: tribeB.id, previousTribeName: "Tribe B" });
+
+    const all = await prisma.sideEffect.findMany({ where: { registrationId: registration.id, type: "TRIBE_CHANGED" } });
+    expect(all).toHaveLength(1);
+    expect(all[0].status).toBe("QUEUED");
+    expect((all[0].payload as any).previousTribeName).toBe("Tribe B");
   });
 });

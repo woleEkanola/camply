@@ -4,6 +4,9 @@ import { logEvent } from "../audit";
 import { calculateAge } from "../registration/validation";
 import { gendersMatch, normalizeGender } from "../../lib/gender";
 import { ACTIVE_ASSIGNMENT_REGISTRATION_STATUSES } from "../assignments/eligibility";
+import { BED_FAILURE_MESSAGES, type BedFailureReason } from "../../lib/bedFailureMessages";
+
+export { BED_FAILURE_MESSAGES, type BedFailureReason };
 
 type TxClient = PrismaClient<any> | Prisma.TransactionClient;
 
@@ -55,8 +58,8 @@ function ageGroup(dateOfBirth: Date | null, cutoff: Date): string {
 
 /** Unifies Camper (Registration) and Staff (StaffProfile) occupants behind one shape so scoring is population-agnostic. */
 export type Occupant =
-  | { kind: "CAMPER"; registrationId: string; gender: string | null; dateOfBirth: Date | null; groupId: string | null; tribeId?: string | null; campusId: string | null }
-  | { kind: "STAFF"; staffProfileId: string; gender: string | null; dateOfBirth: Date | null; groupId: string | null; tribeId?: string | null; campusId: string | null };
+  | { kind: "CAMPER"; registrationId: string; name: string; gender: string | null; dateOfBirth: Date | null; groupId: string | null; tribeId?: string | null; campusId: string | null }
+  | { kind: "STAFF"; staffProfileId: string; name: string; gender: string | null; dateOfBirth: Date | null; groupId: string | null; tribeId?: string | null; campusId: string | null };
 
 function occupantKey(occupant: Occupant): string {
   return occupant.kind === "CAMPER" ? `camper:${occupant.registrationId}` : `staff:${occupant.staffProfileId}`;
@@ -71,6 +74,10 @@ export interface BedSuggestion {
   confidence: number;
   reasons: string[];
 }
+
+export type BedSuggestionOutcome =
+  | { ok: true; suggestion: BedSuggestion }
+  | { ok: false; reason: BedFailureReason };
 
 /**
  * Scores every AVAILABLE bed in the venue's hostels against the camp's enabled
@@ -89,8 +96,18 @@ export async function suggestBed(
    * receive a supervising adult — scoring alone can't fix that, since by then
    * there is simply no bed left to score.
    */
-  excludeBedIds?: ReadonlySet<string>
-): Promise<BedSuggestion | null> {
+  excludeBedIds?: ReadonlySet<string>,
+  options?: {
+    /**
+     * Skips the GROUP_TOGETHER hard tribe filter entirely, so a candidate
+     * bed in another tribe's room is still eligible. Used only as a staff
+     * fallback: an unhoused teacher is worse than one placed outside their
+     * tribe's block, and unlike campers, staff have nowhere else to go when
+     * every tribe-compatible room is full.
+     */
+    ignoreTribe?: boolean;
+  }
+): Promise<BedSuggestionOutcome> {
   const venue = await tx.venue.findUniqueOrThrow({ where: { id: venueId }, include: { camp: true } });
 
   const hostels = await tx.hostel.findMany({
@@ -117,7 +134,11 @@ export async function suggestBed(
       }
     }
   }
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+    if (!occupant.gender) return { ok: false, reason: "MISSING_GENDER" };
+    if (genderEligible.length === 0) return { ok: false, reason: "NO_GENDER_MATCH" };
+    return { ok: false, reason: "NO_FREE_BEDS" };
+  }
 
   // Merge stored rules *over* the defaults rather than replacing them: a camp
   // configured before a criterion existed has no entry for it, and treating
@@ -168,7 +189,7 @@ export async function suggestBed(
     };
   }
 
-  const groupTogether = enabledRules.some((rule) => rule.criterion === "GROUP_TOGETHER");
+  const groupTogether = enabledRules.some((rule) => rule.criterion === "GROUP_TOGETHER") && !options?.ignoreTribe;
   const occupantTribeId = occupant.tribeId;
   const eligibleCandidates = groupTogether && occupantTribeId
     ? candidates.filter((candidate) => {
@@ -185,7 +206,7 @@ export async function suggestBed(
         return room.tribeIds.length === 0 || room.tribeIds.every((tribeId) => tribeId === occupantTribeId);
       })
     : candidates;
-  if (eligibleCandidates.length === 0) return null;
+  if (eligibleCandidates.length === 0) return { ok: false, reason: "NO_TRIBE_COMPATIBLE_ROOM" };
 
   const scored = eligibleCandidates.map((candidate) => {
     let score = 0;
@@ -248,13 +269,16 @@ export async function suggestBed(
   const confidence = scored.length === 1 ? 99 : Math.round(Math.min(99, 50 + (gap / scale) * 49));
 
   return {
-    bedId: best.candidate.bedId,
-    roomId: best.candidate.roomId,
-    roomName: best.candidate.roomName,
-    hostelId: best.candidate.hostelId,
-    hostelName: best.candidate.hostelName,
-    confidence,
-    reasons: Array.from(new Set(best.reasons)),
+    ok: true,
+    suggestion: {
+      bedId: best.candidate.bedId,
+      roomId: best.candidate.roomId,
+      roomName: best.candidate.roomName,
+      hostelId: best.candidate.hostelId,
+      hostelName: best.candidate.hostelName,
+      confidence,
+      reasons: Array.from(new Set(best.reasons)),
+    },
   };
 }
 
@@ -375,10 +399,11 @@ export async function assignBedInTx(
   return bed;
 }
 
-function occupantFromRegistration(reg: { id: string; tribeId: string | null; campusId: string; camper: { gender: string | null; dateOfBirth: Date | null } }): Occupant {
+function occupantFromRegistration(reg: { id: string; tribeId: string | null; campusId: string; camper: { name: string; gender: string | null; dateOfBirth: Date | null } }): Occupant {
   return {
     kind: "CAMPER",
     registrationId: reg.id,
+    name: reg.camper.name,
     gender: normalizeGender(reg.camper.gender),
     dateOfBirth: reg.camper.dateOfBirth,
     groupId: reg.tribeId,
@@ -387,10 +412,11 @@ function occupantFromRegistration(reg: { id: string; tribeId: string | null; cam
   };
 }
 
-function occupantFromStaff(staff: { id: string; gender: string | null; dateOfBirth: Date | null; departmentId: string | null; assignedTribeId: string | null; preferredCampusId: string | null }): Occupant {
+function occupantFromStaff(staff: { id: string; firstName: string; lastName: string; gender: string | null; dateOfBirth: Date | null; departmentId: string | null; assignedTribeId: string | null; preferredCampusId: string | null }): Occupant {
   return {
     kind: "STAFF",
     staffProfileId: staff.id,
+    name: `${staff.firstName} ${staff.lastName}`.trim(),
     gender: normalizeGender(staff.gender),
     dateOfBirth: staff.dateOfBirth,
     // Sleeping-group cohesion follows the staff member's tribe first. Their
@@ -403,8 +429,16 @@ function occupantFromStaff(staff: { id: string; gender: string | null; dateOfBir
 
 export interface BedAssignmentResult {
   occupantKey: string;
+  name: string;
+  kind: "CAMPER" | "STAFF";
   bedId?: string;
   preserved?: boolean;
+  /** Set only on a diagnosable placement failure (suggestBed's reason) — not on a thrown BedAllocationError. */
+  reason?: BedFailureReason;
+  /** Staff-only: placed successfully, but outside their own tribe's room block because no tribe-compatible bed was free. */
+  placedOutsideTribe?: boolean;
+  gender: string | null;
+  tribeName: string | null;
   error?: string;
 }
 
@@ -528,9 +562,14 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
 
   const occupants: Occupant[] = [...camperOccupants, ...staffOccupants];
 
+  const tribeIds = Array.from(new Set(occupants.map((o) => o.tribeId).filter((id): id is string => !!id)));
+  const tribes = tribeIds.length ? await prisma.tribe.findMany({ where: { id: { in: tribeIds } }, select: { id: true, name: true } }) : [];
+  const tribeNameById = new Map(tribes.map((t) => [t.id, t.name]));
+
   const results: BedAssignmentResult[] = [];
   for (const occupant of occupants) {
     const key = occupantKey(occupant);
+    const resultBase = { occupantKey: key, name: occupant.name, kind: occupant.kind, gender: occupant.gender, tribeName: occupant.tribeId ? tribeNameById.get(occupant.tribeId) ?? null : null };
     try {
       // suggestBed and assignBedInTx now share one transaction — previously
       // suggestBed ran against the raw client outside any transaction, so a
@@ -540,41 +579,55 @@ export async function bulkAutoAssignBeds(params: { venueId: string; actorId: str
       // corrupting data, but running both under one lock avoids the wasted
       // suggestion and the resulting spurious "bed occupied" failure.
       const assignment = await prisma.$transaction(async (tx) => {
+        const commit = async (suggestion: BedSuggestion, placedOutsideTribe: boolean) => {
+          const assigned = await assignBedInTx(tx, {
+            bedId: suggestion.bedId,
+            occupant,
+            actorId: params.actorId,
+            preserveExistingAssignment: true,
+          });
+          return assigned
+            ? { bedId: suggestion.bedId, preserved: false, reason: undefined, placedOutsideTribe }
+            : { bedId: null, preserved: true, reason: undefined, placedOutsideTribe: false };
+        };
+
         // Staff-reserved beds are off-limits to campers but fair game once
         // we reach the staff phase — that's the whole point of holding them.
         const exclude = occupant.kind === "CAMPER" ? reservedForStaff : undefined;
-        let suggestion = await suggestBed(tx, params.venueId, occupant, exclude);
+        let outcome = await suggestBed(tx, params.venueId, occupant, exclude);
         // Rather than fail a camper outright, fall back to the reserved pool:
         // an unhoused camper is worse than an unsupervised room, and this only
         // triggers once every non-reserved bed in the venue is taken.
-        if (!suggestion && occupant.kind === "CAMPER") {
-          suggestion = await suggestBed(tx, params.venueId, occupant);
+        if (!outcome.ok && occupant.kind === "CAMPER") {
+          outcome = await suggestBed(tx, params.venueId, occupant);
         }
-        if (!suggestion) return { bedId: null, preserved: false };
-        const assigned = await assignBedInTx(tx, {
-          bedId: suggestion.bedId,
-          occupant,
-          actorId: params.actorId,
-          preserveExistingAssignment: true,
-        });
-        return assigned
-          ? { bedId: suggestion.bedId, preserved: false }
-          : { bedId: null, preserved: true };
+        // Staff get an equivalent fallback for the one failure campers can't
+        // hit here: every tribe-compatible room is full. Relax the tribe
+        // constraint rather than leave a teacher unhoused — reserveBedsForStaff
+        // reads room tribe occupancy before any camper has been placed, so its
+        // guard can miss and reserve a bed in a room a tribe later claims,
+        // stranding that teacher with no retry unless this fallback exists.
+        if (!outcome.ok && occupant.kind === "STAFF" && outcome.reason === "NO_TRIBE_COMPATIBLE_ROOM") {
+          const relaxed = await suggestBed(tx, params.venueId, occupant, undefined, { ignoreTribe: true });
+          if (relaxed.ok) return commit(relaxed.suggestion, true);
+        }
+        if (!outcome.ok) return { bedId: null, preserved: false, reason: outcome.reason, placedOutsideTribe: false };
+        return commit(outcome.suggestion, false);
       });
       if (assignment.preserved) {
-        results.push({ occupantKey: key, preserved: true });
+        results.push({ ...resultBase, preserved: true });
         continue;
       }
       if (!assignment.bedId) {
-        results.push({ occupantKey: key, error: groupTogether && occupant.tribeId ? "No compatible bed is available for this gender and tribe" : "No matching-gender bed available" });
+        results.push({ ...resultBase, reason: assignment.reason, error: BED_FAILURE_MESSAGES[assignment.reason!].summary });
         continue;
       }
       // Keep the reservation set honest: if a camper did consume a reserved
       // bed via the fallback above, it's no longer held for anyone.
       reservedForStaff.delete(assignment.bedId);
-      results.push({ occupantKey: key, bedId: assignment.bedId });
+      results.push({ ...resultBase, bedId: assignment.bedId, placedOutsideTribe: assignment.placedOutsideTribe || undefined });
     } catch (error) {
-      results.push({ occupantKey: key, error: error instanceof Error ? error.message : String(error) });
+      results.push({ ...resultBase, error: error instanceof Error ? error.message : String(error) });
     }
   }
   return results;

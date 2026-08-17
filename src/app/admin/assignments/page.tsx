@@ -11,6 +11,20 @@ import { Card, CardBody } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { api } from "@/utils/trpc";
+import { BED_FAILURE_MESSAGES, type BedFailureReason } from "@/lib/bedFailureMessages";
+
+type BedAssignmentResult = {
+  occupantKey: string;
+  name: string;
+  kind: "CAMPER" | "STAFF";
+  bedId?: string;
+  preserved?: boolean;
+  reason?: BedFailureReason;
+  placedOutsideTribe?: boolean;
+  gender: string | null;
+  tribeName: string | null;
+  error?: string;
+};
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN"];
 
@@ -45,6 +59,8 @@ export default function AssignmentSetupPage() {
   const organizationId = (session?.user as any)?.organizationId ?? "";
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [bedExceptions, setBedExceptions] = useState<BedAssignmentResult[]>([]);
+  const [expandedVenueId, setExpandedVenueId] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "authenticated" && !ADMIN_ROLES.includes(role)) router.push("/admin");
@@ -83,17 +99,28 @@ export default function AssignmentSetupPage() {
     onError: showError,
   });
   const assignBeds = api.accommodation.bulkAutoAssignBeds.useMutation({
-    onSuccess: (results) => {
+    onSuccess: (results: BedAssignmentResult[]) => {
       const assigned = results.filter((result) => result.bedId).length;
       const exceptions = results.filter((result) => result.error);
+      const outsideTribe = results.filter((result) => result.placedOutsideTribe).length;
       setError("");
-      setMessage(exceptions.length ? `${assigned} assigned. ${exceptions.length} could not be placed; review the venue capacity and tribe coverage warning below.` : `${assigned} people assigned. Existing bed assignments were preserved.`);
+      setBedExceptions(exceptions);
+      setMessage(
+        exceptions.length
+          ? `${assigned} assigned, ${exceptions.length} could not be placed — see the list below.${outsideTribe ? ` ${outsideTribe} were placed outside their own tribe's rooms.` : ""}`
+          : `${assigned} people assigned.${outsideTribe ? ` ${outsideTribe} outside their own tribe's rooms.` : ""} Existing bed assignments were preserved.`
+      );
       refresh();
     },
     onError: showError,
   });
 
-  const capacityWarnings = useMemo(() => data?.venues.filter((venue) => venue.capacityShortfall > 0) ?? [], [data?.venues]);
+  // Gender-aware, not just a raw headcount-vs-bed-count number: 30 free beds
+  // all in a FEMALE hostel does nothing for 30 unassigned men, and the old
+  // capacityShortfall couldn't tell the difference.
+  const genderAwareShortfall = (venue: NonNullable<typeof data>["venues"][number]) =>
+    venue.genderShortfall.MALE + venue.genderShortfall.FEMALE + venue.genderShortfall.UNKNOWN;
+  const capacityWarnings = useMemo(() => data?.venues.filter((venue) => genderAwareShortfall(venue) > 0) ?? [], [data?.venues]);
 
   return <AppShell area="admin">
     <div className="mx-auto max-w-5xl space-y-6">
@@ -133,8 +160,47 @@ export default function AssignmentSetupPage() {
         <StepCard number={5} title="Preview and assign beds" description="Existing room and bed assignments stay untouched. Only unassigned people are placed." ready={assignmentComplete} locked={!configReady} reason="Complete Steps 1–4 before assigning beds.">
           <div className="space-y-4">
             <div className="rounded-lg border border-border-default bg-surface-raised p-4 text-sm"><strong>Impact preview:</strong> assign up to {totals!.unassignedPeople} unassigned people, preserve {totals!.existingBedAssignments} existing bed assignments, move 0 people.</div>
-            {capacityWarnings.map((venue) => <div key={venue.id} className="rounded-lg bg-danger-50 p-3 text-sm text-danger-700">{venue.name} needs at least {venue.capacityShortfall} more compatible bed{venue.capacityShortfall === 1 ? "" : "s"} before everyone can be placed.</div>)}
-            <div className="space-y-2">{data.venues.map((venue) => <div key={venue.id} className="flex flex-col justify-between gap-3 rounded-lg border border-border-default p-4 sm:flex-row sm:items-center"><div><div className="font-semibold text-txt-primary">{venue.name}</div><div className="text-sm text-txt-muted">{venue.unassignedPeople} to assign · {venue.occupiedBeds} preserved · {venue.availableBeds} beds available</div></div><Button loading={assignBeds.isPending} disabled={venue.unassignedPeople === 0 || venue.capacityShortfall > 0} onClick={() => window.confirm(`Assign ${venue.unassignedPeople} unassigned people at ${venue.name} and preserve all existing assignments?`) && assignBeds.mutate({ venueId: venue.id })}>{venue.unassignedPeople === 0 ? "Venue complete" : "Assign this venue"}</Button></div>)}</div>
+            {capacityWarnings.map((venue) => <div key={venue.id} className="space-y-1 rounded-lg bg-danger-50 p-3 text-sm text-danger-700">
+              <p><strong>{venue.name}</strong> doesn&apos;t have enough gender-compatible beds yet:</p>
+              <ul className="ml-4 list-disc">
+                {venue.genderShortfall.MALE > 0 && <li>{venue.genderShortfall.MALE} more male bed{venue.genderShortfall.MALE === 1 ? "" : "s"} needed ({venue.availableBedsByGender.MALE} available for {venue.unassignedByGender.MALE} unassigned)</li>}
+                {venue.genderShortfall.FEMALE > 0 && <li>{venue.genderShortfall.FEMALE} more female bed{venue.genderShortfall.FEMALE === 1 ? "" : "s"} needed ({venue.availableBedsByGender.FEMALE} available for {venue.unassignedByGender.FEMALE} unassigned)</li>}
+                {venue.genderShortfall.UNKNOWN > 0 && <li>{venue.genderShortfall.UNKNOWN} more mixed/unspecified bed{venue.genderShortfall.UNKNOWN === 1 ? "" : "s"} needed for {venue.unassignedByGender.UNKNOWN} {venue.unassignedByGender.UNKNOWN === 1 ? "person" : "people"} with no gender on file</li>}
+              </ul>
+              {venue.missingGenderPeople.length > 0 && <p className="text-xs">No gender on file: {venue.missingGenderPeople.map((person) => person.name).join(", ")}</p>}
+            </div>)}
+            <div className="space-y-2">{data.venues.map((venue) => <div key={venue.id} data-testid={`assignment-venue-row-${venue.id}`} className="rounded-lg border border-border-default p-4">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <div className="font-semibold text-txt-primary">{venue.name}</div>
+                  <div className="text-sm text-txt-muted">
+                    {venue.unassignedPeople > 0 ? (
+                      <button type="button" className="underline decoration-dotted underline-offset-2 hover:text-txt-primary" onClick={() => setExpandedVenueId(expandedVenueId === venue.id ? null : venue.id)}>
+                        {venue.unassignedPeople} to assign
+                      </button>
+                    ) : "0 to assign"} · {venue.occupiedBeds} preserved · {venue.availableBeds} beds available
+                  </div>
+                </div>
+                <Button loading={assignBeds.isPending} disabled={venue.unassignedPeople === 0 || genderAwareShortfall(venue) > 0} onClick={() => window.confirm(`Assign ${venue.unassignedPeople} unassigned people at ${venue.name} and preserve all existing assignments?`) && assignBeds.mutate({ venueId: venue.id })}>{venue.unassignedPeople === 0 ? "Venue complete" : "Assign this venue"}</Button>
+              </div>
+              {expandedVenueId === venue.id && venue.unassignedPeopleList.length > 0 && (
+                <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto border-t border-border-subtle pt-3 text-sm text-txt-secondary">
+                  {venue.unassignedPeopleList.map((person) => (
+                    <li key={person.id} className="flex items-center justify-between gap-2">
+                      <span>{person.name}</span>
+                      <span className="text-xs text-txt-muted">{person.kind === "STAFF" ? "Staff" : "Camper"}{person.tribeName ? ` · ${person.tribeName}` : ""}{person.gender ? ` · ${person.gender}` : ""}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>)}</div>
+
+            {bedExceptions.length > 0 && <div className="space-y-2 rounded-lg border border-border-default p-4">
+              <p className="text-sm font-semibold text-txt-primary">{bedExceptions.length} could not be placed</p>
+              <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="text-txt-muted"><th className="pr-4 py-1">Name</th><th className="pr-4 py-1">Role</th><th className="pr-4 py-1">Reason</th><th className="py-1">Suggested action</th></tr></thead><tbody>
+                {bedExceptions.map((exception) => <tr key={exception.occupantKey} className="border-t border-border-subtle"><td className="pr-4 py-1.5 font-medium text-txt-primary">{exception.name}</td><td className="pr-4 py-1.5 text-txt-secondary">{exception.kind === "STAFF" ? "Staff" : "Camper"}</td><td className="pr-4 py-1.5 text-txt-secondary">{exception.reason ? BED_FAILURE_MESSAGES[exception.reason].summary : exception.error}</td><td className="py-1.5 text-txt-secondary">{exception.reason ? BED_FAILURE_MESSAGES[exception.reason].action : "—"}</td></tr>)}
+              </tbody></table></div>
+            </div>}
           </div>
         </StepCard>
       </>}

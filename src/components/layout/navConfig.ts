@@ -135,6 +135,18 @@ const ADMIN_GROUPS: NavGroup[] = [
         icon: HomeIcon,
         roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
       },
+      {
+        name: "Accommodation Roster",
+        href: "/admin/accommodation/roster",
+        icon: HomeIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
+      {
+        name: "Camp Resources",
+        href: "/admin/resources",
+        icon: DocumentTextIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
+      },
     ],
   },
   {
@@ -207,6 +219,12 @@ const ADMIN_GROUPS: NavGroup[] = [
     collapsible: true,
     items: [
       {
+        name: "Users",
+        href: "/admin/users",
+        icon: UsersIcon,
+        roles: ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"],
+      },
+      {
         name: "Access Control",
         href: "/admin/access-control",
         icon: ShieldCheckIcon,
@@ -252,6 +270,7 @@ const TEACHER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/teacher", icon: HomeIcon },
       { name: "Schedule", href: "/teacher/schedule", icon: ClockIcon },
+      { name: "Documents", href: "/teacher/documents", icon: DocumentTextIcon },
       { name: "My Campers", href: "/teacher/campers", icon: UserGroupIcon },
       { name: "Incidents", href: "/teacher/incidents", icon: ExclamationTriangleIcon },
       { name: "Inbox", href: "/teacher/inbox", icon: InboxIcon },
@@ -269,6 +288,7 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
     items: [
       { name: "Dashboard", href: "/volunteer", icon: HomeIcon },
       { name: "Schedule", href: "/volunteer/schedule", icon: ClockIcon },
+      { name: "Documents", href: "/volunteer/documents", icon: DocumentTextIcon },
       { name: "Campers", href: "/volunteer/campers", icon: UserGroupIcon },
       { name: "Incidents", href: "/volunteer/incidents", icon: ExclamationTriangleIcon },
       { name: "Inbox", href: "/volunteer/inbox", icon: InboxIcon },
@@ -280,12 +300,24 @@ const VOLUNTEER_GROUPS: NavGroup[] = [
   },
 ];
 
+const DASHBOARD_GROUPS: NavGroup[] = [
+  {
+    name: "Dashboard",
+    items: [
+      { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
+      { name: "Documents", href: "/dashboard/documents", icon: DocumentTextIcon },
+      { name: "Profile", href: "/profile", icon: UserGroupIcon },
+    ],
+  },
+];
+
 const CAMPUS_REP_GROUPS: NavGroup[] = [
   {
     name: "Dashboard",
     items: [
       { name: "Dashboard", href: "/campus-rep-dashboard", icon: HomeIcon },
       { name: "Schedule", href: "/campus-rep-dashboard/schedule", icon: ClockIcon },
+      { name: "Documents", href: "/campus-rep-dashboard/documents", icon: DocumentTextIcon },
       { name: "Campers Profile", href: "/campus-rep-dashboard/campers-profile", icon: UserGroupIcon },
       { name: "Incidents", href: "/campus-rep-dashboard/incidents", icon: ExclamationTriangleIcon },
       { name: "Inbox", href: "/campus-rep-dashboard/inbox", icon: InboxIcon },
@@ -332,6 +364,8 @@ export function getNavGroups(
       groups = CAMPUS_REP_GROUPS;
       break;
     case "dashboard":
+      groups = DASHBOARD_GROUPS;
+      break;
     case "super-admin":
       return [];
   }
@@ -408,6 +442,11 @@ export function getBottomNavItems(
         { name: "My Tribe", href: "/campus-rep-dashboard/tribe", icon: UserGroupIcon },
       ];
     case "dashboard":
+      return [
+        { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
+        { name: "Documents", href: "/dashboard/documents", icon: DocumentTextIcon },
+        { name: "Profile", href: "/profile", icon: UserGroupIcon },
+      ];
     case "super-admin":
       return [];
   }

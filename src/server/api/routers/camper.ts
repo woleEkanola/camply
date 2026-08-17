@@ -155,6 +155,10 @@ export const camperRouter = createTRPCRouter({
       active: z.boolean().optional(),
       status: z.string().optional(),
       statuses: z.array(z.string()).optional(),
+      hostelId: z.string().optional(),
+      floorId: z.string().optional(),
+      roomId: z.string().optional(),
+      bedStatus: z.enum(["ASSIGNED", "UNASSIGNED"]).optional(),
       limit: z.number().min(1).max(100).default(50),
       cursor: z.string().optional(),
     }))
@@ -187,11 +191,19 @@ export const camperRouter = createTRPCRouter({
         });
       }
 
+      const roomWhere: Record<string, any> = {
+        ...(input.floorId && { floorId: input.floorId }),
+        ...(input.hostelId && { hostelId: input.hostelId }),
+      };
       const registrationWhere: Record<string, any> = {
         deletedAt: null,
         ...(input.campId && { campId: input.campId }),
         ...(input.status ? { status: input.status } : input.statuses ? { status: { in: input.statuses } } : {}),
         ...(input.tribeId && { tribeId: input.tribeId }),
+        ...(input.roomId && { roomId: input.roomId }),
+        ...(Object.keys(roomWhere).length && { room: roomWhere }),
+        ...(input.bedStatus === "ASSIGNED" && { bed: { isNot: null } }),
+        ...(input.bedStatus === "UNASSIGNED" && { bed: { is: null } }),
       };
 
       const where: Record<string, any> = {
@@ -200,7 +212,7 @@ export const camperRouter = createTRPCRouter({
         ...(input.campusId && { homeCampusId: input.campusId }),
         ...(input.active !== undefined && { active: input.active }),
         ...(input.gender && { gender: { equals: normalizeGender(input.gender) ?? input.gender, mode: "insensitive" } }),
-        ...((input.status || input.statuses || input.tribeId) && {
+        ...((input.status || input.statuses || input.tribeId || input.hostelId || input.floorId || input.roomId || input.bedStatus) && {
           registrations: { some: registrationWhere },
         }),
         ...(input.q && {
@@ -245,7 +257,14 @@ export const camperRouter = createTRPCRouter({
             where: registrationWhere,
             include: {
               tribe: { select: { id: true, name: true } },
-              room: { select: { id: true, name: true } },
+              room: {
+                select: {
+                  id: true,
+                  name: true,
+                  floor: { select: { id: true, name: true } },
+                  hostel: { select: { id: true, name: true, gender: true } },
+                },
+              },
               bed: { select: { id: true, label: true } },
               campus: { select: { id: true, name: true } },
             },

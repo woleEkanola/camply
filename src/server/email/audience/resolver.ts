@@ -142,14 +142,26 @@ export async function resolveAudience(
     campers: (u as any).campers ?? [],
   }));
 
-  // Registration status
+  // Registration status (parents, via their campers) / staff status (teachers,
+  // volunteers, campus reps — StaffProfile.status, a completely different
+  // enum from Registration.status). Applying the camper-only check to staff
+  // users unconditionally used to drop every staff member the moment any
+  // status was selected, since a staff User has no Camper rows at all.
+  const STAFF_STATUS_ROLES = new Set(["TEACHER", "VOLUNTEER", "CAMPUS_REPRESENTATIVE"]);
   if (filters.registrationStatus && filters.registrationStatus.length > 0) {
     const statuses = new Set(filters.registrationStatus);
-    filtered = filtered.filter((user: any) =>
-      user.campers?.some((camper: any) =>
-        camper.registrations?.some((r: any) => statuses.has(r.status))
-      )
-    );
+    filtered = filtered.filter((user: any) => {
+      if (user.role === "PARENT") {
+        return user.campers?.some((camper: any) =>
+          camper.registrations?.some((r: any) => statuses.has(r.status))
+        );
+      }
+      if (STAFF_STATUS_ROLES.has(user.role)) {
+        return user.staffProfiles?.some((s: any) => statuses.has(s.status));
+      }
+      // Admins (and anyone else) have no status concept to filter on.
+      return true;
+    });
   }
 
   // Camp
@@ -195,11 +207,6 @@ export async function resolveAudience(
     filtered = filtered.filter((user: any) =>
       user.staffProfiles?.some((s: any) => s.departmentId === filters.departmentId)
     );
-  }
-
-  // Venue (teacher filter - staff assigned to a venue)
-  if (filters.teacherId) {
-    // Not a venue filter - teacherId filter not needed; venue is implicit via campId filter on staff assignments
   }
 
   // Volunteer department

@@ -159,6 +159,7 @@ model User {
   pushSubscriptions        PushSubscription[]
   scanEvents               ScanEvent[]
   staffScanEventsPerformed StaffScanEvent[]   @relation("StaffScanScannedBy")
+  uploadedCampResources    CampResource[]
   deletedAt                DateTime?
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
@@ -424,6 +425,7 @@ model Camp {
   departmentReports             DepartmentReport[]
   commandPolicy                 CampCommandPolicy?
   teacherCampusQuotas           TeacherCampusQuota[]
+  resources                     CampResource[]
 
   // Tribe Allocation (PRD Part 4A)
   tribeAllocationEnabled Boolean              @default(false)
@@ -1122,6 +1124,25 @@ model ExportJob {
   expiresAt      DateTime
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+
+  // Resumable-build state (currently used by ID_CARDS/STAFF_ID_CARDS; other
+  // kinds leave these null and complete in the existing single build() call).
+  // resumeIndex is a plain row-offset cursor into the builder's deterministic
+  // ordering — advanced only after a chunk's bytes are durably staged, so a
+  // process killed mid-chunk (e.g. a Vercel function reclaimed after the
+  // response completes) re-renders at most one in-flight chunk, never loses
+  // or duplicates a completed one.
+  resumeIndex Int?
+  // Completed, durably-stored chunks: [{ partNumber, blobKey, fileName,
+  // mimeType, size, cardCount, sheetCount }]. A job with exactly one entry at
+  // completion is promoted to a plain single-file artifact (fileData/blobKey
+  // below) rather than shown as "part 1 of 1".
+  partRefs Json?
+  // Blob-store key for the final artifact, when it's large enough that
+  // holding it in the fileData bytea column isn't appropriate. Mutually
+  // exclusive with fileData in practice, both kept nullable so either
+  // storage path can serve a DONE job.
+  blobKey String?
 
   @@index([status, runAfter])
   @@index([organizationId, userId, createdAt])
@@ -2333,3 +2354,30 @@ model CampScheduleChange {
 
   @@index([scheduleId, createdAt])
 }
+
+// ─── Downloadable Camp Resources & Handbooks ────────────────────────────────
+model CampResource {
+  id             String    @id @default(cuid())
+  organizationId String
+  campId         String
+  camp           Camp      @relation(fields: [campId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  fileUrl        String
+  fileName       String
+  fileSize       Int?
+  fileType       String?
+  category       String    @default("GENERAL") // GENERAL | GUIDELINES | PACKING | SCHEDULE | FORMS | MEDICAL
+  audience       String    @default("ALL") // PARENTS | TEACHERS | VOLUNTEERS | ALL
+  isPublished    Boolean   @default(true)
+  displayOrder   Int       @default(0)
+  uploadedById   String?
+  uploadedBy     User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([campId, deletedAt])
+  @@index([organizationId, deletedAt])
+}
+

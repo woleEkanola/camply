@@ -346,7 +346,6 @@ export default function TemplatesPage() {
   const [previewEvent, setPreviewEvent] = useState<string>("REGISTRATION_APPROVED");
   /** Pixels the Camp Invitation certificate overflows one A4 page by, or null. */
   const [a4OverflowPx, setA4OverflowPx] = useState<number | null>(null);
-  const [testEmailAddress, setTestEmailAddress] = useState("");
   const [testSendToast, setTestSendToast] = useState<string | null>(null);
 
   // ─── Resizable panel widths ──────────────────────────────────────────────────
@@ -577,10 +576,12 @@ export default function TemplatesPage() {
 
   const handleTestSend = () => {
     if (!editor || !selectedId) return;
-    const defaultTo = testEmailAddress || session?.user?.email || "";
-    const testTo = window.prompt("Enter recipient email address to send a real test email:", defaultTo);
+    // Test sends always render from sample data (a fake tribe name among
+    // other placeholders) — restricted server-side to the requesting
+    // admin's own address so that data can never reach a real parent.
+    const testTo = session?.user?.email;
     if (!testTo) return;
-    setTestEmailAddress(testTo);
+    if (!window.confirm(`Send a test email (with sample data) to your address, ${testTo}?`)) return;
 
     previewEmailMutation.mutate(
       {

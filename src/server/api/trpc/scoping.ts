@@ -86,6 +86,32 @@ export async function assertOrgAdmin(ctx: { session: any; prisma?: any }, organi
   throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized for this organization" });
 }
 
+/**
+ * Throws unless the caller is an org admin (SUPER_ADMIN/OWNER/ADMIN) for the
+ * organization that owns `campId`. Deliberately does NOT fall through to
+ * `getCampCommandAccess`/command-permission checks the way `assertCanManageCamp`
+ * and `assertOrgAdminOrCommand` do — a sitting Camp Commandant or Assistant
+ * Commandant must never pass this gate. It exists specifically to guard
+ * filling/vacating/creating Camp Command leadership seats, where letting a
+ * current appointee approve their own peers or successors would be a
+ * privilege-escalation path. Returns the camp row (matches
+ * `assertCanManageCamp`'s return shape) so callers can reuse it.
+ */
+export async function assertCampCommandAppointer(
+  ctx: { prisma: any; session: any },
+  campId: string
+) {
+  const user = ctx.session?.user;
+  if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+  const camp = await ctx.prisma.camp.findUnique({ where: { id: campId }, select: { id: true, organizationId: true } });
+  if (!camp) throw new TRPCError({ code: "NOT_FOUND", message: "Camp not found." });
+  if (user.role === "SUPER_ADMIN") return camp;
+  if (!ORG_ADMIN_ROLES.includes(user.role) || user.organizationId !== camp.organizationId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Only an Owner or Admin can manage Camp Command appointments." });
+  }
+  return camp;
+}
+
 export async function assertOrgAdminOrCommand(
   ctx: { session: any; prisma: any },
   organizationId: string,

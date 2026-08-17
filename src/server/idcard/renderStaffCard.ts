@@ -28,6 +28,7 @@ import {
   drawShieldGlyph,
   loadLogoOrNull,
   initials,
+  type RenderCardOptions,
   SHEET_COLS,
   SHEET_ROWS,
   SHEET_GAP,
@@ -56,14 +57,14 @@ const ROLE_COLORS: Record<StaffIdCardData["roleLabel"], string> = {
 
 type InfoRow = { label: string; value: string; glyph: "church" | "person" | "briefcase" | "shield" };
 
-export async function renderStaffIdCardPng(data: StaffIdCardData): Promise<Buffer> {
+export async function renderStaffIdCardPng(data: StaffIdCardData, options?: RenderCardOptions): Promise<Buffer> {
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   const ctx = canvas.getContext("2d");
 
   const bandColor = ROLE_COLORS[data.roleLabel];
 
   const [logo, qrBuffer] = await Promise.all([
-    loadLogoOrNull(data.logoUrl),
+    loadLogoOrNull(data.logoUrl, options?.logoCache),
     QRCode.toBuffer(data.qrToken, { width: 600, margin: 1 }),
   ]);
   const qrImage = await loadImage(qrBuffer);
@@ -263,6 +264,7 @@ export async function renderStaffIdCardPng(data: StaffIdCardData): Promise<Buffe
   ctx.lineWidth = 3;
   ctx.stroke();
 
+  if (options?.encodeAs === "jpeg") return canvas.encode("jpeg", options.jpegQuality ?? 90);
   return canvas.encode("png");
 }
 

@@ -3,9 +3,9 @@ import { registerExport } from "../registry";
 import { authorizeCamperAccess } from "./campers";
 import type { CamperFilters } from "./campers";
 import type { ExportDescriptor } from "../types";
-import { buildCampIdCardData, ID_CARD_INCLUDE } from "../../idcard/data";
+import { buildCampIdCardData, ID_CARD_INCLUDE, type RegistrationForIdCard } from "../../idcard/data";
 import { renderCampIdCardPng } from "../../idcard/renderCard";
-import { generateIdCardSheetPdf } from "../../idcard/sheetPdf";
+import { buildIdCardChunk } from "./chunkedIdCardRender";
 
 const idCardFilterSchema: z.ZodType<CamperFilters> = z.object({
   campId: z.string().optional(),
@@ -15,21 +15,6 @@ const idCardFilterSchema: z.ZodType<CamperFilters> = z.object({
   status: z.string().optional(),
   search: z.string().optional(),
 });
-
-const CONCURRENCY = 5;
-
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  async function worker() {
-    while (cursor < items.length) {
-      const i = cursor++;
-      results[i] = await fn(items[i], i);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
-}
 
 function registrationWhere(organizationId: string, filters: CamperFilters, ids?: string[]) {
   const where: Record<string, any> = {
@@ -64,34 +49,42 @@ export const idCardsDescriptor: ExportDescriptor<CamperFilters> = {
       where: registrationWhere(params.organizationId, filters, params.scope === "SELECTED" ? params.selectedIds : undefined),
     });
   },
-  async build(ctx, params, _format, onProgress) {
+  async buildChunk(ctx, params, _format, resumeIndex, deadline, onProgress) {
     const filters = params.filters as CamperFilters;
     const ids = params.scope === "SELECTED" ? params.selectedIds : undefined;
-    await onProgress({ stage: "Fetching registrations…" });
-    const registrations: import("../../idcard/data").RegistrationForIdCard[] = await ctx.prisma.registration.findMany({
-      where: registrationWhere(params.organizationId, filters, ids),
-      include: ID_CARD_INCLUDE,
-      orderBy: { createdAt: "desc" },
-    });
+    const where = registrationWhere(params.organizationId, filters, ids);
 
-    const total = registrations.length;
-    let processed = 0;
-    const rendered = await mapWithConcurrency(registrations, CONCURRENCY, async (reg) => {
-      const cardData = buildCampIdCardData(reg);
-      const png = cardData ? await renderCampIdCardPng(cardData) : null;
-      processed++;
-      if (processed % 5 === 0 || processed === total) {
-        await onProgress({ processed, total, stage: "Rendering cards…" });
-      }
-      return png;
-    });
-    // Registrations without an approved qrToken/tribe can't render a card
-    // (buildCampIdCardData returns null) — skip them rather than fail the batch.
-    const cardPngs = rendered.filter((png): png is Buffer => png !== null);
+    if (resumeIndex === 0) await onProgress({ stage: "Fetching registrations…" });
+    const total = await ctx.prisma.registration.count({ where });
 
-    await onProgress({ stage: "Paginating A4 sheets…" });
-    const data = await generateIdCardSheetPdf(cardPngs);
-    return { fileName: this.fileName(params, "PDF"), mimeType: "application/pdf", data };
+    return buildIdCardChunk<RegistrationForIdCard>(
+      {
+        total,
+        fileName: this.fileName(params, "PDF"),
+        // [createdAt desc, id desc] rather than createdAt alone: createdAt is
+        // not unique across rows created in the same millisecond, and a
+        // non-unique cursor ordering can silently skip or repeat a row
+        // between two separate buildChunk calls (which may run in different
+        // process invocations, sometimes minutes apart).
+        fetchRows: (skip, take) =>
+          ctx.prisma.registration.findMany({
+            where,
+            include: ID_CARD_INCLUDE,
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            skip,
+            take,
+          }),
+        renderRow: (registration, logoCache) => {
+          const cardData = buildCampIdCardData(registration);
+          if (!cardData) return Promise.resolve(null);
+          return renderCampIdCardPng(cardData, { logoCache, encodeAs: "jpeg" });
+        },
+      },
+      ctx.stagePart,
+      resumeIndex,
+      deadline,
+      onProgress
+    );
   },
   fileName() {
     const stamp = new Date().toISOString().slice(0, 10);

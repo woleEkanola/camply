@@ -5,6 +5,7 @@ import { authOptions } from "@/server/auth/authOptions";
 import { prisma } from "@/server/db";
 import { validateFormFields } from "@/server/registration/validateFormFields";
 import { assertDepartmentHasCapacity, DepartmentCapacityError } from "@/server/staff/departmentCapacity";
+import { isDuplicateStaffProfileError } from "@/server/staff/registerGuards";
 import { normalizeEmail } from "@/lib/email";
 import { normalizeGender } from "@/lib/gender";
 
@@ -46,6 +47,12 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // Hoisted so the catch block below (the unique-index race backstop) can
+  // re-derive the existing profile without re-parsing the already-consumed
+  // request body.
+  let userId: string | undefined;
+  let campId: string | undefined;
+
   try {
     const parsed = bodySchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -90,42 +97,8 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ message: "Please verify your email or log in first" }, { status: 400 });
     }
-
-    const existing = await prisma.staffProfile.findFirst({
-      where: { userId: user.id, campId: link.campId, deletedAt: null },
-    });
-    if (existing) {
-      return NextResponse.json({ message: "You have already registered for this camp", staffProfileId: existing.id }, { status: 200 });
-    }
-
-    // Teacher campus quota enforcement (teacher recruitment only).
-    if (link.type === "TEACHER" && rest.preferredCampusId) {
-      const quota = await prisma.teacherCampusQuota.findUnique({
-        where: {
-          campId_campusId: { campId: link.campId, campusId: rest.preferredCampusId },
-        },
-      });
-      if (quota && quota.quota > 0) {
-        const usedCount = await prisma.staffProfile.count({
-          where: {
-            campId: link.campId,
-            preferredCampusId: rest.preferredCampusId,
-            type: "TEACHER",
-            deletedAt: null,
-            status: { in: ["APPROVED", "PENDING"] },
-          },
-        });
-        if (usedCount >= quota.quota) {
-          return NextResponse.json(
-            {
-              message: "The teacher quota for this campus has been reached. Registration is currently closed for this campus.",
-              code: "TEACHER_CAMPUS_QUOTA_REACHED",
-            },
-            { status: 409 }
-          );
-        }
-      }
-    }
+    userId = user.id;
+    campId = link.campId;
 
     const submittedValues: Record<string, unknown> = { ...rest, dateOfBirth };
     for (const fv of fieldValues || []) {
@@ -139,14 +112,60 @@ export async function POST(request: Request) {
       );
     }
 
-    // Transactional so the department capacity check below (row-locked
-    // re-count) and the profile creation commit atomically — otherwise two
-    // concurrent applicants could both pass the check and both land in the
-    // last slot of a capped department.
-    const profile = await prisma.$transaction(async (tx) => {
+    // Everything that decides whether a profile gets created — the duplicate
+    // re-check, the teacher quota check, and the department capacity check —
+    // now runs INSIDE the same transaction as the create, and returns a
+    // result instead of throwing wherever possible. At READ COMMITTED this
+    // narrows the race window (two concurrent submits can no longer both
+    // observe "no existing profile" and then both insert outside any lock)
+    // but doesn't fully close it on its own — the real backstop is the
+    // partial unique index `StaffProfile_userId_campId_key`, caught below via
+    // isDuplicateStaffProfileError. On a database missing that index (see
+    // registerGuards.ts's comment) there is still no backstop at all; that
+    // gap is what B2's index-health probe surfaces to admins.
+    //
+    // The teacher campus quota check has the same count-then-create shape and
+    // the same narrowing (not closing) property — fully closing it would need
+    // a real constraint behind it, which is out of scope here.
+    type RegisterOutcome =
+      | { kind: "existing"; staffProfileId: string }
+      | { kind: "quota" }
+      | { kind: "created"; staffProfileId: string };
+
+    const outcome = await prisma.$transaction(async (tx): Promise<RegisterOutcome> => {
+      const existing = await tx.staffProfile.findFirst({
+        where: { userId: user.id, campId: link.campId, deletedAt: null },
+      });
+      if (existing) {
+        return { kind: "existing", staffProfileId: existing.id };
+      }
+
+      if (link.type === "TEACHER" && rest.preferredCampusId) {
+        const quota = await tx.teacherCampusQuota.findUnique({
+          where: {
+            campId_campusId: { campId: link.campId, campusId: rest.preferredCampusId },
+          },
+        });
+        if (quota && quota.quota > 0) {
+          const usedCount = await tx.staffProfile.count({
+            where: {
+              campId: link.campId,
+              preferredCampusId: rest.preferredCampusId,
+              type: "TEACHER",
+              deletedAt: null,
+              status: { in: ["APPROVED", "PENDING"] },
+            },
+          });
+          if (usedCount >= quota.quota) {
+            return { kind: "quota" };
+          }
+        }
+      }
+
       if (rest.departmentId) {
         await assertDepartmentHasCapacity(tx, rest.departmentId);
       }
+
       // Sync names to User record
       await tx.user.update({
         where: { id: user.id },
@@ -155,7 +174,7 @@ export async function POST(request: Request) {
           lastName: rest.lastName,
         },
       });
-      return tx.staffProfile.create({
+      const profile = await tx.staffProfile.create({
         data: {
           userId: user.id,
           organizationId: link.organizationId,
@@ -172,12 +191,42 @@ export async function POST(request: Request) {
           },
         },
       });
+      return { kind: "created", staffProfileId: profile.id };
     });
 
-    return NextResponse.json({ message: "Registration submitted", staffProfileId: profile.id }, { status: 201 });
+    if (outcome.kind === "existing") {
+      return NextResponse.json(
+        { message: "You have already registered for this camp", staffProfileId: outcome.staffProfileId },
+        { status: 200 }
+      );
+    }
+    if (outcome.kind === "quota") {
+      return NextResponse.json(
+        {
+          message: "The teacher quota for this campus has been reached. Registration is currently closed for this campus.",
+          code: "TEACHER_CAMPUS_QUOTA_REACHED",
+        },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ message: "Registration submitted", staffProfileId: outcome.staffProfileId }, { status: 201 });
   } catch (error) {
     if (error instanceof DepartmentCapacityError) {
       return NextResponse.json({ message: error.message }, { status: 409 });
+    }
+    if (isDuplicateStaffProfileError(error) && userId && campId) {
+      // The in-transaction re-check above lost a genuine race — the unique
+      // index caught what it missed. Same graceful response as the "existing"
+      // branch, not the generic 500 this used to fall into.
+      const existing = await prisma.staffProfile.findFirst({
+        where: { userId, campId, deletedAt: null },
+      });
+      if (existing) {
+        return NextResponse.json(
+          { message: "You have already registered for this camp", staffProfileId: existing.id },
+          { status: 200 }
+        );
+      }
     }
     console.error("Staff registration error:", error);
     return NextResponse.json({ message: "Something went wrong during registration" }, { status: 500 });

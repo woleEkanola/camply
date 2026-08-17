@@ -29,6 +29,31 @@ export default function AudienceBuilder() {
   const [registrationStatus, setRegistrationStatus] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Registration.status (camper) and StaffProfile.status (teachers/
+  // volunteers/campus reps) are different enums with only some values in
+  // common — the status control has to switch which one it's offering
+  // depending on who's being targeted, or a selection meaningless for that
+  // recipient type (e.g. "Waitlisted" for Teachers) silently returns 0.
+  const isStaffRecipient = ["TEACHERS", "VOLUNTEERS", "CAMPUS_REPS"].includes(recipientType);
+  const isAdminRecipient = recipientType === "ADMINS";
+  const statusOptions = isStaffRecipient
+    ? [
+        { value: "", label: "Any" }, { value: "APPROVED", label: "Approved" }, { value: "PENDING", label: "Pending" },
+        { value: "REJECTED", label: "Rejected" }, { value: "DEACTIVATED", label: "Deactivated" },
+      ]
+    : [
+        { value: "", label: "Any" }, { value: "APPROVED", label: "Approved" }, { value: "PENDING", label: "Pending" },
+        { value: "WAITLISTED", label: "Waitlisted" }, { value: "REJECTED", label: "Rejected" }, { value: "CHECKED_IN", label: "Checked In" },
+      ];
+
+  const handleRecipientTypeChange = (value: string) => {
+    setRecipientType(value);
+    // A status chosen for one recipient type rarely means anything for
+    // another (e.g. "Checked In" doesn't exist for staff) — clear it so a
+    // stale selection can't silently zero out the new audience.
+    setRegistrationStatus([]);
+  };
+
   const createMut = api.communication.audienceCreate.useMutation();
   const previewQuery = api.communication.audiencePreview.useQuery({
     filterDefinition: { recipientType: recipientType as any, filters: { registrationStatus: registrationStatus.length > 0 ? (registrationStatus as any) : undefined } },
@@ -59,14 +84,18 @@ export default function AudienceBuilder() {
           <CardBody className="space-y-4">
             <Input label="Name" value={name} onChange={(e: any) => setName(e.target.value)} placeholder="Approved Parents" />
             <Input label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="All parents with approved registrations" />
-            <Select label="Recipient Type" value={recipientType} onChange={(e: any) => setRecipientType(e.target.value)} options={[
+            <Select label="Recipient Type" value={recipientType} onChange={(e: any) => handleRecipientTypeChange(e.target.value)} options={[
               { value: "ALL", label: "Everyone" }, { value: "PARENTS", label: "Parents" }, { value: "TEACHERS", label: "Teachers" },
               { value: "VOLUNTEERS", label: "Volunteers" }, { value: "CAMPUS_REPS", label: "Campus Representatives" }, { value: "ADMINS", label: "Administrators" },
             ]} />
-            <Select label="Registration Status" value={registrationStatus[0] || ""} onChange={(e: any) => setRegistrationStatus(e.target.value ? [e.target.value] : [])} options={[
-              { value: "", label: "Any" }, { value: "APPROVED", label: "Approved" }, { value: "PENDING", label: "Pending" },
-              { value: "WAITLISTED", label: "Waitlisted" }, { value: "REJECTED", label: "Rejected" }, { value: "CHECKED_IN", label: "Checked In" },
-            ]} />
+            {!isAdminRecipient && (
+              <Select
+                label={isStaffRecipient ? "Staff Status" : "Registration Status"}
+                value={registrationStatus[0] || ""}
+                onChange={(e: any) => setRegistrationStatus(e.target.value ? [e.target.value] : [])}
+                options={statusOptions}
+              />
+            )}
           </CardBody>
         </Card>
 

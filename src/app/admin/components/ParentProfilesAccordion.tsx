@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { api } from "@/utils/trpc";
 import { Badge } from "@/components/ui/Badge";
+import { SearchBar } from "@/components/ui/SearchBar";
 import Link from "next/link";
 
 interface Parent {
@@ -11,6 +12,7 @@ interface Parent {
   createdAt: Date;
   organizationId?: string | null;
   camperCount: number;
+  campers?: { id: string; name: string }[];
 }
 
 interface ParentProfilesAccordionProps {
@@ -32,9 +34,29 @@ const calculateAge = (dobString: string | Date | null | undefined): string => {
 
 export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = ({ users, onCorrectEmail }) => {
   const [openUserId, setOpenUserId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredUsers = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((user) => {
+      const parentName = `${user.firstName ?? ""} ${user.lastName ?? ""}`.toLowerCase();
+      if (parentName.includes(q) || user.email.toLowerCase().includes(q)) return true;
+      return (user.campers ?? []).some((camper) => camper.name.toLowerCase().includes(q));
+    });
+  }, [users, searchTerm]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border-default bg-surface shadow-sm">
+    <div className="space-y-3">
+      <SearchBar
+        placeholder="Search by parent name, email, or teen name"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        onClear={() => setSearchTerm("")}
+        containerClassName="w-full sm:w-96"
+        aria-label="Search parent and teen accounts"
+      />
+      <div className="overflow-hidden rounded-lg border border-border-default bg-surface shadow-sm">
       <table className="min-w-full divide-y divide-neutral-200">
         <thead className="bg-surface-raised">
           <tr>
@@ -58,7 +80,7 @@ export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = (
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-200">
-          {users.map((user) => (
+          {filteredUsers.map((user) => (
             <React.Fragment key={user.id}>
               <tr
                 className={`hover:bg-surface-hover cursor-pointer transition-colors ${
@@ -111,15 +133,16 @@ export const ParentProfilesAccordion: React.FC<ParentProfilesAccordionProps> = (
               )}
             </React.Fragment>
           ))}
-          {users.length === 0 && (
+          {filteredUsers.length === 0 && (
             <tr>
               <td colSpan={onCorrectEmail ? 5 : 4} className="py-8 text-center text-sm text-txt-muted">
-                No parent accounts found.
+                {users.length === 0 ? "No parent accounts found." : "No accounts match your search."}
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 };

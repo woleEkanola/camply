@@ -244,16 +244,33 @@ export function drawShieldGlyph(ctx: SKRSContext2D, cx: number, cy: number, size
   ctx.fill();
 }
 
-export async function loadLogoOrNull(url: string | null): Promise<Image | null> {
+/**
+ * `cache`, when provided, is keyed by URL and holds a `Promise` (not just a
+ * resolved value) so concurrent callers racing on the same URL — the normal
+ * case in a bulk export, where every card in an org shares one logo URL —
+ * share a single in-flight fetch/decode rather than each starting their own.
+ * A `null` resolution (missing/failed logo) is cached too, so a bad URL is
+ * only ever attempted once per export rather than once per card. Callers
+ * that render a single card in isolation (the email/download routes) omit
+ * `cache` and get the original per-call fetch behaviour unchanged.
+ */
+export async function loadLogoOrNull(url: string | null, cache?: Map<string, Promise<Image | null>>): Promise<Image | null> {
   if (!url) return null;
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    return await loadImage(buf);
-  } catch {
-    return null;
-  }
+  if (cache?.has(url)) return cache.get(url)!;
+
+  const load = (async () => {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      if (!res.ok) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      return await loadImage(buf);
+    } catch {
+      return null;
+    }
+  })();
+
+  cache?.set(url, load);
+  return load;
 }
 
 export function initials(name: string): string {
@@ -267,3 +284,16 @@ export function initials(name: string): string {
 
 export { createCanvas, loadImage };
 export type { SKRSContext2D, Image };
+
+/**
+ * Shared by renderCard.ts and renderStaffCard.ts. See loadLogoOrNull's doc
+ * for what `logoCache` buys a bulk export, and sheetPdf.ts's
+ * generateIdCardSheetPdf for why "jpeg" is what makes bulk embedding
+ * affordable in memory.
+ */
+export interface RenderCardOptions {
+  logoCache?: Map<string, Promise<Image | null>>;
+  encodeAs?: "png" | "jpeg";
+  /** 0-100. Only used when encodeAs is "jpeg". 90 keeps the QR code reliably scannable. */
+  jpegQuality?: number;
+}

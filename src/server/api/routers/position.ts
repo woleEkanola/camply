@@ -5,7 +5,33 @@ import { hasStaffCapability } from "../../auth/capabilities";
 
 const STAFF_MODULE_ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 import { syncStaffProfileFromPositions, syncPositionOccupantsAndDescendants } from "../../utils/hierarchySync";
-import { assertCanManageCamp, assertOrgAdmin } from "../trpc/scoping";
+import { assertCanManageCamp, assertOrgAdmin, assertCampCommandAppointer } from "../trpc/scoping";
+import { logEvent } from "../../audit";
+import { mergePositionInTx, PositionMergeError } from "../../positions/merge";
+
+const norm = (s: string) => s.trim().toLowerCase();
+
+/**
+ * `kind: "SEAT"` covers anything that fills, empties, or destroys a
+ * leadership seat itself (e.g. deleting an Assistant Commandant ROLE) —
+ * these require the strict `assertCampCommandAppointer` gate (OWNER/ADMIN
+ * only, never falls through to command-permission checks) so that a sitting
+ * Commandant can't remove/replace assistants or dissolve their own seat.
+ * `kind: "STRUCTURE"` covers ordinary structural edits (move/reorder/rename)
+ * and always uses the looser `assertCanManageCamp`, which a sitting
+ * Commandant or Camp Head also passes — appropriate for everyday org-chart
+ * upkeep that isn't about who holds power.
+ */
+async function assertPositionWriteAllowed(
+  ctx: { prisma: any; session: any },
+  position: { campId: string; leadershipRole: string | null },
+  kind: "SEAT" | "STRUCTURE"
+) {
+  if (kind === "SEAT" && position.leadershipRole) {
+    return assertCampCommandAppointer(ctx, position.campId);
+  }
+  return assertCanManageCamp(ctx, position.campId);
+}
 
 async function assertStaffAccess(ctx: { session: any; userId: string }) {
   const currentUser = ctx.session?.user;
@@ -116,8 +142,14 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.id },
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
-      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Camp Command positions are managed from Settings." });
-      await assertCanManageCamp(ctx, position.campId);
+      // The Commandant seat is the fixed top of the hierarchy — never
+      // renamable. Assistants (and every ordinary role) may be renamed;
+      // renaming/editing an assistant is a "SEAT" write since it's still a
+      // leadership position, so it requires the strict appointer gate.
+      if (position.leadershipRole === "COMMANDANT" && input.name !== undefined) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Commandant role cannot be renamed." });
+      }
+      await assertPositionWriteAllowed(ctx, position, "SEAT");
 
       // Granting/revoking the Camp Head flag itself is deliberately gated
       // tighter than ordinary position edits: assertCanManageCamp above
@@ -125,6 +157,12 @@ export const positionRouter = createTRPCRouter({
       // also toggle grantsManageCamp, a Camp Head could grant the flag to
       // arbitrary other positions (or keep it after being reassigned) —
       // unbounded privilege escalation. Only a true org admin may change it.
+      // A leadership row already carries Camp Command permissions of its
+      // own — stacking grantsManageCamp/grantsAwardPoints on it as well
+      // would be redundant and widen the blast radius, so refuse outright.
+      if (position.leadershipRole && (input.grantsManageCamp !== undefined || input.grantsAwardPoints !== undefined)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Camp Command positions cannot be granted additional camp-management flags." });
+      }
       if (input.grantsManageCamp !== undefined || input.grantsAwardPoints !== undefined) {
         const camp = await ctx.prisma.camp.findUnique({ where: { id: position.campId } });
         await assertOrgAdmin(ctx, camp!.organizationId);
@@ -148,8 +186,11 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.id },
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
-      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Camp Command positions cannot be moved." });
-      await assertCanManageCamp(ctx, position.campId);
+      // The Commandant is the fixed top of the hierarchy and never moves.
+      if (position.leadershipRole === "COMMANDANT") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Commandant is the top of the hierarchy and cannot be moved." });
+      }
+      await assertPositionWriteAllowed(ctx, position, "STRUCTURE");
 
       // Prevent cycles (cannot report to itself or its descendants)
       if (input.parentPositionId) {
@@ -160,10 +201,18 @@ export const positionRouter = createTRPCRouter({
         // Walk up from target parent to check for cycles
         const targetParent = await ctx.prisma.position.findFirst({
           where: { id: input.parentPositionId, campId: position.campId, deletedAt: null },
-          select: { id: true },
+          select: { id: true, leadershipRole: true },
         });
         if (!targetParent) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "The selected parent position is not in this camp." });
+        }
+
+        // Fluid nesting for Assistant Commandants, but they may only report
+        // to another leadership row (the Commandant or another Assistant) —
+        // ordinary roles hang off Camp Command departmentally, not the chain
+        // of command itself.
+        if (position.leadershipRole === "ASSISTANT_COMMANDANT" && !targetParent.leadershipRole) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "An Assistant Commandant can only report to the Commandant or another Assistant Commandant." });
         }
 
         let currentParentId: string | null = input.parentPositionId;
@@ -209,8 +258,8 @@ export const positionRouter = createTRPCRouter({
       const positions = await ctx.prisma.position.findMany({ where: { id: { in: orderedIds }, deletedAt: null } });
       const firstPos = positions[0];
       if (!firstPos) throw new TRPCError({ code: "NOT_FOUND" });
-      if (positions.some((candidate) => candidate.leadershipRole)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Camp Command positions cannot be reordered." });
+      if (positions.some((candidate) => candidate.leadershipRole === "COMMANDANT")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Commandant cannot be reordered." });
       }
       await assertCanManageCamp(ctx, firstPos.campId);
       if (positions.length !== orderedIds.length || positions.some((candidate) => candidate.campId !== firstPos.campId)) {
@@ -240,7 +289,11 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.positionId },
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
-      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Use Camp Command settings to appoint leadership." });
+      // Deliberately kept closed even from the organogram: assertCanManageCamp
+      // below passes a sitting Commandant, so relaxing this would let a
+      // Commandant seat their own peers/successors. Leadership seating goes
+      // exclusively through campCommand.appointToPosition's strict gate.
+      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Use campCommand.appointToPosition for Camp Command seats." });
       await assertCanManageCamp(ctx, position.campId);
 
       const staff = await ctx.prisma.staffProfile.findUnique({
@@ -347,7 +400,8 @@ export const positionRouter = createTRPCRouter({
       });
     }),
 
-  // Soft delete a position
+  // Soft delete a position. Children are promoted up one level (re-parented
+  // to the deleted position's own parent) — never orphaned, never cascaded.
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -355,21 +409,52 @@ export const positionRouter = createTRPCRouter({
         where: { id: input.id },
       });
       if (!position || position.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
-      if (position.leadershipRole) throw new TRPCError({ code: "FORBIDDEN", message: "Camp Command positions cannot be deleted." });
-      await assertCanManageCamp(ctx, position.campId);
+      // The Commandant is the fixed top of the hierarchy and can never be
+      // deleted. Deleting an Assistant seat is a "SEAT" write (OWNER/ADMIN
+      // only via the strict gate); ordinary roles use the looser gate.
+      if (position.leadershipRole === "COMMANDANT") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The Camp Commandant cannot be deleted." });
+      }
+      await assertPositionWriteAllowed(ctx, position, "SEAT");
 
       const now = new Date();
 
       return ctx.prisma.$transaction(async (tx) => {
+        // Re-read inside the transaction — the outer read above happened
+        // before any lock was held, so two concurrent deletes could both
+        // pass the initial check.
+        const fresh = await tx.position.findUnique({ where: { id: input.id } });
+        if (!fresh || fresh.deletedAt) throw new TRPCError({ code: "NOT_FOUND" });
+
+        const children = await tx.position.findMany({
+          where: { parentPositionId: input.id, deletedAt: null },
+          select: { id: true },
+        });
+
+        // Promote children up one level — a deleted root leaves its
+        // children as new roots (parentPositionId becomes null).
+        if (children.length > 0) {
+          await tx.position.updateMany({
+            where: { parentPositionId: input.id, deletedAt: null },
+            data: { parentPositionId: fresh.parentPositionId },
+          });
+        }
+
         // Clear active assignments
         const assignments = await tx.positionAssignment.findMany({
           where: { positionId: input.id, isCurrent: true },
           select: { staffId: true },
         });
-
         await tx.positionAssignment.updateMany({
           where: { positionId: input.id, isCurrent: true },
           data: { isCurrent: false, endDate: now },
+        });
+
+        // Detach any checklist items pointing at this position rather than
+        // leaving them referencing a soft-deleted row.
+        await tx.departmentChecklistItem.updateMany({
+          where: { positionId: input.id },
+          data: { positionId: null },
         });
 
         // Soft delete the position
@@ -378,12 +463,104 @@ export const positionRouter = createTRPCRouter({
           data: { deletedAt: now },
         });
 
-        // Sync legacy columns on affected staff
+        // Sync legacy columns on affected staff who lost their seat...
         for (const a of assignments) {
           await syncStaffProfileFromPositions(tx, a.staffId);
         }
+        // ...and on every promoted child's subtree, whose reportsTo chain
+        // now runs through a different occupant (or none) at this level.
+        for (const child of children) {
+          await syncPositionOccupantsAndDescendants(tx, child.id);
+        }
 
-        return deleted;
+        await logEvent(tx, {
+          organizationId: (await tx.camp.findUnique({ where: { id: fresh.campId }, select: { organizationId: true } }))!.organizationId,
+          actorId: ctx.userId,
+          action: "POSITION_DELETED",
+          subjectType: "POSITION",
+          subjectId: input.id,
+          previousValue: { name: fresh.name, parentPositionId: fresh.parentPositionId },
+          newValue: { promotedChildIds: children.map((c) => c.id) },
+        });
+
+        return { deleted, promotedChildCount: children.length };
       });
+    }),
+
+  // Absorbs `sourceId` into `targetId` — moves assignments/children/checklist
+  // items onto the target and soft-deletes the source. Used both for
+  // ordinary role cleanup and for resolving the duplicate Camp Command rows
+  // `campCommand.appoint`'s old bug could produce (an untagged JD twin
+  // merging into the real leadership row).
+  merge: protectedProcedure
+    .input(z.object({ sourceId: z.string(), targetId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [source, target] = await Promise.all([
+        ctx.prisma.position.findUnique({ where: { id: input.sourceId } }),
+        ctx.prisma.position.findUnique({ where: { id: input.targetId } }),
+      ]);
+      if (!source || source.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Source role not found." });
+      if (!target || target.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Target role not found." });
+      if (source.campId !== target.campId) throw new TRPCError({ code: "BAD_REQUEST", message: "Both roles must belong to the same camp." });
+
+      // Either side being a leadership row means this merge changes who can
+      // hold a Camp Command seat — strict gate. Otherwise the ordinary
+      // structural gate applies.
+      if (source.leadershipRole || target.leadershipRole) {
+        await assertCampCommandAppointer(ctx, source.campId);
+      } else {
+        await assertCanManageCamp(ctx, source.campId);
+      }
+
+      try {
+        return await ctx.prisma.$transaction((tx: any) =>
+          mergePositionInTx(tx, { sourceId: input.sourceId, targetId: input.targetId, actorId: ctx.userId })
+        );
+      } catch (err) {
+        if (err instanceof PositionMergeError) {
+          throw new TRPCError({ code: err.code as any, message: err.message });
+        }
+        throw err;
+      }
+    }),
+
+  // Groups live positions by normalized name within a department (plus a
+  // camp-wide group for leadership rows, which sit outside the department
+  // name-scoping) so the organogram can flag likely duplicates for the user
+  // to resolve via `merge`. Read-only users get an empty list.
+  duplicateGroups: protectedProcedure
+    .input(z.object({ campId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const currentUser = await assertStaffAccess(ctx);
+      const canWrite = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"].includes(currentUser.role);
+      if (!canWrite) return [];
+
+      const positions = await ctx.prisma.position.findMany({
+        where: { campId: input.campId, deletedAt: null },
+        select: { id: true, name: true, departmentId: true, leadershipRole: true, createdAt: true, _count: { select: { assignments: { where: { isCurrent: true } } } } },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Grouped by department + normalized name — leadership rows (which
+      // always live in the Camp Command department) fall out of this
+      // naturally: two rows both named "Camp Commandant" group together,
+      // while distinctly-named assistants correctly stay apart rather than
+      // being flagged as duplicates of each other or of the Commandant.
+      const groups = new Map<string, typeof positions>();
+      for (const position of positions) {
+        const key = `${position.departmentId ?? "none"}:${norm(position.name)}`;
+        const list = groups.get(key) ?? [];
+        list.push(position);
+        groups.set(key, list);
+      }
+
+      return Array.from(groups.entries())
+        .filter(([, rows]) => rows.length > 1)
+        .map(([key, rows]) => ({
+          key,
+          name: rows[0].name,
+          departmentId: rows[0].departmentId,
+          rows: rows.map((r) => ({ id: r.id, name: r.name, leadershipRole: r.leadershipRole, occupantCount: r._count.assignments, createdAt: r.createdAt })),
+        }));
     }),
 });

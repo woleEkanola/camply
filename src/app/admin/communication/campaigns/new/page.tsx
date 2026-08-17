@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Dialog } from "@/components/ui/Dialog";
 import { AttachmentList } from "@/components/communication/AttachmentList";
+import { InvitationRecipientPicker } from "@/components/communication/InvitationRecipientPicker";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -44,6 +45,7 @@ function ComposerInner() {
   const [audienceType, setAudienceType] = useState("ALL");
   const [savedAudienceId, setSavedAudienceId] = useState("");
   const [manualEmailsText, setManualEmailsText] = useState("");
+  const [personalizeRegistrationIds, setPersonalizeRegistrationIds] = useState<string[]>([]);
   const [personalize, setPersonalize] = useState(false);
   const [personalizeCampId, setPersonalizeCampId] = useState("");
   const [senderMode, setSenderMode] = useState("ORG_SLUG");
@@ -68,6 +70,13 @@ function ComposerInner() {
       if (!role || !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)) router.replace("/admin");
     }
   }, [session, status, router]);
+
+  // Selected registrations are scoped to a single camp — clear them if the
+  // camp changes underneath so a stale selection from a different camp is
+  // never silently carried into campaignSend.
+  useEffect(() => {
+    setPersonalizeRegistrationIds([]);
+  }, [personalizeCampId]);
 
   const { data: audiences } = api.communication.audienceList.useQuery();
   const { data: branding } = api.communication.brandingGet.useQuery();
@@ -161,11 +170,16 @@ function ComposerInner() {
       subject,
     });
 
-    // Check manual email recipients if provided
-    const rawEmails = manualEmailsText
-      .split(/[\s,;\n]+/)
-      .map((e) => e.trim())
-      .filter((e) => e.includes("@"));
+    // Check manual email recipients if provided — the registration picker
+    // (personalized mode) is its own source of targeting and already
+    // guarantees valid/ready selections, so it skips this email-match check.
+    const usingRecipientPicker = personalize && personalizeRegistrationIds.length > 0;
+    const rawEmails = usingRecipientPicker
+      ? []
+      : manualEmailsText
+          .split(/[\s,;\n]+/)
+          .map((e) => e.trim())
+          .filter((e) => e.includes("@"));
     if (rawEmails.length > 0) {
       const checkResult = await checkManualRecipientsMut.mutateAsync({
         id: draftId,
@@ -179,6 +193,7 @@ function ComposerInner() {
     const readinessResult = await utils.communication.campaignReadiness.fetch({
       id: draftId,
       manualEmails: rawEmails.length > 0 ? rawEmails : undefined,
+      registrationIds: usingRecipientPicker ? personalizeRegistrationIds : undefined,
     });
     setReadiness(readinessResult);
 
@@ -190,11 +205,18 @@ function ComposerInner() {
   const handleConfirmSend = async () => {
     setSending(true);
     try {
-      const emails = manualEmailsText
-        .split(/[\s,;\n]+/)
-        .map((e) => e.trim())
-        .filter((e) => e.includes("@"));
-      await sendMut.mutateAsync({ id: confirmDraftId, manualEmails: emails.length > 0 ? emails : undefined });
+      const usingRecipientPicker = personalize && personalizeRegistrationIds.length > 0;
+      const emails = usingRecipientPicker
+        ? []
+        : manualEmailsText
+            .split(/[\s,;\n]+/)
+            .map((e) => e.trim())
+            .filter((e) => e.includes("@"));
+      await sendMut.mutateAsync({
+        id: confirmDraftId,
+        manualEmails: emails.length > 0 ? emails : undefined,
+        registrationIds: usingRecipientPicker ? personalizeRegistrationIds : undefined,
+      });
       setShowConfirm(false);
       router.push(`/admin/communication/campaigns/${confirmDraftId}`);
     } catch (error) {
@@ -206,8 +228,12 @@ function ComposerInner() {
   };
 
   const handleTestSend = async () => {
-    const to = window.prompt("Send test to email address:");
+    // Test sends always render from sample data (a fake tribe name among
+    // other placeholders) — restricted server-side to the requesting
+    // admin's own address so that data can never reach a real parent.
+    const to = session?.user?.email;
     if (!to || !editor) return;
+    if (!window.confirm(`Send a test email (with sample data) to your address, ${to}?`)) return;
     await previewMut.mutateAsync({
       event: personalize ? "CAMP_INVITATION" : "BROADCAST",
       tiptapJson: editor.getJSON() as Record<string, unknown>,
@@ -244,6 +270,20 @@ function ComposerInner() {
           <CardBody className="space-y-4">
             <Input label="Campaign Name" value={name} onChange={(e: any) => setName(e.target.value)} placeholder="Summer Camp Newsletter" />
             <Input label="Subject" value={subject} onChange={(e: any) => setSubject(e.target.value)} placeholder="Updates for {{camp_name}}" />
+            {personalize && !subject.includes("{{camper_name}}") && (
+              <p className="rounded-lg status-warning px-3 py-2 text-xs">
+                This subject doesn't include the camper's name. A parent with more than one camper here will get
+                several identically-titled emails (for different campers, possibly different tribes) with no way
+                to tell them apart at a glance.{" "}
+                <button
+                  type="button"
+                  className="font-medium underline"
+                  onClick={() => setSubject((s) => (s ? `${s} — {{camper_name}}` : "{{camper_name}}"))}
+                >
+                  Add camper name to subject
+                </button>
+              </p>
+            )}
             <Input label="Preview Text" value={previewText} onChange={(e: any) => setPreviewText(e.target.value)} placeholder="Brief preview shown in inbox" />
           </CardBody>
         </Card>
@@ -304,21 +344,41 @@ function ComposerInner() {
               </>
             )}
 
-            <div className="border-t border-border-default pt-4">
-              <label className="text-xs font-medium text-txt-secondary">
-                Override recipients (optional)
-              </label>
-              <textarea
-                value={manualEmailsText}
-                onChange={(e) => setManualEmailsText(e.target.value)}
-                placeholder="Paste parent email addresses — comma or line separated — to send only to these parents instead of the full audience. Leave blank to use the audience above."
-                rows={3}
-                className="mt-1 w-full rounded-md border border-border-default px-3 py-2 text-xs text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
-              />
-              <p className="mt-1 text-[10px] text-txt-muted">
-                Overrides the audience selector above. {personalize ? "Approved or checked-in registrations whose parent email matches will receive one invitation per camper." : "Only users matching these emails will receive the broadcast."}
-              </p>
-            </div>
+            {personalize && personalizeCampId ? (
+              <div className="border-t border-border-default pt-4">
+                <label className="text-xs font-medium text-txt-secondary">
+                  Send to specific campers (optional)
+                </label>
+                <div className="mt-1">
+                  <InvitationRecipientPicker
+                    campId={personalizeCampId}
+                    value={personalizeRegistrationIds}
+                    onChange={setPersonalizeRegistrationIds}
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-txt-muted">
+                  Search and select one or more campers to send only to them instead of every ready registration in
+                  this camp — the right way to resend to a parent who missed the original invitation. Leave empty to
+                  send to everyone ready in the camp.
+                </p>
+              </div>
+            ) : (
+              <div className="border-t border-border-default pt-4">
+                <label className="text-xs font-medium text-txt-secondary">
+                  Override recipients (optional)
+                </label>
+                <textarea
+                  value={manualEmailsText}
+                  onChange={(e) => setManualEmailsText(e.target.value)}
+                  placeholder="Paste parent email addresses — comma or line separated — to send only to these parents instead of the full audience. Leave blank to use the audience above."
+                  rows={3}
+                  className="mt-1 w-full rounded-md border border-border-default px-3 py-2 text-xs text-txt-primary placeholder:text-txt-muted focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                />
+                <p className="mt-1 text-[10px] text-txt-muted">
+                  Overrides the audience selector above. Only users matching these emails will receive the broadcast.
+                </p>
+              </div>
+            )}
           </CardBody>
         </Card>
 

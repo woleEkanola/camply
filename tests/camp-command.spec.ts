@@ -92,6 +92,12 @@ test.describe("Camp Command", () => {
     const currentCommand = page.getByText("E2E Command Teacher").locator("..");
     await expect(currentCommand).toContainText("Camp Commandant");
 
+    // Explicit counts, not just findFirstOrThrow — this is the regression
+    // guard for the duplicate-Commandant bug: a `findFirstOrThrow` alone
+    // would have silently passed even with two rows sharing the name.
+    expect(await prisma.position.count({ where: { campId, deletedAt: null, leadershipRole: "COMMANDANT" } })).toBe(1);
+    expect(await prisma.position.count({ where: { campId, deletedAt: null, name: { equals: "Camp Commandant", mode: "insensitive" } } })).toBe(1);
+
     const commandPosition = await prisma.position.findFirstOrThrow({ where: { campId, leadershipRole: "COMMANDANT" } });
     const assistantPosition = await prisma.position.findFirstOrThrow({ where: { campId, leadershipRole: "ASSISTANT_COMMANDANT" } });
     expect(assistantPosition.parentPositionId).toBe(commandPosition.id);

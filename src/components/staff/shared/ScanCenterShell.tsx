@@ -865,57 +865,59 @@ export function ScanCenterShell({
             setDuplicateData(null);
             setScannerActive(true);
           }}
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-blue-600 p-6 text-white cursor-pointer animate-fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto bg-blue-600 p-4 sm:p-6 text-white cursor-pointer animate-fade-in"
         >
-          <div className="flex flex-col items-center max-w-lg text-center space-y-6">
-            <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
-            
-            <div className="space-y-2">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight">{STATIONS[activeStation].duplicateVerb}</h1>
-              <p className="text-2xl md:text-3xl font-bold opacity-90">{duplicateData.camperName}</p>
-              <p className="text-sm font-semibold tracking-wider opacity-75 uppercase">{duplicateData.regNumber}</p>
-            </div>
-
-            {duplicateData.photoUrl && (
-              <img
-                src={duplicateData.photoUrl}
-                alt={duplicateData.camperName}
-                className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
-              />
-            )}
-
-            <div className="bg-surface/10 backdrop-blur rounded-xl p-5 text-left text-sm border border-white/10 space-y-3 w-full">
-              {duplicateData.message && (
-                <div className="text-white font-bold text-sm bg-surface/10 rounded-lg p-2.5 mb-2">
-                  {duplicateData.message}
-                </div>
-              )}
-              <div>
-                <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Original Activity</span>
-                <span className="font-bold text-lg">{duplicateData.originalStation}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Time processed</span>
-                  <span className="font-bold">{new Date(duplicateData.originalTime).toLocaleTimeString()}</span>
-                </div>
-                <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Processed By</span>
-                  <span className="font-bold">{duplicateData.originalVolunteerName}</span>
-                </div>
+          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+            <div className="flex flex-col items-center max-w-lg w-full text-center space-y-6">
+              <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
+              
+              <div className="space-y-2">
+                <h1 className="text-4xl md:text-5xl font-black tracking-tight">{STATIONS[activeStation].duplicateVerb}</h1>
+                <p className="text-2xl md:text-3xl font-bold opacity-90">{duplicateData.camperName}</p>
+                <p className="text-sm font-semibold tracking-wider opacity-75 uppercase">{duplicateData.regNumber}</p>
               </div>
 
-              {duplicateData.metadata?.collectorName && (
-                <div className="border-t border-white/10 pt-2 mt-2">
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Collected By</span>
-                  <span className="font-bold">
-                    {duplicateData.metadata.collectorName} ({duplicateData.metadata.relationship})
-                  </span>
-                </div>
+              {duplicateData.photoUrl && (
+                <img
+                  src={duplicateData.photoUrl}
+                  alt={duplicateData.camperName}
+                  className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                />
               )}
-            </div>
 
-            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
+              <div className="bg-surface/10 backdrop-blur rounded-xl p-5 text-left text-sm border border-white/10 space-y-3 w-full">
+                {duplicateData.message && (
+                  <div className="text-white font-bold text-sm bg-surface/10 rounded-lg p-2.5 mb-2">
+                    {duplicateData.message}
+                  </div>
+                )}
+                <div>
+                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Original Activity</span>
+                  <span className="font-bold text-lg">{duplicateData.originalStation}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Time processed</span>
+                    <span className="font-bold">{new Date(duplicateData.originalTime).toLocaleTimeString()}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Processed By</span>
+                    <span className="font-bold">{duplicateData.originalVolunteerName}</span>
+                  </div>
+                </div>
+
+                {duplicateData.metadata?.collectorName && (
+                  <div className="border-t border-white/10 pt-2 mt-2">
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Collected By</span>
+                    <span className="font-bold">
+                      {duplicateData.metadata.collectorName} ({duplicateData.metadata.relationship})
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
+            </div>
           </div>
         </div>
       )}
@@ -927,70 +929,72 @@ export function ScanCenterShell({
             setEmergencyLookupData(null);
             setScannerActive(true);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-red-700 p-6 text-white cursor-pointer overflow-y-auto"
+          className="fixed inset-0 z-50 overflow-y-auto bg-red-700 p-4 sm:p-6 text-white cursor-pointer"
         >
-          <div className="flex flex-col max-w-xl w-full text-center space-y-6 py-6">
-            <div className="flex flex-col items-center space-y-2">
-              <ExclamationTriangleIcon className="h-20 w-20 text-red-200 animate-bounce" />
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight">⚠ Emergency lookup</h1>
-              <p className="text-2xl md:text-3xl font-black text-red-50">{emergencyLookupData.name}</p>
-            </div>
-
-            {emergencyLookupData.photoUrl && (
-              <div className="flex justify-center">
-                <img
-                  src={emergencyLookupData.photoUrl}
-                  alt={emergencyLookupData.name}
-                  className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
-                />
-              </div>
-            )}
-
-            <div className="bg-surface/10 backdrop-blur rounded-xl p-5 text-left space-y-4 border border-white/10 text-base">
-              <div>
-                <span className="block text-xs uppercase opacity-85 font-black text-red-200">Medical Conditions</span>
-                <span className="font-black text-2xl text-white block mt-0.5">
-                  {emergencyLookupData.medicalConditions || "No medical conditions recorded"}
-                </span>
-              </div>
-              
-              <div>
-                <span className="block text-xs uppercase opacity-85 font-black text-red-200">Allergies</span>
-                <span className="font-black text-2xl text-white block mt-0.5">
-                  {emergencyLookupData.allergies || "No allergies recorded"}
-                </span>
+          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+            <div className="flex flex-col max-w-xl w-full text-center space-y-6">
+              <div className="flex flex-col items-center space-y-2">
+                <ExclamationTriangleIcon className="h-20 w-20 text-red-200 animate-bounce" />
+                <h1 className="text-3xl md:text-4xl font-black tracking-tight">⚠ Emergency lookup</h1>
+                <p className="text-2xl md:text-3xl font-black text-red-50">{emergencyLookupData.name}</p>
               </div>
 
-              {emergencyLookupData.medications && (
-                <div>
-                  <span className="block text-xs uppercase opacity-85 font-black text-red-200">Medications</span>
-                  <span className="font-bold text-white block">{emergencyLookupData.medications}</span>
+              {emergencyLookupData.photoUrl && (
+                <div className="flex justify-center">
+                  <img
+                    src={emergencyLookupData.photoUrl}
+                    alt={emergencyLookupData.name}
+                    className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                  />
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4 border-t border-white/20 pt-4">
+              <div className="bg-surface/10 backdrop-blur rounded-xl p-5 text-left space-y-4 border border-white/10 text-base">
                 <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Emergency Contact</span>
-                  <span className="font-bold text-sm block">
-                    {emergencyLookupData.emergencyContactName || "—"} ({emergencyLookupData.relationship || "Guardian"})
+                  <span className="block text-xs uppercase opacity-85 font-black text-red-200">Medical Conditions</span>
+                  <span className="font-black text-2xl text-white block mt-0.5">
+                    {emergencyLookupData.medicalConditions || "No medical conditions recorded"}
                   </span>
-                  <span className="font-bold text-sm block">{emergencyLookupData.emergencyContactPhone || "—"}</span>
                 </div>
+                
                 <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Parent Phone</span>
-                  <span className="font-bold text-sm block">{emergencyLookupData.parentPhone || "—"}</span>
+                  <span className="block text-xs uppercase opacity-85 font-black text-red-200">Allergies</span>
+                  <span className="font-black text-2xl text-white block mt-0.5">
+                    {emergencyLookupData.allergies || "No allergies recorded"}
+                  </span>
+                </div>
+
+                {emergencyLookupData.medications && (
+                  <div>
+                    <span className="block text-xs uppercase opacity-85 font-black text-red-200">Medications</span>
+                    <span className="font-bold text-white block">{emergencyLookupData.medications}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4 border-t border-white/20 pt-4">
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Emergency Contact</span>
+                    <span className="font-bold text-sm block">
+                      {emergencyLookupData.emergencyContactName || "—"} ({emergencyLookupData.relationship || "Guardian"})
+                    </span>
+                    <span className="font-bold text-sm block">{emergencyLookupData.emergencyContactPhone || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Parent Phone</span>
+                    <span className="font-bold text-sm block">{emergencyLookupData.parentPhone || "—"}</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <p className="text-xs opacity-60">Tapping anywhere will return to scanning</p>
+              <p className="text-xs opacity-60">Tapping anywhere will return to scanning</p>
+            </div>
           </div>
         </div>
       )}
 
       {/* ═══ OVERLAY 4: CAMPER DETAILS LOOKUP OVERLAY ═══ */}
       {lookupData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-purple-900 p-6 text-white overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-purple-900 p-4 sm:p-6 text-white">
           <button
             type="button"
             onClick={() => {
@@ -998,145 +1002,147 @@ export function ScanCenterShell({
               setScannerActive(true);
             }}
             aria-label="Close"
-            className="fixed right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
+            className="fixed right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm"
           >
             <XMarkIcon className="h-6 w-6" />
           </button>
 
-          <div className="flex flex-col max-w-xl w-full space-y-6 py-6 text-left">
-            <div className="flex items-center gap-4 border-b border-white/10 pb-4">
-              {lookupData.registration.camper.photoUrl ? (
-                <img
-                  src={lookupData.registration.camper.photoUrl}
-                  alt={lookupData.registration.camper.name}
-                  className="h-32 w-32 rounded-2xl object-cover border-2 border-white/20 shadow-md shrink-0"
-                />
-              ) : (
-                <div className="h-32 w-32 rounded-2xl bg-surface/15 flex items-center justify-center text-4xl font-black shrink-0">
-                  {lookupData.registration.camper.name.charAt(0)}
+          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+            <div className="flex flex-col max-w-xl w-full space-y-6 text-left">
+              <div className="flex items-center gap-4 border-b border-white/10 pb-4">
+                {lookupData.registration.camper.photoUrl ? (
+                  <img
+                    src={lookupData.registration.camper.photoUrl}
+                    alt={lookupData.registration.camper.name}
+                    className="h-32 w-32 rounded-2xl object-cover border-2 border-white/20 shadow-md shrink-0"
+                  />
+                ) : (
+                  <div className="h-32 w-32 rounded-2xl bg-surface/15 flex items-center justify-center text-4xl font-black shrink-0">
+                    {lookupData.registration.camper.name.charAt(0)}
+                  </div>
+                )}
+                <div>
+                  <h1 className="text-2xl font-black text-white">{lookupData.registration.camper.name}</h1>
+                  <p className="text-xs font-semibold tracking-wider text-purple-200 uppercase">
+                    {lookupData.registration.registrationNumber}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm bg-surface/5 rounded-xl p-4 border border-white/10">
+                <div>
+                  <span className="block text-xs uppercase opacity-60 font-semibold">Tribe</span>
+                  <span className="font-bold text-purple-50">{lookupData.registration.tribe?.name || "—"}</span>
+                </div>
+                <div>
+                  <span className="block text-xs uppercase opacity-60 font-semibold">Hostel & Room</span>
+                  <span className="font-bold text-purple-50">
+                    {lookupData.registration.room?.hostel?.name || "—"} / {lookupData.registration.room?.name || "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs uppercase opacity-60 font-semibold">Teacher</span>
+                  <span className="font-bold text-purple-50">{lookupData.registration.teacher?.name || "—"}</span>
+                </div>
+                <div>
+                  <span className="block text-xs uppercase opacity-60 font-semibold">Campus</span>
+                  <span className="font-bold text-purple-50">{lookupData.registration.campus?.name || "—"}</span>
+                </div>
+                <div>
+                  <span className="block text-xs uppercase opacity-60 font-semibold">DOB & Gender</span>
+                  <span className="font-bold text-purple-50">
+                    {lookupData.registration.camper.dateOfBirth
+                      ? new Date(lookupData.registration.camper.dateOfBirth).toLocaleDateString()
+                      : "—"}{" "}
+                    / {lookupData.registration.camper.gender || "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs uppercase opacity-60 font-semibold">Current Status</span>
+                  <Badge tone="success" className="bg-emerald-500/20 text-emerald-300 border-none font-bold mt-0.5">
+                    {lookupData.registration.status}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Medical Info in lookup */}
+              {(lookupData.registration.camper.allergies || lookupData.registration.camper.medicalConditions) && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-2">
+                  <span className="block text-xs uppercase text-red-300 font-bold">⚠ Medical & safety alert</span>
+                  <div className="text-xs space-y-1">
+                    {lookupData.registration.camper.allergies && (
+                      <div><span className="opacity-80">Allergies:</span> <span className="font-bold text-red-200">{lookupData.registration.camper.allergies}</span></div>
+                    )}
+                    {lookupData.registration.camper.medicalConditions && (
+                      <div><span className="opacity-80">Conditions:</span> <span className="font-bold text-red-200">{lookupData.registration.camper.medicalConditions}</span></div>
+                    )}
+                  </div>
                 </div>
               )}
-              <div>
-                <h1 className="text-2xl font-black text-white">{lookupData.registration.camper.name}</h1>
-                <p className="text-xs font-semibold tracking-wider text-purple-200 uppercase">
-                  {lookupData.registration.registrationNumber}
-                </p>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4 text-sm bg-surface/5 rounded-xl p-4 border border-white/10">
-              <div>
-                <span className="block text-xs uppercase opacity-60 font-semibold">Tribe</span>
-                <span className="font-bold text-purple-50">{lookupData.registration.tribe?.name || "—"}</span>
-              </div>
-              <div>
-                <span className="block text-xs uppercase opacity-60 font-semibold">Hostel & Room</span>
-                <span className="font-bold text-purple-50">
-                  {lookupData.registration.room?.hostel?.name || "—"} / {lookupData.registration.room?.name || "—"}
-                </span>
-              </div>
-              <div>
-                <span className="block text-xs uppercase opacity-60 font-semibold">Teacher</span>
-                <span className="font-bold text-purple-50">{lookupData.registration.teacher?.name || "—"}</span>
-              </div>
-              <div>
-                <span className="block text-xs uppercase opacity-60 font-semibold">Campus</span>
-                <span className="font-bold text-purple-50">{lookupData.registration.campus?.name || "—"}</span>
-              </div>
-              <div>
-                <span className="block text-xs uppercase opacity-60 font-semibold">DOB & Gender</span>
-                <span className="font-bold text-purple-50">
-                  {lookupData.registration.camper.dateOfBirth
-                    ? new Date(lookupData.registration.camper.dateOfBirth).toLocaleDateString()
-                    : "—"}{" "}
-                  / {lookupData.registration.camper.gender || "—"}
-                </span>
-              </div>
-              <div>
-                <span className="block text-xs uppercase opacity-60 font-semibold">Current Status</span>
-                <Badge tone="success" className="bg-emerald-500/20 text-emerald-300 border-none font-bold mt-0.5">
-                  {lookupData.registration.status}
-                </Badge>
-              </div>
-            </div>
-
-            {/* Medical Info in lookup */}
-            {(lookupData.registration.camper.allergies || lookupData.registration.camper.medicalConditions) && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-2">
-                <span className="block text-xs uppercase text-red-300 font-bold">⚠ Medical & safety alert</span>
-                <div className="text-xs space-y-1">
-                  {lookupData.registration.camper.allergies && (
-                    <div><span className="opacity-80">Allergies:</span> <span className="font-bold text-red-200">{lookupData.registration.camper.allergies}</span></div>
-                  )}
-                  {lookupData.registration.camper.medicalConditions && (
-                    <div><span className="opacity-80">Conditions:</span> <span className="font-bold text-red-200">{lookupData.registration.camper.medicalConditions}</span></div>
+              {/* Timelines of checkin events */}
+              <div className="space-y-3">
+                <span className="block text-xs uppercase opacity-65 font-bold">Operational Timeline</span>
+                <div className="space-y-2.5 max-h-48 overflow-y-auto">
+                  {lookupData.history && lookupData.history.length > 0 ? (
+                    lookupData.history.map((h: any) => (
+                      <div key={h.id} className="flex gap-3 text-xs bg-surface/5 border border-white/5 rounded-lg p-2.5">
+                        <span className="font-black text-purple-300">{new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <div className="flex-1">
+                          <span className="font-bold block text-white">{h.station}</span>
+                          <span className="opacity-60 block">Result: {h.result} · By: {h.volunteerName}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs opacity-50">No scan history recorded.</p>
                   )}
                 </div>
               </div>
-            )}
 
-            {/* Timelines of checkin events */}
-            <div className="space-y-3">
-              <span className="block text-xs uppercase opacity-65 font-bold">Operational Timeline</span>
-              <div className="space-y-2.5 max-h-48 overflow-y-auto">
-                {lookupData.history && lookupData.history.length > 0 ? (
-                  lookupData.history.map((h: any) => (
-                    <div key={h.id} className="flex gap-3 text-xs bg-surface/5 border border-white/5 rounded-lg p-2.5">
-                      <span className="font-black text-purple-300">{new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      <div className="flex-1">
-                        <span className="font-bold block text-white">{h.station}</span>
-                        <span className="opacity-60 block">Result: {h.result} · By: {h.volunteerName}</span>
+              {/* Campus rep contact + full teacher list — reach anyone from
+                  this camper's campus quickly in an emergency. */}
+              {lookupData.registration.campus?.id && (
+                <div className="border-t border-white/10 pt-4 space-y-3">
+                  <span className="block text-xs uppercase opacity-65 font-bold">Campus Contacts</span>
+                  {(lookupData.registration.campus.reps ?? []).length === 0 && (
+                    <p className="text-xs opacity-50">No campus rep on file.</p>
+                  )}
+                  {(lookupData.registration.campus.reps ?? []).map((rep: any) => {
+                    const repName = [rep.firstName, rep.lastName].filter(Boolean).join(" ") || "Campus Rep";
+                    return (
+                      <div key={rep.id} className="flex items-center justify-between gap-3 bg-surface/5 border border-white/5 rounded-lg p-3">
+                        <div className="min-w-0">
+                          <span className="block text-xs uppercase opacity-60 font-semibold">Campus Rep</span>
+                          <span className="block font-bold truncate">{repName}</span>
+                        </div>
+                        {rep.phone ? (
+                          <a
+                            href={`tel:${rep.phone}`}
+                            className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white min-h-[44px] shrink-0"
+                          >
+                            <PhoneIcon className="h-4 w-4" />
+                            Call
+                          </a>
+                        ) : (
+                          <span className="text-xs opacity-50 shrink-0">No phone on file</span>
+                        )}
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs opacity-50">No scan history recorded.</p>
-                )}
-              </div>
+                    );
+                  })}
+
+                  <Button
+                    variant="secondary"
+                    className="w-full bg-transparent hover:bg-surface/10 text-white border border-white/20"
+                    onClick={() => setCampusTeachersSheetOpen(true)}
+                  >
+                    More — View campus teachers
+                  </Button>
+                </div>
+              )}
+
+              <p className="text-xs text-center opacity-40">Tap the X to return to scanning</p>
             </div>
-
-            {/* Campus rep contact + full teacher list — reach anyone from
-                this camper's campus quickly in an emergency. */}
-            {lookupData.registration.campus?.id && (
-              <div className="border-t border-white/10 pt-4 space-y-3">
-                <span className="block text-xs uppercase opacity-65 font-bold">Campus Contacts</span>
-                {(lookupData.registration.campus.reps ?? []).length === 0 && (
-                  <p className="text-xs opacity-50">No campus rep on file.</p>
-                )}
-                {(lookupData.registration.campus.reps ?? []).map((rep: any) => {
-                  const repName = [rep.firstName, rep.lastName].filter(Boolean).join(" ") || "Campus Rep";
-                  return (
-                    <div key={rep.id} className="flex items-center justify-between gap-3 bg-surface/5 border border-white/5 rounded-lg p-3">
-                      <div className="min-w-0">
-                        <span className="block text-xs uppercase opacity-60 font-semibold">Campus Rep</span>
-                        <span className="block font-bold truncate">{repName}</span>
-                      </div>
-                      {rep.phone ? (
-                        <a
-                          href={`tel:${rep.phone}`}
-                          className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white min-h-[44px] shrink-0"
-                        >
-                          <PhoneIcon className="h-4 w-4" />
-                          Call
-                        </a>
-                      ) : (
-                        <span className="text-xs opacity-50 shrink-0">No phone on file</span>
-                      )}
-                    </div>
-                  );
-                })}
-
-                <Button
-                  variant="secondary"
-                  className="w-full bg-transparent hover:bg-surface/10 text-white border border-white/20"
-                  onClick={() => setCampusTeachersSheetOpen(true)}
-                >
-                  More — View campus teachers
-                </Button>
-              </div>
-            )}
-
-            <p className="text-xs text-center opacity-40">Tap the X to return to scanning</p>
           </div>
         </div>
       )}
@@ -1156,62 +1162,64 @@ export function ScanCenterShell({
           src/lib/medical.ts classifyMedical); everything else renders as
           an inline MedicalBanner in the success overlay instead. ═══ */}
       {medicalData && (
-        <div role="alertdialog" aria-live="assertive" className="fixed inset-0 z-50 flex items-center justify-center bg-red-700 p-6 text-white overflow-y-auto">
-          <div className="flex flex-col max-w-xl w-full text-center space-y-6 py-6">
-            <div className="flex flex-col items-center space-y-3">
-              <ExclamationTriangleIcon className="h-20 w-20 text-red-100 animate-bounce" />
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight">⚠ Critical Medical Alert</h1>
-              <p className="text-xl md:text-2xl font-bold opacity-95">{medicalData.registration.camper.name}</p>
-            </div>
+        <div role="alertdialog" aria-live="assertive" className="fixed inset-0 z-50 overflow-y-auto bg-red-700 p-4 sm:p-6 text-white">
+          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+            <div className="flex flex-col max-w-xl w-full text-center space-y-6">
+              <div className="flex flex-col items-center space-y-3">
+                <ExclamationTriangleIcon className="h-20 w-20 text-red-100 animate-bounce" />
+                <h1 className="text-3xl md:text-4xl font-black tracking-tight">⚠ Critical Medical Alert</h1>
+                <p className="text-xl md:text-2xl font-bold opacity-95">{medicalData.registration.camper.name}</p>
+              </div>
 
-            <div className="bg-surface/10 backdrop-blur rounded-xl p-4 text-left space-y-4 border border-white/10 text-sm md:text-base">
-              {medicalData.registration.camper.allergies && (
-                <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Allergies</span>
-                  <span className="font-bold text-lg text-red-50">{medicalData.registration.camper.allergies}</span>
-                </div>
-              )}
-              {medicalData.registration.camper.medicalConditions && (
-                <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Medical Conditions</span>
-                  <span className="font-bold text-lg text-red-50">{medicalData.registration.camper.medicalConditions}</span>
-                </div>
-              )}
-              {medicalData.registration.camper.dietaryRestrictions && (
-                <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Dietary Restrictions</span>
-                  <span className="font-bold">{medicalData.registration.camper.dietaryRestrictions}</span>
-                </div>
-              )}
-            </div>
+              <div className="bg-surface/10 backdrop-blur rounded-xl p-4 text-left space-y-4 border border-white/10 text-sm md:text-base">
+                {medicalData.registration.camper.allergies && (
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Allergies</span>
+                    <span className="font-bold text-lg text-red-50">{medicalData.registration.camper.allergies}</span>
+                  </div>
+                )}
+                {medicalData.registration.camper.medicalConditions && (
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Medical Conditions</span>
+                    <span className="font-bold text-lg text-red-50">{medicalData.registration.camper.medicalConditions}</span>
+                  </div>
+                )}
+                {medicalData.registration.camper.dietaryRestrictions && (
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Dietary Restrictions</span>
+                    <span className="font-bold">{medicalData.registration.camper.dietaryRestrictions}</span>
+                  </div>
+                )}
+              </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full">
-              <Button
-                size="lg"
-                className="flex-1 bg-surface text-red-700 hover:bg-surface-raised font-bold py-4 text-base border-none shadow-lg"
-                onClick={() => {
-                  const payload = {
-                    qrToken: medicalData.qrToken,
-                    query: medicalData.query,
-                    acknowledgedMedical: true,
-                  };
-                  setMedicalData(null);
-                  handleScanSubmit(payload);
-                }}
-              >
-                Acknowledge & Confirm Scan
-              </Button>
-              <Button
-                size="lg"
-                variant="secondary"
-                className="flex-1 bg-transparent hover:bg-surface/10 text-white font-bold py-4 text-base border border-white/40"
-                onClick={() => {
-                  setMedicalData(null);
-                  setScannerActive(true);
-                }}
-              >
-                Cancel & Go Back
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full">
+                <Button
+                  size="lg"
+                  className="flex-1 bg-surface text-red-700 hover:bg-surface-raised font-bold py-4 text-base border-none shadow-lg"
+                  onClick={() => {
+                    const payload = {
+                      qrToken: medicalData.qrToken,
+                      query: medicalData.query,
+                      acknowledgedMedical: true,
+                    };
+                    setMedicalData(null);
+                    handleScanSubmit(payload);
+                  }}
+                >
+                  Acknowledge & Confirm Scan
+                </Button>
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  className="flex-1 bg-transparent hover:bg-surface/10 text-white font-bold py-4 text-base border border-white/40"
+                  onClick={() => {
+                    setMedicalData(null);
+                    setScannerActive(true);
+                  }}
+                >
+                  Cancel & Go Back
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1219,105 +1227,107 @@ export function ScanCenterShell({
 
       {/* ═══ OVERLAY 6: SECURE CHECKOUT GUARDIAN FORM OVERLAY ═══ */}
       {checkoutTargetReg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-blue-900 p-6 text-white overflow-y-auto">
-          <div className="flex flex-col max-w-xl w-full space-y-6 py-6 text-left">
-            
-            <div className="flex items-center gap-4 border-b border-white/15 pb-4">
-              {checkoutTargetReg.camper.photoUrl ? (
-                <img
-                  src={checkoutTargetReg.camper.photoUrl}
-                  alt={checkoutTargetReg.camper.name}
-                  className="h-16 w-16 rounded-xl object-cover border-2 border-white/20"
-                />
-              ) : (
-                <div className="h-16 w-16 rounded-xl bg-surface/15 flex items-center justify-center text-2xl font-black">
-                  {checkoutTargetReg.camper.name.charAt(0)}
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-blue-900 p-4 sm:p-6 text-white">
+          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+            <div className="flex flex-col max-w-xl w-full space-y-6 text-left">
+              
+              <div className="flex items-center gap-4 border-b border-white/15 pb-4">
+                {checkoutTargetReg.camper.photoUrl ? (
+                  <img
+                    src={checkoutTargetReg.camper.photoUrl}
+                    alt={checkoutTargetReg.camper.name}
+                    className="h-16 w-16 rounded-xl object-cover border-2 border-white/20"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-xl bg-surface/15 flex items-center justify-center text-2xl font-black">
+                    {checkoutTargetReg.camper.name.charAt(0)}
+                  </div>
+                )}
+                <div>
+                  <h1 className="text-2xl font-black text-white">Checkout: {checkoutTargetReg.camper.name}</h1>
+                  <p className="text-xs text-blue-200">Verify guardian identity and obtain signature</p>
                 </div>
-              )}
-              <div>
-                <h1 className="text-2xl font-black text-white">Checkout: {checkoutTargetReg.camper.name}</h1>
-                <p className="text-xs text-blue-200">Verify guardian identity and obtain signature</p>
               </div>
-            </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Select
-                  label="Approved Guardians"
-                  value={collectorType}
-                  onChange={(e) => handleGuardianChange(e.target.value)}
-                  className="text-neutral-900 bg-surface"
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Select
+                    label="Approved Guardians"
+                    value={collectorType}
+                    onChange={(e) => handleGuardianChange(e.target.value)}
+                    className="text-neutral-900 bg-surface"
+                  >
+                    <option value="PARENT">Parent/Guardian</option>
+                    {checkoutTargetReg.camper.emergencyContactName && (
+                      <option value="EMERGENCY">Emergency ({checkoutTargetReg.camper.emergencyContactName})</option>
+                    )}
+                    <option value="OTHER">Other collector...</option>
+                  </Select>
+
+                  <Input
+                    label="Collector Name"
+                    placeholder="Guardian full name..."
+                    value={collectorName}
+                    onChange={(e) => setCollectorName(e.target.value)}
+                    className="text-neutral-950 bg-surface"
+                    disabled={collectorType !== "OTHER"}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Relationship to Camper"
+                    placeholder="e.g. Uncle, Aunt, Driver"
+                    value={collectorRelationship}
+                    onChange={(e) => setCollectorRelationship(e.target.value)}
+                    className="text-neutral-950 bg-surface"
+                    disabled={collectorType !== "OTHER"}
+                    required
+                  />
+                  
+                  <Input
+                    label="Parent collection PIN (Optional)"
+                    placeholder="Verification code..."
+                    type="password"
+                    value={parentPin}
+                    onChange={(e) => setParentPin(e.target.value)}
+                    className="text-neutral-950 bg-surface"
+                  />
+                </div>
+
+                {/* Canvas Signature Pad */}
+                <div className="space-y-1.5">
+                  <span className="block text-xs font-bold text-blue-200">Guardian Signature Capture</span>
+                  <CheckoutSignaturePad
+                    onSave={(dataUrl) => setSignatureData(dataUrl)}
+                    onClear={() => setSignatureData("")}
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-4 pt-2">
+                <Button
+                  size="lg"
+                  className="flex-1 bg-surface text-blue-900 hover:bg-surface-raised font-bold border-none"
+                  disabled={!collectorName || !collectorRelationship || !signatureData}
+                  onClick={handleConfirmCheckout}
                 >
-                  <option value="PARENT">Parent/Guardian</option>
-                  {checkoutTargetReg.camper.emergencyContactName && (
-                    <option value="EMERGENCY">Emergency ({checkoutTargetReg.camper.emergencyContactName})</option>
-                  )}
-                  <option value="OTHER">Other collector...</option>
-                </Select>
-
-                <Input
-                  label="Collector Name"
-                  placeholder="Guardian full name..."
-                  value={collectorName}
-                  onChange={(e) => setCollectorName(e.target.value)}
-                  className="text-neutral-950 bg-surface"
-                  disabled={collectorType !== "OTHER"}
-                  required
-                />
+                  Confirm Checkout & Depart
+                </Button>
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  className="flex-1 bg-transparent hover:bg-surface/10 text-white font-bold border border-white/40"
+                  onClick={() => {
+                    setCheckoutTargetReg(null);
+                    setScannerActive(true);
+                  }}
+                >
+                  Cancel
+                </Button>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="Relationship to Camper"
-                  placeholder="e.g. Uncle, Aunt, Driver"
-                  value={collectorRelationship}
-                  onChange={(e) => setCollectorRelationship(e.target.value)}
-                  className="text-neutral-950 bg-surface"
-                  disabled={collectorType !== "OTHER"}
-                  required
-                />
-                
-                <Input
-                  label="Parent collection PIN (Optional)"
-                  placeholder="Verification code..."
-                  type="password"
-                  value={parentPin}
-                  onChange={(e) => setParentPin(e.target.value)}
-                  className="text-neutral-950 bg-surface"
-                />
-              </div>
-
-              {/* Canvas Signature Pad */}
-              <div className="space-y-1.5">
-                <span className="block text-xs font-bold text-blue-200">Guardian Signature Capture</span>
-                <CheckoutSignaturePad
-                  onSave={(dataUrl) => setSignatureData(dataUrl)}
-                  onClear={() => setSignatureData("")}
-                />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-4 pt-2">
-              <Button
-                size="lg"
-                className="flex-1 bg-surface text-blue-900 hover:bg-surface-raised font-bold border-none"
-                disabled={!collectorName || !collectorRelationship || !signatureData}
-                onClick={handleConfirmCheckout}
-              >
-                Confirm Checkout & Depart
-              </Button>
-              <Button
-                size="lg"
-                variant="secondary"
-                className="flex-1 bg-transparent hover:bg-surface/10 text-white font-bold border border-white/40"
-                onClick={() => {
-                  setCheckoutTargetReg(null);
-                  setScannerActive(true);
-                }}
-              >
-                Cancel
-              </Button>
             </div>
           </div>
         </div>

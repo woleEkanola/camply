@@ -8,6 +8,7 @@ import {
   sendRejectionEmail,
   sendWaitlistEmail,
   sendSubmissionEmail,
+  sendTribeChangedEmail,
 } from "../email/sendAcceptanceEmail";
 import { loadTemplateForEvent } from "../email/templateLoader";
 import { renderEmail, renderEmailWithEvent } from "../email/renderer";
@@ -31,7 +32,8 @@ export type SideEffectType =
   | "REGISTRATION_REJECTED"
   | "CORRECTION_REQUESTED"
   | "REGISTRATION_WAITLISTED"
-  | "REGISTRATION_SUBMITTED";
+  | "REGISTRATION_SUBMITTED"
+  | "TRIBE_CHANGED";
 
 const MAX_ATTEMPTS = 5;
 const APP_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3001";
@@ -57,7 +59,73 @@ export async function qrDataUrlForToken(token: string): Promise<string> {
   return QRCode.toDataURL(token, { width: 300, margin: 1 });
 }
 
-async function runEffect(registrationId: string, type: SideEffectType) {
+/**
+ * Queues a correction email for a registration whose tribe has actually
+ * changed (not a first-time assignment — that's already covered by the
+ * approval email). The previous tribe's name can't be recovered from
+ * `Registration.tribe` once overwritten, so it's snapshotted onto
+ * `SideEffect.payload` at enqueue time rather than re-read at send time.
+ *
+ * Debounced against an already-QUEUED TRIBE_CHANGED effect for the same
+ * registration so correcting a mistake twice in quick succession sends one
+ * email, not two — the later enqueue just refreshes the snapshot in place.
+ *
+ * Deliberately called outside the assignment transaction (fire-and-forget,
+ * errors logged not thrown) so a mail-queue failure can never roll back the
+ * tribe write itself — mirrors the outbox pattern used everywhere else here.
+ *
+ * Also kicks off processing immediately (fire-and-forget, via `setImmediate`
+ * — same pattern as the sweep's own self-continuation), rather than leaving
+ * it for the next cron sweep — this is a correction for something the
+ * parent may already be holding a wrong answer for, so it shouldn't wait on
+ * cron any longer than it has to (and per the campaign auto-send work,
+ * cron's `render.yaml` deployment is a known gap anyway). Fire-and-forget
+ * rather than awaited so a tribe-assignment mutation never blocks on an
+ * email send, and so a second reassignment landing within the same instant
+ * still has a real chance to hit the debounce path above instead of racing
+ * a synchronous send.
+ */
+export async function enqueueTribeChangedEffect(params: {
+  registrationId: string;
+  previousTribeId: string;
+  previousTribeName: string;
+}) {
+  let effectId: string;
+  try {
+    const registration = await prisma.registration.findUnique({
+      where: { id: params.registrationId },
+      select: { camp: { select: { organizationId: true } } },
+    });
+    const payload = { previousTribeId: params.previousTribeId, previousTribeName: params.previousTribeName };
+    const existing = await prisma.sideEffect.findFirst({
+      where: { registrationId: params.registrationId, type: "TRIBE_CHANGED", status: "QUEUED" },
+    });
+    if (existing) {
+      await prisma.sideEffect.update({ where: { id: existing.id }, data: { payload } });
+      effectId = existing.id;
+    } else {
+      const created = await prisma.sideEffect.create({
+        data: {
+          registrationId: params.registrationId,
+          type: "TRIBE_CHANGED",
+          organizationId: registration?.camp.organizationId ?? null,
+          payload,
+        },
+      });
+      effectId = created.id;
+    }
+  } catch (error) {
+    console.error(`[effects] Failed to enqueue TRIBE_CHANGED for registration ${params.registrationId}:`, error);
+    return;
+  }
+  setImmediate(() => {
+    processSideEffect(effectId).catch((error) => {
+      console.error(`[effects] Immediate processing of TRIBE_CHANGED effect ${effectId} failed, leaving it for the sweep:`, error);
+    });
+  });
+}
+
+async function runEffect(registrationId: string, type: SideEffectType, payload?: Record<string, unknown> | null) {
   const registration = await prisma.registration.findUniqueOrThrow({
     where: { id: registrationId },
     include: { camper: { include: { user: true } }, camp: { include: { organization: { select: { slug: true, id: true } } } }, campus: true, tribe: true },
@@ -264,6 +332,39 @@ async function runEffect(registrationId: string, type: SideEffectType) {
       });
       break;
     }
+    case "TRIBE_CHANGED": {
+      // A registration without a current tribe (cleared, not reassigned)
+      // has nothing correct to tell the parent — skip rather than send a
+      // blank/confusing email.
+      if (!registration.tribe) break;
+      const previousTribeName = typeof payload?.previousTribeName === "string" ? payload.previousTribeName : "";
+      await tryTemplateEmail("TRIBE_CHANGED", {
+        parent_name: parentEmail,
+        camper_name: camperName,
+        camp_name: registration.camp.name,
+        previous_tribe_name: previousTribeName,
+        tribe_name: registration.tribe.name,
+        tribe_color: registration.tribe.color ?? "",
+        registration_url: viewUrl,
+      }, async () => {
+        await sendTribeChangedEmail({
+          to: parentEmail, camperName, campName: registration.camp.name,
+          previousTribeName, tribeName: registration.tribe!.name, tribeColor: registration.tribe!.color,
+          viewUrl, orgSlug,
+        });
+      });
+      await prisma.notification.create({
+        data: {
+          organizationId: registration.camper.organizationId,
+          userId: registration.camper.userId,
+          registrationId: registration.id,
+          channel: "IN_APP",
+          title: "Tribe Updated",
+          body: `${camperName}'s tribe for ${registration.camp.name} is now ${registration.tribe.name}.`,
+        },
+      });
+      break;
+    }
   }
 }
 
@@ -317,7 +418,7 @@ export async function processSideEffect(id: string) {
     } else if (effect.type === "CAMPAIGN_SEND" && effect.campaignId) {
       await processCampaignSideEffect(prisma, effect.id);
     } else if (effect.registrationId) {
-      await runEffect(effect.registrationId, effect.type as SideEffectType);
+      await runEffect(effect.registrationId, effect.type as SideEffectType, effect.payload as Record<string, unknown> | null);
     }
     await prisma.sideEffect.update({ where: { id }, data: { status: "DONE" } });
 
@@ -465,8 +566,73 @@ async function processBroadcastEffect(effectId: string) {
   });
 }
 
-/** Sweeps due, non-terminal effects. Intended to be hit by a cron/pinger every minute or so. */
-export async function sweepPendingSideEffects(limit = 200) {
+// Arbitrary constant identifying this sweep's Postgres advisory lock —
+// unique within the app, never reused for anything else.
+const SWEEP_LOCK_KEY = 847_362_910;
+// Leaves margin inside a one-minute cron tick so a run that hits this budget
+// still finishes (and releases the lock) well before the next tick fires.
+const SWEEP_WALL_CLOCK_BUDGET_MS = 45_000;
+// A safety cap on self-continuation depth, not a ceiling normal operation
+// should ever approach — at 200/run this is 10,000 effects deep.
+const SWEEP_MAX_CONTINUATION_DEPTH = 50;
+
+/**
+ * Sweeps due, non-terminal effects. Safe to call from a cron/pinger every
+ * minute or so, but also self-continues (see below) so it no longer
+ * *depends* on that — a large campaign or backlog drains itself.
+ */
+export async function sweepPendingSideEffects(limit = 200, opts?: { continuationDepth?: number }): Promise<{ processed: number; skipped?: boolean }> {
+  // Serializes overlapping invocations. A cron tick, a self-continuation, a
+  // campaign's immediate post-send kick, and someone clicking "Send queued
+  // now" can all land within moments of each other; without this they'd
+  // each run their own in-process Resend rate limiter (sender.ts)
+  // concurrently and collectively exceed the intended send rate.
+  // pg_try_advisory_lock is non-blocking — a losing caller returns
+  // immediately rather than queueing up behind the winner.
+  //
+  // Acquire and release must run on the *same* Postgres connection — advisory
+  // locks are session-scoped, and Prisma's normal pool round-robins across
+  // separate `await`s, so two independent `$queryRaw` calls (the original
+  // shape of this function) could silently land on different connections:
+  // the unlock would then no-op and the lock would stay held forever on
+  // whichever connection acquired it. `$transaction` pins one connection for
+  // its callback's lifetime purely to make that pairing safe; `runSweep`
+  // itself still goes through the normal pool on separate connections, it is
+  // not part of this SQL transaction.
+  const result = await prisma.$transaction(async (tx) => {
+    const lockRows = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_lock(${SWEEP_LOCK_KEY}) AS locked`;
+    if (!lockRows[0]?.locked) return { processed: 0, skipped: true as const };
+
+    try {
+      const processed = await runSweep(limit);
+      return { processed, skipped: false as const };
+    } finally {
+      await tx.$queryRaw`SELECT pg_advisory_unlock(${SWEEP_LOCK_KEY})`;
+    }
+  }, { timeout: SWEEP_WALL_CLOCK_BUDGET_MS + 15_000, maxWait: 10_000 });
+
+  if (result.skipped) return { processed: 0, skipped: true };
+
+  // Self-continuation: a full page suggests more due work is waiting right
+  // now rather than a minute from now. Chained instead of waiting for the
+  // next external trigger — this is what lets a large campaign fully drain
+  // without depending on cron running at all. Fire-and-forget so this call's
+  // own caller isn't held up by it.
+  const depth = opts?.continuationDepth ?? 0;
+  if (result.processed >= limit && depth < SWEEP_MAX_CONTINUATION_DEPTH) {
+    setImmediate(() => {
+      sweepPendingSideEffects(limit, { continuationDepth: depth + 1 }).catch((error) => {
+        console.error("[sweep] self-continuation failed:", error);
+      });
+    });
+  }
+  return { processed: result.processed };
+}
+
+async function runSweep(limit: number): Promise<number> {
+  const startedAt = Date.now();
+  const withinBudget = () => Date.now() - startedAt < SWEEP_WALL_CLOCK_BUDGET_MS;
+
   // Fire any scheduled campaigns whose time has come — their sends enqueue
   // CAMPAIGN_SEND effects which the loop below then picks up.
   try {
@@ -494,9 +660,10 @@ export async function sweepPendingSideEffects(limit = 200) {
     orderBy: { runAfter: "asc" },
   });
   const campaignGroups = new Map<string, typeof due>();
+  const simple: typeof due = [];
   for (const effect of due) {
     if (effect.type !== "CAMPAIGN_SEND" || !effect.campaignId) {
-      await processSideEffect(effect.id);
+      simple.push(effect);
       continue;
     }
     const group = campaignGroups.get(effect.campaignId) ?? [];
@@ -504,12 +671,25 @@ export async function sweepPendingSideEffects(limit = 200) {
     campaignGroups.set(effect.campaignId, group);
   }
 
-  let processed = due.length - [...campaignGroups.values()].reduce((sum, group) => sum + group.length, 0);
+  // Anything not attempted because the budget ran out stays QUEUED
+  // untouched — picked up by the next run (self-continuation or the next
+  // cron tick), never lost or double-counted.
+  let processed = 0;
+  for (const effect of simple) {
+    if (!withinBudget()) return processed;
+    await processSideEffect(effect.id);
+    processed++;
+  }
+
   for (const [campaignId, effects] of campaignGroups) {
+    if (!withinBudget()) return processed;
     const campaign = await prisma.emailCampaign.findUnique({ where: { id: campaignId }, select: { status: true, personalizeEvent: true, attachments: true } });
     if (campaign?.status !== "SENDING") {
-      for (const effect of effects) await processSideEffect(effect.id);
-      processed += effects.length;
+      for (const effect of effects) {
+        if (!withinBudget()) return processed;
+        await processSideEffect(effect.id);
+        processed++;
+      }
       continue;
     }
     const claimed: typeof effects = [];
@@ -521,6 +701,10 @@ export async function sweepPendingSideEffects(limit = 200) {
     }
     const chunkSize = campaign.personalizeEvent || (Array.isArray(campaign.attachments) && campaign.attachments.length > 0) ? 1 : 100;
     for (let offset = 0; offset < claimed.length; offset += chunkSize) {
+      // Already-claimed (PROCESSING) effects must be seen through rather
+      // than abandoned mid-chunk-loop — the budget only gates starting a
+      // *new* chunk, not finishing one in progress.
+      if (offset > 0 && !withinBudget()) break;
       const chunk = claimed.slice(offset, offset + chunkSize);
       try {
         await processCampaignEffectBatch(prisma, chunk.map((effect) => effect.id));
@@ -528,9 +712,9 @@ export async function sweepPendingSideEffects(limit = 200) {
       } catch (error) {
         for (const effect of chunk) await recordEffectFailure(effect, error);
       }
+      processed += chunk.length;
     }
-    processed += claimed.length;
     await finalizeCampaignIfDrained(campaignId);
   }
-  return { processed };
+  return processed;
 }

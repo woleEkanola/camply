@@ -10,6 +10,11 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/cn";
 
+function nodeParentLabel(node: PositionNode, allFlat: PositionNode[]) {
+  const parent = allFlat.find((p) => p.id === node.parentPositionId);
+  return parent?.name ?? "the top level";
+}
+
 export interface PositionManagerProps {
   organizationId: string;
   campId: string;
@@ -58,6 +63,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [selectedParentId, setSelectedParentId] = useState("");
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PositionNode | null>(null);
 
   const invalidate = () => {
     utils.position.getHierarchy.invalidate({ campId });
@@ -93,6 +99,13 @@ export function PositionManager({ organizationId, campId, departmentId, departme
   });
   const reorderPositions = api.position.reorderPositions.useMutation({ onSuccess: invalidate, onError });
   const updatePosition = api.position.update.useMutation({ onSuccess: invalidate, onError });
+  const deletePosition = api.position.delete.useMutation({
+    onSuccess: () => {
+      setDeleteTarget(null);
+      invalidate();
+    },
+    onError,
+  });
 
   // limit: 100 (the max adminList allows) — its default of 25 silently
   // truncated this picker on a camp with more staff than that, hiding real
@@ -135,7 +148,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
   }
 
   function move(node: PositionNode, direction: -1 | 1) {
-    if (node.leadershipRole) return;
+    if (node.leadershipRole === "COMMANDANT") return;
     const siblings = node.parentPositionId && deptIds.has(node.parentPositionId)
       ? childrenOf.get(node.parentPositionId) ?? []
       : roots;
@@ -154,7 +167,12 @@ export function PositionManager({ organizationId, campId, departmentId, departme
 
   function renderNode(node: PositionNode, depth: number): React.ReactNode {
     const occupants = node.assignments;
-    const protectedLeadership = Boolean(node.leadershipRole);
+    // Only the Commandant is pinned — Assistant Commandants can be
+    // reordered, moved, and deleted (as a role) like any other position now;
+    // seating/vacating who HOLDS a leadership role still only happens via
+    // Camp Command settings / the organogram's strict-gated appoint action.
+    const pinnedRoot = node.leadershipRole === "COMMANDANT";
+    const isLeadership = Boolean(node.leadershipRole);
     const siblings = node.parentPositionId && deptIds.has(node.parentPositionId) ? childrenOf.get(node.parentPositionId) ?? [] : roots;
     const idx = siblings.findIndex((s) => s.id === node.id);
 
@@ -168,7 +186,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
           <div className="flex flex-col">
             <button
               type="button"
-              disabled={protectedLeadership || idx <= 0}
+              disabled={pinnedRoot || idx <= 0}
               onClick={() => move(node, -1)}
               aria-label={`Move ${node.name} up`}
               className="rounded p-0.5 text-txt-muted hover:bg-surface-raised disabled:opacity-30"
@@ -177,7 +195,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
             </button>
             <button
               type="button"
-              disabled={protectedLeadership || idx === -1 || idx >= siblings.length - 1}
+              disabled={pinnedRoot || idx === -1 || idx >= siblings.length - 1}
               onClick={() => move(node, 1)}
               aria-label={`Move ${node.name} down`}
               className="rounded p-0.5 text-txt-muted hover:bg-surface-raised disabled:opacity-30"
@@ -188,7 +206,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
 
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-txt-primary truncate">{node.name}</div>
-            {protectedLeadership && <div className="mt-0.5 text-[11px] font-medium text-accent-600">Managed in Settings → Camp Command</div>}
+            {isLeadership && <div className="mt-0.5 text-[11px] font-medium text-accent-600">Seat managed from Camp Command / the organogram</div>}
             {node.grantsAwardPoints && <div className="mt-0.5 text-[11px] font-medium text-accent-600">Can award camper points</div>}
             {occupants.length === 0 ? (
               <div className="text-xs text-txt-muted">Vacant</div>
@@ -198,7 +216,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
                   <div key={a.id} className="flex items-center gap-1.5">
                     <Avatar name={`${a.staff.firstName} ${a.staff.lastName}`} photoUrl={a.staff.photoUrl} size="xs" />
                     <span className="text-xs text-txt-secondary">{a.staff.firstName} {a.staff.lastName}</span>
-                    {!protectedLeadership && (
+                    {!isLeadership && (
                       <button
                         type="button"
                         onClick={() => unassignPosition.mutate({ positionId: node.id, staffId: a.staff.id })}
@@ -213,13 +231,13 @@ export function PositionManager({ organizationId, campId, departmentId, departme
             )}
           </div>
 
-          {occupants.length === 0 && !protectedLeadership && (
+          {occupants.length === 0 && !isLeadership && (
             <Button size="sm" variant="secondary" onClick={() => setAssignTarget(node)}>
               Assign
             </Button>
           )}
 
-          {!protectedLeadership && <Menu as="div" className="relative shrink-0">
+          {!pinnedRoot && <Menu as="div" className="relative shrink-0">
             <Menu.Button
               aria-label={`${node.name} position options`}
               className="-m-2.5 flex h-11 w-11 items-center justify-center rounded-full text-txt-muted hover:bg-surface-raised hover:text-txt-primary"
@@ -250,7 +268,7 @@ export function PositionManager({ organizationId, campId, departmentId, departme
                     </button>
                   )}
                 </Menu.Item>
-                <Menu.Item>
+                {!isLeadership && <Menu.Item>
                   {({ active }) => (
                     <button
                       type="button"
@@ -258,6 +276,17 @@ export function PositionManager({ organizationId, campId, departmentId, departme
                       className={cn("flex w-full min-h-[44px] items-center px-3 text-left", active && "bg-surface-raised")}
                     >
                       {node.grantsAwardPoints ? "Remove point access" : "Allow point awards"}
+                    </button>
+                  )}
+                </Menu.Item>}
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(node)}
+                      className={cn("flex w-full min-h-[44px] items-center px-3 text-left text-[var(--status-danger-fg)]", active && "bg-surface-raised")}
+                    >
+                      Delete position
                     </button>
                   )}
                 </Menu.Item>
@@ -358,6 +387,24 @@ export function PositionManager({ organizationId, campId, departmentId, departme
             </Button>
           </div>
         </div>
+      </Dialog>
+
+      {/* Delete position dialog */}
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete position"} size="sm">
+        {deleteTarget && (
+          <div className="space-y-4">
+            <p className="text-xs text-txt-secondary">
+              {(childrenOf.get(deleteTarget.id) ?? []).length > 0
+                ? `${(childrenOf.get(deleteTarget.id) ?? []).length} reporting position(s) will move up to report to ${nodeParentLabel(deleteTarget, allFlat)}.`
+                : "This position has no reporting positions beneath it."}
+              {deleteTarget.assignments.length > 0 && " Its current holder will be marked vacant."}
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button variant="danger" loading={deletePosition.isPending} onClick={() => deletePosition.mutate({ id: deleteTarget.id })}>Delete</Button>
+            </div>
+          </div>
+        )}
       </Dialog>
     </div>
   );

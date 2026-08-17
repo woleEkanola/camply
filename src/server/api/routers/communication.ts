@@ -10,13 +10,30 @@ import { interpolateSubject } from "../../email/interpolate";
 import { validateTemplate } from "../../email/validateTemplate";
 import { audienceFilterSchema } from "../../email/audience/filters";
 import { previewAudience } from "../../email/audience/resolver";
-import { getCampaignReadiness, retryHeldCampaignRecipients, sendCampaign, scheduleCampaign } from "../../email/campaign/sender";
+import { getCampaignReadiness, retryHeldCampaignRecipients, sendCampaign, scheduleCampaign, assessRegistration } from "../../email/campaign/sender";
 import { sweepPendingSideEffects } from "../../registration/effects";
 import { validateCampaignAttachments } from "../../../lib/email/campaignAttachments";
 import { assertCampaignSender } from "../trpc/campaignAccess";
 import { assertOrgAdminOrCommand } from "../trpc/scoping";
+import {
+  computeRecipientStats,
+  statsFromStatusCounts,
+  rates,
+  SENT_STATUSES,
+  DELIVERED_STATUSES,
+  FAILED_STATUSES,
+} from "../../email/stats";
+import { estimateSendSeconds } from "../../email/appUrl";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Who a "send to non-openers" follow-up actually targets: anyone the provider
+ * accepted who has no recorded open. The detail page's count and the mutation's
+ * query both read this, so the button can't advertise a different number than it
+ * sends to.
+ */
+const NON_OPENER_STATUSES = ["SENT", "DELIVERED", "DELAYED"];
 
 async function requireAdmin(ctx: { prisma: any; session?: { user?: { role?: string; organizationId?: string } } | null }) {
   const organizationId = ctx.session?.user?.organizationId;
@@ -974,6 +991,16 @@ export const communicationRouter = createTRPCRouter({
       if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       const oid = orgId(ctx);
 
+      // A real send is only ever rendered from sample data (getSampleData()
+      // below) — including a fake tribe name unrelated to any real camper.
+      // Restricting the recipient to the requesting admin's own address is
+      // what stops that fake data from ever reaching a real parent, which is
+      // exactly how this shipped once: an admin free-typed an arbitrary
+      // address into a "send test to" prompt.
+      if (input.to && input.to.toLowerCase() !== currentUser.email?.toLowerCase()) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Test emails can only be sent to your own address." });
+      }
+
       const variables = { ...getSampleData(), ...input.variables };
 
       const { unknownTokens } = validateTemplate({
@@ -1067,7 +1094,7 @@ export const communicationRouter = createTRPCRouter({
         await resend.emails.send({
           from,
           to: input.to,
-          subject: interpolatedSubject,
+          subject: `[TEST] ${interpolatedSubject}`,
           html,
           replyTo,
         });
@@ -1168,20 +1195,26 @@ export const communicationRouter = createTRPCRouter({
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
+    const inOrg = { campaign: { organizationId: oid } };
     const [sentToday, sentWeek, failed, waiting, queueSize, campaignsRunning, campaignsScheduled, totalSent, totalDelivered, totalOpened, totalClicked, totalBounced] =
       await Promise.all([
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, updatedAt: { gte: todayStart }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, updatedAt: { gte: weekAgo }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["FAILED", "BOUNCED"] }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "QUEUED", campaign: { organizationId: oid } } }),
+        // Windowed on sentAt, not updatedAt: an open or a late webhook event on a
+        // month-old message bumps updatedAt, which used to make it count as
+        // "sent today" and inflate the figure every time an old campaign got read.
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, sentAt: { gte: todayStart } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, sentAt: { gte: weekAgo } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: { in: [...FAILED_STATUSES] } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: "QUEUED" } }),
         ctx.prisma.sideEffect.count({ where: { status: "QUEUED", campaignId: { not: null }, campaign: { organizationId: oid } } }),
         ctx.prisma.emailCampaign.count({ where: { organizationId: oid, status: "SENDING" } }),
         ctx.prisma.emailCampaign.count({ where: { organizationId: oid, status: "SCHEDULED" } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["DELIVERED", "OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "CLICKED", campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "BOUNCED", campaign: { organizationId: oid } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: { in: [...SENT_STATUSES] } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: { in: [...DELIVERED_STATUSES] } } }),
+        // By timestamp, matching every other surface — a status-based count drops
+        // recipients who clicked without the pixel ever loading.
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, openedAt: { not: null } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, clickedAt: { not: null } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: "BOUNCED" } }),
       ]);
 
     const recent = await ctx.prisma.emailRecipient.findMany({
@@ -1199,9 +1232,14 @@ export const communicationRouter = createTRPCRouter({
       queueSize,
       campaignsRunning,
       campaignsScheduled,
-      successRate: totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0,
-      openRate: totalDelivered > 0 ? Math.round((totalOpened / totalDelivered) * 100) : 0,
-      clickRate: totalOpened > 0 ? Math.round((totalClicked / totalOpened) * 100) : 0,
+      // Same formulas the campaign detail page shows — see server/email/stats.ts.
+      ...rates({
+        ...computeRecipientStats([]),
+        sent: totalSent,
+        delivered: totalDelivered,
+        opened: totalOpened,
+        clicked: totalClicked,
+      }),
       bounced: totalBounced,
       recentActivity: recent.map((r: any) => ({
         id: r.id,
@@ -1335,21 +1373,24 @@ export const communicationRouter = createTRPCRouter({
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
 
       const recipients = campaign.recipients as any[];
+      const base = computeRecipientStats(recipients);
+      // Attachments or personalization force one-at-a-time delivery; everything
+      // else batches. Computed here rather than in the page so the ETA honours
+      // RESEND_MAX_REQUESTS_PER_SECOND instead of assuming the default rate.
+      const individualDelivery =
+        !!campaign.personalizeEvent || ((campaign.attachments as any[])?.length ?? 0) > 0;
+
       return {
         ...campaign,
         stats: {
-          total: campaign._count.recipients,
-          queued: recipients.filter((r) => r.deliveryStatus === "QUEUED").length,
-          processing: recipients.filter((r) => r.deliveryStatus === "PROCESSING").length,
-          held: recipients.filter((r) => r.deliveryStatus === "HELD").length,
-          sent: recipients.filter((r) => ["SENT", "DELIVERED", "OPENED", "CLICKED", "DELAYED"].includes(r.deliveryStatus)).length,
-          delayed: recipients.filter((r) => r.deliveryStatus === "DELAYED").length,
-          delivered: recipients.filter((r) => ["DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
-          opened: recipients.filter((r) => r.openedAt).length,
-          clicked: recipients.filter((r) => r.clickedAt).length,
-          failed: recipients.filter((r) => r.deliveryStatus === "FAILED").length,
-          bounced: recipients.filter((r) => r.deliveryStatus === "BOUNCED").length,
-          cancelled: recipients.filter((r) => r.deliveryStatus === "CANCELLED").length,
+          ...base,
+          ...rates(base),
+          // The button that consumes this targets the same rows — see
+          // campaignSendToNonOpeners below. Keep the two in lockstep.
+          nonOpeners: recipients.filter(
+            (r) => !r.openedAt && NON_OPENER_STATUSES.includes(r.deliveryStatus)
+          ).length,
+          estimatedSeconds: estimateSendSeconds(base.queued + base.processing, individualDelivery),
           lastActivityAt: recipients.reduce<Date | null>((latest, r) => !latest || r.updatedAt > latest ? r.updatedAt : latest, null),
           heldIssues: recipients.filter((r) => r.deliveryStatus === "HELD").slice(0, 100).map((r) => ({ id: r.id, registrationId: r.registrationId, email: r.email, reason: r.failedReason })),
         },
@@ -1421,7 +1462,7 @@ export const communicationRouter = createTRPCRouter({
     }),
 
   campaignSend: protectedProcedure
-    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional() }))
+    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional(), registrationIds: z.array(z.string()).optional() }))
     .mutation(async ({ ctx, input }) => {
       const oid = orgId(ctx);
       await assertCampaignSender(ctx, oid);
@@ -1433,16 +1474,16 @@ export const communicationRouter = createTRPCRouter({
         data: { organizationId: orgId(ctx), userId: ctx.session!.user!.id, action: "CAMPAIGN_SENT", targetType: "CAMPAIGN", targetId: input.id, metadata: { name: campaign.name } },
       });
 
-      return sendCampaign(ctx.prisma, input.id, { manualEmails: input.manualEmails });
+      return sendCampaign(ctx.prisma, input.id, { manualEmails: input.manualEmails, registrationIds: input.registrationIds });
     }),
 
   campaignReadiness: protectedProcedure
-    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional() }))
+    .input(z.object({ id: z.string(), manualEmails: z.array(z.string().email()).optional(), registrationIds: z.array(z.string()).optional() }))
     .query(async ({ ctx, input }) => {
       await requireAdmin(ctx);
       const campaign = await ctx.prisma.emailCampaign.findFirst({ where: { id: input.id, organizationId: orgId(ctx) } });
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
-      return getCampaignReadiness(ctx.prisma, input.id, { manualEmails: input.manualEmails });
+      return getCampaignReadiness(ctx.prisma, input.id, { manualEmails: input.manualEmails, registrationIds: input.registrationIds });
     }),
 
   campaignRetryHeld: protectedProcedure
@@ -1546,38 +1587,9 @@ export const communicationRouter = createTRPCRouter({
       return sendCampaign(ctx.prisma, input.id);
     }),
 
-  campaignGetStats: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      // Org-scoped but not role-scoped.
-      await requireAdmin(ctx);
-      const oid = orgId(ctx);
-      const campaign = await ctx.prisma.emailCampaign.findFirst({
-        where: { id: input.id, organizationId: oid },
-        select: { id: true },
-      });
-      if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
-      const recipients = await ctx.prisma.emailRecipient.findMany({
-        where: { campaignId: input.id },
-        select: { deliveryStatus: true, openedAt: true, clickedAt: true },
-      });
-      return {
-        total: recipients.length,
-        queued: recipients.filter((r) => r.deliveryStatus === "QUEUED").length,
-        processing: recipients.filter((r) => r.deliveryStatus === "PROCESSING").length,
-        held: recipients.filter((r) => r.deliveryStatus === "HELD").length,
-        // deliveryStatus advances SENT → DELIVERED → OPENED → CLICKED, so "sent"
-        // must count the whole pipeline or it shrinks as people engage.
-        sent: recipients.filter((r) => ["SENT", "DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
-        delivered: recipients.filter((r) => ["DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
-        opened: recipients.filter((r) => r.openedAt).length,
-        clicked: recipients.filter((r) => r.clickedAt).length,
-        failed: recipients.filter((r) => r.deliveryStatus === "FAILED").length,
-        bounced: recipients.filter((r) => r.deliveryStatus === "BOUNCED").length,
-        delayed: recipients.filter((r) => r.deliveryStatus === "DELAYED").length,
-        cancelled: recipients.filter((r) => r.deliveryStatus === "CANCELLED").length,
-      };
-    }),
+  // campaignGetStats removed — it was a near-duplicate of campaignGet's `stats`
+  // with a subtly different "sent" bucket (it omitted DELAYED), and had no
+  // caller anywhere in the app. Use campaignGet.
 
   campaignDuplicate: protectedProcedure
     .input(z.object({ id: z.string() }))
@@ -1644,32 +1656,221 @@ export const communicationRouter = createTRPCRouter({
       });
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
 
+      const emailWhere = { OR: input.manualEmails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })) };
+
       if (campaign.personalizeEvent && campaign.personalizeCampId) {
         const registrations = await (ctx.prisma as any).registration.findMany({
           where: {
             campId: campaign.personalizeCampId,
             status: { in: ["APPROVED", "CHECKED_IN"] },
             deletedAt: null,
-            camper: { user: { email: { in: input.manualEmails } } },
+            camper: { user: emailWhere },
           },
           include: { camper: { select: { user: { select: { email: true } } } } },
         });
-        const matchedEmails = new Set(registrations.map((r: any) => r.camper?.user?.email).filter(Boolean));
+        const matchedEmails = new Set(registrations.map((r: any) => r.camper?.user?.email?.toLowerCase()).filter(Boolean));
         return {
           matched: registrations.length,
-          unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e)),
+          unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e.toLowerCase())),
         };
       }
 
       const users = await ctx.prisma.user.findMany({
-        where: { email: { in: input.manualEmails }, organizationId: oid },
+        where: { organizationId: oid, ...emailWhere },
         select: { email: true },
       });
-      const matchedEmails = new Set(users.map((u) => u.email));
+      const matchedEmails = new Set(users.map((u) => u.email.toLowerCase()));
       return {
         matched: matchedEmails.size,
-        unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e)),
+        unmatched: input.manualEmails.filter((e) => !matchedEmails.has(e.toLowerCase())),
       };
+    }),
+
+  /** Typeahead source for the invitation recipient picker — a lightweight
+   * per-registration row (camper, parent email, tribe, bed, readiness, last
+   * send) for a single camp, not the heavy admin registrations list. */
+  invitationCandidates: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      q: z.string().optional(),
+      onlyUnsent: z.boolean().optional(),
+      cursor: z.string().optional(),
+      limit: z.number().min(1).max(50).default(20),
+    }))
+    .query(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const { forcedCampusId } = await assertCampaignSender(ctx, oid);
+      const camp = await ctx.prisma.camp.findFirst({ where: { id: input.campId, organizationId: oid } });
+      if (!camp) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const where: Record<string, unknown> = {
+        campId: input.campId,
+        status: { in: ["APPROVED", "CHECKED_IN"] },
+        deletedAt: null,
+        campus: { organizationId: oid },
+        ...(forcedCampusId && { campusId: forcedCampusId }),
+        ...(input.q && {
+          OR: [
+            { registrationNumber: { contains: input.q, mode: "insensitive" } },
+            { camper: { name: { contains: input.q, mode: "insensitive" } } },
+            { camper: { user: { email: { contains: input.q, mode: "insensitive" } } } },
+            { camper: { user: { firstName: { contains: input.q, mode: "insensitive" } } } },
+            { camper: { user: { lastName: { contains: input.q, mode: "insensitive" } } } },
+          ],
+        }),
+      };
+
+      const registrations = await (ctx.prisma as any).registration.findMany({
+        where,
+        include: {
+          camper: { include: { user: { select: { email: true } } } },
+          campus: { select: { name: true } },
+          camp: {
+            select: {
+              name: true,
+              year: true,
+              logoUrl: true,
+              organization: { select: { branding: { select: { idCardLogoUrl: true, logoUrl: true } } } },
+            },
+          },
+          tribe: { select: { name: true, color: true } },
+          room: { select: { name: true, hostel: { select: { name: true } } } },
+          bed: { select: { label: true } },
+        },
+        orderBy: { createdAt: "asc" },
+        take: input.limit + 1,
+        ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
+      });
+
+      let nextCursor: string | undefined;
+      if (registrations.length > input.limit) {
+        const next = registrations.pop();
+        nextCursor = next?.id;
+      }
+
+      const org = await ctx.prisma.organization.findUnique({
+        where: { id: oid },
+        select: { branding: { select: { idCardEnabled: true } } },
+      });
+      const commonIssues = org?.branding?.idCardEnabled ? [] : ["Camp ID cards are disabled in Communication settings."];
+
+      const registrationIds = registrations.map((r: any) => r.id);
+      const lastInvites = registrationIds.length > 0
+        ? await (ctx.prisma as any).emailRecipient.findMany({
+            where: { registrationId: { in: registrationIds }, campaign: { personalizeEvent: "CAMP_INVITATION" } },
+            orderBy: { createdAt: "desc" },
+            select: { registrationId: true, sentAt: true, deliveryStatus: true, openedAt: true },
+          })
+        : [];
+      const lastInviteByReg = new Map<string, (typeof lastInvites)[number]>();
+      for (const recipient of lastInvites) {
+        if (!lastInviteByReg.has(recipient.registrationId)) lastInviteByReg.set(recipient.registrationId, recipient);
+      }
+
+      const items = registrations
+        .map((registration: any) => {
+          const lastInvitation = lastInviteByReg.get(registration.id) ?? null;
+          return {
+            registrationId: registration.id,
+            camperName: registration.camper?.name ?? "",
+            parentEmail: registration.camper?.user?.email ?? "",
+            registrationNumber: registration.registrationNumber,
+            tribeName: registration.tribe?.name ?? null,
+            hostelName: registration.room?.hostel?.name ?? null,
+            roomName: registration.room?.name ?? null,
+            bedLabel: registration.bed?.label ?? null,
+            readinessIssues: assessRegistration(registration, commonIssues),
+            lastInvitation: lastInvitation
+              ? { sentAt: lastInvitation.sentAt, deliveryStatus: lastInvitation.deliveryStatus, openedAt: lastInvitation.openedAt }
+              : null,
+          };
+        })
+        .filter((item: any) => !input.onlyUnsent || !item.lastInvitation);
+
+      return { items, nextCursor };
+    }),
+
+  /** One-off targeted resend: always creates a fresh DRAFT campaign scoped to
+   * exactly the given registrations, so it works regardless of whether those
+   * registrations already received the original campaign (sendCampaign's
+   * dedupe is per-campaign, and campaignSend refuses non-draft campaigns —
+   * both of which make re-sending the *same* campaign a dead end). Leaves the
+   * original campaign's stats untouched. */
+  invitationResend: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      registrationIds: z.array(z.string()).min(1).max(200),
+      sourceCampaignId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const oid = orgId(ctx);
+      const { forcedCampusId } = await assertCampaignSender(ctx, oid);
+
+      const camp = await ctx.prisma.camp.findFirst({ where: { id: input.campId, organizationId: oid } });
+      if (!camp) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const matchedRegistrations = await (ctx.prisma as any).registration.findMany({
+        where: {
+          id: { in: input.registrationIds },
+          campId: input.campId,
+          deletedAt: null,
+          campus: { organizationId: oid },
+          ...(forcedCampusId && { campusId: forcedCampusId }),
+        },
+        select: { id: true },
+      });
+      if (matchedRegistrations.length !== input.registrationIds.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "One or more selected registrations could not be found in this camp." });
+      }
+
+      let source: { subject: string; previewText: string | null; body: unknown; senderMode: string; customFromLocalPart: string | null; replyTo: string | null; attachments: unknown } | null = null;
+      if (input.sourceCampaignId) {
+        source = await ctx.prisma.emailCampaign.findFirst({
+          where: { id: input.sourceCampaignId, organizationId: oid, personalizeCampId: input.campId },
+          select: { subject: true, previewText: true, body: true, senderMode: true, customFromLocalPart: true, replyTo: true, attachments: true },
+        });
+        if (!source) throw new TRPCError({ code: "NOT_FOUND", message: "Source campaign not found." });
+      } else {
+        source = await ctx.prisma.emailCampaign.findFirst({
+          where: { organizationId: oid, personalizeCampId: input.campId, personalizeEvent: "CAMP_INVITATION", status: "COMPLETED" },
+          orderBy: { completedAt: "desc" },
+          select: { subject: true, previewText: true, body: true, senderMode: true, customFromLocalPart: true, replyTo: true, attachments: true },
+        });
+      }
+
+      const template = DEFAULT_TEMPLATES.CAMP_INVITATION;
+
+      const campaign = await ctx.prisma.emailCampaign.create({
+        data: {
+          organizationId: oid,
+          createdById: ctx.session!.user!.id,
+          name: `Invitation resend — ${camp.name} — ${new Date().toISOString().slice(0, 10)}`,
+          subject: source?.subject ?? template.subject,
+          previewText: source?.previewText ?? template.previewText,
+          body: (source?.body ?? template.content) as any,
+          audienceFilter: (forcedCampusId ? { recipientType: "PARENTS", filters: { campusId: forcedCampusId } } : { recipientType: "PARENTS" }) as any,
+          senderMode: source?.senderMode ?? "ORG_SLUG",
+          customFromLocalPart: source?.customFromLocalPart ?? null,
+          replyTo: source?.replyTo ?? null,
+          attachments: (source?.attachments ?? undefined) as any,
+          personalizeEvent: "CAMP_INVITATION",
+          personalizeCampId: input.campId,
+        },
+      });
+
+      await ctx.prisma.emailAuditLog.create({
+        data: {
+          organizationId: oid,
+          userId: ctx.session!.user!.id,
+          action: "CAMPAIGN_SENT",
+          targetType: "CAMPAIGN",
+          targetId: campaign.id,
+          metadata: { name: campaign.name, registrationIds: input.registrationIds, sourceCampaignId: input.sourceCampaignId ?? null },
+        },
+      });
+
+      const result = await sendCampaign(ctx.prisma, campaign.id, { registrationIds: input.registrationIds });
+      return { ...result, campaignId: campaign.id };
     }),
 
   campaignSendToNonOpeners: protectedProcedure
@@ -1681,7 +1882,7 @@ export const communicationRouter = createTRPCRouter({
       if (!original || original.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
 
       const nonOpeners = await ctx.prisma.emailRecipient.findMany({
-        where: { campaignId: input.id, openedAt: null, deliveryStatus: { in: ["SENT", "DELIVERED"] } },
+        where: { campaignId: input.id, openedAt: null, deliveryStatus: { in: NON_OPENER_STATUSES } },
         select: { userId: true, email: true },
       });
 
@@ -1703,6 +1904,11 @@ export const communicationRouter = createTRPCRouter({
           senderMode: original.senderMode,
           customFromLocalPart: original.customFromLocalPart,
           replyTo: original.replyTo,
+          // Matches campaignDuplicate — without these a personalized (e.g.
+          // Camp Invitation) campaign's follow-up silently renders through
+          // the generic branch, which has no tribe/camper variables at all.
+          personalizeEvent: original.personalizeEvent,
+          personalizeCampId: original.personalizeCampId,
           createdById: ctx.session!.user!.id,
         },
       } as any);
@@ -1923,18 +2129,17 @@ export const communicationRouter = createTRPCRouter({
     // Org-scoped but not role-scoped.
     await requireAdmin(ctx);
     const oid = orgId(ctx);
-    const items = await ctx.prisma.emailRecipient.findMany({
-      where: { organizationId: oid },
-      select: { deliveryStatus: true },
-    });
-    return {
-      total: items.length,
-      delivered: items.filter((i) => ["DELIVERED", "OPENED", "CLICKED"].includes(i.deliveryStatus)).length,
-      opened: items.filter((i) => ["OPENED", "CLICKED"].includes(i.deliveryStatus)).length,
-      clicked: items.filter((i) => i.deliveryStatus === "CLICKED").length,
-      bounced: items.filter((i) => i.deliveryStatus === "BOUNCED").length,
-      failed: items.filter((i) => i.deliveryStatus === "FAILED").length,
-    };
+    // Aggregated in Postgres. This used to select every EmailRecipient row in the
+    // org into memory just to length-count filtered subsets of it — unbounded, and
+    // it grows with every transactional email the org has ever sent.
+    const where = { organizationId: oid };
+    const [groups, opened, clicked] = await Promise.all([
+      ctx.prisma.emailRecipient.groupBy({ by: ["deliveryStatus"], where, _count: { _all: true } }),
+      ctx.prisma.emailRecipient.count({ where: { ...where, openedAt: { not: null } } }),
+      ctx.prisma.emailRecipient.count({ where: { ...where, clickedAt: { not: null } } }),
+    ]);
+    const stats = statsFromStatusCounts(groups as any, { opened, clicked });
+    return { ...stats, ...rates(stats) };
   }),
 
   // ═══ Analytics ══════════════════════════════════════════════════════════════
@@ -1942,6 +2147,10 @@ export const communicationRouter = createTRPCRouter({
   analyticsOverview: protectedProcedure
     .input(z.object({ dateFrom: z.string().optional(), dateTo: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
+      // These two analytics procedures were the only campaign reads in this file
+      // without an admin check, so any authenticated user — including a PARENT —
+      // could read org-wide email analytics.
+      await requireAdmin(ctx);
       const oid = orgId(ctx);
       const where: Record<string, unknown> = { campaign: { organizationId: oid } };
       if (input?.dateFrom || input?.dateTo) {
@@ -1950,24 +2159,27 @@ export const communicationRouter = createTRPCRouter({
         if (input?.dateTo) (where.createdAt as any).lte = new Date(input.dateTo);
       }
 
-      const items = await ctx.prisma.emailRecipient.findMany({
-        where,
-        select: { deliveryStatus: true, openedAt: true, clickedAt: true, createdAt: true },
-      });
+      const [groups, opened, clicked] = await Promise.all([
+        ctx.prisma.emailRecipient.groupBy({ by: ["deliveryStatus"], where: where as any, _count: { _all: true } }),
+        ctx.prisma.emailRecipient.count({ where: { ...(where as any), openedAt: { not: null } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...(where as any), clickedAt: { not: null } } }),
+      ]);
 
+      const stats = statsFromStatusCounts(groups as any, { opened, clicked });
       return {
-        totalSent: items.length,
-        delivered: items.filter((i) => ["DELIVERED", "OPENED", "CLICKED"].includes(i.deliveryStatus)).length,
-        opened: items.filter((i) => i.openedAt).length,
-        clicked: items.filter((i) => i.clickedAt).length,
-        bounced: items.filter((i) => i.deliveryStatus === "BOUNCED").length,
-        failed: items.filter((i) => i.deliveryStatus === "FAILED").length,
+        ...stats,
+        ...rates(stats),
+        // `totalSent` previously meant `items.length` — every recipient row, including
+        // ones still QUEUED, HELD, or CANCELLED — while being labelled "Sent" in the
+        // UI. `sent` is the real accepted-by-provider count; `total` is the roster size.
+        totalSent: stats.sent,
       };
     }),
 
   analyticsTimeSeries: protectedProcedure
     .input(z.object({ days: z.number().default(30) }).optional())
     .query(async ({ ctx, input }) => {
+      await requireAdmin(ctx);
       const oid = orgId(ctx);
       const days = input?.days ?? 30;
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -1978,16 +2190,22 @@ export const communicationRouter = createTRPCRouter({
         orderBy: { createdAt: "asc" },
       });
 
+      // Bucket once, then read each day off the map — the previous version
+      // re-scanned the whole result set for every day in the range.
+      const buckets = new Map<string, { sent: number; opened: number }>();
+      for (const item of items) {
+        const key = item.createdAt.toISOString().slice(0, 10);
+        const bucket = buckets.get(key) ?? { sent: 0, opened: 0 };
+        if ((SENT_STATUSES as readonly string[]).includes(item.deliveryStatus)) bucket.sent++;
+        if (item.openedAt) bucket.opened++;
+        buckets.set(key, bucket);
+      }
+
       const series: { date: string; sent: number; opened: number }[] = [];
       for (let d = 0; d < days; d++) {
         const date = new Date(Date.now() - (days - 1 - d) * 24 * 60 * 60 * 1000);
         const key = date.toISOString().slice(0, 10);
-        const dayItems = items.filter((i) => i.createdAt.toISOString().slice(0, 10) === key);
-        series.push({
-          date: key,
-          sent: dayItems.length,
-          opened: dayItems.filter((i) => i.openedAt).length,
-        });
+        series.push({ date: key, ...(buckets.get(key) ?? { sent: 0, opened: 0 }) });
       }
 
       return series;

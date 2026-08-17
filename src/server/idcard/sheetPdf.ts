@@ -12,7 +12,7 @@ const CARD_HEIGHT = 53.98 * MM_TO_PT; // ~153.0pt
 const MARGIN_X = 40;
 const COLS = 2;
 const ROWS = 4;
-const CARDS_PER_PAGE = COLS * ROWS;
+export const CARDS_PER_PAGE = COLS * ROWS;
 const COL_GUTTER = (PAGE_WIDTH - 2 * MARGIN_X - COLS * CARD_WIDTH) / (COLS - 1);
 const ROW_GUTTER = 18;
 
@@ -78,26 +78,40 @@ export async function generateCampIdCardSheetPdf(cardPng: Buffer): Promise<Buffe
  * as needed, rather than repeating a single card 6 times. Reuses the exact
  * grid/crop-mark layout above so bulk sheets are pixel-identical to the
  * single-camper spares sheet.
+ *
+ * `format` controls how pdf-lib embeds the source images. `embedPng` decodes
+ * to raw RGBA and retains it (~2.5MB per CR80-at-300DPI card) until `save()`
+ * — fine for a handful of cards, but the reason a few hundred cards used to
+ * exhaust memory. `embedJpg` carries the JPEG bytes through as DCTDecode
+ * data with no raster decode, cutting that to the JPEG's own size (~60-90KB
+ * at the quality idCards.ts renders at). The bulk export builder always
+ * passes "jpeg"; the single-camper spares sheet (generateCampIdCardSheetPdf,
+ * one card, 8 slots) keeps "png" — at that scale the memory difference is
+ * irrelevant and lossless output is free.
  */
-export async function generateIdCardSheetPdf(cardPngs: Buffer[]): Promise<Buffer> {
+export async function generateIdCardSheetPdf(cardImages: Buffer[], format: "png" | "jpeg" = "png"): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create();
   const positions = cardPositions();
 
   // Embed each unique buffer once, not once per slot — generateCampIdCardSheetPdf
-  // passes the same Buffer instance 6 times, and re-embedding it per slot silently
+  // passes the same Buffer instance 8 times, and re-embedding it per slot silently
   // bloated the PDF (and broke the "embedded once" invariant callers rely on).
+  // Buffer-identity keying is correct for both current callers: the repeated-
+  // object case above, and the bulk path, where every card is a distinct
+  // render and therefore a distinct object — a content hash would key
+  // identically there, just with extra hashing cost for no cache hits.
   const embedded = new Map<Buffer, Awaited<ReturnType<typeof pdfDoc.embedPng>>>();
-  async function embedOnce(png: Buffer) {
-    const cached = embedded.get(png);
+  async function embedOnce(image: Buffer) {
+    const cached = embedded.get(image);
     if (cached) return cached;
-    const image = await pdfDoc.embedPng(png);
-    embedded.set(png, image);
-    return image;
+    const embeddedImage = format === "jpeg" ? await pdfDoc.embedJpg(image) : await pdfDoc.embedPng(image);
+    embedded.set(image, embeddedImage);
+    return embeddedImage;
   }
 
-  for (let i = 0; i < cardPngs.length; i += CARDS_PER_PAGE) {
+  for (let i = 0; i < cardImages.length; i += CARDS_PER_PAGE) {
     const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    const pageCards = cardPngs.slice(i, i + CARDS_PER_PAGE);
+    const pageCards = cardImages.slice(i, i + CARDS_PER_PAGE);
     for (let j = 0; j < pageCards.length; j++) {
       const image = await embedOnce(pageCards[j]);
       const { x, y } = positions[j];
@@ -106,7 +120,7 @@ export async function generateIdCardSheetPdf(cardPngs: Buffer[]): Promise<Buffer
     }
   }
 
-  if (cardPngs.length === 0) {
+  if (cardImages.length === 0) {
     pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   }
 
