@@ -44,6 +44,7 @@ vi.mock("../blobStore", () => ({
   deleteBlobs: vi.fn(async (urls: string[]) => {
     for (const url of urls) blobFixtureStore.delete(url);
   }),
+  hasRealBlobToken: vi.fn(() => true),
 }));
 
 let orgId: string;
@@ -616,3 +617,43 @@ describe("purgeExpiredExports", () => {
     expect(await prisma.exportJob.findUnique({ where: { id: fresh.id } })).not.toBeNull();
   });
 });
+
+describe("artifactStore storage routing", () => {
+  it("stores artifacts in Postgres bytea (fileData) when under 30MB or when Blob token is missing", async () => {
+    const { artifactStore } = await import("../artifactStore");
+    const { hasRealBlobToken } = await import("../blobStore");
+
+    const job = await prisma.exportJob.create({
+      data: {
+        organizationId: orgId,
+        userId: adminId,
+        kind: "TEMPLATE",
+        format: "PDF",
+        label: "Medium PDF Export",
+        params: { ...baseParams, organizationId: orgId } as any,
+        status: "RUNNING",
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    // 10MB data (under 30MB) with hasRealBlobToken = true
+    const tenMbBuffer = Buffer.alloc(10 * 1024 * 1024, "a");
+    await artifactStore.put(job.id, { fileName: "10mb.pdf", mimeType: "application/pdf", data: tenMbBuffer });
+
+    let row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(row.fileData).not.toBeNull();
+    expect(row.blobKey).toBeNull();
+    expect(row.fileSize).toBe(tenMbBuffer.byteLength);
+
+    // When hasRealBlobToken is false, even large files stay in bytea rather than writing invalid local-blob URLs
+    vi.mocked(hasRealBlobToken).mockReturnValueOnce(false);
+    const thirtyFiveMbBuffer = Buffer.alloc(35 * 1024 * 1024, "b");
+    await artifactStore.put(job.id, { fileName: "35mb.pdf", mimeType: "application/pdf", data: thirtyFiveMbBuffer });
+
+    row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(row.fileData).not.toBeNull();
+    expect(row.blobKey).toBeNull();
+    expect(row.fileSize).toBe(thirtyFiveMbBuffer.byteLength);
+  });
+});
+

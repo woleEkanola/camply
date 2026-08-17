@@ -38,7 +38,7 @@ import { put, del } from "@vercel/blob";
  * outright once bulk exports needed somewhere to stage chunks.
  */
 
-function hasRealBlobToken(): boolean {
+export function hasRealBlobToken(): boolean {
   return !!process.env.BLOB_READ_WRITE_TOKEN;
 }
 
@@ -85,7 +85,12 @@ export interface UploadedBlob {
 
 export async function uploadBlob(jobId: string, data: Buffer, mimeType: string): Promise<UploadedBlob> {
   const pathname = randomPathname(jobId, extensionFor(mimeType));
-  if (!hasRealBlobToken()) return localPut(pathname, data);
+  if (!hasRealBlobToken()) {
+    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+      console.warn(`[export/blobStore] BLOB_READ_WRITE_TOKEN is not configured in production; falling back to ephemeral local /tmp for export ${jobId}.`);
+    }
+    return localPut(pathname, data);
+  }
   const result = await put(pathname, data, {
     access: "public",
     contentType: mimeType,
