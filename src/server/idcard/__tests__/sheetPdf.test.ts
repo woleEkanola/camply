@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll } from "vitest";
 import { PDFDocument, PDFName, PDFRawStream } from "pdf-lib";
 import { renderCampIdCardPng, type CampIdCardData } from "../renderCard";
 import { generateCampIdCardSheetPdf, generateIdCardSheetPdf } from "../sheetPdf";
+import { CARD_WIDTH, CARD_HEIGHT } from "../cardPrimitives";
 
 const SAMPLE: CampIdCardData = {
   camperName: "James Adelabu",
@@ -70,4 +71,69 @@ describe("generateIdCardSheetPdf pagination", () => {
     const doc = await PDFDocument.load(pdfBytes);
     expect(doc.getPageCount()).toBe(1);
   });
+
+  it("paginates distinct jpeg cards correctly (not silently deduped)", async () => {
+    // Each buffer must be genuinely distinct here — embedOnce keys by Buffer
+    // identity (sheetPdf.ts's documented, deliberate choice), and every real
+    // bulk-export card is a distinct render, never a repeated object.
+    const cards = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        renderCampIdCardPng({ ...SAMPLE, qrToken: `DISTINCT-${i}` }, { encodeAs: "jpeg" })
+      )
+    );
+    const pdfBytes = await generateIdCardSheetPdf(cards, "jpeg");
+    const doc = await PDFDocument.load(pdfBytes);
+    expect(doc.getPageCount()).toBe(2); // 8 per page
+    const imageStreams = doc.context.enumerateIndirectObjects().filter(([, object]) =>
+      object instanceof PDFRawStream && object.dict.get(PDFName.of("Subtype")) === PDFName.of("Image")
+    );
+    expect(imageStreams.length).toBe(10); // one per distinct card, none collapsed
+  });
+});
+
+/**
+ * Operationalizes the actual bug fix: pdf-lib's embedPng decodes every PNG to
+ * raw RGBA and retains it until save() — CARD_WIDTH*CARD_HEIGHT*4 bytes per
+ * card, ~2.5MB each, which is what stalled real exports at 120-145 cards on
+ * a memory-constrained instance. embedJpg (via the "jpeg" format this suite
+ * covers) carries the JPEG bytes through as DCTDecode data with no decode
+ * step. This measures actual process memory around embedding many cards,
+ * rather than only asserting on output byte sizes, to prove the retained
+ * footprint doesn't scale the old way.
+ */
+describe("generateIdCardSheetPdf memory footprint (jpeg vs png)", () => {
+  const CARD_COUNT = 60;
+  // Real Skia render + embed of 60 cards is meaningfully slower than the
+  // rest of this file's synthetic-buffer tests — this is measuring actual
+  // memory behaviour, not mocking it, so it needs the room.
+  const TEST_TIMEOUT = 60_000;
+
+  it(
+    "keeps retained memory far below what decoding every card as PNG would require",
+    async () => {
+      const jpegCards = await Promise.all(
+        Array.from({ length: CARD_COUNT }, (_, i) =>
+          renderCampIdCardPng({ ...SAMPLE, qrToken: `MEM-${i}` }, { encodeAs: "jpeg" })
+        )
+      );
+
+      if (global.gc) global.gc();
+      const before = process.memoryUsage().rss;
+
+      const pdfBytes = await generateIdCardSheetPdf(jpegCards, "jpeg");
+
+      if (global.gc) global.gc();
+      const after = process.memoryUsage().rss;
+
+      const decodedPngRasterTotal = CARD_COUNT * (CARD_WIDTH * CARD_HEIGHT * 4); // what embedPng would have retained for the same count
+      const observedGrowth = Math.max(0, after - before);
+
+      // Not a tight bound (RSS is a noisy, whole-process measurement) — proving
+      // an order-of-magnitude difference from the PNG-decode figure, which is
+      // the actual claim: memory does not grow linearly at ~2.5MB/card.
+      expect(observedGrowth).toBeLessThan(decodedPngRasterTotal / 4);
+      expect(pdfBytes.byteLength).toBeGreaterThan(0);
+    },
+    TEST_TIMEOUT
+  );
 });

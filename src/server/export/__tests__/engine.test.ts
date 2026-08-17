@@ -1,9 +1,50 @@
 import { afterEach, afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { registerExport } from "../registry";
-import type { ExportDescriptor, ExportEnqueueParams } from "../types";
+import type { ExportChunkOutcome, ExportDescriptor, ExportEnqueueParams, ExportPart } from "../types";
 
 const prisma = new PrismaClient();
+
+/**
+ * No real BLOB_READ_WRITE_TOKEN exists locally or in CI, so every test that
+ * touches the resumable/staged-part path needs blobStore's network calls
+ * replaced with an in-memory store. partStore.ts and artifactStore.ts both
+ * import blobStore.ts by the same relative specifier, so this one mock
+ * covers the whole chain engine.ts exercises them through.
+ */
+const blobFixtureStore = new Map<string, Buffer>();
+let blobCounter = 0;
+vi.mock("../blobStore", () => ({
+  uploadBlob: vi.fn(async (jobId: string, data: Buffer) => {
+    const url = `mock-blob://${jobId}/${blobCounter++}`;
+    blobFixtureStore.set(url, data);
+    return { url, size: data.byteLength };
+  }),
+  fetchBlob: vi.fn(async (url: string) => {
+    const data = blobFixtureStore.get(url);
+    if (!data) throw new Error(`mock blob not found: ${url}`);
+    return data;
+  }),
+  streamBlob: vi.fn(async (url: string) => {
+    const data = blobFixtureStore.get(url);
+    if (!data) throw new Error(`mock blob not found: ${url}`);
+    return {
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(data));
+          controller.close();
+        },
+      }),
+      contentLength: data.byteLength,
+    };
+  }),
+  deleteBlob: vi.fn(async (url: string) => {
+    blobFixtureStore.delete(url);
+  }),
+  deleteBlobs: vi.fn(async (urls: string[]) => {
+    for (const url of urls) blobFixtureStore.delete(url);
+  }),
+}));
 
 let orgId: string;
 let adminId: string;
@@ -272,7 +313,22 @@ describe("retryExportJob", () => {
 });
 
 describe("sweepPendingExportJobs", () => {
-  it("reclaims a RUNNING job whose process died more than 10 minutes ago", async () => {
+  /**
+   * @updatedAt is normally auto-set, but Prisma's typed client does honour an
+   * explicit value passed in `data` — unlike a raw `$executeRaw` write of a
+   * JS `Date` into this timestamp(3)-without-timezone column, which was
+   * verified (while writing this test) to round-trip an hour off on this
+   * machine's Postgres setup. Worth knowing for any other raw-SQL DateTime
+   * write in this codebase — CLAUDE.md's existing raw-query timezone caveat
+   * only calls out `@db.Date` columns via `$queryRawUnsafe`; this is the
+   * same class of bug via a different query method against a different
+   * column type.
+   */
+  async function backdateUpdatedAt(id: string, minutesAgo: number) {
+    await prisma.exportJob.update({ where: { id }, data: { updatedAt: new Date(Date.now() - minutesAgo * 60 * 1000) } });
+  }
+
+  it("reclaims a RUNNING job that has stopped reporting progress for more than 10 minutes", async () => {
     const { sweepPendingExportJobs } = await import("../engine");
     const staleRunning = await prisma.exportJob.create({
       data: {
@@ -288,12 +344,72 @@ describe("sweepPendingExportJobs", () => {
         expiresAt: new Date(Date.now() + 60_000),
       },
     });
+    await backdateUpdatedAt(staleRunning.id, 15);
 
     const result = await sweepPendingExportJobs();
     expect(result.reclaimed).toBeGreaterThanOrEqual(1);
 
     const row = await prisma.exportJob.findUniqueOrThrow({ where: { id: staleRunning.id } });
     expect(row.status === "QUEUED" || row.status === "DONE" || row.status === "FAILED").toBe(true);
+    expect(row.attempts).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does NOT reclaim a job with an old startedAt but a fresh updatedAt", async () => {
+    // The regression this covers: the reclaim used to key on startedAt, so a
+    // genuinely live long-running job (progress checkpointed throughout, so
+    // updatedAt stays fresh) got reclaimed anyway — and the same sweep call
+    // immediately re-picked up what it had just reclaimed, running a second
+    // concurrent render of the same rows every ~10 minutes.
+    const { sweepPendingExportJobs } = await import("../engine");
+    const stillWorking = await prisma.exportJob.create({
+      data: {
+        organizationId: orgId,
+        userId: adminId,
+        kind: "TEMPLATE",
+        format: "CSV",
+        label: "Long-running but alive",
+        params: { ...baseParams, organizationId: orgId } as any,
+        status: "RUNNING",
+        startedAt: new Date(Date.now() - 20 * 60 * 1000), // started 20 minutes ago
+        runAfter: new Date(Date.now() + 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    // updatedAt defaults to "now" at create() — deliberately left fresh.
+
+    const result = await sweepPendingExportJobs();
+    expect(result.reclaimed).toBe(0);
+
+    const row = await prisma.exportJob.findUniqueOrThrow({ where: { id: stillWorking.id } });
+    expect(row.status).toBe("RUNNING");
+    expect(row.attempts).toBe(0);
+  });
+
+  it("increments attempts on each reclaim and reaches FAILED after MAX_ATTEMPTS, without ever calling the descriptor's build", async () => {
+    const { sweepPendingExportJobs } = await import("../engine");
+    const stuck = await prisma.exportJob.create({
+      data: {
+        organizationId: orgId,
+        userId: adminId,
+        kind: "TEMPLATE",
+        format: "CSV",
+        label: "Stuck forever",
+        params: { ...baseParams, organizationId: orgId } as any,
+        status: "RUNNING",
+        attempts: 2, // one reclaim away from MAX_ATTEMPTS (3)
+        startedAt: new Date(Date.now() - 15 * 60 * 1000),
+        runAfter: new Date(Date.now() + 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    await backdateUpdatedAt(stuck.id, 15);
+
+    await sweepPendingExportJobs();
+
+    const row = await prisma.exportJob.findUniqueOrThrow({ where: { id: stuck.id } });
+    expect(row.status).toBe("FAILED");
+    expect(row.attempts).toBe(3);
+    expect(row.error).toMatch(/stopped making progress/i);
   });
 
   it("does not touch a QUEUED job whose runAfter is still in the future", async () => {
@@ -316,6 +432,152 @@ describe("sweepPendingExportJobs", () => {
     const row = await prisma.exportJob.findUniqueOrThrow({ where: { id: notDue.id } });
     expect(row.status).toBe("QUEUED");
     expect(row.attempts).toBe(0);
+  });
+});
+
+describe("resumable builds (buildChunk)", () => {
+  /**
+   * Registers a chunked stub under TEMPLATE, overriding the plain-build stub
+   * the outer beforeEach registers — registerExport (registry.ts) keys by
+   * `kind`, so the later registration for this describe block's tests wins.
+   * Each call consumes exactly one "row" and stages a tiny fake PDF part,
+   * mirroring the real contract idCards.ts's buildIdCardChunk fulfils:
+   * forward progress every call, a durable part staged before returning.
+   */
+  let chunkCalls: number;
+  function makeChunkedStub(totalRows: number) {
+    chunkCalls = 0;
+    const buildChunk = vi.fn(
+      async (ctx: any, _params: ExportEnqueueParams, _format: any, resumeIndex: number, _deadline: number, onProgress: any): Promise<ExportChunkOutcome> => {
+        chunkCalls++;
+        const nextIndex = resumeIndex + 1;
+        await onProgress({ processed: nextIndex, total: totalRows, stage: "Rendering…" });
+        const part: ExportPart = await ctx.stagePart(Buffer.from(`part-${nextIndex}`), {
+          fileName: "test.pdf",
+          mimeType: "application/pdf",
+          cardCount: 1,
+          sheetCount: 1,
+        });
+        return { done: nextIndex >= totalRows, resumeIndex: nextIndex, part };
+      }
+    );
+    const descriptor: ExportDescriptor<any> = {
+      kind: "TEMPLATE",
+      label: "Chunked stub",
+      formats: ["PDF"],
+      presets: [],
+      filterSchema: { parse: (v: unknown) => v } as any,
+      authorize: vi.fn(async () => {}) as any,
+      count: vi.fn(async () => totalRows),
+      buildChunk: buildChunk as any,
+      fileName: () => "test.pdf",
+    };
+    registerExport(descriptor);
+    return { buildChunk };
+  }
+
+  async function createQueuedJob(kind = "TEMPLATE") {
+    return prisma.exportJob.create({
+      data: {
+        organizationId: orgId,
+        userId: adminId,
+        kind: kind as any,
+        format: "PDF",
+        label: "Chunked job",
+        params: { ...baseParams, organizationId: orgId, format: "PDF" } as any,
+        status: "QUEUED",
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+  }
+
+  afterEach(async () => {
+    const { __testing__ } = await import("../engine");
+    __testing__.resetResumableLoopBudgetMs();
+  });
+
+  it("spans multiple invocations (processExportJob, then sweepPendingExportJobs resuming) without losing, skipping, or duplicating chunks", async () => {
+    makeChunkedStub(3);
+    const { processExportJob, sweepPendingExportJobs, __testing__ } = await import("../engine");
+    // Forces runResumableBuild to stop after exactly one chunk per call,
+    // simulating "this invocation's time budget ran out" deterministically
+    // instead of depending on real wall-clock time.
+    __testing__.setResumableLoopBudgetMs(0);
+
+    const job = await createQueuedJob();
+
+    // First invocation: the normal QUEUED->RUNNING claim.
+    await processExportJob(job.id);
+    let row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(row.status).toBe("RUNNING");
+    expect(row.resumeIndex).toBe(1);
+    expect((row.partRefs as any[]).length).toBe(1);
+
+    // Second and third invocations: this job is RUNNING now, not QUEUED — the
+    // only path that can continue it is the sweep's resume-RUNNING-jobs
+    // branch, exactly as in production (see enqueueExportJob's comment on
+    // why the request-triggered kick alone can't be relied on).
+    await sweepPendingExportJobs();
+    row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(row.status).toBe("RUNNING");
+    expect(row.resumeIndex).toBe(2);
+    expect((row.partRefs as any[]).length).toBe(2);
+
+    await sweepPendingExportJobs();
+    row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(chunkCalls).toBe(3);
+    expect(row.resumeIndex).toBe(3);
+    expect(row.status).toBe("DONE"); // 3rd chunk completed the job
+  });
+
+  it("promotes a job that only ever staged one part to a plain single-file artifact", async () => {
+    makeChunkedStub(1);
+    const { processExportJob } = await import("../engine");
+    const job = await createQueuedJob();
+
+    await processExportJob(job.id);
+
+    const row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(row.status).toBe("DONE");
+    expect(row.fileName).toBe("test.pdf");
+    expect(row.fileData).not.toBeNull(); // small artifact — bytea path, not blob
+    expect((row.partRefs as any[]).length).toBe(0); // staged part cleared after promotion
+  });
+
+  it("exposes multiple staged parts, unpromoted, for a job that never collapses to one part", async () => {
+    makeChunkedStub(3);
+    const { processExportJob } = await import("../engine");
+    const job = await createQueuedJob();
+
+    await processExportJob(job.id); // runs to completion in one call — real deadline is generous
+
+    const row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(row.status).toBe("DONE");
+    const parts = row.partRefs as any[];
+    expect(parts.length).toBe(3);
+    expect(parts.map((p) => p.partNumber)).toEqual([1, 2, 3]);
+    // Never promoted — no plain fileData/fileName for a genuinely multi-part job.
+    expect(row.fileData).toBeNull();
+    expect(row.fileName).toBeNull();
+  });
+
+  it("stops checkpointing once the job is cancelled mid-build", async () => {
+    const { buildChunk } = makeChunkedStub(5);
+    const { processExportJob, cancelExportJob } = await import("../engine");
+    const job = await createQueuedJob();
+
+    buildChunk.mockImplementationOnce(async (ctx: any, _p: any, _f: any, resumeIndex: number, _d: number, onProgress: any) => {
+      await onProgress({ processed: 1, total: 5, stage: "Rendering…" });
+      await cancelExportJob(job.id); // simulates the user cancelling while this chunk was in flight
+      const part = await ctx.stagePart(Buffer.from("part-1"), { fileName: "test.pdf", mimeType: "application/pdf", cardCount: 1, sheetCount: 1 });
+      return { done: false, resumeIndex: resumeIndex + 1, part };
+    });
+
+    await processExportJob(job.id);
+
+    const row = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(row.status).toBe("CANCELLED");
+    expect(buildChunk).toHaveBeenCalledTimes(1); // the loop did not continue past the cancellation
   });
 });
 

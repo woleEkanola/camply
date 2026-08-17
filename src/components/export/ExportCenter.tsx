@@ -27,6 +27,8 @@ export interface ExportJobSummary {
   updatedAt: string | Date;
   completedAt: string | Date | null;
   expiresAt: string | Date;
+  /** >1 when the export outgrew a single file — see engine.ts's finalizeResumableJob. 0/1 both mean "one plain download", the normal case. */
+  partCount: number;
 }
 
 const STATUS_TONE: Record<string, BadgeTone> = {
@@ -109,7 +111,12 @@ export function ExportCenter({ organizationId }: { organizationId: string }) {
               {job.stage ?? "Working…"}
               {job.total ? ` — ${job.processed ?? 0} / ${job.total}` : job.progress ? ` — ${job.progress}%` : ""}
             </p>
-            {isStalled(job) && <p className="text-xs font-medium text-warning-700">No progress update for several minutes. You can cancel this export and retry it.</p>}
+            {isStalled(job) && (
+              <p className="text-xs font-medium text-warning-700">
+                This is taking a while — large exports can take several minutes and will resume automatically if
+                interrupted. You can also cancel and retry it.
+              </p>
+            )}
           </div>
         )}
       </Section>
@@ -120,16 +127,29 @@ export function ExportCenter({ organizationId }: { organizationId: string }) {
             <div>
               <p className="text-sm font-medium text-txt-primary">{job.fileName ?? job.label}</p>
               <p className="text-xs text-txt-muted">
+                {job.partCount > 1 ? `Split into ${job.partCount} files · ` : ""}
                 {formatBytes(job.fileSize)}
                 {job.completedAt ? ` · ${new Date(job.completedAt).toLocaleString()}` : ""}
               </p>
             </div>
             <div className="flex items-center gap-1.5">
-              <a href={`/api/exports/${job.id}/download`}>
-                <Button size="sm" icon={<ArrowDownTrayIcon className="h-4 w-4" />}>
-                  Download
-                </Button>
-              </a>
+              {job.partCount > 1 ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {Array.from({ length: job.partCount }, (_, i) => i + 1).map((partNumber) => (
+                    <a key={partNumber} href={`/api/exports/${job.id}/download?part=${partNumber}`}>
+                      <Button size="sm" variant="secondary" icon={<ArrowDownTrayIcon className="h-4 w-4" />}>
+                        Part {partNumber}
+                      </Button>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <a href={`/api/exports/${job.id}/download`}>
+                  <Button size="sm" icon={<ArrowDownTrayIcon className="h-4 w-4" />}>
+                    Download
+                  </Button>
+                </a>
+              )}
               <Button size="sm" variant="ghost" aria-label="Dismiss" onClick={() => dismiss.mutate({ id: job.id })}>
                 <XMarkIcon className="h-4 w-4" />
               </Button>
@@ -163,9 +183,16 @@ export function ExportCenter({ organizationId }: { organizationId: string }) {
   );
 }
 
+// Comfortably inside the server's own 10-minute stale-job reclaim
+// (STALE_RUNNING_MINUTES in engine.ts) — this is a "still working, hang
+// tight" notice shown before the server would act, not a claim that
+// anything has actually gone wrong. A resumable job's updatedAt keeps
+// advancing throughout a long render (each staged chunk checkpoints it), so
+// this only fires when nothing has happened in a while, not merely because
+// the export is large.
 function isStalled(job: ExportJobSummary): boolean {
   if (job.status !== "RUNNING") return false;
-  return Date.now() - new Date(job.updatedAt).getTime() > 2 * 60 * 1000;
+  return Date.now() - new Date(job.updatedAt).getTime() > 6 * 60 * 1000;
 }
 
 function Section({

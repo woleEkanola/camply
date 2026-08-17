@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/db";
+import { isAuthorizedCronRequest } from "@/server/cron/auth";
+
+export const maxDuration = 300;
 
 function linkFor(role: string) {
   return role === "VOLUNTEER" ? "/volunteer/departments?view=mine" : "/teacher/departments?view=mine";
 }
 
-export async function POST(req: NextRequest) {
-  if (!process.env.CRON_SECRET || req.headers.get("x-cron-secret") !== process.env.CRON_SECRET) {
+/**
+ * Reminds staff of checklist items due in the next 15 minutes, and flags
+ * department heads once anything goes OVERDUE. The 30-minute dedupe window
+ * (below) means this tolerates being run more often than it strictly needs —
+ * scheduled every 5 minutes via vercel.json so the 15-minute lookahead can't
+ * be missed between runs.
+ */
+async function handle(req: NextRequest) {
+  if (!isAuthorizedCronRequest(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -63,4 +73,12 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ reminders, newlyOverdue: overdueResult.count, headAlerts });
+}
+
+export async function GET(req: NextRequest) {
+  return handle(req);
+}
+
+export async function POST(req: NextRequest) {
+  return handle(req);
 }
