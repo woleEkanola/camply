@@ -133,6 +133,10 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     expect(reg.status).toBe("APPROVED");
     expect(reg.checkedInAt).toBeNull();
 
+    // Dismiss overlay (manual dismiss mode) before re-searching
+    await page.getByRole("button", { name: "Close popup" }).click();
+    await expect(page.getByRole("heading", { name: "Collected Gift Bags", exact: true })).not.toBeVisible();
+
     // Re-scanning the same checkpoint the same day is an informational duplicate.
     await searchInput.fill(registrationNumber);
     await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -145,7 +149,8 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await page.goto("/admin/qr-scan");
     await page.waitForLoadState("networkidle");
 
-    // Fresh session default is already Identity Lookup.
+    await page.getByRole("button", { name: "Change station" }).click();
+    await page.getByTestId("bottom-sheet-panel").getByRole("button", { name: /Identity Lookup/ }).click();
     await expect(page.getByRole("heading", { name: "Identity Lookup" })).toBeVisible();
 
     const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
@@ -160,8 +165,8 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await expect(closeButton).toBeVisible();
 
     // Campus rep contact footer with a working tel: Call link.
-    await expect(page.getByText("Rep Contact")).toBeVisible();
-    const callLink = page.locator('a[href="tel:+2348012345678"]');
+    await expect(page.getByText("Rep Contact").first()).toBeVisible();
+    const callLink = page.locator('a[href="tel:+2348012345678"]').first();
     await expect(callLink).toBeVisible();
 
     // X button dismisses.

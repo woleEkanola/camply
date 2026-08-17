@@ -86,6 +86,20 @@ export function ScanCenterShell({
   const [customStationName, setCustomStationName] = useState("");
   const [sessionStats, setSessionStats] = useState<SessionScanStats>(EMPTY_SESSION_STATS);
 
+  // Scan Popup Dismiss Mode: "MANUAL" (default, waits for X) vs "AUTO" (1.5s auto-dismiss)
+  const [dismissMode, setDismissMode] = useState<"AUTO" | "MANUAL">(() => {
+    if (typeof window === "undefined") return "MANUAL";
+    const saved = localStorage.getItem("camply-scan-dismiss-mode");
+    return saved === "AUTO" ? "AUTO" : "MANUAL";
+  });
+
+  const handleDismissModeChange = (mode: "AUTO" | "MANUAL") => {
+    setDismissMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("camply-scan-dismiss-mode", mode);
+    }
+  };
+
   const [searchQuery, setSearchQuery] = useState("");
   const [scannerActive, setScannerActive] = useState(true);
   const [lastCacheSyncTime, setLastCacheSyncTime] = useState<string>("Never");
@@ -172,36 +186,34 @@ export function ScanCenterShell({
     return () => clearInterval(timer);
   }, []);
 
-  // Auto-dismiss success/duplicate overlays so the volunteer never needs to
-  // tap through — the camera stays live underneath and resumes the instant
-  // the overlay clears. Success: 1.5s. Duplicate: 2.5s (a touch longer,
-  // since it's read for context rather than just confirmed at a glance).
+  // Auto-dismiss success/duplicate overlays when dismissMode === "AUTO".
+  // When dismissMode === "MANUAL" (default), popup stays on screen until user taps X.
   useEffect(() => {
-    if (!successData) return;
+    if (!successData || dismissMode === "MANUAL") return;
     const timer = setTimeout(() => {
       setSuccessData(null);
       setScannerActive(true);
     }, 1500);
     return () => clearTimeout(timer);
-  }, [successData]);
+  }, [successData, dismissMode]);
 
   useEffect(() => {
-    if (!duplicateData) return;
+    if (!duplicateData || dismissMode === "MANUAL") return;
     const timer = setTimeout(() => {
       setDuplicateData(null);
       setScannerActive(true);
     }, 2500);
     return () => clearTimeout(timer);
-  }, [duplicateData]);
+  }, [duplicateData, dismissMode]);
 
   useEffect(() => {
-    if (!staffScanData) return;
+    if (!staffScanData || dismissMode === "MANUAL") return;
     const timer = setTimeout(() => {
       setStaffScanData(null);
       setScannerActive(true);
     }, staffScanData.duplicate ? 2500 : 1500);
     return () => clearTimeout(timer);
-  }, [staffScanData]);
+  }, [staffScanData, dismissMode]);
 
   // Keyboard shortcut: slash key focuses search, Escape closes overlays
   useEffect(() => {
@@ -592,16 +604,26 @@ export function ScanCenterShell({
         onLocationChange={handleLocationChange}
         deviceIdentifier={deviceIdentifier}
         onDeviceChange={handleDeviceChange}
+        dismissMode={dismissMode}
+        onDismissModeChange={handleDismissModeChange}
       />
 
-      {/* Offline status — collapsed to a single tappable chip; sync/cache
-          are maintenance actions handled in the OfflineSheet, not
-          permanent header controls. */}
+      {/* Offline status & Popup mode — collapsed to single tappable chips */}
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => setOfflineSheetOpen(true)}>
+        <button type="button" onClick={() => setOfflineSheetOpen(true)} className="cursor-pointer">
           <Badge tone={offlineScanner.isOnline ? "success" : "warning"}>
             <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
             {offlineScanner.isOnline ? "Online" : `Offline · ${offlineScanner.offlineQueueCount} waiting`}
+          </Badge>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDismissModeChange(dismissMode === "MANUAL" ? "AUTO" : "MANUAL")}
+          title={`Scan popup mode: ${dismissMode === "MANUAL" ? "Manual Close (Click X) - Default" : "Auto-dismiss (1.5s)"}`}
+          className="cursor-pointer"
+        >
+          <Badge tone={dismissMode === "MANUAL" ? "attention" : "neutral"}>
+            Popup: {dismissMode === "MANUAL" ? "Manual (X)" : "Auto (1.5s)"}
           </Badge>
         </button>
         {pointsHref && (
@@ -656,6 +678,7 @@ export function ScanCenterShell({
         open={searchSheetOpen}
         onClose={() => setSearchSheetOpen(false)}
         onSearch={(query) => handleScanSubmit({ query })}
+        organizationId={organizationId}
       />
 
       <HistorySheet
@@ -751,6 +774,19 @@ export function ScanCenterShell({
           }}
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-600 p-6 text-white cursor-pointer animate-fade-in"
         >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSuccessData(null);
+              setScannerActive(true);
+            }}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/20 hover:bg-black/40 text-white p-2.5 backdrop-blur-md transition shadow-lg z-10 cursor-pointer"
+            aria-label="Close popup"
+          >
+            <XMarkIcon className="h-7 w-7 stroke-2" />
+          </button>
+
           <div className="flex flex-col items-center max-w-lg text-center space-y-6">
             <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
             
@@ -799,7 +835,11 @@ export function ScanCenterShell({
               <MedicalBanner flags={successData.medicalFlags} camper={successData.camper} />
             )}
 
-            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
+            <p className="text-xs opacity-75 font-medium">
+              {dismissMode === "MANUAL"
+                ? "Click (X) or tap anywhere to close and scan next"
+                : "Tap to dismiss now · resumes scanning automatically"}
+            </p>
           </div>
         </div>
       )}
@@ -815,6 +855,19 @@ export function ScanCenterShell({
             staffScanData.notApplicable ? "bg-amber-700" : staffScanData.duplicate ? "bg-blue-600" : "bg-sky-700"
           }`}
         >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setStaffScanData(null);
+              setScannerActive(true);
+            }}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/20 hover:bg-black/40 text-white p-2.5 backdrop-blur-md transition shadow-lg z-10 cursor-pointer"
+            aria-label="Close popup"
+          >
+            <XMarkIcon className="h-7 w-7 stroke-2" />
+          </button>
+
           <div className="flex flex-col items-center max-w-lg text-center space-y-6">
             {staffScanData.notApplicable ? (
               <ExclamationTriangleIcon className="h-24 w-24 md:h-32 md:w-32" />
@@ -853,7 +906,11 @@ export function ScanCenterShell({
               )}
             </div>
 
-            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
+            <p className="text-xs opacity-75 font-medium">
+              {dismissMode === "MANUAL"
+                ? "Click (X) or tap anywhere to close and scan next"
+                : "Tap to dismiss now · resumes scanning automatically"}
+            </p>
           </div>
         </div>
       )}
@@ -867,6 +924,19 @@ export function ScanCenterShell({
           }}
           className="fixed inset-0 z-50 overflow-y-auto bg-blue-600 p-4 sm:p-6 text-white cursor-pointer animate-fade-in"
         >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDuplicateData(null);
+              setScannerActive(true);
+            }}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/20 hover:bg-black/40 text-white p-2.5 backdrop-blur-md transition shadow-lg z-10 cursor-pointer"
+            aria-label="Close popup"
+          >
+            <XMarkIcon className="h-7 w-7 stroke-2" />
+          </button>
+
           <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
             <div className="flex flex-col items-center max-w-lg w-full text-center space-y-6">
               <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
@@ -916,7 +986,11 @@ export function ScanCenterShell({
                 )}
               </div>
 
-              <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
+              <p className="text-xs opacity-75 font-medium">
+                {dismissMode === "MANUAL"
+                  ? "Click (X) or tap anywhere to close and scan next"
+                  : "Tap to dismiss now · resumes scanning automatically"}
+              </p>
             </div>
           </div>
         </div>

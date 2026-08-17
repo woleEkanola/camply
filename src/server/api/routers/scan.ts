@@ -1771,12 +1771,6 @@ export const scanRouter = createTRPCRouter({
         deletedAt: null,
         campus: { organizationId: input.organizationId },
       };
-
-      // Previously filtered meals by servedAt (a real DateTime) using a
-      // server-local "today" boundary, while getMealReport filtered the
-      // same data by `date` (@db.Date, always UTC-truncated) — the two
-      // dashboards disagreed on any non-UTC deployment. Both now query
-      // `date` with the same UTC boundary.
       const { start: startOfToday, end: endOfToday } = utcDayRange();
 
       const [registered, checkedIn, camperBreakfastCount, camperLunchCount, camperDinnerCount, checkedOutCount, staffBreakfastCount, staffLunchCount, staffDinnerCount] =
@@ -1823,6 +1817,100 @@ export const scanRouter = createTRPCRouter({
         staffMealCounts: { breakfast: staffBreakfastCount, lunch: staffLunchCount, dinner: staffDinnerCount },
         checkedOutCount,
       };
+    }),
+
+  // ─── Live camper search for scanner fallback ───
+
+  searchCampers: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        query: z.string().min(1),
+        campId: z.string().optional(),
+        limit: z.number().min(1).max(30).default(10),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+      const q = input.query.trim();
+      if (!q) return [];
+
+      const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
+
+      const registrations = await ctx.prisma.registration.findMany({
+        where: {
+          campus: { organizationId: input.organizationId },
+          ...(campId ? { campId } : {}),
+          deletedAt: null,
+          OR: [
+            { registrationNumber: { contains: q, mode: "insensitive" } },
+            { qrToken: { equals: q } },
+            { camper: { name: { contains: q, mode: "insensitive" } } },
+            { camper: { parentPhone: { contains: q, mode: "insensitive" } } },
+            { camper: { teenPhone: { contains: q, mode: "insensitive" } } },
+            { camper: { emergencyContactPhone: { contains: q, mode: "insensitive" } } },
+            { camper: { user: { email: { contains: q, mode: "insensitive" } } } },
+            { camper: { user: { phone: { contains: q, mode: "insensitive" } } } },
+          ],
+        },
+        take: input.limit,
+        orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          registrationNumber: true,
+          qrToken: true,
+          status: true,
+          camper: {
+            select: {
+              id: true,
+              name: true,
+              gender: true,
+              photoUrl: true,
+              parentPhone: true,
+              teenPhone: true,
+            },
+          },
+          campus: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          tribe: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          room: {
+            select: {
+              name: true,
+              hostel: { select: { name: true } },
+            },
+          },
+          bed: {
+            select: {
+              label: true,
+            },
+          },
+        },
+      });
+
+      return registrations.map((r: any) => ({
+        registrationId: r.id,
+        registrationNumber: r.registrationNumber,
+        qrToken: r.qrToken,
+        status: r.status,
+        name: r.camper?.name,
+        gender: r.camper?.gender,
+        photoUrl: r.camper?.photoUrl,
+        campusName: r.campus?.name,
+        tribeName: r.tribe?.name,
+        hostelName: r.room?.hostel?.name,
+        roomName: r.room?.name,
+        bedLabel: r.bed?.label,
+        phone: r.camper?.teenPhone || r.camper?.parentPhone,
+      }));
     }),
 
   // ─── Pickup Point picker + campus contact lookup ───

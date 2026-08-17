@@ -680,4 +680,19 @@ describe("scanRouter - reports", () => {
     await prisma.user.delete({ where: { id: otherAdmin.id } });
     await prisma.organization.delete({ where: { id: otherOrg.id } });
   });
+
+  it("searches campers by name or registration number", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const byName = await caller.scan.searchCampers({ organizationId: orgId, query: "Test Camper" });
+    expect(byName.length).toBeGreaterThanOrEqual(1);
+    expect(byName[0].name).toBe("Test Camper Scan");
+    expect(byName[0].registrationId).toBe(registrationId);
+  });
 });

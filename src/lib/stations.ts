@@ -236,8 +236,8 @@ export const STATIONS: Record<StationId, StationDef> = {
  * marks it "Safe mode · read-only" so returning to it is a deliberate act. */
 export const STATION_ORDER: StationId[] = [
   "IDENTITY_LOOKUP",
-  "CAMP_ARRIVAL",
   "PICKUP_POINT",
+  "CAMP_ARRIVAL",
   "HOSTEL_ARRIVAL",
   "BREAKFAST",
   "LUNCH",
