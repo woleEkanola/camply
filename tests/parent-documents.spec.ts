@@ -123,7 +123,10 @@ test.describe("Parent documents page", () => {
     // the "Documents" link is real, reachable navigation, not a deep link.
     await onlyVisible(page.getByRole("link", { name: "Documents" })).first().click();
     await page.waitForURL(/\/dashboard\/documents/, { timeout: 15000 });
-    await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible({ timeout: 15000 });
+    // Match the page's h1 specifically. A bare "Documents" name is a substring
+    // match, and this page also renders an h2 "Official Camper Documents", so the
+    // unqualified locator is a strict-mode violation rather than a missing element.
+    await expect(page.getByRole("heading", { name: "Documents & Downloads", level: 1 })).toBeVisible({ timeout: 15000 });
 
     // Ready camper: both links present. `div` + hasText matches every
     // ancestor div containing the camper's name (Card, CardBody, and the
@@ -153,7 +156,9 @@ test.describe("Parent documents page", () => {
     // its ID card link is specifically absent while acceptance letter
     // still works.
     const noTribeCard = page.locator("h3", { hasText: "E2E Docs No Tribe Camper" }).locator("xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' space-y-3 ')][1]");
-    await expect(noTribeCard.getByText(/awaiting tribe assignment/i)).toBeVisible();
+    // The badge reads "ID card awaiting tribe" (see src/app/dashboard/documents/page.tsx).
+    // Match on the stable phrase rather than wording the page never used.
+    await expect(noTribeCard.getByText(/awaiting tribe/i)).toBeVisible();
     await expect(noTribeCard.getByRole("link", { name: /Camp ID Card/i })).toHaveCount(0);
     const noTribeAcceptanceLink = noTribeCard.getByRole("link", { name: /Acceptance Certificate/i });
     await expect(noTribeAcceptanceLink).toBeVisible();

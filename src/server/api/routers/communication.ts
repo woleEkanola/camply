@@ -15,8 +15,25 @@ import { sweepPendingSideEffects } from "../../registration/effects";
 import { validateCampaignAttachments } from "../../../lib/email/campaignAttachments";
 import { assertCampaignSender } from "../trpc/campaignAccess";
 import { assertOrgAdminOrCommand } from "../trpc/scoping";
+import {
+  computeRecipientStats,
+  statsFromStatusCounts,
+  rates,
+  SENT_STATUSES,
+  DELIVERED_STATUSES,
+  FAILED_STATUSES,
+} from "../../email/stats";
+import { estimateSendSeconds } from "../../email/appUrl";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Who a "send to non-openers" follow-up actually targets: anyone the provider
+ * accepted who has no recorded open. The detail page's count and the mutation's
+ * query both read this, so the button can't advertise a different number than it
+ * sends to.
+ */
+const NON_OPENER_STATUSES = ["SENT", "DELIVERED", "DELAYED"];
 
 async function requireAdmin(ctx: { prisma: any; session?: { user?: { role?: string; organizationId?: string } } | null }) {
   const organizationId = ctx.session?.user?.organizationId;
@@ -1178,20 +1195,26 @@ export const communicationRouter = createTRPCRouter({
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
+    const inOrg = { campaign: { organizationId: oid } };
     const [sentToday, sentWeek, failed, waiting, queueSize, campaignsRunning, campaignsScheduled, totalSent, totalDelivered, totalOpened, totalClicked, totalBounced] =
       await Promise.all([
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, updatedAt: { gte: todayStart }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, updatedAt: { gte: weekAgo }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["FAILED", "BOUNCED"] }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "QUEUED", campaign: { organizationId: oid } } }),
+        // Windowed on sentAt, not updatedAt: an open or a late webhook event on a
+        // month-old message bumps updatedAt, which used to make it count as
+        // "sent today" and inflate the figure every time an old campaign got read.
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, sentAt: { gte: todayStart } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, sentAt: { gte: weekAgo } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: { in: [...FAILED_STATUSES] } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: "QUEUED" } }),
         ctx.prisma.sideEffect.count({ where: { status: "QUEUED", campaignId: { not: null }, campaign: { organizationId: oid } } }),
         ctx.prisma.emailCampaign.count({ where: { organizationId: oid, status: "SENDING" } }),
         ctx.prisma.emailCampaign.count({ where: { organizationId: oid, status: "SCHEDULED" } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["DELIVERED", "OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: { in: ["OPENED", "CLICKED"] }, campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "CLICKED", campaign: { organizationId: oid } } }),
-        ctx.prisma.emailRecipient.count({ where: { deliveryStatus: "BOUNCED", campaign: { organizationId: oid } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: { in: [...SENT_STATUSES] } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: { in: [...DELIVERED_STATUSES] } } }),
+        // By timestamp, matching every other surface — a status-based count drops
+        // recipients who clicked without the pixel ever loading.
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, openedAt: { not: null } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, clickedAt: { not: null } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...inOrg, deliveryStatus: "BOUNCED" } }),
       ]);
 
     const recent = await ctx.prisma.emailRecipient.findMany({
@@ -1209,9 +1232,14 @@ export const communicationRouter = createTRPCRouter({
       queueSize,
       campaignsRunning,
       campaignsScheduled,
-      successRate: totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0,
-      openRate: totalDelivered > 0 ? Math.round((totalOpened / totalDelivered) * 100) : 0,
-      clickRate: totalOpened > 0 ? Math.round((totalClicked / totalOpened) * 100) : 0,
+      // Same formulas the campaign detail page shows — see server/email/stats.ts.
+      ...rates({
+        ...computeRecipientStats([]),
+        sent: totalSent,
+        delivered: totalDelivered,
+        opened: totalOpened,
+        clicked: totalClicked,
+      }),
       bounced: totalBounced,
       recentActivity: recent.map((r: any) => ({
         id: r.id,
@@ -1345,21 +1373,24 @@ export const communicationRouter = createTRPCRouter({
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
 
       const recipients = campaign.recipients as any[];
+      const base = computeRecipientStats(recipients);
+      // Attachments or personalization force one-at-a-time delivery; everything
+      // else batches. Computed here rather than in the page so the ETA honours
+      // RESEND_MAX_REQUESTS_PER_SECOND instead of assuming the default rate.
+      const individualDelivery =
+        !!campaign.personalizeEvent || ((campaign.attachments as any[])?.length ?? 0) > 0;
+
       return {
         ...campaign,
         stats: {
-          total: campaign._count.recipients,
-          queued: recipients.filter((r) => r.deliveryStatus === "QUEUED").length,
-          processing: recipients.filter((r) => r.deliveryStatus === "PROCESSING").length,
-          held: recipients.filter((r) => r.deliveryStatus === "HELD").length,
-          sent: recipients.filter((r) => ["SENT", "DELIVERED", "OPENED", "CLICKED", "DELAYED"].includes(r.deliveryStatus)).length,
-          delayed: recipients.filter((r) => r.deliveryStatus === "DELAYED").length,
-          delivered: recipients.filter((r) => ["DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
-          opened: recipients.filter((r) => r.openedAt).length,
-          clicked: recipients.filter((r) => r.clickedAt).length,
-          failed: recipients.filter((r) => r.deliveryStatus === "FAILED").length,
-          bounced: recipients.filter((r) => r.deliveryStatus === "BOUNCED").length,
-          cancelled: recipients.filter((r) => r.deliveryStatus === "CANCELLED").length,
+          ...base,
+          ...rates(base),
+          // The button that consumes this targets the same rows — see
+          // campaignSendToNonOpeners below. Keep the two in lockstep.
+          nonOpeners: recipients.filter(
+            (r) => !r.openedAt && NON_OPENER_STATUSES.includes(r.deliveryStatus)
+          ).length,
+          estimatedSeconds: estimateSendSeconds(base.queued + base.processing, individualDelivery),
           lastActivityAt: recipients.reduce<Date | null>((latest, r) => !latest || r.updatedAt > latest ? r.updatedAt : latest, null),
           heldIssues: recipients.filter((r) => r.deliveryStatus === "HELD").slice(0, 100).map((r) => ({ id: r.id, registrationId: r.registrationId, email: r.email, reason: r.failedReason })),
         },
@@ -1556,38 +1587,9 @@ export const communicationRouter = createTRPCRouter({
       return sendCampaign(ctx.prisma, input.id);
     }),
 
-  campaignGetStats: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      // Org-scoped but not role-scoped.
-      await requireAdmin(ctx);
-      const oid = orgId(ctx);
-      const campaign = await ctx.prisma.emailCampaign.findFirst({
-        where: { id: input.id, organizationId: oid },
-        select: { id: true },
-      });
-      if (!campaign) throw new TRPCError({ code: "NOT_FOUND" });
-      const recipients = await ctx.prisma.emailRecipient.findMany({
-        where: { campaignId: input.id },
-        select: { deliveryStatus: true, openedAt: true, clickedAt: true },
-      });
-      return {
-        total: recipients.length,
-        queued: recipients.filter((r) => r.deliveryStatus === "QUEUED").length,
-        processing: recipients.filter((r) => r.deliveryStatus === "PROCESSING").length,
-        held: recipients.filter((r) => r.deliveryStatus === "HELD").length,
-        // deliveryStatus advances SENT → DELIVERED → OPENED → CLICKED, so "sent"
-        // must count the whole pipeline or it shrinks as people engage.
-        sent: recipients.filter((r) => ["SENT", "DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
-        delivered: recipients.filter((r) => ["DELIVERED", "OPENED", "CLICKED"].includes(r.deliveryStatus)).length,
-        opened: recipients.filter((r) => r.openedAt).length,
-        clicked: recipients.filter((r) => r.clickedAt).length,
-        failed: recipients.filter((r) => r.deliveryStatus === "FAILED").length,
-        bounced: recipients.filter((r) => r.deliveryStatus === "BOUNCED").length,
-        delayed: recipients.filter((r) => r.deliveryStatus === "DELAYED").length,
-        cancelled: recipients.filter((r) => r.deliveryStatus === "CANCELLED").length,
-      };
-    }),
+  // campaignGetStats removed — it was a near-duplicate of campaignGet's `stats`
+  // with a subtly different "sent" bucket (it omitted DELAYED), and had no
+  // caller anywhere in the app. Use campaignGet.
 
   campaignDuplicate: protectedProcedure
     .input(z.object({ id: z.string() }))
@@ -1880,7 +1882,7 @@ export const communicationRouter = createTRPCRouter({
       if (!original || original.organizationId !== oid) throw new TRPCError({ code: "NOT_FOUND" });
 
       const nonOpeners = await ctx.prisma.emailRecipient.findMany({
-        where: { campaignId: input.id, openedAt: null, deliveryStatus: { in: ["SENT", "DELIVERED"] } },
+        where: { campaignId: input.id, openedAt: null, deliveryStatus: { in: NON_OPENER_STATUSES } },
         select: { userId: true, email: true },
       });
 
@@ -2127,18 +2129,17 @@ export const communicationRouter = createTRPCRouter({
     // Org-scoped but not role-scoped.
     await requireAdmin(ctx);
     const oid = orgId(ctx);
-    const items = await ctx.prisma.emailRecipient.findMany({
-      where: { organizationId: oid },
-      select: { deliveryStatus: true },
-    });
-    return {
-      total: items.length,
-      delivered: items.filter((i) => ["DELIVERED", "OPENED", "CLICKED"].includes(i.deliveryStatus)).length,
-      opened: items.filter((i) => ["OPENED", "CLICKED"].includes(i.deliveryStatus)).length,
-      clicked: items.filter((i) => i.deliveryStatus === "CLICKED").length,
-      bounced: items.filter((i) => i.deliveryStatus === "BOUNCED").length,
-      failed: items.filter((i) => i.deliveryStatus === "FAILED").length,
-    };
+    // Aggregated in Postgres. This used to select every EmailRecipient row in the
+    // org into memory just to length-count filtered subsets of it — unbounded, and
+    // it grows with every transactional email the org has ever sent.
+    const where = { organizationId: oid };
+    const [groups, opened, clicked] = await Promise.all([
+      ctx.prisma.emailRecipient.groupBy({ by: ["deliveryStatus"], where, _count: { _all: true } }),
+      ctx.prisma.emailRecipient.count({ where: { ...where, openedAt: { not: null } } }),
+      ctx.prisma.emailRecipient.count({ where: { ...where, clickedAt: { not: null } } }),
+    ]);
+    const stats = statsFromStatusCounts(groups as any, { opened, clicked });
+    return { ...stats, ...rates(stats) };
   }),
 
   // ═══ Analytics ══════════════════════════════════════════════════════════════
@@ -2146,6 +2147,10 @@ export const communicationRouter = createTRPCRouter({
   analyticsOverview: protectedProcedure
     .input(z.object({ dateFrom: z.string().optional(), dateTo: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
+      // These two analytics procedures were the only campaign reads in this file
+      // without an admin check, so any authenticated user — including a PARENT —
+      // could read org-wide email analytics.
+      await requireAdmin(ctx);
       const oid = orgId(ctx);
       const where: Record<string, unknown> = { campaign: { organizationId: oid } };
       if (input?.dateFrom || input?.dateTo) {
@@ -2154,24 +2159,27 @@ export const communicationRouter = createTRPCRouter({
         if (input?.dateTo) (where.createdAt as any).lte = new Date(input.dateTo);
       }
 
-      const items = await ctx.prisma.emailRecipient.findMany({
-        where,
-        select: { deliveryStatus: true, openedAt: true, clickedAt: true, createdAt: true },
-      });
+      const [groups, opened, clicked] = await Promise.all([
+        ctx.prisma.emailRecipient.groupBy({ by: ["deliveryStatus"], where: where as any, _count: { _all: true } }),
+        ctx.prisma.emailRecipient.count({ where: { ...(where as any), openedAt: { not: null } } }),
+        ctx.prisma.emailRecipient.count({ where: { ...(where as any), clickedAt: { not: null } } }),
+      ]);
 
+      const stats = statsFromStatusCounts(groups as any, { opened, clicked });
       return {
-        totalSent: items.length,
-        delivered: items.filter((i) => ["DELIVERED", "OPENED", "CLICKED"].includes(i.deliveryStatus)).length,
-        opened: items.filter((i) => i.openedAt).length,
-        clicked: items.filter((i) => i.clickedAt).length,
-        bounced: items.filter((i) => i.deliveryStatus === "BOUNCED").length,
-        failed: items.filter((i) => i.deliveryStatus === "FAILED").length,
+        ...stats,
+        ...rates(stats),
+        // `totalSent` previously meant `items.length` — every recipient row, including
+        // ones still QUEUED, HELD, or CANCELLED — while being labelled "Sent" in the
+        // UI. `sent` is the real accepted-by-provider count; `total` is the roster size.
+        totalSent: stats.sent,
       };
     }),
 
   analyticsTimeSeries: protectedProcedure
     .input(z.object({ days: z.number().default(30) }).optional())
     .query(async ({ ctx, input }) => {
+      await requireAdmin(ctx);
       const oid = orgId(ctx);
       const days = input?.days ?? 30;
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -2182,16 +2190,22 @@ export const communicationRouter = createTRPCRouter({
         orderBy: { createdAt: "asc" },
       });
 
+      // Bucket once, then read each day off the map — the previous version
+      // re-scanned the whole result set for every day in the range.
+      const buckets = new Map<string, { sent: number; opened: number }>();
+      for (const item of items) {
+        const key = item.createdAt.toISOString().slice(0, 10);
+        const bucket = buckets.get(key) ?? { sent: 0, opened: 0 };
+        if ((SENT_STATUSES as readonly string[]).includes(item.deliveryStatus)) bucket.sent++;
+        if (item.openedAt) bucket.opened++;
+        buckets.set(key, bucket);
+      }
+
       const series: { date: string; sent: number; opened: number }[] = [];
       for (let d = 0; d < days; d++) {
         const date = new Date(Date.now() - (days - 1 - d) * 24 * 60 * 60 * 1000);
         const key = date.toISOString().slice(0, 10);
-        const dayItems = items.filter((i) => i.createdAt.toISOString().slice(0, 10) === key);
-        series.push({
-          date: key,
-          sent: dayItems.length,
-          opened: dayItems.filter((i) => i.openedAt).length,
-        });
+        series.push({ date: key, ...(buckets.get(key) ?? { sent: 0, opened: 0 }) });
       }
 
       return series;

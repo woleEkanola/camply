@@ -4,6 +4,7 @@ import type { CreateBatchEmailOptions, CreateEmailOptions } from "resend";
 import { resolveAudience, type ResolvedUser } from "../audience/resolver";
 import type { AudienceFilter } from "../audience/filters";
 import { injectTracking } from "../tracking/injectTracking";
+import { publicAppUrl, configuredRequestsPerSecond, estimateSendSeconds } from "../appUrl";
 import { buildCampIdCardData } from "../../idcard/data";
 import {
   type CampaignAttachment,
@@ -42,12 +43,6 @@ interface SendCampaignResult extends CampaignReadiness {
 }
 
 const PERSONALIZED_STATUSES = ["APPROVED", "CHECKED_IN"];
-const DEFAULT_REQUESTS_PER_SECOND = 4;
-
-function configuredRequestsPerSecond(): number {
-  const parsed = Number(process.env.RESEND_MAX_REQUESTS_PER_SECOND ?? DEFAULT_REQUESTS_PER_SECOND);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 5) : DEFAULT_REQUESTS_PER_SECOND;
-}
 
 // The floor requestSpacingMs decays back to once rate-limit pressure eases —
 // never a moving target, or a single 429 permanently slows every future send
@@ -63,19 +58,6 @@ function recipientTypeForRole(role: string): string {
   if (role === "VOLUNTEER") return "VOLUNTEER";
   if (role === "CAMPUS_REPRESENTATIVE") return "CAMPUS_REP";
   return "ADMIN";
-}
-
-function publicAppUrl(): { url: string; error?: string } {
-  const raw = (process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3001").replace(/\/$/, "");
-  try {
-    const url = new URL(raw);
-    if (process.env.NODE_ENV === "production" && (url.protocol !== "https:" || ["localhost", "127.0.0.1"].includes(url.hostname))) {
-      return { url: raw, error: "APP_URL must be a public HTTPS address before personalized ID-card emails can be sent." };
-    }
-    return { url: raw };
-  } catch {
-    return { url: raw, error: "APP_URL is not a valid absolute URL." };
-  }
 }
 
 function campaignFilter(campaign: any): AudienceFilter {
@@ -199,7 +181,7 @@ export async function getCampaignReadiness(
     total: recipients.length,
     sharedAttachments: attachments.length,
     personalizedPdfs: personalized ? ready : 0,
-    estimatedSeconds: ready === 0 ? 0 : individual ? Math.ceil(ready / configuredRequestsPerSecond()) : Math.ceil(ready / (configuredRequestsPerSecond() * 100)),
+    estimatedSeconds: estimateSendSeconds(ready, individual),
     blockingErrors,
     issues,
   };

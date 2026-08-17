@@ -21,6 +21,20 @@ function statusTone(status: string): "success" | "warning" | "danger" | "neutral
   return map[status] ?? "neutral";
 }
 
+/**
+ * One stat tile. Carries a stable `data-testid` so specs can assert the actual
+ * number rather than merely that the label rendered — the old spec only checked
+ * label visibility, which passed no matter what the counts said.
+ */
+function StatTile({ testId, label, value, tone }: { testId: string; label: string; value: number | string; tone: string }) {
+  return (
+    <div className="rounded-lg bg-surface-raised p-3 text-center" data-testid={`stat-${testId}`}>
+      <div className={`text-xl font-bold ${tone}`} data-testid={`stat-${testId}-value`}>{value}</div>
+      <div className="text-xs text-txt-secondary">{label}</div>
+    </div>
+  );
+}
+
 export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -52,10 +66,13 @@ export default function CampaignDetail() {
   }
 
   const s = (campaign as any).stats;
-  const nonOpenerCount = Math.max(0, s.delivered - s.opened);
+  // Counts, rates, and the ETA all come from the server (see server/email/stats.ts
+  // and server/email/appUrl.ts) so this page can't drift from the dashboard the
+  // way it did when each computed its own "Success Rate" from a different base.
+  const nonOpenerCount = s.nonOpeners;
+  const estimatedSeconds = s.estimatedSeconds;
   const isPersonalized = !!campaign.personalizeEvent;
-  const individualDelivery = isPersonalized || ((campaign.attachments as any[])?.length ?? 0) > 0;
-  const estimatedSeconds = Math.ceil((s.queued + s.processing) / (individualDelivery ? 4 : 400));
+  const pct = (value: number | null) => (value === null ? "—" : `${value}%`);
   const lastActivity = s.lastActivityAt ? new Date(s.lastActivityAt) : null;
   const stale = campaign.status === "SENDING" && lastActivity && Date.now() - lastActivity.getTime() > 2 * 60 * 1000;
   const refresh = async (message?: string) => {
@@ -82,17 +99,17 @@ export default function CampaignDetail() {
         {stale && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">No campaign progress has been recorded for more than two minutes — sending appears to have stalled. Use “Send queued now” below to nudge it, or check back shortly.</div>}
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-neutral-900">{s.total}</div><div className="text-xs text-txt-secondary">Total</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-amber-600">{s.queued}</div><div className="text-xs text-txt-secondary">Queued</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-blue-600">{s.processing}</div><div className="text-xs text-txt-secondary">Processing</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-amber-700">{s.held}</div><div className="text-xs text-txt-secondary">Held</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-cyan-700">{s.sent}</div><div className="text-xs text-txt-secondary">Accepted</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-green-600">{s.delivered}</div><div className="text-xs text-txt-secondary">Delivered</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-red-600">{s.failed + s.bounced}</div><div className="text-xs text-txt-secondary">Failed/Bounced</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-indigo-600">{s.opened}</div><div className="text-xs text-txt-secondary">Opened</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-rose-600">{s.clicked}</div><div className="text-xs text-txt-secondary">Clicked</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-txt-secondary">{s.total > 0 ? Math.round((s.delivered / s.total) * 100) : 0}%</div><div className="text-xs text-txt-secondary">Success Rate</div></div>
-          <div className="rounded-lg bg-surface-raised p-3 text-center"><div className="text-xl font-bold text-cyan-600">{s.delivered > 0 ? Math.round((s.opened / s.delivered) * 100) : 0}%</div><div className="text-xs text-txt-secondary">Open Rate</div></div>
+          <StatTile testId="total" label="Total" value={s.total} tone="text-neutral-900" />
+          <StatTile testId="queued" label="Queued" value={s.queued} tone="text-amber-600" />
+          <StatTile testId="processing" label="Processing" value={s.processing} tone="text-blue-600" />
+          <StatTile testId="held" label="Held" value={s.held} tone="text-amber-700" />
+          <StatTile testId="sent" label="Accepted" value={s.sent} tone="text-cyan-700" />
+          <StatTile testId="delivered" label="Delivered" value={s.delivered} tone="text-green-600" />
+          <StatTile testId="failed" label="Failed/Bounced" value={s.failed + s.bounced} tone="text-red-600" />
+          <StatTile testId="opened" label="Opened" value={s.opened} tone="text-indigo-600" />
+          <StatTile testId="clicked" label="Clicked" value={s.clicked} tone="text-rose-600" />
+          <StatTile testId="success-rate" label="Success Rate" value={pct(s.successRate)} tone="text-txt-secondary" />
+          <StatTile testId="open-rate" label="Open Rate" value={pct(s.openRate)} tone="text-cyan-600" />
         </div>
 
         <div className="flex flex-wrap gap-2">
