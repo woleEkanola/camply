@@ -20,6 +20,7 @@ describe("buildCampInvitationVariables", () => {
     expect(result!.email).toBe("parent@example.com");
     expect(result!.variables.camper_name).toBe("Daniel Johnson");
     expect(result!.variables.registration_number).toBe("TC26-LEK-0042");
+    expect(result!.variables.checkin_location).toBe("Lekki Centre");
     expect(result!.qrSrc).toBe("http://localhost:3001/api/qr/qr-token-abc");
   });
 
