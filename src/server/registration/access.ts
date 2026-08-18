@@ -33,13 +33,11 @@ export async function canAccessRegistration(
     return !!user.organizationId && registration.campus.organizationId === user.organizationId;
   }
 
-  if (user.role === "CAMPUS_REPRESENTATIVE") {
-    const managed = await prisma.campus.findFirst({
-      where: { id: registration.campusId, reps: { some: { id: user.id } } },
-      select: { id: true },
-    });
-    return !!managed;
-  }
-
-  return false;
+  // Campus representative capability is granted via Campus.reps (managedCampuses),
+  // which can be assigned to users with any base role (CAMPUS_REPRESENTATIVE, TEACHER, VOLUNTEER, etc.).
+  const managed = await prisma.campus.findFirst({
+    where: { id: registration.campusId, reps: { some: { id: user.id } } },
+    select: { id: true },
+  });
+  return !!managed;
 }
