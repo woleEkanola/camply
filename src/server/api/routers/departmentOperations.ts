@@ -571,6 +571,15 @@ export const departmentOperationsRouter = createTRPCRouter({
             ? (await tx.positionAssignment.findMany({ where: { positionId: input.positionId, isCurrent: true }, select: { staff: { select: { userId: true } } } })).map((item: any) => item.staff.userId)
             : [];
         if (userIds.length) await tx.notification.createMany({ data: [...new Set(userIds)].map((userId) => ({ organizationId: access.department.organizationId, userId, title: "Task assigned", body: `You have been assigned: ${input.title}.`, link: "/teacher/departments?view=mine", status: "SENT" })) });
+        
+        // Immediately instantiate execution for today / target date so the task is visible in the creator's and assignees' duty lists right away
+        const todayStr = new Date().toISOString().slice(0, 10);
+        await ensureDepartmentExecutions(tx, {
+          campId: access.department.campId,
+          departmentId: input.departmentId,
+          date: input.specificDate ?? todayStr,
+        });
+
         return item;
       });
     }),
@@ -671,6 +680,14 @@ export const departmentOperationsRouter = createTRPCRouter({
         where: { departmentId, date: dateOnly(input.date), OR: [{ assignmentType: "EVERYONE" }, { assignmentType: "PERSON", assignedStaffId: profile.id }, { assignmentType: "ROLE", positionId: { in: positionIds } }] },
         orderBy: [{ routine: "asc" }, { dueAt: "asc" }, { createdAt: "asc" }],
       });
+      const masterItems = await ctx.prisma.departmentChecklistItem.findMany({
+        where: { departmentId, active: true },
+        include: {
+          position: { select: { id: true, name: true } },
+          assignedStaff: { select: { id: true, firstName: true, lastName: true } },
+        },
+        orderBy: [{ routine: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
+      });
       const leader = await isDepartmentLeader(ctx.prisma, ctx.userId, department.id);
       // Only trust the persisted per-assignment flag once at least one of
       // this person's current assignments (in any department) actually
@@ -683,7 +700,7 @@ export const departmentOperationsRouter = createTRPCRouter({
         ? department.positions.some((position: any) => position.assignments.some((assignment: any) => assignment.isPrimary))
         : department.id === profile.departmentId;
       const departmentForClient = { ...department, positions: department.positions.map((position: any) => { const { assignments, ...rest } = position; return rest; }) };
-      return { profile, department: departmentForClient, duties, isPrimary, canManage: leader, canAdd: leader || department.allowMembersAddChecklistItems, canEdit: leader || department.allowMembersEditChecklistItems, canDeactivate: leader || department.allowMembersDeactivateChecklistItems };
+      return { profile, department: departmentForClient, duties, masterItems, isPrimary, canManage: leader, canAdd: leader || department.allowMembersAddChecklistItems, canEdit: leader || department.allowMembersEditChecklistItems, canDeactivate: leader || department.allowMembersDeactivateChecklistItems };
     }),
 
   updateExecution: protectedProcedure
