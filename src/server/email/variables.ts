@@ -53,7 +53,7 @@ export const EMAIL_VARIABLES: EmailVariable[] = [
 
   // Check-in (Camp Invitation email)
   { key: "checkin_date", label: "Check-in Date", category: "camp", sampleValue: "Wednesday, August 19, 2026" },
-  { key: "checkin_location", label: "Check-in Location", category: "camp", sampleValue: "Lekki Centre Pick-up Point" },
+  { key: "checkin_location", label: "Check-in Location", category: "camp", sampleValue: "Lekki Centre" },
   { key: "arrive_before", label: "Arrive Before", category: "camp", sampleValue: "8:00 AM" },
 
   // Organization

@@ -27,7 +27,7 @@ const PLACEHOLDERS: Partial<Record<StationId, string>> = {
 
 const TITLES: Partial<Record<StationId, string>> = {
   CUSTOM: "Checkpoint name",
-  COLLECTIBLES: "What's being collected?",
+  COLLECTIBLES: "What's being distributed?",
 };
 
 /**

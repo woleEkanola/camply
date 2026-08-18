@@ -3,9 +3,7 @@ import { registerExport } from "../registry";
 import {
   assertReportsAccess,
   resolveReportCampId,
-  computeMealReport,
-  computeArrivalsReport,
-  computeCollectiblesReport,
+  computeComprehensiveStationReport,
 } from "../../api/routers/scan";
 import { exportUserDataToCsv, exportUserDataToXlsx } from "../../../lib/import-export/serialize";
 import type { ExportDescriptor } from "../types";
@@ -13,44 +11,92 @@ import type { ExportDescriptor } from "../types";
 export interface ReportFilters {
   campId?: string;
   date?: string; // ISO yyyy-mm-dd
-  stationId?: "CAMP_ARRIVAL" | "HOSTEL_ARRIVAL" | "PICKUP_POINT";
+  stationId?: string;
 }
 
 const reportFilterSchema: z.ZodType<ReportFilters> = z.object({
   campId: z.string().optional(),
   date: z.string().optional(),
-  stationId: z.enum(["CAMP_ARRIVAL", "HOSTEL_ARRIVAL", "PICKUP_POINT"]).optional(),
+  stationId: z.string().optional(),
 });
 
 async function fetchReportData(ctx: { prisma: any }, organizationId: string, filters: ReportFilters) {
   const campId = await resolveReportCampId(ctx, organizationId, filters.campId);
   const date = filters.date ? new Date(filters.date) : undefined;
-  const [meals, arrivals, collectibles] = await Promise.all([
-    computeMealReport(ctx.prisma, campId, date),
-    computeArrivalsReport(ctx.prisma, campId, date, filters.stationId),
-    computeCollectiblesReport(ctx.prisma, campId, date),
-  ]);
-  return { meals, arrivals, collectibles, date: date ?? new Date() };
+  const report = await computeComprehensiveStationReport(ctx.prisma, campId, date);
+  return { report, date: date ?? new Date() };
 }
 
 function reportRows(data: Awaited<ReturnType<typeof fetchReportData>>): Record<string, any>[] {
+  const { report } = data;
   const rows: Record<string, any>[] = [
-    { Section: "Meals", Item: "Breakfast — Total", Count: data.meals.breakfast },
-    { Section: "Meals", Item: "Breakfast — Campers", Count: data.meals.camper.breakfast },
-    { Section: "Meals", Item: "Breakfast — Staff", Count: data.meals.staff.breakfast },
-    { Section: "Meals", Item: "Lunch — Total", Count: data.meals.lunch },
-    { Section: "Meals", Item: "Lunch — Campers", Count: data.meals.camper.lunch },
-    { Section: "Meals", Item: "Lunch — Staff", Count: data.meals.staff.lunch },
-    { Section: "Meals", Item: "Dinner — Total", Count: data.meals.dinner },
-    { Section: "Meals", Item: "Dinner — Campers", Count: data.meals.camper.dinner },
-    { Section: "Meals", Item: "Dinner — Staff", Count: data.meals.staff.dinner },
+    // Overview
+    { Section: "Overview", Item: "Total Registered", Count: report.overview.registered },
+    { Section: "Overview", Item: "Checked In (In-Camp)", Count: report.overview.checkedIn },
+    { Section: "Overview", Item: "Pending Arrival", Count: report.overview.pendingArrival },
+    { Section: "Overview", Item: "Total Boarded Bus", Count: report.overview.totalBoarded },
+    { Section: "Overview", Item: "Hostel Checked In", Count: report.overview.totalHostelCheckedIn },
+    { Section: "Overview", Item: "Released / Departed", Count: report.overview.checkedOutCount },
+    { Section: "Overview", Item: "Remaining In Camp", Count: report.overview.stillInCamp },
+
+    // Meals
+    { Section: "Meals", Item: "Breakfast — Total", Count: report.meals.breakfast },
+    { Section: "Meals", Item: "Breakfast — Campers", Count: report.meals.camper.breakfast },
+    { Section: "Meals", Item: "Breakfast — Staff", Count: report.meals.staff.breakfast },
+    { Section: "Meals", Item: "Lunch — Total", Count: report.meals.lunch },
+    { Section: "Meals", Item: "Lunch — Campers", Count: report.meals.camper.lunch },
+    { Section: "Meals", Item: "Lunch — Staff", Count: report.meals.staff.lunch },
+    { Section: "Meals", Item: "Dinner — Total", Count: report.meals.dinner },
+    { Section: "Meals", Item: "Dinner — Campers", Count: report.meals.camper.dinner },
+    { Section: "Meals", Item: "Dinner — Staff", Count: report.meals.staff.dinner },
   ];
-  for (const r of data.arrivals.rows) {
-    rows.push({ Section: "Arrivals", Item: `${r.station} (${r.stationId})`, Count: r.count });
+
+  // Camp Arrivals
+  for (const r of report.campArrivals.rows) {
+    rows.push({ Section: "Camp Arrivals", Item: r.station, Count: r.count });
   }
-  for (const r of data.collectibles.rows) {
+
+  // Bus Boarding
+  for (const r of report.busBoarding.rows) {
+    rows.push({ Section: "Bus Boarding", Item: r.station, Count: r.count });
+  }
+
+  // Hostel Check-ins
+  for (const r of report.hostelArrivals.rows) {
+    rows.push({ Section: "Hostel Check-in", Item: r.station, Count: r.count });
+  }
+
+  // Collectibles
+  for (const r of report.collectibles.rows) {
     rows.push({ Section: "Collectibles", Item: r.station, Count: r.count });
   }
+
+  // Checkout
+  for (const r of report.checkout.rows) {
+    rows.push({
+      Section: "Checkout / Releases",
+      Item: `${r.camperName} (${r.registrationNumber})`,
+      Count: 1,
+      Collector: `${r.collectorName} (${r.collectorRelationship})`,
+      Time: r.time,
+    });
+  }
+
+  // Staff Presence
+  for (const r of report.staffPresence.rows) {
+    rows.push({
+      Section: "Staff Presence",
+      Item: `${r.name} (${r.role})`,
+      Count: 1,
+      Action: r.action,
+      Time: r.time,
+    });
+  }
+
+  // Lookups
+  rows.push({ Section: "Security & Lookups", Item: "Identity Lookups", Count: report.lookups.identityLookups });
+  rows.push({ Section: "Security & Lookups", Item: "Emergency Lookups", Count: report.lookups.emergencyLookups });
+
   return rows;
 }
 
@@ -62,43 +108,69 @@ async function reportPdf(data: Awaited<ReturnType<typeof fetchReportData>>): Pro
   const page = doc.addPage([595, 842]);
   let y = 800;
 
-  page.drawText("Operations Report", { x: 40, y, font: bold, size: 16 });
+  page.drawText("Camply Operations & Station Report", { x: 40, y, font: bold, size: 16 });
   y -= 20;
   page.drawText(`For ${data.date.toISOString().slice(0, 10)} — generated ${new Date().toISOString()}`, {
-    x: 40, y, font, size: 9, color: rgb(0.4, 0.4, 0.4),
+    x: 40,
+    y,
+    font,
+    size: 9,
+    color: rgb(0.4, 0.4, 0.4),
   });
   y -= 30;
 
   const section = (title: string, rows: { label: string; value: number }[], total?: number) => {
+    if (y < 80) return; // avoid overflow
     page.drawText(title, { x: 40, y, font: bold, size: 12 });
     y -= 18;
     for (const r of rows) {
+      if (y < 60) break;
       page.drawText(r.label, { x: 50, y, font, size: 10 });
-      page.drawText(String(r.value), { x: 400, y, font, size: 10 });
+      page.drawText(String(r.value), { x: 420, y, font, size: 10 });
       y -= 16;
     }
-    if (total !== undefined) {
+    if (total !== undefined && y >= 60) {
       page.drawText("Total", { x: 50, y, font: bold, size: 10 });
-      page.drawText(String(total), { x: 400, y, font: bold, size: 10 });
+      page.drawText(String(total), { x: 420, y, font, size: 10 });
       y -= 16;
     }
     y -= 10;
   };
 
-  section("Meals", [
-    { label: "Breakfast", value: data.meals.breakfast },
-    { label: "Lunch", value: data.meals.lunch },
-    { label: "Dinner", value: data.meals.dinner },
+  const { report } = data;
+
+  section("Camp Overview & Headcount", [
+    { label: "Total Registered Campers", value: report.overview.registered },
+    { label: "Checked In at Camp", value: report.overview.checkedIn },
+    { label: "Pending Camp Arrival", value: report.overview.pendingArrival },
+    { label: "Boarded Bus (Pickup Points)", value: report.overview.totalBoarded },
+    { label: "Hostel Checked In", value: report.overview.totalHostelCheckedIn },
+    { label: "Released / Departed", value: report.overview.checkedOutCount },
+    { label: "Currently in Camp", value: report.overview.stillInCamp },
   ]);
+
+  section("Meals Distribution", [
+    { label: "Breakfast", value: report.meals.breakfast },
+    { label: "Lunch", value: report.meals.lunch },
+    { label: "Dinner", value: report.meals.dinner },
+  ]);
+
   section(
-    "Arrivals",
-    data.arrivals.rows.map((r) => ({ label: `${r.station} (${r.stationId})`, value: r.count })),
-    data.arrivals.total
+    "Camp Arrivals",
+    report.campArrivals.rows.map((r) => ({ label: r.station, value: r.count })),
+    report.campArrivals.total
   );
+
+  section(
+    "Bus Boarding (Pickup Points)",
+    report.busBoarding.rows.map((r) => ({ label: r.station, value: r.count })),
+    report.busBoarding.total
+  );
+
   section(
     "Collectibles",
-    data.collectibles.rows.map((r: { station: string; count: number }) => ({ label: r.station, value: r.count })),
-    data.collectibles.total
+    report.collectibles.rows.map((r: { station: string; count: number }) => ({ label: r.station, value: r.count })),
+    report.collectibles.total
   );
 
   return Buffer.from(await doc.save());

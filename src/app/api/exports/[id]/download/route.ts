@@ -61,18 +61,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!part) {
       return NextResponse.json({ error: "Part not found" }, { status: 404 });
     }
-    const { body, contentLength } = await streamBlob(part.blobKey);
-    const dotIndex = part.fileName.lastIndexOf(".");
-    const base = dotIndex === -1 ? part.fileName : part.fileName.slice(0, dotIndex);
-    const ext = dotIndex === -1 ? "" : part.fileName.slice(dotIndex);
-    const downloadName = `${base}-part-${part.partNumber}-of-${parts.length}${ext}`;
-    return new NextResponse(body, {
-      headers: {
-        "Content-Type": part.mimeType,
-        "Content-Disposition": `attachment; filename="${downloadName.replace(/"/g, "")}"`,
-        ...(contentLength !== null ? { "Content-Length": String(contentLength) } : {}),
-      },
-    });
+    try {
+      const { body, contentLength } = await streamBlob(part.blobKey);
+      const dotIndex = part.fileName.lastIndexOf(".");
+      const base = dotIndex === -1 ? part.fileName : part.fileName.slice(0, dotIndex);
+      const ext = dotIndex === -1 ? "" : part.fileName.slice(dotIndex);
+      const downloadName = `${base}-part-${part.partNumber}-of-${parts.length}${ext}`;
+      return new NextResponse(body, {
+        headers: {
+          "Content-Type": part.mimeType,
+          "Content-Disposition": `attachment; filename="${downloadName.replace(/"/g, "")}"`,
+          ...(contentLength !== null ? { "Content-Length": String(contentLength) } : {}),
+        },
+      });
+    } catch (error) {
+      console.error(`[export/download] failed to stream part ${partNumber} for job ${id}:`, error);
+      return NextResponse.json(
+        { error: "Export part file is unavailable. Please retry or re-run the export." },
+        { status: 410 }
+      );
+    }
   }
 
   const parts = getPartRefs(job);
@@ -88,14 +96,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   if (job.blobKey) {
-    const { body, contentLength } = await streamBlob(job.blobKey);
-    return new NextResponse(body, {
-      headers: {
-        "Content-Type": job.mimeType,
-        "Content-Disposition": `attachment; filename="${job.fileName.replace(/"/g, "")}"`,
-        ...(contentLength !== null ? { "Content-Length": String(contentLength) } : {}),
-      },
-    });
+    try {
+      const { body, contentLength } = await streamBlob(job.blobKey);
+      return new NextResponse(body, {
+        headers: {
+          "Content-Type": job.mimeType,
+          "Content-Disposition": `attachment; filename="${job.fileName.replace(/"/g, "")}"`,
+          ...(contentLength !== null ? { "Content-Length": String(contentLength) } : {}),
+        },
+      });
+    } catch (error) {
+      console.error(`[export/download] failed to stream artifact blob for job ${id}:`, error);
+      return NextResponse.json(
+        { error: "Export artifact file is unavailable. Please retry or re-run the export." },
+        { status: 410 }
+      );
+    }
   }
 
   if (!job.fileData) {

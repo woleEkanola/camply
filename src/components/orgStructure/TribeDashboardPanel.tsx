@@ -32,6 +32,13 @@ export function TribeDashboardPanel({ tribe, onClose }: { tribe: any; onClose: (
     },
   });
 
+  const undoPoints = api.tribe.undoPoints.useMutation({
+    onSuccess: () => {
+      utils.tribe.pointsHistory.invalidate({ tribeId: tribe.id });
+      utils.orgStructure.getTribeStructure.invalidate();
+    },
+  });
+
   const allocationLabel: Record<string, string> = {
     MANUAL: "Manual",
     AUTOMATIC: "Automatic",
@@ -150,13 +157,38 @@ export function TribeDashboardPanel({ tribe, onClose }: { tribe: any; onClose: (
 
           {/* History */}
           {history.length > 0 ? (
-            <div className="mt-3 divide-y divide-neutral-50">
+            <div className="mt-3 divide-y divide-neutral-100 dark:divide-neutral-800 max-h-56 overflow-y-auto">
               {history.map((h: any) => (
-                <div key={h.id} className="flex items-center justify-between py-1.5 text-sm">
-                  <span className="text-neutral-600">{h.reason || "—"}</span>
-                  <span className={`font-semibold tabular-nums ${h.delta >= 0 ? "text-success-600" : "text-danger-600"}`}>
-                    {h.delta >= 0 ? `+${h.delta}` : h.delta}
-                  </span>
+                <div key={h.id} className="flex items-center justify-between py-2 text-sm gap-2">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-neutral-700 dark:text-neutral-300 font-medium block truncate">
+                      {h.reason || "Points Award"}
+                    </span>
+                    {h.reversesEventId && (
+                      <span className="text-[11px] text-neutral-400 block">Reversal</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`font-bold tabular-nums text-sm ${h.delta >= 0 ? "text-success-600" : "text-danger-600"}`}>
+                      {h.delta >= 0 ? `+${h.delta}` : h.delta}
+                    </span>
+                    {!h.reversesEventId && (
+                      <button
+                        type="button"
+                        disabled={undoPoints.isPending}
+                        onClick={() =>
+                          undoPoints.mutate({
+                            tribeId: tribe.id,
+                            scoreEventId: h.id,
+                          })
+                        }
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold text-neutral-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-800 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-950/40 transition cursor-pointer disabled:opacity-50"
+                        title="Undo this points award"
+                      >
+                        Undo
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

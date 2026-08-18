@@ -19,6 +19,8 @@ interface StationSheetProps {
   onLocationChange: (val: string) => void;
   deviceIdentifier: string;
   onDeviceChange: (val: string) => void;
+  dismissMode?: "AUTO" | "MANUAL";
+  onDismissModeChange?: (val: "AUTO" | "MANUAL") => void;
 }
 
 export function StationSheet({
@@ -32,6 +34,8 @@ export function StationSheet({
   onLocationChange,
   deviceIdentifier,
   onDeviceChange,
+  dismissMode = "MANUAL",
+  onDismissModeChange,
 }: StationSheetProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingStation, setPendingStation] = useState<StationId | null>(null);
@@ -106,12 +110,44 @@ export function StationSheet({
         <button
           type="button"
           onClick={() => setSettingsOpen((v) => !v)}
-          className="text-xs font-bold uppercase tracking-wide text-txt-muted"
+          className="text-xs font-bold uppercase tracking-wide text-txt-muted hover:text-txt-primary transition"
         >
           {settingsOpen ? "Hide" : "Show"} device & desk settings
         </button>
         {settingsOpen && (
           <div className="mt-3 grid grid-cols-1 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-txt-secondary mb-1.5">
+                Scan Popup Dismiss Behavior
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onDismissModeChange?.("MANUAL")}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    dismissMode === "MANUAL"
+                      ? "border-accent-600 bg-accent-50/60 dark:bg-accent-950/40 text-txt-primary font-bold shadow-xs"
+                      : "border-border-default bg-bg-surface text-txt-secondary hover:bg-bg-subtle"
+                  }`}
+                >
+                  <div className="text-xs font-bold text-txt-primary">Manual (Click X)</div>
+                  <div className="text-[10px] text-txt-muted mt-0.5">Stay until closed (Default)</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDismissModeChange?.("AUTO")}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    dismissMode === "AUTO"
+                      ? "border-accent-600 bg-accent-50/60 dark:bg-accent-950/40 text-txt-primary font-bold shadow-xs"
+                      : "border-border-default bg-bg-surface text-txt-secondary hover:bg-bg-subtle"
+                  }`}
+                >
+                  <div className="text-xs font-bold text-txt-primary">Auto-dismiss</div>
+                  <div className="text-[10px] text-txt-muted mt-0.5">Clears after 1.5s</div>
+                </button>
+              </div>
+            </div>
+
             <Input
               label="Station Location / Gate"
               placeholder="e.g. Lekki Bus, Gate A, Desk 3"

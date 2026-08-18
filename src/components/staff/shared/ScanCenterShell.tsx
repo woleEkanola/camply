@@ -34,11 +34,13 @@ import {
   ExclamationTriangleIcon,
   InformationCircleIcon,
   XMarkIcon,
+  ArrowUturnLeftIcon,
 } from "@heroicons/react/24/outline";
 import { PhoneIcon } from "@heroicons/react/24/solid";
 
 interface RecentScan {
   registrationId: string;
+  scanEventId?: string;
   name: string;
   registrationNumber: string;
   station: string;
@@ -85,6 +87,20 @@ export function ScanCenterShell({
   const [deviceIdentifier, setDeviceIdentifier] = useState("");
   const [customStationName, setCustomStationName] = useState("");
   const [sessionStats, setSessionStats] = useState<SessionScanStats>(EMPTY_SESSION_STATS);
+
+  // Scan Popup Dismiss Mode: "MANUAL" (default, waits for X) vs "AUTO" (1.5s auto-dismiss)
+  const [dismissMode, setDismissMode] = useState<"AUTO" | "MANUAL">(() => {
+    if (typeof window === "undefined") return "MANUAL";
+    const saved = localStorage.getItem("camply-scan-dismiss-mode");
+    return saved === "AUTO" ? "AUTO" : "MANUAL";
+  });
+
+  const handleDismissModeChange = (mode: "AUTO" | "MANUAL") => {
+    setDismissMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("camply-scan-dismiss-mode", mode);
+    }
+  };
 
   const [searchQuery, setSearchQuery] = useState("");
   const [scannerActive, setScannerActive] = useState(true);
@@ -133,14 +149,22 @@ export function ScanCenterShell({
     { enabled: !!organizationId }
   );
 
-  const undoCheckInMutation = api.registration.undoCheckIn.useMutation({
+  const undoScanMutation = api.scan.undoScan.useMutation({
     onSuccess: (_, variables) => {
-      setRecentScans((prev) => prev.filter((s) => s.registrationId !== variables.registrationId));
-      toast.success("Check-in undone successfully");
+      setRecentScans((prev) =>
+        prev.filter((s) =>
+          variables.scanEventId
+            ? s.scanEventId !== variables.scanEventId
+            : s.registrationId !== variables.registrationId
+        )
+      );
+      toast.success("Scan undone successfully — record cleared");
       refetchStats?.();
+      setSuccessData(null);
+      setScannerActive(true);
     },
     onError: (err) => {
-      toast.error(`Failed to undo check-in: ${err.message}`);
+      toast.error(`Failed to undo scan: ${err.message}`);
     },
   });
 
@@ -172,43 +196,41 @@ export function ScanCenterShell({
     return () => clearInterval(timer);
   }, []);
 
-  // Auto-dismiss success/duplicate overlays so the volunteer never needs to
-  // tap through — the camera stays live underneath and resumes the instant
-  // the overlay clears. Success: 1.5s. Duplicate: 2.5s (a touch longer,
-  // since it's read for context rather than just confirmed at a glance).
+  // Auto-dismiss success/duplicate overlays when dismissMode === "AUTO".
+  // When dismissMode === "MANUAL" (default), popup stays on screen until user taps X.
   useEffect(() => {
-    if (!successData) return;
+    if (!successData || dismissMode === "MANUAL") return;
     const timer = setTimeout(() => {
       setSuccessData(null);
       setScannerActive(true);
     }, 1500);
     return () => clearTimeout(timer);
-  }, [successData]);
+  }, [successData, dismissMode]);
 
   useEffect(() => {
-    if (!duplicateData) return;
+    if (!duplicateData || dismissMode === "MANUAL") return;
     const timer = setTimeout(() => {
       setDuplicateData(null);
       setScannerActive(true);
     }, 2500);
     return () => clearTimeout(timer);
-  }, [duplicateData]);
+  }, [duplicateData, dismissMode]);
 
   useEffect(() => {
-    if (!staffScanData) return;
+    if (!staffScanData || dismissMode === "MANUAL") return;
     const timer = setTimeout(() => {
       setStaffScanData(null);
       setScannerActive(true);
     }, staffScanData.duplicate ? 2500 : 1500);
     return () => clearTimeout(timer);
-  }, [staffScanData]);
+  }, [staffScanData, dismissMode]);
 
-  // Keyboard shortcut: slash key focuses search, Escape closes overlays
+  // Keyboard shortcut: slash key opens smart search, Escape closes overlays
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "/" && document.activeElement !== searchInputRef.current) {
+      if (e.key === "/" && !searchSheetOpen) {
         e.preventDefault();
-        searchInputRef.current?.focus();
+        setSearchSheetOpen(true);
       }
       if (e.key === "Escape") {
         setSuccessData(null);
@@ -472,10 +494,13 @@ export function ScanCenterShell({
         return;
       }
 
+      const scanEventId = (response as any).scanEventId;
+
       // Add to recent activity list
       setRecentScans((prev) => [
         {
           registrationId: reg.id,
+          scanEventId,
           name: camper.name,
           registrationNumber: reg.registrationNumber,
           station: targetStationName,
@@ -489,6 +514,8 @@ export function ScanCenterShell({
       playScanCue("success");
       vibrateForCue("success");
       setSuccessData({
+        scanEventId,
+        registrationId: reg.id,
         camperName: camper.name,
         photoUrl: camper.photoUrl,
         regNumber: reg.registrationNumber,
@@ -592,16 +619,26 @@ export function ScanCenterShell({
         onLocationChange={handleLocationChange}
         deviceIdentifier={deviceIdentifier}
         onDeviceChange={handleDeviceChange}
+        dismissMode={dismissMode}
+        onDismissModeChange={handleDismissModeChange}
       />
 
-      {/* Offline status — collapsed to a single tappable chip; sync/cache
-          are maintenance actions handled in the OfflineSheet, not
-          permanent header controls. */}
+      {/* Offline status & Popup mode — collapsed to single tappable chips */}
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => setOfflineSheetOpen(true)}>
+        <button type="button" onClick={() => setOfflineSheetOpen(true)} className="cursor-pointer">
           <Badge tone={offlineScanner.isOnline ? "success" : "warning"}>
             <span className="h-1.5 w-1.5 rounded-full bg-current mr-1.5 animate-pulse" />
             {offlineScanner.isOnline ? "Online" : `Offline · ${offlineScanner.offlineQueueCount} waiting`}
+          </Badge>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDismissModeChange(dismissMode === "MANUAL" ? "AUTO" : "MANUAL")}
+          title={`Scan popup mode: ${dismissMode === "MANUAL" ? "Manual Close (Click X) - Default" : "Auto-dismiss (1.5s)"}`}
+          className="cursor-pointer"
+        >
+          <Badge tone={dismissMode === "MANUAL" ? "attention" : "neutral"}>
+            Popup: {dismissMode === "MANUAL" ? "Manual (X)" : "Auto (1.5s)"}
           </Badge>
         </button>
         {pointsHref && (
@@ -656,6 +693,13 @@ export function ScanCenterShell({
         open={searchSheetOpen}
         onClose={() => setSearchSheetOpen(false)}
         onSearch={(query) => handleScanSubmit({ query })}
+        onSelectCamper={(camper) =>
+          handleScanSubmit({
+            qrToken: camper.qrToken || undefined,
+            query: camper.registrationNumber || camper.name,
+          })
+        }
+        organizationId={organizationId}
       />
 
       <HistorySheet
@@ -665,9 +709,14 @@ export function ScanCenterShell({
         timeTick={timeTick}
         activeStation={activeStation}
         allowsUndo={activeStationDef.allowsUndo}
-        isUndoing={undoCheckInMutation.isPending}
-        onUndo={(registrationId) =>
-          undoCheckInMutation.mutate({ registrationId, reason: "Volunteer operator error / duplicate sync correction" })
+        isUndoing={undoScanMutation.isPending}
+        onUndo={(scan) =>
+          undoScanMutation.mutate({
+            organizationId,
+            scanEventId: scan.scanEventId,
+            registrationId: scan.registrationId,
+            station: scan.station,
+          })
         }
       />
 
@@ -684,30 +733,39 @@ export function ScanCenterShell({
           />
         </div>
 
-        {/* Search is the exception path — a floating icon + sheet on
-            mobile (see ScanTabBar), a persistent field on desktop where
-            there's room and a keyboard ([/] shortcut retained). */}
-        <Card className="hidden md:block border-border-default">
-            <CardBody className="p-4">
-              <form onSubmit={handleSearchSubmit} className="flex gap-3">
-                <div className="relative flex-1">
-                  <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-txt-muted" />
-                  <Input
-                    ref={searchInputRef}
-                    containerClassName="w-full"
-                    className="pl-10 h-10 text-sm rounded-lg"
-                    placeholder="Enter Registration #, camper name, or phone..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <span className="absolute right-3 top-2.5 text-xs text-txt-muted pointer-events-none hidden md:inline">
-                    Press [/] to search
-                  </span>
-                </div>
-                <Button type="submit" className="h-10">Search</Button>
-              </form>
-            </CardBody>
-          </Card>
+        {/* Search is the exception path — smart search sheet with live auto-complete on mobile and desktop */}
+        <Card
+          className="hidden md:block border-border-default hover:border-accent-500 transition cursor-pointer shadow-xs"
+          onClick={() => setSearchSheetOpen(true)}
+        >
+          <CardBody className="p-4">
+            <div className="flex gap-3 items-center">
+              <div className="relative flex-1">
+                <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-txt-muted" />
+                <Input
+                  ref={searchInputRef}
+                  readOnly
+                  onFocus={() => setSearchSheetOpen(true)}
+                  onClick={() => setSearchSheetOpen(true)}
+                  containerClassName="w-full cursor-pointer"
+                  className="pl-10 h-10 text-sm rounded-lg cursor-pointer bg-bg-surface dark:bg-neutral-900 border-border-default"
+                  placeholder="Click or press [/] to search camper by name, registration #, or phone..."
+                  value={searchQuery}
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-txt-muted pointer-events-none hidden md:inline">
+                  Press [/] for smart search
+                </span>
+              </div>
+              <Button
+                type="button"
+                onClick={() => setSearchSheetOpen(true)}
+                className="h-10 cursor-pointer px-5 font-bold"
+              >
+                Smart Search
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
 
           {/* Compact recent-activity strip — last 4, auto-updates after
               every scan. Full session history + undo lives in HistorySheet
@@ -751,6 +809,19 @@ export function ScanCenterShell({
           }}
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-600 p-6 text-white cursor-pointer animate-fade-in"
         >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSuccessData(null);
+              setScannerActive(true);
+            }}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-10 cursor-pointer border border-white/20"
+            aria-label="Close popup"
+          >
+            <XMarkIcon className="h-7 w-7 stroke-2" />
+          </button>
+
           <div className="flex flex-col items-center max-w-lg text-center space-y-6">
             <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
             
@@ -799,7 +870,31 @@ export function ScanCenterShell({
               <MedicalBanner flags={successData.medicalFlags} camper={successData.camper} />
             )}
 
-            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
+            <div className="flex flex-col items-center gap-3 w-full pt-1">
+              <button
+                type="button"
+                disabled={undoScanMutation.isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  undoScanMutation.mutate({
+                    organizationId,
+                    scanEventId: successData.scanEventId,
+                    registrationId: successData.registrationId,
+                    station: activeStationDef.name,
+                  });
+                }}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-neutral-100 active:scale-95 text-emerald-950 font-bold text-sm shadow-xl transition border border-white/40 cursor-pointer disabled:opacity-50"
+              >
+                <ArrowUturnLeftIcon className="h-4 w-4 stroke-2 text-emerald-950" />
+                {undoScanMutation.isPending ? "Undoing..." : "Undo this scan"}
+              </button>
+
+              <p className="text-xs opacity-75 font-medium">
+                {dismissMode === "MANUAL"
+                  ? "Click (X) or tap anywhere to close and scan next"
+                  : "Tap to dismiss now · resumes scanning automatically"}
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -815,6 +910,19 @@ export function ScanCenterShell({
             staffScanData.notApplicable ? "bg-amber-700" : staffScanData.duplicate ? "bg-blue-600" : "bg-sky-700"
           }`}
         >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setStaffScanData(null);
+              setScannerActive(true);
+            }}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-10 cursor-pointer border border-white/20"
+            aria-label="Close popup"
+          >
+            <XMarkIcon className="h-7 w-7 stroke-2" />
+          </button>
+
           <div className="flex flex-col items-center max-w-lg text-center space-y-6">
             {staffScanData.notApplicable ? (
               <ExclamationTriangleIcon className="h-24 w-24 md:h-32 md:w-32" />
@@ -853,7 +961,32 @@ export function ScanCenterShell({
               )}
             </div>
 
-            <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
+            {staffScanData.scanEventId && (
+              <div className="flex flex-col items-center gap-3 w-full pt-1">
+                <button
+                  type="button"
+                  disabled={undoScanMutation.isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    undoScanMutation.mutate({
+                      organizationId,
+                      scanEventId: staffScanData.scanEventId,
+                      station: staffScanData.profile?.type ? `${staffScanData.profile.type} Scan` : "Staff Scan",
+                    });
+                  }}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-neutral-100 active:scale-95 text-neutral-900 font-bold text-sm shadow-xl transition border border-white/40 cursor-pointer disabled:opacity-50"
+                >
+                  <ArrowUturnLeftIcon className="h-4 w-4 stroke-2 text-neutral-900" />
+                  {undoScanMutation.isPending ? "Undoing..." : "Undo this scan"}
+                </button>
+              </div>
+            )}
+
+            <p className="text-xs opacity-75 font-medium">
+              {dismissMode === "MANUAL"
+                ? "Click (X) or tap anywhere to close and scan next"
+                : "Tap to dismiss now · resumes scanning automatically"}
+            </p>
           </div>
         </div>
       )}
@@ -867,6 +1000,19 @@ export function ScanCenterShell({
           }}
           className="fixed inset-0 z-50 overflow-y-auto bg-blue-600 p-4 sm:p-6 text-white cursor-pointer animate-fade-in"
         >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDuplicateData(null);
+              setScannerActive(true);
+            }}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-10 cursor-pointer border border-white/20"
+            aria-label="Close popup"
+          >
+            <XMarkIcon className="h-7 w-7 stroke-2" />
+          </button>
+
           <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
             <div className="flex flex-col items-center max-w-lg w-full text-center space-y-6">
               <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
@@ -916,7 +1062,11 @@ export function ScanCenterShell({
                 )}
               </div>
 
-              <p className="text-xs opacity-60">Tap to dismiss now · resumes scanning automatically</p>
+              <p className="text-xs opacity-75 font-medium">
+                {dismissMode === "MANUAL"
+                  ? "Click (X) or tap anywhere to close and scan next"
+                  : "Tap to dismiss now · resumes scanning automatically"}
+              </p>
             </div>
           </div>
         </div>

@@ -28,7 +28,7 @@ interface NextStepItem {
 
 const DEFAULT_NEXT_STEPS: NextStepItem[] = [
   { icon: "printer", title: "Print This Page", description: "Print this page and bring it with you on check-in." },
-  { icon: "qr-code", title: "Bring Your QR Code", description: "Present this QR code during check-in at the pickup center." },
+  { icon: "qr-code", title: "Bring Your QR Code", description: "Present this QR code during check-in." },
   { icon: "clock", title: "Arrive On Time", description: "Arrive before the reporting time listed above." },
   { icon: "backpack", title: "Pack & Prepare", description: "Bring all required items listed in your welcome packet." },
 ];

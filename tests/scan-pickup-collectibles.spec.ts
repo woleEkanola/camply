@@ -109,6 +109,51 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await expect(page.getByRole("heading", { name: "Custom Bus Stop E2E" })).toBeVisible();
   });
 
+  test("Pickup Point: scanning boards the bus, keeps status as APPROVED, and can be undone via Undo button", async ({ page }) => {
+    test.setTimeout(60000);
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/qr-scan");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByRole("button", { name: "Change station" }).click();
+    await page.getByRole("button", { name: "Pickup Point Check-in" }).click();
+    await expect(page.getByRole("heading", { name: "Choose Pickup Point" })).toBeVisible();
+
+    await page.getByPlaceholder("e.g. Third Mainland Bridge Bus Stop").fill("Main Gate Pickup");
+    await page.getByTestId("bottom-sheet-panel").getByRole("button", { name: "Use", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Main Gate Pickup" })).toBeVisible();
+
+    const performSearch = async (query: string) => {
+      await page.getByRole("button", { name: "Smart Search" }).click();
+      await expect(page.getByRole("heading", { name: "Search Camper Database" })).toBeVisible();
+      const modalInput = page.locator('input[placeholder*="Name, registration #"]');
+      await modalInput.fill(query);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+    };
+
+    await performSearch(registrationNumber);
+
+    // Verify popup shows "Boarded the Bus"
+    await expect(page.getByRole("heading", { name: "Boarded the Bus", exact: true })).toBeVisible({ timeout: 10000 });
+
+    // Verify registration status is still APPROVED (not CHECKED_IN)
+    const reg = await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } });
+    expect(reg.status).toBe("APPROVED");
+    expect(reg.checkedInAt).toBeNull();
+
+    // Click "Undo this scan" button on the popup
+    const undoButton = page.getByRole("button", { name: "Undo this scan" });
+    await expect(undoButton).toBeVisible();
+    await undoButton.click();
+
+    // Verify popup disappears and scan event is deleted
+    await expect(page.getByRole("heading", { name: "Boarded the Bus", exact: true })).not.toBeVisible();
+    const eventAfterUndo = await prisma.scanEvent.findFirst({
+      where: { registrationId, station: "Main Gate Pickup" },
+    });
+    expect(eventAfterUndo).toBeNull();
+  });
+
   test("Collectibles: recording an item collection does not mark the camper checked in", async ({ page }) => {
     test.setTimeout(60000);
     await loginWithPassword(page, "owner@camply.com", "password123");
@@ -117,15 +162,21 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
 
     await page.getByRole("button", { name: "Change station" }).click();
     await page.getByRole("button", { name: "Collectibles" }).click();
-    await expect(page.getByRole("heading", { name: "What's being collected?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What's being distributed?" })).toBeVisible();
     await page.getByPlaceholder(/Gift Bags/).fill("Gift Bags");
     await page.getByRole("button", { name: "Start" }).click();
 
     await expect(page.getByRole("heading", { name: "Gift Bags" })).toBeVisible();
 
-    const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
-    await searchInput.fill(registrationNumber);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const performSearch = async (query: string) => {
+      await page.getByRole("button", { name: "Smart Search" }).click();
+      await expect(page.getByRole("heading", { name: "Search Camper Database" })).toBeVisible();
+      const modalInput = page.locator('input[placeholder*="Name, registration #"]');
+      await modalInput.fill(query);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+    };
+
+    await performSearch(registrationNumber);
 
     await expect(page.getByRole("heading", { name: "Collected Gift Bags", exact: true })).toBeVisible({ timeout: 10000 });
 
@@ -133,9 +184,12 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     expect(reg.status).toBe("APPROVED");
     expect(reg.checkedInAt).toBeNull();
 
+    // Dismiss overlay (manual dismiss mode) before re-searching
+    await page.getByRole("button", { name: "Close popup" }).click();
+    await expect(page.getByRole("heading", { name: "Collected Gift Bags", exact: true })).not.toBeVisible();
+
     // Re-scanning the same checkpoint the same day is an informational duplicate.
-    await searchInput.fill(registrationNumber);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await performSearch(registrationNumber);
     await expect(page.getByRole("heading", { name: "Already Collected" })).toBeVisible({ timeout: 10000 });
   });
 
@@ -145,11 +199,14 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await page.goto("/admin/qr-scan");
     await page.waitForLoadState("networkidle");
 
-    // Fresh session default is already Identity Lookup.
+    await page.getByRole("button", { name: "Change station" }).click();
+    await page.getByTestId("bottom-sheet-panel").getByRole("button", { name: /Identity Lookup/ }).click();
     await expect(page.getByRole("heading", { name: "Identity Lookup" })).toBeVisible();
 
-    const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
-    await searchInput.fill(registrationNumber);
+    await page.getByRole("button", { name: "Smart Search" }).click();
+    await expect(page.getByRole("heading", { name: "Search Camper Database" })).toBeVisible();
+    const modalInput = page.locator('input[placeholder*="Name, registration #"]');
+    await modalInput.fill(registrationNumber);
     await page.getByRole("button", { name: "Search", exact: true }).click();
 
     const closeButton = page.getByRole("button", { name: "Close" });
@@ -160,8 +217,8 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await expect(closeButton).toBeVisible();
 
     // Campus rep contact footer with a working tel: Call link.
-    await expect(page.getByText("Rep Contact")).toBeVisible();
-    const callLink = page.locator('a[href="tel:+2348012345678"]');
+    await expect(page.getByText("Rep Contact").first()).toBeVisible();
+    const callLink = page.locator('a[href="tel:+2348012345678"]').first();
     await expect(callLink).toBeVisible();
 
     // X button dismisses.

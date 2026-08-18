@@ -3,8 +3,9 @@
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 
-interface RecentScan {
+export interface RecentScan {
   registrationId: string;
+  scanEventId?: string;
   name: string;
   registrationNumber: string;
   station: string;
@@ -19,7 +20,7 @@ interface HistorySheetProps {
   activeStation: string;
   allowsUndo: boolean;
   isUndoing: boolean;
-  onUndo: (registrationId: string) => void;
+  onUndo: (scan: RecentScan) => void;
 }
 
 export function HistorySheet({ open, onClose, scans, timeTick, allowsUndo, isUndoing, onUndo }: HistorySheetProps) {
@@ -31,8 +32,8 @@ export function HistorySheet({ open, onClose, scans, timeTick, allowsUndo, isUnd
         <div className="divide-y divide-border-subtle">
           {scans.map((scan) => {
             const elapsedSeconds = Math.floor((timeTick - scan.timestamp) / 1000);
-            const isUndoable = allowsUndo && elapsedSeconds < 30;
-            const remainingSeconds = 30 - elapsedSeconds;
+            const isUndoable = allowsUndo && elapsedSeconds < 120; // 2 minutes grace period for instant undo
+            const remainingSeconds = 120 - elapsedSeconds;
             return (
               <div key={`${scan.registrationId}-${scan.timestamp}`} className="py-3 flex items-center justify-between text-sm">
                 <div>
@@ -42,7 +43,7 @@ export function HistorySheet({ open, onClose, scans, timeTick, allowsUndo, isUnd
                   </span>
                 </div>
                 {isUndoable && (
-                  <Button size="sm" variant="secondary" loading={isUndoing} onClick={() => onUndo(scan.registrationId)}>
+                  <Button size="sm" variant="secondary" loading={isUndoing} onClick={() => onUndo(scan)}>
                     Undo ({remainingSeconds}s)
                   </Button>
                 )}

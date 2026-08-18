@@ -46,10 +46,17 @@ describe("station registry", () => {
     expect(STATIONS.CHECKOUT.isLookup).toBe(false);
   });
 
-  it("disallows undo for checkout and lookup stations", () => {
-    expect(STATIONS.CHECKOUT.allowsUndo).toBe(false);
-    expect(STATIONS.IDENTITY_LOOKUP.allowsUndo).toBe(false);
-    expect(STATIONS.EMERGENCY_LOOKUP.allowsUndo).toBe(false);
-    expect(STATIONS.CAMP_ARRIVAL.allowsUndo).toBe(true);
+  it("lists Pickup Point Check-in before Camp Arrival in the switcher order", () => {
+    const pickupIdx = STATION_ORDER.indexOf("PICKUP_POINT");
+    const arrivalIdx = STATION_ORDER.indexOf("CAMP_ARRIVAL");
+    expect(pickupIdx).toBeGreaterThan(-1);
+    expect(arrivalIdx).toBeGreaterThan(-1);
+    expect(pickupIdx).toBeLessThan(arrivalIdx);
+  });
+
+  it("allows undo for all scan stations", () => {
+    Object.values(STATIONS).forEach((station) => {
+      expect(station.allowsUndo).toBe(true);
+    });
   });
 });

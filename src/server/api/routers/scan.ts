@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
 import { normalizeScannedQRToken } from "../../../lib/qr";
@@ -114,7 +115,9 @@ function dayRange(date?: Date): { start: Date; end: Date } {
   start.setHours(0, 0, 0, 0);
   const end = new Date(base);
   end.setHours(23, 59, 59, 999);
-  return { start, end };
+  const expandedStart = new Date(start.getTime() - 6 * 3600 * 1000);
+  const expandedEnd = new Date(end.getTime() + 6 * 3600 * 1000);
+  return { start: expandedStart, end: expandedEnd };
 }
 
 /** UTC day boundaries, for querying @db.Date columns (MealDistribution.date)
@@ -199,6 +202,187 @@ export async function computeCollectiblesReport(prisma: any, campId: string | nu
   const mapped = rows.map((r: any) => ({ station: r.station, count: r._count._all }));
   const total = mapped.reduce((sum: number, r: any) => sum + r.count, 0);
   return { total, rows: mapped };
+}
+
+export async function computeComprehensiveStationReport(prisma: any, campId: string | null, date?: Date) {
+  const { start, end } = dayRange(date);
+  if (!campId) {
+    return {
+      overview: {
+        registered: 0,
+        checkedIn: 0,
+        pendingArrival: 0,
+        checkedOutCount: 0,
+        stillInCamp: 0,
+        totalBoarded: 0,
+        totalHostelCheckedIn: 0,
+        totalMeals: 0,
+        totalCollectibles: 0,
+        totalStaffPresence: 0,
+        totalLookups: 0,
+      },
+      busBoarding: { total: 0, rows: [] as { station: string; count: number }[] },
+      campArrivals: { total: 0, rows: [] as { station: string; count: number }[] },
+      hostelArrivals: { total: 0, rows: [] as { station: string; count: number }[] },
+      meals: {
+        breakfast: 0,
+        lunch: 0,
+        dinner: 0,
+        camper: { breakfast: 0, lunch: 0, dinner: 0 },
+        staff: { breakfast: 0, lunch: 0, dinner: 0 },
+      },
+      collectibles: { total: 0, rows: [] as { station: string; count: number }[] },
+      checkout: { total: 0, rows: [] as any[] },
+      staffPresence: { checkedInCount: 0, checkedOutCount: 0, rows: [] as any[] },
+      lookups: { total: 0, identityLookups: 0, emergencyLookups: 0 },
+      customStations: { total: 0, rows: [] as { station: string; count: number }[] },
+    };
+  }
+
+  const [
+    registered,
+    checkedIn,
+    checkedOutCount,
+    meals,
+    collectibles,
+    scanEvents,
+    checkoutRegistrations,
+    staffPresenceEvents,
+  ] = await Promise.all([
+    prisma.registration.count({ where: { campId, deletedAt: null, status: { in: ["APPROVED", "CHECKED_IN"] } } }),
+    prisma.registration.count({ where: { campId, deletedAt: null, status: "CHECKED_IN" } }),
+    prisma.registration.count({ where: { campId, deletedAt: null, checkedOutAt: { not: null } } }),
+    computeMealReport(prisma, campId, date),
+    computeCollectiblesReport(prisma, campId, date),
+    prisma.scanEvent.findMany({
+      where: { campId, timestamp: { gte: start, lte: end } },
+      include: {
+        registration: {
+          select: {
+            id: true,
+            registrationNumber: true,
+            camper: { select: { name: true } },
+            campus: { select: { name: true } },
+            room: { select: { name: true, hostel: { select: { name: true } } } },
+          },
+        },
+        volunteer: { select: { firstName: true, lastName: true, email: true } },
+      },
+      orderBy: { timestamp: "desc" },
+    }),
+    prisma.registration.findMany({
+      where: { campId, deletedAt: null, checkedOutAt: { gte: start, lte: end } },
+      select: {
+        id: true,
+        registrationNumber: true,
+        checkedOutAt: true,
+        checkoutCollectorName: true,
+        checkoutCollectorRelationship: true,
+        camper: { select: { name: true } },
+        campus: { select: { name: true } },
+      },
+      orderBy: { checkedOutAt: "desc" },
+    }),
+    prisma.staffScanEvent.findMany({
+      where: { campId, timestamp: { gte: start, lte: end } },
+      include: {
+        staffProfile: { select: { id: true, firstName: true, lastName: true, type: true } },
+      },
+      orderBy: { timestamp: "desc" },
+    }),
+  ]);
+
+  const busBoardingRowsMap = new Map<string, number>();
+  const campArrivalRowsMap = new Map<string, number>();
+  const hostelArrivalRowsMap = new Map<string, number>();
+  const customStationRowsMap = new Map<string, number>();
+  let identityLookups = 0;
+  let emergencyLookups = 0;
+
+  for (const ev of scanEvents) {
+    if (ev.result !== "SUCCESS") continue;
+    const meta = (ev.metadata as any) ?? {};
+    const stationId = meta.stationId;
+    const stationName = ev.station;
+    const lower = stationName.toLowerCase();
+
+    if (stationId === "PICKUP_POINT" || lower.includes("pickup")) {
+      busBoardingRowsMap.set(stationName, (busBoardingRowsMap.get(stationName) ?? 0) + 1);
+    } else if (stationId === "CAMP_ARRIVAL" || lower.includes("camp arrival")) {
+      campArrivalRowsMap.set(stationName, (campArrivalRowsMap.get(stationName) ?? 0) + 1);
+    } else if (stationId === "HOSTEL_ARRIVAL" || lower.includes("hostel")) {
+      hostelArrivalRowsMap.set(stationName, (hostelArrivalRowsMap.get(stationName) ?? 0) + 1);
+    } else if (stationId === "IDENTITY_LOOKUP" || lower.includes("identity")) {
+      identityLookups++;
+    } else if (stationId === "EMERGENCY_LOOKUP" || lower.includes("emergency")) {
+      emergencyLookups++;
+    } else if (
+      stationId === "CUSTOM" ||
+      (!lower.includes("meal") &&
+        !lower.includes("breakfast") &&
+        !lower.includes("lunch") &&
+        !lower.includes("dinner") &&
+        !lower.includes("checkout") &&
+        stationId !== "COLLECTIBLE")
+    ) {
+      customStationRowsMap.set(stationName, (customStationRowsMap.get(stationName) ?? 0) + 1);
+    }
+  }
+
+  const busBoardingRows = Array.from(busBoardingRowsMap.entries()).map(([station, count]) => ({ station, count }));
+  const campArrivalRows = Array.from(campArrivalRowsMap.entries()).map(([station, count]) => ({ station, count }));
+  const hostelArrivalRows = Array.from(hostelArrivalRowsMap.entries()).map(([station, count]) => ({ station, count }));
+  const customStationRows = Array.from(customStationRowsMap.entries()).map(([station, count]) => ({ station, count }));
+
+  const totalBoarded = busBoardingRows.reduce((s, r) => s + r.count, 0);
+  const totalCampArrivals = campArrivalRows.reduce((s, r) => s + r.count, 0);
+  const totalHostelArrivals = hostelArrivalRows.reduce((s, r) => s + r.count, 0);
+  const totalCustom = customStationRows.reduce((s, r) => s + r.count, 0);
+
+  const checkoutRows = checkoutRegistrations.map((r: any) => ({
+    id: r.id,
+    camperName: r.camper.name,
+    registrationNumber: r.registrationNumber || "—",
+    campusName: r.campus?.name || "—",
+    collectorName: r.checkoutCollectorName || "—",
+    collectorRelationship: r.checkoutCollectorRelationship || "—",
+    time: r.checkedOutAt?.toISOString() || "",
+  }));
+
+  const staffCheckedIn = staffPresenceEvents.filter((e: any) => e.result === "SUCCESS" && !e.station.toLowerCase().includes("out")).length;
+  const staffCheckedOut = staffPresenceEvents.filter((e: any) => e.result === "SUCCESS" && e.station.toLowerCase().includes("out")).length;
+  const staffRows = staffPresenceEvents.map((e: any) => ({
+    id: e.id,
+    name: `${e.staffProfile?.firstName || ""} ${e.staffProfile?.lastName || ""}`.trim() || "Staff",
+    role: e.staffProfile?.type || "Staff",
+    action: e.station.toLowerCase().includes("out") ? "CHECK_OUT" : "CHECK_IN",
+    time: e.timestamp.toISOString(),
+  }));
+
+  return {
+    overview: {
+      registered,
+      checkedIn,
+      pendingArrival: Math.max(0, registered - checkedIn),
+      checkedOutCount,
+      stillInCamp: Math.max(0, checkedIn - checkedOutCount),
+      totalBoarded,
+      totalHostelCheckedIn: totalHostelArrivals,
+      totalMeals: meals.breakfast + meals.lunch + meals.dinner,
+      totalCollectibles: collectibles.total,
+      totalStaffPresence: staffPresenceEvents.length,
+      totalLookups: identityLookups + emergencyLookups,
+    },
+    busBoarding: { total: totalBoarded, rows: busBoardingRows },
+    campArrivals: { total: totalCampArrivals, rows: campArrivalRows },
+    hostelArrivals: { total: totalHostelArrivals, rows: hostelArrivalRows },
+    meals,
+    collectibles,
+    checkout: { total: checkoutRows.length, rows: checkoutRows },
+    staffPresence: { checkedInCount: staffCheckedIn, checkedOutCount: staffCheckedOut, rows: staffRows },
+    lookups: { total: identityLookups + emergencyLookups, identityLookups, emergencyLookups },
+    customStations: { total: totalCustom, rows: customStationRows },
+  };
 }
 
 export const scanRouter = createTRPCRouter({
@@ -443,42 +627,6 @@ export const scanRouter = createTRPCRouter({
         };
       }
 
-      // Auto check-in if scanning at MEAL or CHECKOUT but still only APPROVED
-      if (registration.status === "APPROVED" && (classification === "MEAL" || classification === "CHECKOUT")) {
-        registration = await ctx.prisma.registration.update({
-          where: { id: registrationId },
-          data: {
-            status: "CHECKED_IN",
-            checkedInAt: activeTime,
-            checkedInById: ctx.userId,
-          },
-          include,
-        });
-
-        await ctx.prisma.scanEvent.create({
-          data: {
-            registrationId,
-            campId,
-            station: `Auto-Checkin (${input.station})`,
-            timestamp: activeTime,
-            volunteerId: ctx.userId,
-            result: "SUCCESS",
-            metadata: { note: "Automatic check-in triggered by meal/checkout scan" },
-          },
-        });
-
-        await ctx.prisma.auditLog.create({
-          data: {
-            organizationId: input.organizationId,
-            registrationId,
-            actorId: ctx.userId,
-            action: "CHECK_IN_COMPLETED",
-            previousValue: { status: "APPROVED" },
-            newValue: { status: "CHECKED_IN", note: "Auto-checkin via meal/checkout" },
-          },
-        });
-      }
-
       // 2. Classify station & determine duplicates
 
       // A. MEAL STATION ("breakfast", "lunch", "dinner")
@@ -522,9 +670,7 @@ export const scanRouter = createTRPCRouter({
           };
         }
 
-        // Record meal distribution + SUCCESS scan event as one transaction,
-        // matching the check-in path's fix — otherwise a failure between the
-        // two leaves a served meal with no audit trail (or vice versa).
+        // Record meal distribution + SUCCESS scan event as one transaction
         const [mealRecord, mealScanEvent] = await ctx.prisma.$transaction([
           ctx.prisma.mealDistribution.create({
             data: {
@@ -549,13 +695,12 @@ export const scanRouter = createTRPCRouter({
             },
           }),
         ]);
-        // At-most-once, healed by the nightly reconcile — deliberately not
-        // inside the transaction above (see queue.ts's enqueueScoreScan doc).
         await enqueueScoreScan({ scanEventId: mealScanEvent.id, stationId: input.stationId ?? null, campId });
 
         return {
           result: "SUCCESS" as const,
           actionPerformed: `Served ${mealType.toLowerCase()}`,
+          scanEventId: mealScanEvent.id,
           registration,
           mealRecord,
           medicalSeverity: medicalClassification.severity,
@@ -581,7 +726,7 @@ export const scanRouter = createTRPCRouter({
               device: input.device,
               location: input.location,
               result: "DUPLICATE",
-              metadata: { originalTime: registration.checkedOutAt, processedBy: checkerName },
+              metadata: { originalTime: registration.checkedOutAt, processedBy: checkerName, stationId: "CHECKOUT" },
             },
           });
 
@@ -607,9 +752,7 @@ export const scanRouter = createTRPCRouter({
           };
         }
 
-        // Perform checkout + scan event + audit log as one transaction —
-        // previously unwrapped, so a failure partway through could leave
-        // checkedOutAt set with no matching ScanEvent/AuditLog trail.
+        // Perform checkout + scan event + audit log as one transaction
         const [updatedReg, checkoutScanEvent] = await ctx.prisma.$transaction([
           ctx.prisma.registration.update({
             where: { id: registrationId },
@@ -633,6 +776,7 @@ export const scanRouter = createTRPCRouter({
               location: input.location,
               result: "SUCCESS",
               metadata: {
+                stationId: "CHECKOUT",
                 collectorName: input.checkoutDetails.collectorName,
                 relationship: input.checkoutDetails.collectorRelationship,
               },
@@ -657,6 +801,7 @@ export const scanRouter = createTRPCRouter({
         return {
           result: "SUCCESS" as const,
           actionPerformed: "Checked Out",
+          scanEventId: checkoutScanEvent.id,
           registration: updatedReg,
           medicalSeverity: medicalClassification.severity,
           medicalFlags: medicalClassification.flags,
@@ -668,7 +813,7 @@ export const scanRouter = createTRPCRouter({
         ? STATION_ID_CLASSIFICATION[input.stationId] === "LOOKUP"
         : ["identity lookup", "emergency lookup"].includes(stationLower);
       if (isLookup) {
-        // Just record audit event, no modifications
+        const lookupStationTag = input.stationId || (stationLower.includes("emergency") ? "EMERGENCY_LOOKUP" : "IDENTITY_LOOKUP");
         const lookupScanEvent = await ctx.prisma.scanEvent.create({
           data: {
             registrationId,
@@ -679,6 +824,7 @@ export const scanRouter = createTRPCRouter({
             device: input.device,
             location: input.location,
             result: "SUCCESS",
+            metadata: { stationId: lookupStationTag },
           },
         });
         await enqueueScoreScan({ scanEventId: lookupScanEvent.id, stationId: input.stationId ?? null, campId });
@@ -686,17 +832,14 @@ export const scanRouter = createTRPCRouter({
         return {
           result: "SUCCESS" as const,
           actionPerformed: "Identity Resolved",
+          scanEventId: lookupScanEvent.id,
           registration,
           medicalSeverity: medicalClassification.severity,
           medicalFlags: medicalClassification.flags,
         };
       }
 
-      // D. COLLECTIBLE STATIONS (gifts, stationery, water, snacks, etc.) —
-      // same per-day dedupe-then-write shape as arrival check-ins below,
-      // but deliberately does NOT mutate registration.status or write a
-      // CHECK_IN_COMPLETED audit entry. A camper collecting a gift bag must
-      // not be silently marked as checked in.
+      // D. COLLECTIBLE STATIONS
       const isCollectible = input.stationId
         ? STATION_ID_CLASSIFICATION[input.stationId] === "COLLECTIBLE"
         : false;
@@ -755,15 +898,43 @@ export const scanRouter = createTRPCRouter({
         return {
           result: "SUCCESS" as const,
           actionPerformed: `Collected ${input.station}`,
+          scanEventId: collectibleScanEvent.id,
           registration,
           medicalSeverity: medicalClassification.severity,
           medicalFlags: medicalClassification.flags,
         };
       }
 
-      // E. ARRIVAL CHECK-IN STATIONS (e.g. "Pickup Point", "Camp Arrival", "Hostel Arrival" or custom)
-      // Check if already checked in at this specific station today
-      const existingCheckIn = await ctx.prisma.scanEvent.findFirst({
+      // E. ARRIVAL / TRANSIT / CHECK-IN STATIONS
+      const isPickupPoint = input.stationId === "PICKUP_POINT" || stationLower.includes("pickup");
+      const isHostelArrival = input.stationId === "HOSTEL_ARRIVAL" || stationLower.includes("hostel");
+      const isCampArrival = input.stationId === "CAMP_ARRIVAL" || stationLower.includes("camp arrival");
+
+      const resolvedStationId = isPickupPoint
+        ? "PICKUP_POINT"
+        : isHostelArrival
+        ? "HOSTEL_ARRIVAL"
+        : isCampArrival
+        ? "CAMP_ARRIVAL"
+        : input.stationId || "CUSTOM";
+
+      const duplicateMessage = isPickupPoint
+        ? `Camper already boarded the bus at ${input.station}.`
+        : isHostelArrival
+        ? `Camper already checked in at hostel (${input.station}).`
+        : isCampArrival
+        ? `Camper already checked in at camp.`
+        : `Camper already recorded at ${input.station}.`;
+
+      const successAction = isPickupPoint
+        ? "Boarded the Bus"
+        : isHostelArrival
+        ? "Hostel Check-in Recorded"
+        : isCampArrival
+        ? "Checked In at Camp"
+        : `Recorded at ${input.station}`;
+
+      const existingArrivalScan = await ctx.prisma.scanEvent.findFirst({
         where: {
           registrationId,
           station: input.station,
@@ -775,11 +946,8 @@ export const scanRouter = createTRPCRouter({
         },
       });
 
-      const arrivalStationIdTag =
-        input.stationId && REPORTABLE_STATION_IDS.has(input.stationId) ? { stationId: input.stationId } : undefined;
-
-      if (existingCheckIn) {
-        const checkerName = await getVolunteerName(existingCheckIn.volunteerId);
+      if (existingArrivalScan) {
+        const checkerName = await getVolunteerName(existingArrivalScan.volunteerId);
 
         await ctx.prisma.scanEvent.create({
           data: {
@@ -791,30 +959,26 @@ export const scanRouter = createTRPCRouter({
             device: input.device,
             location: input.location,
             result: "DUPLICATE",
-            metadata: { originalTime: existingCheckIn.timestamp, processedBy: checkerName, ...arrivalStationIdTag },
+            metadata: { originalTime: existingArrivalScan.timestamp, processedBy: checkerName, stationId: resolvedStationId },
           },
         });
 
         return {
           result: "DUPLICATE" as const,
-          message: `Camper already checked in at ${input.station}.`,
-          originalTime: existingCheckIn.timestamp,
+          message: duplicateMessage,
+          originalTime: existingArrivalScan.timestamp,
           originalVolunteerName: checkerName,
           originalStation: input.station,
           registration,
         };
       }
 
-      // Record SUCCESS check-in scan event + status update + audit log as
-      // one transaction. Previously the SUCCESS ScanEvent was written first,
-      // outside any transaction — if the registration.update below then
-      // failed (connection blip, timeout), the ScanEvent was already
-      // committed, so the dedupe guard above (`existingCheckIn`) would
-      // reject every retry with "already checked in", leaving the camper
-      // permanently un-check-in-able at this station for the rest of the
-      // day even though status never actually advanced.
+      // ONLY CAMP_ARRIVAL sets Registration.status = "CHECKED_IN".
+      // PICKUP_POINT and HOSTEL_ARRIVAL create verified ScanEvent records without mutating camp check-in status.
       let updatedReg = registration;
-      if (registration.status !== "CHECKED_IN") {
+      let createdScanEvent: any = null;
+
+      if (isCampArrival && registration.status !== "CHECKED_IN") {
         const [arrivalScanEvent, newReg] = await ctx.prisma.$transaction([
           ctx.prisma.scanEvent.create({
             data: {
@@ -826,7 +990,7 @@ export const scanRouter = createTRPCRouter({
               device: input.device,
               location: input.location,
               result: "SUCCESS",
-              metadata: arrivalStationIdTag,
+              metadata: { stationId: "CAMP_ARRIVAL" },
             },
           }),
           ctx.prisma.registration.update({
@@ -850,9 +1014,10 @@ export const scanRouter = createTRPCRouter({
           }),
         ]);
         updatedReg = newReg;
-        await enqueueScoreScan({ scanEventId: arrivalScanEvent.id, stationId: input.stationId ?? null, campId });
+        createdScanEvent = arrivalScanEvent;
+        await enqueueScoreScan({ scanEventId: arrivalScanEvent.id, stationId: "CAMP_ARRIVAL", campId });
       } else {
-        const arrivalScanEvent = await ctx.prisma.scanEvent.create({
+        createdScanEvent = await ctx.prisma.scanEvent.create({
           data: {
             registrationId,
             campId,
@@ -862,18 +1027,163 @@ export const scanRouter = createTRPCRouter({
             device: input.device,
             location: input.location,
             result: "SUCCESS",
-            metadata: arrivalStationIdTag,
+            metadata: { stationId: resolvedStationId },
           },
         });
-        await enqueueScoreScan({ scanEventId: arrivalScanEvent.id, stationId: input.stationId ?? null, campId });
+        await enqueueScoreScan({ scanEventId: createdScanEvent.id, stationId: resolvedStationId, campId });
       }
 
       return {
         result: "SUCCESS" as const,
-        actionPerformed: `Checked In at ${input.station}`,
+        actionPerformed: successAction,
+        scanEventId: createdScanEvent.id,
         registration: updatedReg,
         medicalSeverity: medicalClassification.severity,
         medicalFlags: medicalClassification.flags,
+      };
+    }),
+
+  // ─── Undo scan (Instant Rollback) ───
+  undoScan: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        scanEventId: z.string().optional(),
+        registrationId: z.string().optional(),
+        station: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+
+      let scanEvent: any = null;
+      if (input.scanEventId) {
+        scanEvent = await ctx.prisma.scanEvent.findUnique({
+          where: { id: input.scanEventId },
+          include: { registration: true },
+        });
+        if (!scanEvent) {
+          const staffScan = await ctx.prisma.staffScanEvent.findUnique({
+            where: { id: input.scanEventId },
+            include: { staffProfile: true },
+          });
+          if (staffScan) {
+            await ctx.prisma.staffScanEvent.delete({ where: { id: staffScan.id } });
+            return {
+              success: true,
+              undoneStation: staffScan.station,
+              staffProfileId: staffScan.staffProfileId,
+            };
+          }
+        }
+      } else if (input.registrationId) {
+        scanEvent = await ctx.prisma.scanEvent.findFirst({
+          where: {
+            registrationId: input.registrationId,
+            ...(input.station ? { station: input.station } : {}),
+            result: "SUCCESS",
+          },
+          orderBy: { timestamp: "desc" },
+          include: { registration: true },
+        });
+      }
+
+      if (!scanEvent) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Scan record not found or already undone.",
+        });
+      }
+
+      const regId = scanEvent.registrationId;
+      const meta = (scanEvent.metadata as any) ?? {};
+      const stationIdTag = meta.stationId;
+      const stationName = scanEvent.station;
+      const stationLower = stationName.toLowerCase();
+
+      // 1. If Camp Arrival check-in: revert registration status to APPROVED if checked in
+      if (stationIdTag === "CAMP_ARRIVAL" || stationLower.includes("camp arrival")) {
+        const otherArrivals = await ctx.prisma.scanEvent.findFirst({
+          where: {
+            id: { not: scanEvent.id },
+            registrationId: regId,
+            result: "SUCCESS",
+            OR: [
+              { metadata: { path: ["stationId"], equals: "CAMP_ARRIVAL" } },
+              { station: { contains: "camp arrival", mode: "insensitive" } },
+            ],
+          },
+        });
+
+        if (!otherArrivals) {
+          await ctx.prisma.registration.update({
+            where: { id: regId },
+            data: {
+              status: "APPROVED",
+              checkedInAt: null,
+              checkedInById: null,
+            },
+          });
+
+          await ctx.prisma.auditLog.create({
+            data: {
+              organizationId: input.organizationId,
+              registrationId: regId,
+              actorId: ctx.userId,
+              action: "CHECK_IN_UNDONE",
+              previousValue: { status: "CHECKED_IN" },
+              newValue: { status: "APPROVED", note: "Undone from scanner desk" },
+            },
+          });
+        }
+      }
+
+      // 2. If Checkout: reset checkout fields
+      if (stationIdTag === "CHECKOUT" || stationLower.includes("checkout")) {
+        await ctx.prisma.registration.update({
+          where: { id: regId },
+          data: {
+            checkedOutAt: null,
+            checkedOutById: null,
+            checkoutCollectorName: null,
+            checkoutCollectorRelationship: null,
+            checkoutDetails: Prisma.DbNull,
+          },
+        });
+
+        await ctx.prisma.auditLog.create({
+          data: {
+            organizationId: input.organizationId,
+            registrationId: regId,
+            actorId: ctx.userId,
+            action: "CHECK_OUT_UNDONE",
+            previousValue: { checkedOutAt: scanEvent.timestamp },
+            newValue: { checkedOutAt: null },
+          },
+        });
+      }
+
+      // 3. If Meal: remove meal distribution record
+      const isMeal = stationLower.includes("breakfast") || stationLower.includes("lunch") || stationLower.includes("dinner");
+      if (isMeal) {
+        const mealType = stationLower.includes("breakfast") ? "BREAKFAST" : stationLower.includes("lunch") ? "LUNCH" : "DINNER";
+        await ctx.prisma.mealDistribution.deleteMany({
+          where: {
+            registrationId: regId,
+            meal: mealType,
+          },
+        });
+      }
+
+      // 4. Delete the ScanEvent
+      await ctx.prisma.scanEvent.delete({
+        where: { id: scanEvent.id },
+      });
+
+      return {
+        success: true,
+        undoneStation: scanEvent.station,
+        registrationId: regId,
       };
     }),
 
@@ -1771,12 +2081,6 @@ export const scanRouter = createTRPCRouter({
         deletedAt: null,
         campus: { organizationId: input.organizationId },
       };
-
-      // Previously filtered meals by servedAt (a real DateTime) using a
-      // server-local "today" boundary, while getMealReport filtered the
-      // same data by `date` (@db.Date, always UTC-truncated) — the two
-      // dashboards disagreed on any non-UTC deployment. Both now query
-      // `date` with the same UTC boundary.
       const { start: startOfToday, end: endOfToday } = utcDayRange();
 
       const [registered, checkedIn, camperBreakfastCount, camperLunchCount, camperDinnerCount, checkedOutCount, staffBreakfastCount, staffLunchCount, staffDinnerCount] =
@@ -1823,6 +2127,100 @@ export const scanRouter = createTRPCRouter({
         staffMealCounts: { breakfast: staffBreakfastCount, lunch: staffLunchCount, dinner: staffDinnerCount },
         checkedOutCount,
       };
+    }),
+
+  // ─── Live camper search for scanner fallback ───
+
+  searchCampers: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        query: z.string().min(1),
+        campId: z.string().optional(),
+        limit: z.number().min(1).max(30).default(10),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertCanScan(ctx, input.organizationId);
+      const q = input.query.trim();
+      if (!q) return [];
+
+      const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
+
+      const registrations = await ctx.prisma.registration.findMany({
+        where: {
+          campus: { organizationId: input.organizationId },
+          ...(campId ? { campId } : {}),
+          deletedAt: null,
+          OR: [
+            { registrationNumber: { contains: q, mode: "insensitive" } },
+            { qrToken: { equals: q } },
+            { camper: { name: { contains: q, mode: "insensitive" } } },
+            { camper: { parentPhone: { contains: q, mode: "insensitive" } } },
+            { camper: { teenPhone: { contains: q, mode: "insensitive" } } },
+            { camper: { emergencyContactPhone: { contains: q, mode: "insensitive" } } },
+            { camper: { user: { email: { contains: q, mode: "insensitive" } } } },
+            { camper: { user: { phone: { contains: q, mode: "insensitive" } } } },
+          ],
+        },
+        take: input.limit,
+        orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          registrationNumber: true,
+          qrToken: true,
+          status: true,
+          camper: {
+            select: {
+              id: true,
+              name: true,
+              gender: true,
+              photoUrl: true,
+              parentPhone: true,
+              teenPhone: true,
+            },
+          },
+          campus: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          tribe: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          room: {
+            select: {
+              name: true,
+              hostel: { select: { name: true } },
+            },
+          },
+          bed: {
+            select: {
+              label: true,
+            },
+          },
+        },
+      });
+
+      return registrations.map((r: any) => ({
+        registrationId: r.id,
+        registrationNumber: r.registrationNumber,
+        qrToken: r.qrToken,
+        status: r.status,
+        name: r.camper?.name,
+        gender: r.camper?.gender,
+        photoUrl: r.camper?.photoUrl,
+        campusName: r.campus?.name,
+        tribeName: r.tribe?.name,
+        hostelName: r.room?.hostel?.name,
+        roomName: r.room?.name,
+        bedLabel: r.bed?.label,
+        phone: r.camper?.teenPhone || r.camper?.parentPhone,
+      }));
     }),
 
   // ─── Pickup Point picker + campus contact lookup ───
@@ -1920,5 +2318,13 @@ export const scanRouter = createTRPCRouter({
       await assertReportsAccess(ctx, input.organizationId);
       const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
       return computeCollectiblesReport(ctx.prisma, campId, input.date);
+    }),
+
+  getComprehensiveStationReport: protectedProcedure
+    .input(z.object({ organizationId: z.string(), campId: z.string().optional(), date: z.date().optional() }))
+    .query(async ({ ctx, input }) => {
+      await assertReportsAccess(ctx, input.organizationId);
+      const campId = await resolveReportCampId(ctx, input.organizationId, input.campId);
+      return computeComprehensiveStationReport(ctx.prisma, campId, input.date);
     }),
 });

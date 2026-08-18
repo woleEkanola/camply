@@ -86,7 +86,7 @@ export function buildCampInvitationVariables(registration: RegistrationWithCampI
       ? arrival.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
       : "7:00 AM";
   }
-  variables.checkin_location = `${registration.campus.name} Pick-up Point`;
+  variables.checkin_location = registration.campus.name;
 
   // Confirmed decision: omit entirely, no placeholder, until both are set.
   if (registration.room?.name && registration.room.hostel?.name) {

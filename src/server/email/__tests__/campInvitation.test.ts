@@ -9,7 +9,7 @@ const baseVariables = {
   registration_number: "TC26-LEK-0042",
   tribe_name: "Tribe of Judah",
   checkin_date: "Wednesday, August 19, 2026",
-  checkin_location: "Lekki Centre Pick-up Point",
+  checkin_location: "Lekki Centre",
   arrive_before: "8:00 AM",
 };
 
