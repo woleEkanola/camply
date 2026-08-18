@@ -153,7 +153,7 @@ function RegistrationsPage() {
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_COLUMNS);
 
   useEffect(() => {
-    const saved = localStorage.getItem("camply_reg_columns_v1");
+    const saved = localStorage.getItem("camply_reg_columns_v2");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -168,7 +168,7 @@ function RegistrationsPage() {
     setVisibleColumns((prev) => {
       const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
       if (typeof window !== "undefined") {
-        localStorage.setItem("camply_reg_columns_v1", JSON.stringify(next));
+        localStorage.setItem("camply_reg_columns_v2", JSON.stringify(next));
       }
       return next;
     });
