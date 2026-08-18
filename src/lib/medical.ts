@@ -1,3 +1,5 @@
+import { evaluateMedicalText } from "./medicalCleaner";
+
 export type MedicalSeverity = "CRITICAL" | "INFO" | "NONE";
 
 /**
@@ -44,13 +46,20 @@ export function classifyMedical(input: MedicalInput): MedicalClassification {
     ["dietaryRestrictions", input.dietaryRestrictions],
   ];
 
-  const flags = fields.filter(([, value]) => !!value && value.trim().length > 0).map(([key]) => key);
+  // Filter out empty strings AND non-medical placeholders (e.g. "None", "N/A", "Nil", "-")
+  const validFields = fields.filter(([, value]) => {
+    if (!value || value.trim().length === 0) return false;
+    const evaluation = evaluateMedicalText(value);
+    return evaluation.action === "PRESERVE";
+  });
+
+  const flags = validFields.map(([key]) => key);
 
   if (flags.length === 0) {
     return { severity: "NONE", flags: [] };
   }
 
-  const combinedText = fields
+  const combinedText = validFields
     .map(([, value]) => value || "")
     .join(" ")
     .toLowerCase();
@@ -59,3 +68,4 @@ export function classifyMedical(input: MedicalInput): MedicalClassification {
 
   return { severity: isCritical ? "CRITICAL" : "INFO", flags };
 }
+

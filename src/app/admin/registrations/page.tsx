@@ -30,9 +30,10 @@ import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
 import { ExportButton } from "@/components/export/ExportButton";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
+import { Squares2X2Icon, TableCellsIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import { MobileRegistrationCard, MobileRegistrationsView, formatDuplicateSiblingsHint } from "@/components/staff/shared/MobileRegistrationsView";
 import { RegistrationDetailsDrawer } from "@/components/staff/shared/RegistrationDetailsDrawer";
+import { MedicalDataCleanerModal } from "@/components/medical/MedicalDataCleanerModal";
 
 type ExtendedUser = {
   id: string;
@@ -80,6 +81,8 @@ function RegistrationsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [medicalCleanerOpen, setMedicalCleanerOpen] = useState(false);
   const [bulkAction, setBulkAction] = useState<"REJECT" | "REQUEST_CORRECTION" | "DELETE" | null>(null);
   const [bulkReason, setBulkReason] = useState("");
   const [bulkResult, setBulkResult] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -1004,6 +1007,18 @@ function RegistrationsPage() {
                 )}
               </div>
 
+              {/* Clean Medical Data Button */}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setMedicalCleanerOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-bold text-amber-900 border-amber-300 hover:bg-amber-50"
+              >
+                <SparklesIcon className="h-4 w-4 text-amber-600" />
+                <span>Clean Medical Data</span>
+              </Button>
+
               {/* View Mode Toggle */}
               <div className="flex items-center rounded-xl border border-neutral-200/80 bg-neutral-100/80 p-1 shrink-0">
                 <button
@@ -1277,6 +1292,19 @@ function RegistrationsPage() {
           </Button>
         </div>
       </Dialog>
+
+      {/* Medical & Allergy Data Cleaner Modal */}
+      {medicalCleanerOpen && (
+        <MedicalDataCleanerModal
+          open={medicalCleanerOpen}
+          onClose={() => setMedicalCleanerOpen(false)}
+          organizationId={activeCamp?.organizationId ?? session?.user?.organizationId ?? ""}
+          campId={activeCamp?.id}
+          onSuccess={() => {
+            refetch();
+          }}
+        />
+      )}
     </AppShell>
   );
 }
