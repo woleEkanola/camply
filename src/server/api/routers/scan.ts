@@ -1864,9 +1864,15 @@ export const scanRouter = createTRPCRouter({
       const normalizedToken = normalizeScannedQRToken(rawToken);
 
       const include = {
-        preferredCampus: { select: { name: true } },
-        department: { select: { name: true } },
-        assignedTribe: { select: { name: true, color: true } },
+        preferredCampus: { select: { id: true, name: true } },
+        department: { select: { id: true, name: true } },
+        preferredDepartment: { select: { id: true, name: true } },
+        assignedTribe: { select: { id: true, name: true, color: true } },
+        assignedHostel: { select: { id: true, name: true } },
+        assignedRoom: { select: { id: true, name: true, hostel: { select: { id: true, name: true } } } },
+        assignedBed: { select: { id: true, label: true, room: { select: { id: true, name: true, hostel: { select: { id: true, name: true } } } } } },
+        positionAssignments: { where: { isCurrent: true }, include: { position: { select: { id: true, name: true } } } },
+        user: { select: { photoUrl: true } },
       } as const;
 
       let profile: any = null;
