@@ -1062,6 +1062,20 @@ export const scanRouter = createTRPCRouter({
           where: { id: input.scanEventId },
           include: { registration: true },
         });
+        if (!scanEvent) {
+          const staffScan = await ctx.prisma.staffScanEvent.findUnique({
+            where: { id: input.scanEventId },
+            include: { staffProfile: true },
+          });
+          if (staffScan) {
+            await ctx.prisma.staffScanEvent.delete({ where: { id: staffScan.id } });
+            return {
+              success: true,
+              undoneStation: staffScan.station,
+              staffProfileId: staffScan.staffProfileId,
+            };
+          }
+        }
       } else if (input.registrationId) {
         scanEvent = await ctx.prisma.scanEvent.findFirst({
           where: {

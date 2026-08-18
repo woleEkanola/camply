@@ -225,12 +225,12 @@ export function ScanCenterShell({
     return () => clearTimeout(timer);
   }, [staffScanData, dismissMode]);
 
-  // Keyboard shortcut: slash key focuses search, Escape closes overlays
+  // Keyboard shortcut: slash key opens smart search, Escape closes overlays
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "/" && document.activeElement !== searchInputRef.current) {
+      if (e.key === "/" && !searchSheetOpen) {
         e.preventDefault();
-        searchInputRef.current?.focus();
+        setSearchSheetOpen(true);
       }
       if (e.key === "Escape") {
         setSuccessData(null);
@@ -693,6 +693,12 @@ export function ScanCenterShell({
         open={searchSheetOpen}
         onClose={() => setSearchSheetOpen(false)}
         onSearch={(query) => handleScanSubmit({ query })}
+        onSelectCamper={(camper) =>
+          handleScanSubmit({
+            qrToken: camper.qrToken || undefined,
+            query: camper.registrationNumber || camper.name,
+          })
+        }
         organizationId={organizationId}
       />
 
@@ -727,30 +733,39 @@ export function ScanCenterShell({
           />
         </div>
 
-        {/* Search is the exception path — a floating icon + sheet on
-            mobile (see ScanTabBar), a persistent field on desktop where
-            there's room and a keyboard ([/] shortcut retained). */}
-        <Card className="hidden md:block border-border-default">
-            <CardBody className="p-4">
-              <form onSubmit={handleSearchSubmit} className="flex gap-3">
-                <div className="relative flex-1">
-                  <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-txt-muted" />
-                  <Input
-                    ref={searchInputRef}
-                    containerClassName="w-full"
-                    className="pl-10 h-10 text-sm rounded-lg"
-                    placeholder="Enter Registration #, camper name, or phone..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <span className="absolute right-3 top-2.5 text-xs text-txt-muted pointer-events-none hidden md:inline">
-                    Press [/] to search
-                  </span>
-                </div>
-                <Button type="submit" className="h-10">Search</Button>
-              </form>
-            </CardBody>
-          </Card>
+        {/* Search is the exception path — smart search sheet with live auto-complete on mobile and desktop */}
+        <Card
+          className="hidden md:block border-border-default hover:border-accent-500 transition cursor-pointer shadow-xs"
+          onClick={() => setSearchSheetOpen(true)}
+        >
+          <CardBody className="p-4">
+            <div className="flex gap-3 items-center">
+              <div className="relative flex-1">
+                <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-txt-muted" />
+                <Input
+                  ref={searchInputRef}
+                  readOnly
+                  onFocus={() => setSearchSheetOpen(true)}
+                  onClick={() => setSearchSheetOpen(true)}
+                  containerClassName="w-full cursor-pointer"
+                  className="pl-10 h-10 text-sm rounded-lg cursor-pointer bg-bg-surface dark:bg-neutral-900 border-border-default"
+                  placeholder="Click or press [/] to search camper by name, registration #, or phone..."
+                  value={searchQuery}
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-txt-muted pointer-events-none hidden md:inline">
+                  Press [/] for smart search
+                </span>
+              </div>
+              <Button
+                type="button"
+                onClick={() => setSearchSheetOpen(true)}
+                className="h-10 cursor-pointer px-5 font-bold"
+              >
+                Smart Search
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
 
           {/* Compact recent-activity strip — last 4, auto-updates after
               every scan. Full session history + undo lives in HistorySheet
@@ -801,7 +816,7 @@ export function ScanCenterShell({
               setSuccessData(null);
               setScannerActive(true);
             }}
-            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/20 hover:bg-black/40 text-white p-2.5 backdrop-blur-md transition shadow-lg z-10 cursor-pointer"
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-10 cursor-pointer border border-white/20"
             aria-label="Close popup"
           >
             <XMarkIcon className="h-7 w-7 stroke-2" />
@@ -868,9 +883,9 @@ export function ScanCenterShell({
                     station: activeStationDef.name,
                   });
                 }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white font-bold text-sm backdrop-blur transition shadow-md border border-white/30 cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-neutral-100 active:scale-95 text-emerald-950 font-bold text-sm shadow-xl transition border border-white/40 cursor-pointer disabled:opacity-50"
               >
-                <ArrowUturnLeftIcon className="h-4 w-4 stroke-2" />
+                <ArrowUturnLeftIcon className="h-4 w-4 stroke-2 text-emerald-950" />
                 {undoScanMutation.isPending ? "Undoing..." : "Undo this scan"}
               </button>
 
@@ -902,7 +917,7 @@ export function ScanCenterShell({
               setStaffScanData(null);
               setScannerActive(true);
             }}
-            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/20 hover:bg-black/40 text-white p-2.5 backdrop-blur-md transition shadow-lg z-10 cursor-pointer"
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-10 cursor-pointer border border-white/20"
             aria-label="Close popup"
           >
             <XMarkIcon className="h-7 w-7 stroke-2" />
@@ -946,6 +961,27 @@ export function ScanCenterShell({
               )}
             </div>
 
+            {staffScanData.scanEventId && (
+              <div className="flex flex-col items-center gap-3 w-full pt-1">
+                <button
+                  type="button"
+                  disabled={undoScanMutation.isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    undoScanMutation.mutate({
+                      organizationId,
+                      scanEventId: staffScanData.scanEventId,
+                      station: staffScanData.profile?.type ? `${staffScanData.profile.type} Scan` : "Staff Scan",
+                    });
+                  }}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-neutral-100 active:scale-95 text-neutral-900 font-bold text-sm shadow-xl transition border border-white/40 cursor-pointer disabled:opacity-50"
+                >
+                  <ArrowUturnLeftIcon className="h-4 w-4 stroke-2 text-neutral-900" />
+                  {undoScanMutation.isPending ? "Undoing..." : "Undo this scan"}
+                </button>
+              </div>
+            )}
+
             <p className="text-xs opacity-75 font-medium">
               {dismissMode === "MANUAL"
                 ? "Click (X) or tap anywhere to close and scan next"
@@ -971,7 +1007,7 @@ export function ScanCenterShell({
               setDuplicateData(null);
               setScannerActive(true);
             }}
-            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/20 hover:bg-black/40 text-white p-2.5 backdrop-blur-md transition shadow-lg z-10 cursor-pointer"
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-10 cursor-pointer border border-white/20"
             aria-label="Close popup"
           >
             <XMarkIcon className="h-7 w-7 stroke-2" />

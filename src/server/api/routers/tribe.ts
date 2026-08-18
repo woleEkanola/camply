@@ -544,6 +544,50 @@ export const tribeRouter = createTRPCRouter({
         reason: e.reason,
         actorId: e.createdById,
         createdAt: e.createdAt,
+        reversesEventId: e.reversesEventId,
       }));
+    }),
+
+  undoPoints: protectedProcedure
+    .input(
+      z.object({
+        tribeId: z.string(),
+        scoreEventId: z.string(),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const tribe = await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.tribeId } });
+      await assertCanManageCamp(ctx, tribe.campId);
+
+      const original = await ctx.prisma.scoreEvent.findUniqueOrThrow({ where: { id: input.scoreEventId } });
+      if (original.tribeId !== input.tribeId || original.campId !== tribe.campId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Event does not match tribe" });
+      }
+
+      const undoEvent = await recordScoreEvent({
+        campId: original.campId,
+        campusId: original.campusId,
+        tribeId: original.tribeId,
+        registrationId: original.registrationId,
+        staffProfileId: original.staffProfileId,
+        categoryId: original.categoryId,
+        points: -original.points,
+        reason: input.reason ?? `Undo points (${original.reason || "Award"})`,
+        source: "MANUAL",
+        createdById: ctx.session!.user.id,
+        reversesEventId: original.id,
+        idempotencyKey: `undo:tribe:${original.id}`,
+      });
+
+      if (!undoEvent) {
+        throw new TRPCError({ code: "CONFLICT", message: "This points event was already undone." });
+      }
+
+      return {
+        success: true,
+        undoneEventId: original.id,
+        tribe: await ctx.prisma.tribe.findUniqueOrThrow({ where: { id: input.tribeId } }),
+      };
     }),
 });

@@ -123,9 +123,15 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await page.getByTestId("bottom-sheet-panel").getByRole("button", { name: "Use", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Main Gate Pickup" })).toBeVisible();
 
-    const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
-    await searchInput.fill(registrationNumber);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const performSearch = async (query: string) => {
+      await page.getByRole("button", { name: "Smart Search" }).click();
+      await expect(page.getByRole("heading", { name: "Search Camper Database" })).toBeVisible();
+      const modalInput = page.locator('input[placeholder*="Name, registration #"]');
+      await modalInput.fill(query);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+    };
+
+    await performSearch(registrationNumber);
 
     // Verify popup shows "Boarded the Bus"
     await expect(page.getByRole("heading", { name: "Boarded the Bus", exact: true })).toBeVisible({ timeout: 10000 });
@@ -156,15 +162,21 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
 
     await page.getByRole("button", { name: "Change station" }).click();
     await page.getByRole("button", { name: "Collectibles" }).click();
-    await expect(page.getByRole("heading", { name: "What's being collected?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What's being distributed?" })).toBeVisible();
     await page.getByPlaceholder(/Gift Bags/).fill("Gift Bags");
     await page.getByRole("button", { name: "Start" }).click();
 
     await expect(page.getByRole("heading", { name: "Gift Bags" })).toBeVisible();
 
-    const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
-    await searchInput.fill(registrationNumber);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const performSearch = async (query: string) => {
+      await page.getByRole("button", { name: "Smart Search" }).click();
+      await expect(page.getByRole("heading", { name: "Search Camper Database" })).toBeVisible();
+      const modalInput = page.locator('input[placeholder*="Name, registration #"]');
+      await modalInput.fill(query);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+    };
+
+    await performSearch(registrationNumber);
 
     await expect(page.getByRole("heading", { name: "Collected Gift Bags", exact: true })).toBeVisible({ timeout: 10000 });
 
@@ -177,8 +189,7 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await expect(page.getByRole("heading", { name: "Collected Gift Bags", exact: true })).not.toBeVisible();
 
     // Re-scanning the same checkpoint the same day is an informational duplicate.
-    await searchInput.fill(registrationNumber);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await performSearch(registrationNumber);
     await expect(page.getByRole("heading", { name: "Already Collected" })).toBeVisible({ timeout: 10000 });
   });
 
@@ -192,8 +203,10 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await page.getByTestId("bottom-sheet-panel").getByRole("button", { name: /Identity Lookup/ }).click();
     await expect(page.getByRole("heading", { name: "Identity Lookup" })).toBeVisible();
 
-    const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
-    await searchInput.fill(registrationNumber);
+    await page.getByRole("button", { name: "Smart Search" }).click();
+    await expect(page.getByRole("heading", { name: "Search Camper Database" })).toBeVisible();
+    const modalInput = page.locator('input[placeholder*="Name, registration #"]');
+    await modalInput.fill(registrationNumber);
     await page.getByRole("button", { name: "Search", exact: true }).click();
 
     const closeButton = page.getByRole("button", { name: "Close" });

@@ -73,7 +73,7 @@ export const STATIONS: Record<StationId, StationDef> = {
     theme: { bg: "#475569", bgStrong: "#334155", fg: "#f8fafc", ring: "#94a3b8", tint: "rgba(71,85,105,0.12)" },
     icon: IdentificationIcon,
     stats: ["LOOKUPS_TODAY", "MEDICAL_VIEWED"],
-    allowsUndo: false,
+    allowsUndo: true,
     isLookup: true,
   },
   PICKUP_POINT: {
@@ -125,7 +125,7 @@ export const STATIONS: Record<StationId, StationDef> = {
     theme: { bg: "#c2410c", bgStrong: "#9a3412", fg: "#fff7ed", ring: "#fdba74", tint: "rgba(234,88,12,0.12)" },
     icon: CakeIcon,
     stats: ["SERVED", "REMAINING", "DUPLICATES"],
-    allowsUndo: false,
+    allowsUndo: true,
     isLookup: false,
   },
   LUNCH: {
@@ -138,7 +138,7 @@ export const STATIONS: Record<StationId, StationDef> = {
     theme: { bg: "#b45309", bgStrong: "#92400e", fg: "#fffbeb", ring: "#fcd34d", tint: "rgba(217,119,6,0.12)" },
     icon: CakeIcon,
     stats: ["SERVED", "REMAINING", "DUPLICATES"],
-    allowsUndo: false,
+    allowsUndo: true,
     isLookup: false,
   },
   DINNER: {
@@ -150,7 +150,7 @@ export const STATIONS: Record<StationId, StationDef> = {
     theme: { bg: "#7c3aed", bgStrong: "#6d28d9", fg: "#faf5ff", ring: "#c4b5fd", tint: "rgba(124,58,237,0.12)" },
     icon: CakeIcon,
     stats: ["SERVED", "REMAINING", "DUPLICATES"],
-    allowsUndo: false,
+    allowsUndo: true,
     isLookup: false,
   },
   COLLECTIBLES: {
@@ -179,7 +179,7 @@ export const STATIONS: Record<StationId, StationDef> = {
     theme: { bg: "#b91c1c", bgStrong: "#991b1b", fg: "#fef2f2", ring: "#fca5a5", tint: "rgba(220,38,38,0.12)" },
     icon: ArrowLeftOnRectangleIcon,
     stats: ["RELEASED", "STILL_IN_CAMP"],
-    allowsUndo: false,
+    allowsUndo: true,
     isLookup: false,
   },
   EMERGENCY_LOOKUP: {
@@ -191,7 +191,7 @@ export const STATIONS: Record<StationId, StationDef> = {
     theme: { bg: "#9f1239", bgStrong: "#881337", fg: "#fff1f2", ring: "#fda4af", tint: "rgba(159,18,57,0.12)" },
     icon: HeartIcon,
     stats: ["EMERGENCY_SCANS", "CRITICAL_ALERTS"],
-    allowsUndo: false,
+    allowsUndo: true,
     isLookup: true,
   },
   CUSTOM: {
@@ -216,7 +216,7 @@ export const STATIONS: Record<StationId, StationDef> = {
     theme: { bg: "#0369a1", bgStrong: "#075985", fg: "#f0f9ff", ring: "#7dd3fc", tint: "rgba(3,105,161,0.12)" },
     icon: UserGroupIcon,
     stats: ["SCANS_TODAY"],
-    allowsUndo: false,
+    allowsUndo: true,
     isLookup: false,
   },
   STAFF_CHECKOUT: {
@@ -228,7 +228,7 @@ export const STATIONS: Record<StationId, StationDef> = {
     theme: { bg: "#a16207", bgStrong: "#854d0e", fg: "#fefce8", ring: "#fde047", tint: "rgba(161,98,7,0.12)" },
     icon: UserGroupIcon,
     stats: ["SCANS_TODAY"],
-    allowsUndo: false,
+    allowsUndo: true,
     isLookup: false,
   },
 };

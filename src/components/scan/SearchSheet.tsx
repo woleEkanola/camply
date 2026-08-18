@@ -163,11 +163,11 @@ export function SearchSheet({
   return (
     <div
       data-search-overlay
-      className="fixed inset-0 z-50 flex flex-col bg-bg-surface backdrop-blur-md animate-fade-in md:p-6 md:bg-neutral-900/60 md:flex md:items-center md:justify-center"
+      className="fixed inset-0 z-50 flex flex-col bg-bg-surface md:bg-black/80 dark:md:bg-black/90 md:backdrop-blur-md animate-fade-in md:p-6 md:flex md:items-center md:justify-center"
     >
-      <div className="flex flex-col h-full w-full bg-bg-surface md:h-auto md:max-h-[85vh] md:max-w-xl md:rounded-2xl md:shadow-2xl md:border md:border-border-default overflow-hidden">
+      <div className="flex flex-col h-full w-full bg-bg-surface dark:bg-neutral-900 md:h-auto md:max-h-[85vh] md:max-w-2xl md:rounded-2xl md:shadow-2xl md:border md:border-border-default dark:md:border-neutral-750 overflow-hidden">
         {/* Header covering the top / camera viewport */}
-        <div className="flex items-center justify-between border-b border-border-default px-4 py-3 sm:px-6">
+        <div className="flex items-center justify-between border-b border-border-default dark:border-neutral-800 px-4 py-3 sm:px-6 bg-bg-surface dark:bg-neutral-900">
           <div className="flex items-center gap-2">
             <MagnifyingGlassIcon className="h-5 w-5 text-accent-600" />
             <h2 className="text-base font-bold text-txt-primary">Search Camper Database</h2>
@@ -175,7 +175,7 @@ export function SearchSheet({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-txt-muted hover:bg-bg-subtle hover:text-txt-primary transition cursor-pointer"
+            className="rounded-lg p-1.5 text-txt-muted hover:bg-bg-subtle dark:hover:bg-neutral-800 hover:text-txt-primary transition cursor-pointer"
             aria-label="Close search"
           >
             <XMarkIcon className="h-6 w-6" />
@@ -183,13 +183,13 @@ export function SearchSheet({
         </div>
 
         {/* Pinned Search Input at the top */}
-        <div className="p-4 border-b border-border-default bg-bg-subtle/50">
+        <div className="p-4 border-b border-border-default dark:border-neutral-800 bg-bg-subtle/70 dark:bg-neutral-950/60">
           <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
             <div className="relative flex-1">
               <MagnifyingGlassIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-txt-muted pointer-events-none" />
               <Input
                 autoFocus
-                className="pl-11 pr-10 h-12 text-base rounded-xl bg-bg-surface border-border-default focus:border-accent-500 shadow-sm"
+                className="pl-11 pr-10 h-12 text-base rounded-xl bg-bg-surface dark:bg-neutral-900 border-border-default dark:border-neutral-700 focus:border-accent-500 shadow-sm"
                 placeholder="Name, registration #, or phone..."
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
@@ -208,7 +208,7 @@ export function SearchSheet({
             <Button
               type="submit"
               variant="primary"
-              className="h-12 px-5 font-bold shrink-0 rounded-xl cursor-pointer"
+              className="h-12 px-5 font-bold shrink-0 rounded-xl cursor-pointer shadow-sm"
               disabled={!value.trim()}
             >
               Search
@@ -217,7 +217,7 @@ export function SearchSheet({
         </div>
 
         {/* Live Search Results List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0 divide-y divide-border-subtle">
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0 divide-y divide-border-subtle dark:divide-neutral-800">
           {mergedResults.length > 0 ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1 text-xs font-semibold text-txt-muted">
@@ -238,7 +238,7 @@ export function SearchSheet({
                     key={camper.registrationId}
                     type="button"
                     onClick={() => handleSelect(camper)}
-                    className="w-full text-left p-3 rounded-xl bg-bg-surface hover:bg-bg-subtle active:bg-surface-raised border border-border-default hover:border-accent-400 transition-all flex items-center justify-between gap-3 shadow-xs cursor-pointer"
+                    className="w-full text-left p-3.5 rounded-xl bg-bg-surface dark:bg-neutral-850 hover:bg-bg-subtle dark:hover:bg-neutral-800 active:bg-surface-raised border border-border-default dark:border-neutral-700 hover:border-accent-500 transition-all flex items-center justify-between gap-3 shadow-xs cursor-pointer"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       {camper.photoUrl ? (

@@ -54,10 +54,9 @@ describe("station registry", () => {
     expect(pickupIdx).toBeLessThan(arrivalIdx);
   });
 
-  it("disallows undo for checkout and lookup stations", () => {
-    expect(STATIONS.CHECKOUT.allowsUndo).toBe(false);
-    expect(STATIONS.IDENTITY_LOOKUP.allowsUndo).toBe(false);
-    expect(STATIONS.EMERGENCY_LOOKUP.allowsUndo).toBe(false);
-    expect(STATIONS.CAMP_ARRIVAL.allowsUndo).toBe(true);
+  it("allows undo for all scan stations", () => {
+    Object.values(STATIONS).forEach((station) => {
+      expect(station.allowsUndo).toBe(true);
+    });
   });
 });
