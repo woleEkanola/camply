@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { prisma, getFixtureOrgContext, loginWithPassword, visibleText } from "./helpers";
+import { prisma, getFixtureOrgContext, loginWithPassword } from "./helpers";
 
 test.describe("Admin Reports page", () => {
   let organizationId: string;
@@ -8,7 +8,7 @@ test.describe("Admin Reports page", () => {
   let camperId: string;
   let registrationId: string;
 
-  test.beforeAll(async () => {
+  test.beforeEach(async () => {
     const ctx = await getFixtureOrgContext();
     organizationId = ctx.organizationId;
     campusId = ctx.campusId;
@@ -68,30 +68,48 @@ test.describe("Admin Reports page", () => {
     });
   });
 
-  test.afterAll(async () => {
-    await prisma.scanEvent.deleteMany({ where: { registrationId } });
-    await prisma.mealDistribution.deleteMany({ where: { registrationId } });
-    await prisma.registration.delete({ where: { id: registrationId } });
-    await prisma.camper.delete({ where: { id: camperId } });
+  test.afterEach(async () => {
+    if (registrationId) {
+      await prisma.scanEvent.deleteMany({ where: { registrationId } });
+      await prisma.mealDistribution.deleteMany({ where: { registrationId } });
+      await prisma.registration.delete({ where: { id: registrationId } }).catch(() => {});
+    }
+    if (camperId) {
+      await prisma.camper.delete({ where: { id: camperId } }).catch(() => {});
+    }
   });
 
-  test("shows meal, arrivals, and collectibles data for today, with the arrivals filter narrowing the table", async ({ page }) => {
+  test("shows live operational report covering all QR stations and live refresh controls", async ({ page }) => {
+    test.setTimeout(60000);
+    page.on("console", (msg) => console.log("PAGE CONSOLE:", msg.text()));
+    page.on("pageerror", (err) => console.error("PAGE ERROR:", err));
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/reports");
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Operations & Station Reports" })).toBeVisible();
+    await expect(page.getByText(/Live \(3s\)/)).toBeVisible();
+    await expect(page.getByText("Total Expected")).toBeVisible();
+    await expect(page.getByText("Checked In (Camp)")).toBeVisible();
+    await expect(page.getByText("Boarded Bus", { exact: true })).toBeVisible();
+
     await expect(page.getByText("Breakfast", { exact: true })).toBeVisible();
+    await expect(page.getByText("Reports E2E Campus")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("Reports E2E Snacks")).toBeVisible({ timeout: 15000 });
 
-    await expect(visibleText(page, "Reports E2E Campus")).toBeVisible();
-    await expect(visibleText(page, "Reports E2E Snacks")).toBeVisible();
+    // Switch tab to Bus Boarding
+    await page.getByRole("button", { name: "Bus Boarding" }).click();
+    await expect(page.getByRole("heading", { name: "Bus Boarding / Pickup Points" })).toBeVisible();
+    await expect(page.getByText("Reports E2E Campus")).toBeVisible();
 
-    // Filter arrivals down to Pickup Point only.
-    await page.getByRole("combobox").filter({ hasText: "All arrival types" }).selectOption("PICKUP_POINT");
-    await expect(visibleText(page, "Reports E2E Campus")).toBeVisible();
+    // Switch tab to Collectibles
+    await page.getByRole("button", { name: "Collectibles" }).click();
+    await expect(page.getByRole("heading", { name: "Collectibles & Items Distribution" })).toBeVisible();
+    await expect(page.getByText("Reports E2E Snacks")).toBeVisible();
   });
 
   test("Reports nav item is visible for admin and links to /admin/reports", async ({ page }) => {
+    test.setTimeout(60000);
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin");
     await page.waitForLoadState("networkidle");

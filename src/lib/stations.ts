@@ -31,6 +31,7 @@ export type StatKey =
   | "REMAINING"
   | "DUPLICATES"
   | "CHECKED_IN"
+  | "BOARDED"
   | "EXPECTED"
   | "RELEASED"
   | "STILL_IN_CAMP"
@@ -78,9 +79,9 @@ export const STATIONS: Record<StationId, StationDef> = {
   PICKUP_POINT: {
     id: "PICKUP_POINT",
     name: "Pickup Point Check-in",
-    verb: "Checking In Arrivals",
-    successVerb: "Checked In",
-    duplicateVerb: "Already Checked In",
+    verb: "Boarding Bus",
+    successVerb: "Boarded the Bus",
+    duplicateVerb: "Already Boarded",
     theme: { bg: "#2563eb", bgStrong: "#1d4ed8", fg: "#f8fafc", ring: "#93c5fd", tint: "rgba(37,99,235,0.12)" },
     icon: MapPinIcon,
     stats: ["CHECKED_IN", "EXPECTED", "REMAINING"],
@@ -105,9 +106,9 @@ export const STATIONS: Record<StationId, StationDef> = {
   HOSTEL_ARRIVAL: {
     id: "HOSTEL_ARRIVAL",
     name: "Hostel Arrival",
-    verb: "Checking In Arrivals",
-    successVerb: "Checked In",
-    duplicateVerb: "Already Checked In",
+    verb: "Checking In to Hostel",
+    successVerb: "Hostel Checked In",
+    duplicateVerb: "Already Checked In at Hostel",
     theme: { bg: "#4f46e5", bgStrong: "#4338ca", fg: "#f8fafc", ring: "#a5b4fc", tint: "rgba(79,70,229,0.12)" },
     icon: MapPinIcon,
     stats: ["CHECKED_IN", "EXPECTED", "REMAINING"],

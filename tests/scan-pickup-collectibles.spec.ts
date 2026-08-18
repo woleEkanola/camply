@@ -109,6 +109,45 @@ test.describe("Scan Center - Pickup Point picker, Collectibles, lookup overlay c
     await expect(page.getByRole("heading", { name: "Custom Bus Stop E2E" })).toBeVisible();
   });
 
+  test("Pickup Point: scanning boards the bus, keeps status as APPROVED, and can be undone via Undo button", async ({ page }) => {
+    test.setTimeout(60000);
+    await loginWithPassword(page, "owner@camply.com", "password123");
+    await page.goto("/admin/qr-scan");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByRole("button", { name: "Change station" }).click();
+    await page.getByRole("button", { name: "Pickup Point Check-in" }).click();
+    await expect(page.getByRole("heading", { name: "Choose Pickup Point" })).toBeVisible();
+
+    await page.getByPlaceholder("e.g. Third Mainland Bridge Bus Stop").fill("Main Gate Pickup");
+    await page.getByTestId("bottom-sheet-panel").getByRole("button", { name: "Use", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Main Gate Pickup" })).toBeVisible();
+
+    const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
+    await searchInput.fill(registrationNumber);
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+
+    // Verify popup shows "Boarded the Bus"
+    await expect(page.getByRole("heading", { name: "Boarded the Bus", exact: true })).toBeVisible({ timeout: 10000 });
+
+    // Verify registration status is still APPROVED (not CHECKED_IN)
+    const reg = await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } });
+    expect(reg.status).toBe("APPROVED");
+    expect(reg.checkedInAt).toBeNull();
+
+    // Click "Undo this scan" button on the popup
+    const undoButton = page.getByRole("button", { name: "Undo this scan" });
+    await expect(undoButton).toBeVisible();
+    await undoButton.click();
+
+    // Verify popup disappears and scan event is deleted
+    await expect(page.getByRole("heading", { name: "Boarded the Bus", exact: true })).not.toBeVisible();
+    const eventAfterUndo = await prisma.scanEvent.findFirst({
+      where: { registrationId, station: "Main Gate Pickup" },
+    });
+    expect(eventAfterUndo).toBeNull();
+  });
+
   test("Collectibles: recording an item collection does not mark the camper checked in", async ({ page }) => {
     test.setTimeout(60000);
     await loginWithPassword(page, "owner@camply.com", "password123");

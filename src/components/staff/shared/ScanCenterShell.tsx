@@ -34,11 +34,13 @@ import {
   ExclamationTriangleIcon,
   InformationCircleIcon,
   XMarkIcon,
+  ArrowUturnLeftIcon,
 } from "@heroicons/react/24/outline";
 import { PhoneIcon } from "@heroicons/react/24/solid";
 
 interface RecentScan {
   registrationId: string;
+  scanEventId?: string;
   name: string;
   registrationNumber: string;
   station: string;
@@ -147,14 +149,22 @@ export function ScanCenterShell({
     { enabled: !!organizationId }
   );
 
-  const undoCheckInMutation = api.registration.undoCheckIn.useMutation({
+  const undoScanMutation = api.scan.undoScan.useMutation({
     onSuccess: (_, variables) => {
-      setRecentScans((prev) => prev.filter((s) => s.registrationId !== variables.registrationId));
-      toast.success("Check-in undone successfully");
+      setRecentScans((prev) =>
+        prev.filter((s) =>
+          variables.scanEventId
+            ? s.scanEventId !== variables.scanEventId
+            : s.registrationId !== variables.registrationId
+        )
+      );
+      toast.success("Scan undone successfully — record cleared");
       refetchStats?.();
+      setSuccessData(null);
+      setScannerActive(true);
     },
     onError: (err) => {
-      toast.error(`Failed to undo check-in: ${err.message}`);
+      toast.error(`Failed to undo scan: ${err.message}`);
     },
   });
 
@@ -484,10 +494,13 @@ export function ScanCenterShell({
         return;
       }
 
+      const scanEventId = (response as any).scanEventId;
+
       // Add to recent activity list
       setRecentScans((prev) => [
         {
           registrationId: reg.id,
+          scanEventId,
           name: camper.name,
           registrationNumber: reg.registrationNumber,
           station: targetStationName,
@@ -501,6 +514,8 @@ export function ScanCenterShell({
       playScanCue("success");
       vibrateForCue("success");
       setSuccessData({
+        scanEventId,
+        registrationId: reg.id,
         camperName: camper.name,
         photoUrl: camper.photoUrl,
         regNumber: reg.registrationNumber,
@@ -688,9 +703,14 @@ export function ScanCenterShell({
         timeTick={timeTick}
         activeStation={activeStation}
         allowsUndo={activeStationDef.allowsUndo}
-        isUndoing={undoCheckInMutation.isPending}
-        onUndo={(registrationId) =>
-          undoCheckInMutation.mutate({ registrationId, reason: "Volunteer operator error / duplicate sync correction" })
+        isUndoing={undoScanMutation.isPending}
+        onUndo={(scan) =>
+          undoScanMutation.mutate({
+            organizationId,
+            scanEventId: scan.scanEventId,
+            registrationId: scan.registrationId,
+            station: scan.station,
+          })
         }
       />
 
@@ -835,11 +855,31 @@ export function ScanCenterShell({
               <MedicalBanner flags={successData.medicalFlags} camper={successData.camper} />
             )}
 
-            <p className="text-xs opacity-75 font-medium">
-              {dismissMode === "MANUAL"
-                ? "Click (X) or tap anywhere to close and scan next"
-                : "Tap to dismiss now · resumes scanning automatically"}
-            </p>
+            <div className="flex flex-col items-center gap-3 w-full pt-1">
+              <button
+                type="button"
+                disabled={undoScanMutation.isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  undoScanMutation.mutate({
+                    organizationId,
+                    scanEventId: successData.scanEventId,
+                    registrationId: successData.registrationId,
+                    station: activeStationDef.name,
+                  });
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white font-bold text-sm backdrop-blur transition shadow-md border border-white/30 cursor-pointer disabled:opacity-50"
+              >
+                <ArrowUturnLeftIcon className="h-4 w-4 stroke-2" />
+                {undoScanMutation.isPending ? "Undoing..." : "Undo this scan"}
+              </button>
+
+              <p className="text-xs opacity-75 font-medium">
+                {dismissMode === "MANUAL"
+                  ? "Click (X) or tap anywhere to close and scan next"
+                  : "Tap to dismiss now · resumes scanning automatically"}
+              </p>
+            </div>
           </div>
         </div>
       )}

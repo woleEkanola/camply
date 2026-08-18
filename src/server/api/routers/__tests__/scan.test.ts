@@ -142,7 +142,7 @@ describe("scanRouter - processScan", () => {
     expect(delta.updatedCampers).toHaveLength(0);
   });
 
-  it("processes standard arrival check-in successfully and updates state", async () => {
+  it("processes Pickup Point boarding scan without mutating camp check-in status", async () => {
     const caller = appRouter.createCaller({
       prisma,
       session: {
@@ -155,10 +155,12 @@ describe("scanRouter - processScan", () => {
       organizationId: orgId,
       qrToken,
       station: "Pickup Point",
+      stationId: "PICKUP_POINT",
     });
 
     expect(result.result).toBe("SUCCESS");
-    expect(result.registration.status).toBe("CHECKED_IN");
+    expect(result.actionPerformed).toBe("Boarded the Bus");
+    expect(result.registration.status).toBe("APPROVED");
     
     // Verify scan event is saved
     const event = await prisma.scanEvent.findFirst({
@@ -167,7 +169,31 @@ describe("scanRouter - processScan", () => {
     expect(event).toBeTruthy();
     expect(event?.result).toBe("SUCCESS");
 
-    // Verify Checked-in status on registration
+    // Verify registration status stays APPROVED
+    const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(reg?.status).toBe("APPROVED");
+  });
+
+  it("processes Camp Arrival scan and marks camper as CHECKED_IN", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    const result = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Camp Arrival",
+      stationId: "CAMP_ARRIVAL",
+    });
+
+    expect(result.result).toBe("SUCCESS");
+    expect(result.actionPerformed).toBe("Checked In at Camp");
+    expect(result.registration.status).toBe("CHECKED_IN");
+    
     const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
     expect(reg?.status).toBe("CHECKED_IN");
     expect(reg?.checkedInAt).toBeTruthy();
@@ -186,25 +212,68 @@ describe("scanRouter - processScan", () => {
     await caller.scan.processScan({
       organizationId: orgId,
       qrToken,
-      station: "Pickup Point",
+      station: "Camp Arrival",
+      stationId: "CAMP_ARRIVAL",
     });
 
     // Scan again (Duplicate)
     const duplicateResult = await caller.scan.processScan({
       organizationId: orgId,
       qrToken,
-      station: "Pickup Point",
+      station: "Camp Arrival",
+      stationId: "CAMP_ARRIVAL",
     });
 
     expect(duplicateResult.result).toBe("DUPLICATE");
-    expect(duplicateResult.originalStation).toBe("Pickup Point");
-    expect(duplicateResult.originalVolunteerName).toContain("Test"); // Should return volunteer name
+    expect(duplicateResult.originalStation).toBe("Camp Arrival");
+    expect(duplicateResult.originalVolunteerName).toContain("Test");
     
     // Duplicate event should be logged in database
     const duplicateEvents = await prisma.scanEvent.findMany({
-      where: { registrationId, station: "Pickup Point", result: "DUPLICATE" },
+      where: { registrationId, station: "Camp Arrival", result: "DUPLICATE" },
     });
     expect(duplicateEvents).toHaveLength(1);
+  });
+
+  it("allows undoing a scan to revert state and remove duplicate lock", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    // Scan at Camp Arrival
+    const scanRes = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Camp Arrival",
+      stationId: "CAMP_ARRIVAL",
+    });
+    expect(scanRes.result).toBe("SUCCESS");
+
+    const regAfterScan = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(regAfterScan?.status).toBe("CHECKED_IN");
+
+    // Undo scan
+    const undoRes = await caller.scan.undoScan({
+      organizationId: orgId,
+      scanEventId: scanRes.scanEventId,
+    });
+    expect(undoRes.success).toBe(true);
+
+    const regAfterUndo = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(regAfterUndo?.status).toBe("APPROVED");
+
+    // Re-scan should succeed now (no duplicate error)
+    const rescan = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Camp Arrival",
+      stationId: "CAMP_ARRIVAL",
+    });
+    expect(rescan.result).toBe("SUCCESS");
   });
 
   it("checkout desk prompt works and updates state on submission", async () => {
@@ -382,7 +451,7 @@ describe("scanRouter - processScan", () => {
     });
 
     expect(result.result).toBe("SUCCESS");
-    expect(result.actionPerformed).toBe("Checked In at Lunch Gate");
+    expect(result.actionPerformed).toBe("Checked In at Camp");
 
     const distributions = await prisma.mealDistribution.findMany({ where: { registrationId } });
     expect(distributions).toHaveLength(0); // no meal record should have been created
