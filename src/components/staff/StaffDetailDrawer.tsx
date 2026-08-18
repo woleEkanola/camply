@@ -7,6 +7,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { AttendanceToggleBadge } from "@/components/ui/AttendanceToggleBadge";
 import { Select } from "@/components/ui/Input";
 import { SearchBar } from "@/components/ui/SearchBar";
 
@@ -80,6 +81,7 @@ export function StaffDetailDrawer({
   const setPrimaryDepartment = api.departmentOperations.setPrimaryDepartment.useMutation({ onSuccess: invalidate, onError: onErr });
   const addSecondaryDepartment = api.departmentOperations.addSecondaryDepartment.useMutation({ onSuccess: () => { setAddSecondaryId(""); invalidate(); }, onError: onErr });
   const removePerson = api.departmentOperations.removePerson.useMutation({ onSuccess: invalidate, onError: onErr });
+  const setAttendanceIntent = api.staff.setAttendanceIntent.useMutation({ onSuccess: invalidate, onError: onErr });
 
   const assignCampus = api.user.assignCampusToRep.useMutation({
     onSuccess: () => {
@@ -436,7 +438,16 @@ export function StaffDetailDrawer({
       open
       onClose={onClose}
       title={`${profile.firstName} ${profile.lastName}`}
-      subtitle={<StatusBadge status={profile.status} />}
+      subtitle={
+        <div className="flex items-center gap-2">
+          <StatusBadge status={profile.status} />
+          <AttendanceToggleBadge
+            status={profile.attendanceIntent}
+            onToggle={(next) => setAttendanceIntent.mutate({ id: staffId, intent: next })}
+            disabled={setAttendanceIntent.isPending}
+          />
+        </div>
+      }
     >
       <Tabs
         tabs={[

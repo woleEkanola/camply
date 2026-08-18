@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Select, Textarea } from "@/components/ui/Input";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { AttendanceToggleBadge } from "@/components/ui/AttendanceToggleBadge";
 import { Badge } from "@/components/ui/Badge";
-import { Tabs } from "@/components/ui/Tabs";
 import { Dialog } from "@/components/ui/Dialog";
 import { StatusDialog } from "@/app/admin/registrations/components/StatusDialog";
 import { CommunicationCard } from "@/app/admin/registrations/components/CommunicationCard";
@@ -70,32 +70,49 @@ export function RegistrationDetailsDrawer({
 
   // Queries
   const { data: registration, refetch } = api.registration.getById.useQuery({ id: registrationId });
-  const { data: documents } = api.document.listForRegistration.useQuery({ registrationId });
   const { data: timeline } = api.registration.timeline.useQuery({ registrationId });
-  const { data: review, refetch: refetchReview } = api.registration.getReview.useQuery({ registrationId });
-  const { data: tribes } = api.tribe.listByCamp.useQuery(
-    { campId: registration?.campId ?? "" },
-    { enabled: !!registration?.campId }
-  );
-  const { data: tribeSuggestion } = api.tribe.suggest.useQuery(
+  const { data: commTimeline } = api.communication.timelineForRegistration.useQuery(
     { registrationId },
-    { enabled: !!registrationId }
+    { enabled: activeTab === "communication" }
   );
-  const orgId = (registration?.camp as any)?.organizationId || (registration?.campus as any)?.organizationId;
-  const { data: org } = api.organization.getById.useQuery({ id: orgId ?? "" }, { enabled: !!orgId });
+
+  const orgId = registration?.campus?.organizationId;
+  const { data: org } = api.organization.getById.useQuery(
+    { id: orgId ?? "" },
+    { enabled: !!orgId }
+  );
   const isTwoStep = (org as any)?.approvalWorkflow === "TWO_STEP";
 
-  const { data: campusesData } = api.campus.getByOrganization.useQuery(
+  const { data: review, refetch: refetchReview } = api.registration.getReview.useQuery(
+    { registrationId },
+    { enabled: !!registrationId && isTwoStep }
+  );
+
+  const campId = registration?.campId;
+  const { data: formFields } = api.formField.list.useQuery(
+    { organizationId: orgId ?? "", campId: campId ?? "", audience: "CAMPER" },
+    { enabled: !!orgId && !!campId }
+  );
+
+  const { data: tribes } = api.tribe.listByCamp.useQuery(
+    { campId: campId ?? "" },
+    { enabled: !!campId }
+  );
+
+  const { data: tribeSuggestion } = api.tribe.getSuggestion.useQuery(
+    { registrationId },
+    { enabled: !!registrationId && activeTab === "assignments" }
+  );
+
+  const { data: campuses = [] } = api.campus.getAll.useQuery(
     { organizationId: orgId ?? "" },
     { enabled: !!orgId }
   );
-  const campuses = campusesData ?? [];
-  const { data: formFieldsData } = api.formField.list.useQuery(
-    { organizationId: orgId ?? "", audience: "CAMPER" },
-    { enabled: !!orgId }
+
+  const { data: documents } = api.registration.getDocuments.useQuery(
+    { registrationId },
+    { enabled: !!registrationId }
   );
-  const formFields = formFieldsData ?? [];
-  const { data: commTimeline } = api.communication.timelineForRegistration.useQuery({ registrationId });
 
   const invalidate = () => {
     refetch();
@@ -144,6 +161,7 @@ export function RegistrationDetailsDrawer({
   const transitionWithOptions = api.registration.transitionWithOptions.useMutation({ onSuccess: invalidate, onError: onErr });
   const advanceFromRequiresAction = api.registration.advanceFromRequiresAction.useMutation({ onSuccess: invalidate, onError: onErr });
   const reassignCampus = api.registration.reassignCampus.useMutation({ onSuccess: invalidate, onError: onErr });
+  const setAttendanceIntent = api.registration.setAttendanceIntent.useMutation({ onSuccess: invalidate, onError: onErr });
 
   if (!registration) {
     return (
@@ -183,18 +201,12 @@ export function RegistrationDetailsDrawer({
       })
     : "Yesterday, 9:15 PM";
 
-  // Opens the real ID-card PDF (server/idcard/sheetPdf.ts) in a new tab so the
-  // browser's own PDF viewer handles printing — window.print() on this drawer
-  // printed the whole app chrome around it, not the badge, since there was no
-  // @media print scoping to the badge content.
   const handlePrintBadge = () => {
     window.open(`/api/registrations/${registration.id}/camp-id-card.pdf`, "_blank", "noopener,noreferrer");
   };
 
   const userRole = (session?.user as any)?.role;
   const isOrgAdmin = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(userRole);
-  // endorse() leaves status at PENDING (only the two-step admin's own Approve moves it
-  // forward), so this is the only way to tell a reviewer "you already recommended this".
   const endorsed = isTwoStep && registration.status === "PENDING" && isEndorsed(review);
   const isApproved = ["APPROVED", "CHECKED_IN", "COMPLETED"].includes(registration?.status?.toUpperCase());
 
@@ -326,8 +338,15 @@ export function RegistrationDetailsDrawer({
                 </div>
               </div>
 
-              <div className="shrink-0 flex flex-col items-end gap-1">
+              <div className="shrink-0 flex flex-col items-end gap-1.5">
                 <StatusBadge status={registration.status} />
+                <AttendanceToggleBadge
+                  status={registration.attendanceIntent}
+                  onToggle={(next) =>
+                    setAttendanceIntent.mutate({ registrationId, intent: next })
+                  }
+                  disabled={setAttendanceIntent.isPending}
+                />
                 {endorsed && <Badge tone="info">Recommended</Badge>}
               </div>
             </div>
@@ -405,6 +424,16 @@ export function RegistrationDetailsDrawer({
                     <div className="flex items-center justify-between">
                       <span className="text-neutral-500 font-medium">Updated</span>
                       <span className="font-bold text-neutral-900">{updatedDate}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-neutral-500 font-medium">Attendance</span>
+                      <AttendanceToggleBadge
+                        status={registration.attendanceIntent}
+                        onToggle={(next) =>
+                          setAttendanceIntent.mutate({ registrationId, intent: next })
+                        }
+                        disabled={setAttendanceIntent.isPending}
+                      />
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-neutral-500 font-medium">Source</span>

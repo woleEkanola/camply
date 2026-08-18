@@ -180,6 +180,7 @@ export const staffRouter = createTRPCRouter({
       departmentId: z.string().optional(),
       assignmentStatus: z.enum(["ASSIGNED", "UNASSIGNED"]).optional(),
       volunteerCategory: z.string().optional(),
+      attendanceIntent: z.enum(["COMING", "NOT_COMING"]).optional(),
       hostelId: z.string().optional(),
       floorId: z.string().optional(),
       roomId: z.string().optional(),
@@ -197,6 +198,7 @@ export const staffRouter = createTRPCRouter({
         type: input.type,
         deletedAt: null,
         ...(input.status && { status: input.status }),
+        ...(input.attendanceIntent && { attendanceIntent: input.attendanceIntent }),
         ...(input.venueId && { assignedVenueId: input.venueId }),
         ...(input.campusId && { preferredCampusId: input.campusId }),
         ...(input.gender && { gender: normalizeGender(input.gender) ?? input.gender }),
@@ -427,6 +429,64 @@ export const staffRouter = createTRPCRouter({
       return { count: input.ids.length };
     }),
 
+  setAttendanceIntent: protectedProcedure
+    .input(
+      z.object({
+        staffId: z.string(),
+        intent: z.enum(["COMING", "NOT_COMING"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.staffId } });
+      if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+
+      return await ctx.prisma.staffProfile.update({
+        where: { id: input.staffId },
+        data: {
+          attendanceIntent: input.intent,
+          attendanceNote: input.note !== undefined ? input.note : undefined,
+          attendanceUpdatedAt: new Date(),
+        },
+      });
+    }),
+
+  bulkSetAttendanceIntent: protectedProcedure
+    .input(
+      z.object({
+        staffIds: z.array(z.string()),
+        intent: z.enum(["COMING", "NOT_COMING"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const successes: string[] = [];
+      const failures: { id: string; error: string }[] = [];
+
+      for (const id of input.staffIds) {
+        try {
+          const profile = await ctx.prisma.staffProfile.findUnique({ where: { id } });
+          if (!profile) throw new Error("Staff profile not found");
+          await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+
+          await ctx.prisma.staffProfile.update({
+            where: { id },
+            data: {
+              attendanceIntent: input.intent,
+              attendanceNote: input.note !== undefined ? input.note : undefined,
+              attendanceUpdatedAt: new Date(),
+            },
+          });
+          successes.push(id);
+        } catch (err: any) {
+          failures.push({ id, error: err.message || "Failed to update attendance" });
+        }
+      }
+
+      return { successes, failures };
+    }),
+
   resendApprovalEmails: protectedProcedure
     .input(z.object({ ids: z.array(z.string()).min(1).max(100) }))
     .mutation(async ({ ctx, input }) => {
@@ -536,6 +596,65 @@ export const staffRouter = createTRPCRouter({
         data: { status: "REJECTED", rejectedAt: new Date(), rejectionReason: input.reason, reviewerId: ctx.userId },
       });
       return { count: input.ids.length };
+    }),
+
+  setAttendanceIntent: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        intent: z.enum(["COMING", "NOT_COMING"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
+      if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+      return ctx.prisma.staffProfile.update({
+        where: { id: input.id },
+        data: {
+          attendanceIntent: input.intent,
+          attendanceNote: input.note !== undefined ? input.note : profile.attendanceNote,
+          attendanceUpdatedAt: new Date(),
+        },
+      });
+    }),
+
+  bulkSetAttendanceIntent: protectedProcedure
+    .input(
+      z.object({
+        ids: z.array(z.string()),
+        intent: z.enum(["COMING", "NOT_COMING"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const successes: string[] = [];
+      const failures: Array<{ id: string; reason: string }> = [];
+
+      for (const id of input.ids) {
+        try {
+          const profile = await ctx.prisma.staffProfile.findUnique({ where: { id } });
+          if (!profile) {
+            failures.push({ id, reason: "Staff profile not found" });
+            continue;
+          }
+          await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+          await ctx.prisma.staffProfile.update({
+            where: { id },
+            data: {
+              attendanceIntent: input.intent,
+              attendanceNote: input.note !== undefined ? input.note : profile.attendanceNote,
+              attendanceUpdatedAt: new Date(),
+            },
+          });
+          successes.push(id);
+        } catch (err: any) {
+          failures.push({ id, reason: err.message || "Failed to update attendance" });
+        }
+      }
+
+      return { successes, failures };
     }),
 
   // ─── Admin: assignment ──────────────────────────────────────────────────

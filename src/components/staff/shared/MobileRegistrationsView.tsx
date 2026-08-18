@@ -271,11 +271,23 @@ export function MobileRegistrationCard({
           </div>
         </div>
 
-        {/* Status Badge */}
-        <div className="shrink-0">
+        {/* Status & Attendance Badge */}
+        <div className="shrink-0 flex flex-col items-end gap-1">
           <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-[11px] uppercase tracking-wider", statusInfo.badgeClass)}>
             {statusInfo.label}
           </span>
+          {registration.attendanceIntent && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold",
+                registration.attendanceIntent === "NOT_COMING"
+                  ? "bg-rose-500/15 text-rose-600 border border-rose-500/30"
+                  : "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30"
+              )}
+            >
+              {registration.attendanceIntent === "NOT_COMING" ? "Not Coming" : "Coming"}
+            </span>
+          )}
         </div>
       </div>
 

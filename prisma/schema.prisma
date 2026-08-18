@@ -558,6 +558,9 @@ model Registration {
   qrToken                       String?   @unique
   submittedAt                   DateTime?
   approvedAt                    DateTime?
+  attendanceIntent              String    @default("COMING") // COMING | NOT_COMING
+  attendanceNote                String?
+  attendanceUpdatedAt           DateTime?
   rejectionReason               String?
   correctionRequest             String?
   reviewerId                    String?
@@ -1244,6 +1247,9 @@ model StaffProfile {
   campId         String
   type           StaffType
   status         StaffStatus @default(PENDING)
+  attendanceIntent    String    @default("COMING") // COMING | NOT_COMING
+  attendanceNote      String?
+  attendanceUpdatedAt DateTime?
 
   // Personal
   firstName     String

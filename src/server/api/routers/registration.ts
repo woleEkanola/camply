@@ -1407,6 +1407,72 @@ export const registrationRouter = createTRPCRouter({
       return { successes, failures };
     }),
 
+  setAttendanceIntent: protectedProcedure
+    .input(
+      z.object({
+        registrationId: z.string(),
+        intent: z.enum(["COMING", "NOT_COMING"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const registration = await ctx.prisma.registration.findUniqueOrThrow({
+        where: { id: input.registrationId },
+        include: { campus: true },
+      });
+      await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+
+      return await ctx.prisma.registration.update({
+        where: { id: input.registrationId },
+        data: {
+          attendanceIntent: input.intent,
+          attendanceNote: input.note !== undefined ? input.note : undefined,
+          attendanceUpdatedAt: new Date(),
+        },
+      });
+    }),
+
+  bulkSetAttendanceIntent: protectedProcedure
+    .input(
+      z.object({
+        registrationIds: z.array(z.string()),
+        intent: z.enum(["COMING", "NOT_COMING"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const currentUser = ctx.session?.user;
+      if (!currentUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const successes: string[] = [];
+      const failures: { id: string; error: string }[] = [];
+
+      for (const id of input.registrationIds) {
+        try {
+          const registration = await ctx.prisma.registration.findUniqueOrThrow({
+            where: { id },
+            include: { campus: true },
+          });
+          await assertOrgAdminOrCampusRep(ctx, registration.campus.organizationId, registration.campusId);
+          await ctx.prisma.registration.update({
+            where: { id },
+            data: {
+              attendanceIntent: input.intent,
+              attendanceNote: input.note !== undefined ? input.note : undefined,
+              attendanceUpdatedAt: new Date(),
+            },
+          });
+          successes.push(id);
+        } catch (err: any) {
+          failures.push({ id, error: err.message || "Failed to update attendance" });
+        }
+      }
+
+      return { successes, failures };
+    }),
+
   getCheckInStats: protectedProcedure
     .input(z.object({ organizationId: z.string(), campId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
@@ -2055,6 +2121,7 @@ export const registrationRouter = createTRPCRouter({
       // UNASSIGNED = no room; ROOM_ONLY = room set but no bed within it
       // (reachable via accommodation.assignCamperToRoomOnly); ASSIGNED = has a bed.
       accommodationState: z.enum(["UNASSIGNED", "ROOM_ONLY", "ASSIGNED"]).optional(),
+      attendanceIntent: z.enum(["COMING", "NOT_COMING"]).optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
       limit: z.number().min(1).max(100).default(25),
@@ -2103,6 +2170,7 @@ export const registrationRouter = createTRPCRouter({
         ...baseWhere,
         ...(input.duplicatesOnly && { id: { in: Array.from(duplicateRegIds) } }),
         ...(input.status && { status: input.status }),
+        ...(input.attendanceIntent && { attendanceIntent: input.attendanceIntent }),
         ...(input.accommodationState === "UNASSIGNED" && { roomId: null }),
         ...(input.accommodationState === "ROOM_ONLY" && { roomId: { not: null }, bed: null }),
         ...(input.accommodationState === "ASSIGNED" && { bed: { isNot: null } }),

@@ -44,6 +44,7 @@ import { TeacherRecruitmentPanel } from "@/components/staff/TeacherRecruitmentPa
 import { CampusQuotasCard } from "@/components/staff/CampusQuotasCard";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 import { ExportMenuButton } from "@/components/export/ExportMenuButton";
+import { AttendanceToggleBadge } from "@/components/ui/AttendanceToggleBadge";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 const VOLUNTEER_CATEGORIES = ["Registration", "Medical", "Kitchen", "Transport", "Security", "Media", "Logistics", "Technical", "Cleaning", "Protocol"];
@@ -116,13 +117,14 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [floorFilter, setFloorFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState("");
   const [bedStatusFilter, setBedStatusFilter] = useState<"" | "ASSIGNED" | "UNASSIGNED">("");
+  const [attendanceFilter, setAttendanceFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(50);
   // hostel/room/bed/tribe are hideable but off by default (same pattern as
   // the columns above) — widening every row by four extra columns pushed a
   // plain row-center click (staff-admin-approval.spec.ts) onto the inline
   // Department <select>, opening its dropdown instead of navigating.
-  const [visibleColumnIds, setVisibleColumnIds] = useState(["campus", "preference", "department", "skills", "status", "approval-email"]);
+  const [visibleColumnIds, setVisibleColumnIds] = useState(["attendance", "campus", "preference", "department", "skills", "status", "approval-email"]);
 
   useEffect(() => {
     const savedPageSize = Number(localStorage.getItem(`camply-${type.toLowerCase()}-page-size`));
@@ -154,7 +156,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   useEffect(() => {
     setCursor(undefined);
     setAllLoadedItems([]);
-  }, [debouncedSearchQuery, statusFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter, departmentFilter, assignmentFilter, hostelFilter, floorFilter, roomFilter, bedStatusFilter, pageSize]);
+  }, [debouncedSearchQuery, statusFilter, attendanceFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter, departmentFilter, assignmentFilter, hostelFilter, floorFilter, roomFilter, bedStatusFilter, pageSize]);
 
   const { data: stats } = api.staff.stats.useQuery({ organizationId, campId, type }, { enabled: !!organizationId && !!campId });
   const { data, isLoading } = api.staff.adminList.useQuery(
@@ -163,6 +165,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       campId,
       type,
       status: statusFilter || undefined,
+      attendanceIntent: attendanceFilter ? (attendanceFilter as "COMING" | "NOT_COMING") : undefined,
       q: debouncedSearchQuery || undefined,
       campusId: campusFilter || undefined,
       venueId: venueFilter || undefined,
@@ -286,6 +289,19 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     onSuccess: () => { setSuccess(`${type === "TEACHER" ? "Teacher" : "Volunteer"} manual profile created successfully!`); setIsAddOpen(false); setAddEmail(""); setAddFormValues({}); invalidate(); setTimeout(() => setSuccess(""), 5000); },
     onError: (err) => setError(err.message),
   });
+  const setAttendanceIntent = api.staff.setAttendanceIntent.useMutation({
+    onSuccess: () => invalidate(),
+    onError: (err) => setError(err.message),
+  });
+  const bulkSetAttendanceIntent = api.staff.bulkSetAttendanceIntent.useMutation({
+    onSuccess: (result) => {
+      setSuccess(`Updated attendance for ${result.successes.length} profile${result.successes.length === 1 ? "" : "s"}.`);
+      setSelectedIds([]);
+      invalidate();
+      setTimeout(() => setSuccess(""), 5000);
+    },
+    onError: (err) => setError(err.message),
+  });
 
   const columns: Column<any>[] = [
     {
@@ -309,6 +325,20 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             <div className="truncate text-xs text-txt-muted">{row.phone}</div>
           </div>
         </div>
+      ),
+    },
+    {
+      id: "attendance",
+      header: "Attendance",
+      hideable: true,
+      accessor: (row) => (
+        <AttendanceToggleBadge
+          status={row.attendanceIntent}
+          onToggle={(next) =>
+            setAttendanceIntent.mutate({ staffId: row.id, intent: next })
+          }
+          disabled={setAttendanceIntent.isPending}
+        />
       ),
     },
     { id: "campus", header: "Campus", hideable: true, accessor: (row) => row.preferredCampus?.name || "—" },
@@ -612,6 +642,11 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
 
             {filtersOpen && (
               <div className="grid gap-3 rounded-xl border border-border-default bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="teacher-advanced-filters">
+                <Select value={attendanceFilter} onChange={(event) => setAttendanceFilter(event.target.value)} aria-label="Filter by attendance">
+                  <option value="">All attendance</option>
+                  <option value="COMING">Coming</option>
+                  <option value="NOT_COMING">Not Coming</option>
+                </Select>
                 <Select value={genderFilter} onChange={(event) => setGenderFilter(event.target.value)} aria-label="Filter by gender">
                   <option value="">All genders</option><option value="MALE">Male</option><option value="FEMALE">Female</option>
                 </Select>
@@ -645,6 +680,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             {hasActiveFilters && (
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-neutral-500">Active filters:</span>
+                {attendanceFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{attendanceFilter === "COMING" ? "Coming" : "Not Coming"}</span>}
                 {campusFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{filterCampuses.find((c: any) => c.id === campusFilter)?.name}</span>}
                 {venueFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{filterVenues.find((v: any) => v.id === venueFilter)?.name}</span>}
                 {genderFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{genderFilter}</span>}
@@ -653,7 +689,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                 {hostelFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{structureData?.find((h) => h.id === hostelFilter)?.name}</span>}
                 {roomFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{roomOptions.find((r) => r.id === roomFilter)?.name}</span>}
                 {bedStatusFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{bedStatusFilter === "ASSIGNED" ? "Bed assigned" : "No bed"}</span>}
-                <button onClick={() => { setCampusFilter(""); setVenueFilter(""); setGenderFilter(""); setTribeFilter(""); setCategoryFilter(""); setDepartmentFilter(""); setAssignmentFilter(""); setHostelFilter(""); setFloorFilter(""); setRoomFilter(""); setBedStatusFilter(""); }} className="text-accent-600 hover:underline">Clear all</button>
+                <button onClick={() => { setAttendanceFilter(""); setCampusFilter(""); setVenueFilter(""); setGenderFilter(""); setTribeFilter(""); setCategoryFilter(""); setDepartmentFilter(""); setAssignmentFilter(""); setHostelFilter(""); setFloorFilter(""); setRoomFilter(""); setBedStatusFilter(""); }} className="text-accent-600 hover:underline">Clear all</button>
               </div>
             )}
 
@@ -772,6 +808,24 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           </div>
           <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
             <Button size="sm" className="shrink-0" loading={bulkApprove.isPending} onClick={() => openEmailAction("APPROVE")}><CheckIcon className="mr-1 h-4 w-4" /> Approve</Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="shrink-0 text-emerald-700 dark:text-emerald-300 border-emerald-300"
+              loading={bulkSetAttendanceIntent.isPending}
+              onClick={() => bulkSetAttendanceIntent.mutate({ staffIds: selectedIds, intent: "COMING" })}
+            >
+              <CheckIcon className="mr-1 h-4 w-4 text-emerald-600" /> Mark Coming
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="shrink-0 text-rose-700 dark:text-rose-300 border-rose-300"
+              loading={bulkSetAttendanceIntent.isPending}
+              onClick={() => bulkSetAttendanceIntent.mutate({ staffIds: selectedIds, intent: "NOT_COMING" })}
+            >
+              <XMarkIcon className="mr-1 h-4 w-4 text-rose-600" /> Mark Not Coming
+            </Button>
             {type === "TEACHER" && (
               <Button size="sm" variant="secondary" className="shrink-0" loading={resendApprovalEmails.isPending} onClick={() => openEmailAction("RESEND")}><EnvelopeIcon className="mr-1 h-4 w-4" /> Email</Button>
             )}
