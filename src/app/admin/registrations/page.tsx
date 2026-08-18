@@ -34,6 +34,7 @@ import { Squares2X2Icon, TableCellsIcon, SparklesIcon } from "@heroicons/react/2
 import { MobileRegistrationCard, MobileRegistrationsView, formatDuplicateSiblingsHint } from "@/components/staff/shared/MobileRegistrationsView";
 import { RegistrationDetailsDrawer } from "@/components/staff/shared/RegistrationDetailsDrawer";
 import { MedicalDataCleanerModal } from "@/components/medical/MedicalDataCleanerModal";
+import { AttendanceToggleBadge } from "@/components/ui/AttendanceToggleBadge";
 
 type ExtendedUser = {
   id: string;
@@ -76,6 +77,7 @@ function RegistrationsPage() {
   const [selectedRegistration, setSelectedRegistration] = useState<string | null>(null);
   const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [attendanceFilter, setAttendanceFilter] = useState<"" | "COMING" | "NOT_COMING">("");
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [unassignedBedOnly, setUnassignedBedOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -146,7 +148,7 @@ function RegistrationsPage() {
   const formFields = formFieldsData;
   const isTwoStep = (org as any)?.approvalWorkflow === "TWO_STEP";
 
-  const DEFAULT_COLUMNS = ["camper", "campus", "regNumber", "status", "updated"];
+  const DEFAULT_COLUMNS = ["camper", "attendance", "campus", "regNumber", "status", "updated"];
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_COLUMNS);
 
@@ -203,6 +205,22 @@ function RegistrationsPage() {
     onError: (err) => {
       setBulkResult({ message: err.message, type: "error" });
     },
+  });
+
+  const setAttendanceIntent = api.registration.setAttendanceIntent.useMutation({
+    onSuccess: () => {
+      invalidateRegistrations();
+    },
+    onError: (err) => setBulkResult({ message: err.message, type: "error" }),
+  });
+
+  const bulkSetAttendanceIntent = api.registration.bulkSetAttendanceIntent.useMutation({
+    onSuccess: (res) => {
+      setBulkResult({ message: `Updated attendance for ${res.updatedCount} registration(s).`, type: "success" });
+      setSelectedIds([]);
+      invalidateRegistrations();
+    },
+    onError: (err) => setBulkResult({ message: err.message, type: "error" }),
   });
 
   const [bulkReassignOpen, setBulkReassignOpen] = useState(false);
@@ -272,7 +290,7 @@ function RegistrationsPage() {
   useEffect(() => {
     setCursor(undefined);
     setAccumulatedItems([]);
-  }, [filterCampus, filterStatus, reviewStateFilter, debouncedSearchQuery, duplicatesOnly, unassignedBedOnly]);
+  }, [filterCampus, filterStatus, attendanceFilter, reviewStateFilter, debouncedSearchQuery, duplicatesOnly, unassignedBedOnly]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -290,6 +308,7 @@ function RegistrationsPage() {
       campId: activeCamp?.id,
       campusId: filterCampus || undefined,
       status: filterStatus || undefined,
+      attendanceIntent: attendanceFilter || undefined,
       reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
       duplicatesOnly: duplicatesOnly || undefined,
       accommodationState: unassignedBedOnly ? "UNASSIGNED" : undefined,
@@ -451,6 +470,21 @@ function RegistrationsPage() {
             </div>
             <div className="text-xs text-neutral-500">{row.camper?.user?.email}</div>
           </div>
+        ),
+      });
+    }
+
+    if (visibleColumns.includes("attendance")) {
+      cols.push({
+        header: renderSortableHeader("Attendance", "attendance"),
+        accessor: (row) => (
+          <AttendanceToggleBadge
+            status={row.attendanceIntent}
+            onToggle={(next) =>
+              setAttendanceIntent.mutate({ registrationId: row.id, intent: next })
+            }
+            disabled={setAttendanceIntent.isPending}
+          />
         ),
       });
     }
@@ -840,6 +874,32 @@ function RegistrationsPage() {
             <Button
               size="sm"
               variant="secondary"
+              loading={bulkSetAttendanceIntent.isPending}
+              onClick={() =>
+                bulkSetAttendanceIntent.mutate({
+                  registrationIds: selectedIds,
+                  intent: "COMING",
+                })
+              }
+            >
+              Mark Coming
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={bulkSetAttendanceIntent.isPending}
+              onClick={() =>
+                bulkSetAttendanceIntent.mutate({
+                  registrationIds: selectedIds,
+                  intent: "NOT_COMING",
+                })
+              }
+            >
+              Mark Not Coming
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
               loading={bulkInvitationResendMut.isPending}
               disabled={!activeCamp?.id}
               onClick={() => {
@@ -858,11 +918,16 @@ function RegistrationsPage() {
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="grid flex-1 gap-3 md:grid-cols-3">
               <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
-              <Select value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
+              <Select aria-label="Filter by campus" value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
                 <option value="">All Campuses</option>
                 {campuses.map((c: any) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
+              </Select>
+              <Select aria-label="Filter by attendance" value={attendanceFilter} onChange={(e) => setAttendanceFilter(e.target.value as any)}>
+                <option value="">All Attendance (Coming/Not Coming)</option>
+                <option value="COMING">Coming Only</option>
+                <option value="NOT_COMING">Not Coming Only</option>
               </Select>
               <Select
                 data-testid="registration-status-filter"
@@ -948,6 +1013,7 @@ function RegistrationsPage() {
                           <div className="space-y-1">
                             {[
                               { key: "camper", label: "Camper Name" },
+                              { key: "attendance", label: "Attendance (Coming/Not Coming)" },
                               { key: "email", label: "Parent Email" },
                               { key: "campus", label: "Selected Campus" },
                               { key: "regNumber", label: "Registration #" },
