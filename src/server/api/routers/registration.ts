@@ -445,7 +445,9 @@ export const registrationRouter = createTRPCRouter({
           campus: true,
           camp: true,
           venue: true,
-          tribe: true
+          tribe: true,
+          room: { include: { hostel: true } },
+          bed: true,
         }
       });
 

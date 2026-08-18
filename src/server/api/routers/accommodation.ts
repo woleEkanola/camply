@@ -725,6 +725,238 @@ export const accommodationRouter = createTRPCRouter({
       return ctx.prisma.registration.update({ where: { id: input.registrationId }, data: { roomId: input.roomId } });
     }),
 
+  // ─── Staff housing assignment ──────────────────────────────────────────
+  assignStaffToBed: protectedProcedure
+    .input(z.object({ staffProfileId: z.string(), bedId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const bed = await ctx.prisma.bed.findUnique({ where: { id: input.bedId }, include: { room: { include: { hostel: true } } } });
+      if (!bed) throw new TRPCError({ code: "NOT_FOUND", message: "Bed not found" });
+      await assertOrgAdmin(ctx, bed.room.hostel.organizationId);
+
+      const staff = await ctx.prisma.staffProfile.findFirst({
+        where: { id: input.staffProfileId, organizationId: bed.room.hostel.organizationId, deletedAt: null },
+      });
+      if (!staff) throw new TRPCError({ code: "NOT_FOUND", message: "Staff profile not found in this organization" });
+
+      try {
+        await ctx.prisma.$transaction(async (tx) => {
+          await accommodationEngine.assignBedInTx(tx, {
+            bedId: input.bedId,
+            occupant: {
+              kind: "STAFF",
+              staffProfileId: staff.id,
+              name: `${staff.firstName} ${staff.lastName}`.trim(),
+              gender: staff.gender,
+              dateOfBirth: staff.dateOfBirth,
+              groupId: staff.assignedTribeId ?? staff.departmentId,
+              tribeId: staff.assignedTribeId,
+              campusId: staff.preferredCampusId,
+            },
+            actorId: ctx.userId,
+          });
+        });
+      } catch (err) {
+        if (err instanceof accommodationEngine.BedAllocationError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
+        }
+        throw err;
+      }
+
+      return { success: true };
+    }),
+
+  unassignStaffFromBed: protectedProcedure
+    .input(z.object({ staffProfileId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const staff = await ctx.prisma.staffProfile.findUnique({ where: { id: input.staffProfileId } });
+      if (!staff) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdmin(ctx, staff.organizationId);
+
+      await ctx.prisma.$transaction([
+        ctx.prisma.bed.updateMany({ where: { staffProfileId: input.staffProfileId }, data: { staffProfileId: null, status: "AVAILABLE" } }),
+        ctx.prisma.staffProfile.update({ where: { id: input.staffProfileId }, data: { assignedRoomId: null, assignedHostelId: null } }),
+      ]);
+      return { success: true };
+    }),
+
+  // ─── Available Spaces Explorer ──────────────────────────────────────────
+  // Hierarchical view of hostels -> floors -> rooms -> beds with capacity & availability
+  getAvailableSpaces: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        campId: z.string().optional(),
+        venueId: z.string().optional(),
+        gender: z.string().nullable().optional(),
+        occupantType: z.enum(["CAMPER", "STAFF"]).default("CAMPER"),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const currentUser = ctx.session!.user;
+      const isOrgAdmin =
+        currentUser.role === "SUPER_ADMIN" ||
+        (["OWNER", "ADMIN"].includes(currentUser.role) && currentUser.organizationId === input.organizationId);
+      const isCampusRep = (currentUser.managedCampuses?.length ?? 0) > 0 && currentUser.organizationId === input.organizationId;
+      const isStaffOperational = ["TEACHER", "VOLUNTEER"].includes(currentUser.role);
+      const hasPermission = isOrgAdmin || isCampusRep || (isStaffOperational && currentUser.organizationId === input.organizationId);
+      if (!hasPermission) throw new TRPCError({ code: "FORBIDDEN" });
+
+      const normalizedGender = normalizeGender(input.gender);
+
+      const hostels = await ctx.prisma.hostel.findMany({
+        where: {
+          organizationId: input.organizationId,
+          deletedAt: null,
+          ...(input.venueId ? { venueId: input.venueId } : {}),
+          ...(input.campId && !input.venueId ? { venue: { campId: input.campId, deletedAt: null } } : {}),
+        },
+        include: {
+          venue: { select: { id: true, name: true, campId: true } },
+          floors: {
+            where: { deletedAt: null },
+            orderBy: [{ displayOrder: "asc" }, { level: "asc" }],
+          },
+          rooms: {
+            where: { deletedAt: null },
+            include: {
+              beds: {
+                where: { deletedAt: null },
+                include: {
+                  registration: { select: { id: true, camper: { select: { name: true, gender: true } }, tribe: { select: { name: true } } } },
+                  staffProfile: { select: { id: true, firstName: true, lastName: true, type: true, gender: true, assignedTribe: { select: { name: true } } } },
+                },
+                orderBy: [{ label: "asc" }, { id: "asc" }],
+              },
+            },
+            orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+          },
+        },
+        orderBy: [{ name: "asc" }],
+      });
+
+      let totalAvailableBeds = 0;
+      let totalOccupiedBeds = 0;
+      let totalCapacity = 0;
+
+      const formattedHostels = hostels.map((hostel) => {
+        const hostelGenderNorm = normalizeGender(hostel.gender);
+        const isGenderCompatible =
+          !normalizedGender ||
+          !hostelGenderNorm ||
+          hostelGenderNorm === "MIXED" ||
+          hostelGenderNorm === normalizedGender;
+
+        let hostelTotalBeds = 0;
+        let hostelAvailableBeds = 0;
+        let hostelOccupiedBeds = 0;
+
+        const formattedRooms = hostel.rooms.map((room) => {
+          const roomBeds = room.beds.map((bed) => {
+            const isAvailable = bed.status === "AVAILABLE" && !bed.registrationId && !bed.staffProfileId;
+            const occupant = bed.registration
+              ? {
+                  id: bed.registration.id,
+                  name: bed.registration.camper.name,
+                  kind: "CAMPER" as const,
+                  gender: bed.registration.camper.gender,
+                  tribeName: bed.registration.tribe?.name ?? null,
+                }
+              : bed.staffProfile
+              ? {
+                  id: bed.staffProfile.id,
+                  name: `${bed.staffProfile.firstName} ${bed.staffProfile.lastName}`.trim(),
+                  kind: "STAFF" as const,
+                  type: bed.staffProfile.type,
+                  gender: bed.staffProfile.gender,
+                  tribeName: bed.staffProfile.assignedTribe?.name ?? null,
+                }
+              : null;
+
+            return {
+              id: bed.id,
+              label: bed.label,
+              status: bed.status,
+              isAvailable,
+              occupant,
+            };
+          });
+
+          const roomAvailable = roomBeds.filter((b) => b.isAvailable).length;
+          const roomOccupied = roomBeds.filter((b) => !b.isAvailable).length;
+          const roomTotal = roomBeds.length;
+
+          hostelTotalBeds += roomTotal;
+          hostelAvailableBeds += roomAvailable;
+          hostelOccupiedBeds += roomOccupied;
+
+          return {
+            id: room.id,
+            name: room.name,
+            floorId: room.floorId,
+            roomType: room.roomType,
+            capacity: room.capacity ?? roomTotal,
+            availableBedsCount: roomAvailable,
+            occupiedBedsCount: roomOccupied,
+            totalBedsCount: roomTotal,
+            hasAvailableSpace: roomAvailable > 0,
+            beds: roomBeds,
+          };
+        });
+
+        totalAvailableBeds += hostelAvailableBeds;
+        totalOccupiedBeds += hostelOccupiedBeds;
+        totalCapacity += hostelTotalBeds;
+
+        // Group rooms by floor
+        const floorsMap = new Map<string, { id: string; name: string; level: number; rooms: typeof formattedRooms }>();
+        for (const floor of hostel.floors) {
+          floorsMap.set(floor.id, { id: floor.id, name: floor.name, level: floor.level, rooms: [] });
+        }
+        const noFloorRooms: typeof formattedRooms = [];
+
+        for (const room of formattedRooms) {
+          if (room.floorId && floorsMap.has(room.floorId)) {
+            floorsMap.get(room.floorId)!.rooms.push(room);
+          } else {
+            noFloorRooms.push(room);
+          }
+        }
+
+        const formattedFloors = Array.from(floorsMap.values());
+        if (noFloorRooms.length > 0) {
+          formattedFloors.unshift({
+            id: "__none__",
+            name: "Main / Ground Floor",
+            level: 0,
+            rooms: noFloorRooms,
+          });
+        }
+
+        return {
+          id: hostel.id,
+          name: hostel.name,
+          gender: hostel.gender,
+          venueId: hostel.venueId,
+          venueName: hostel.venue?.name,
+          isGenderCompatible,
+          totalBedsCount: hostelTotalBeds,
+          availableBedsCount: hostelAvailableBeds,
+          occupiedBedsCount: hostelOccupiedBeds,
+          hasAvailableSpace: hostelAvailableBeds > 0,
+          floors: formattedFloors,
+          rooms: formattedRooms,
+        };
+      });
+
+      return {
+        hostels: formattedHostels,
+        totalAvailableBeds,
+        totalOccupiedBeds,
+        totalCapacity,
+        hasAvailableSpace: totalAvailableBeds > 0,
+      };
+    }),
+
   // Auto-assigns every unassigned APPROVED camper/teacher/volunteer at this
   // venue's camp into an available bed, using the camp's bed allocation
   // rules. Never fails the whole batch on one occupant's error.

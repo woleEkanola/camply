@@ -14,6 +14,7 @@ import {
   PrinterIcon,
   EnvelopeIcon,
 } from "@heroicons/react/24/outline";
+import { StaffEditModal } from "@/components/staff/StaffEditModal";
 
 export interface StaffWorkspaceTab {
   id: string;
@@ -34,6 +35,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(defaultTab ?? tabs[0]?.id);
   const utils = api.useUtils();
+  const [editOpen, setEditOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [resendOpen, setResendOpen] = useState(false);
@@ -129,6 +131,13 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
                   Resend approval email
                 </Button>
               )}
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setEditOpen(true)}
+              >
+                Edit Details
+              </Button>
               <Button
                 size="sm"
                 variant="secondary"
@@ -254,6 +263,21 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
           </div>
         </div>
       </Dialog>
+
+      {/* Edit modal */}
+      {editOpen && (
+        <StaffEditModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          staffId={staffId}
+          organizationId={profile.organizationId}
+          campId={profile.campId}
+          onSuccess={() => {
+            utils.staff.getById.invalidate({ id: staffId });
+            utils.staff.adminList.invalidate();
+          }}
+        />
+      )}
     </div>
   );
 }

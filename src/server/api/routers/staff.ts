@@ -113,6 +113,87 @@ export const staffRouter = createTRPCRouter({
       });
     }),
 
+  adminUpdateProfile: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        firstName: z.string().min(1, "First name is required").optional(),
+        lastName: z.string().min(1, "Last name is required").optional(),
+        preferredName: z.string().optional().nullable(),
+        email: z.string().email("Valid email required").optional(),
+        phone: z.string().optional(),
+        gender: z.string().optional().nullable(),
+        dateOfBirth: z.union([z.string(), z.date()]).transform((val) => (val ? new Date(val) : null)).optional().nullable(),
+        church: z.string().optional().nullable(),
+        churchDepartment: z.string().optional().nullable(),
+        yearsServing: z.string().optional().nullable(),
+        workerStatus: z.string().optional().nullable(),
+        volunteerCategory: z.string().optional().nullable(),
+        preferredAgeGroup: z.string().optional().nullable(),
+        areasOfStrength: z.string().optional().nullable(),
+        previousCampExperience: z.string().optional().nullable(),
+        skills: z.array(z.string()).optional(),
+        availability: z.string().optional().nullable(),
+        emergencyContactName: z.string().optional().nullable(),
+        emergencyContactPhone: z.string().optional().nullable(),
+        emergencyContactRelationship: z.string().optional().nullable(),
+        medicalConditions: z.string().optional().nullable(),
+        allergies: z.string().optional().nullable(),
+        fieldValues: z.array(z.object({ fieldId: z.string(), value: z.string() })).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.staffProfile.findUnique({
+        where: { id: input.id },
+        include: { fieldValues: true },
+      });
+      if (!existing || existing.deletedAt) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Staff profile not found" });
+      }
+
+      await assertOrgAdminOrCampusRep(ctx, existing.organizationId);
+
+      const { id, fieldValues, ...profileData } = input;
+
+      return ctx.prisma.$transaction(async (tx: any) => {
+        const updatePayload: Record<string, any> = {};
+        for (const [key, value] of Object.entries(profileData)) {
+          if (value !== undefined) {
+            updatePayload[key] = value;
+          }
+        }
+
+        const updated = await tx.staffProfile.update({
+          where: { id },
+          data: updatePayload,
+          include: { fieldValues: { include: { field: true } } },
+        });
+
+        if (fieldValues && fieldValues.length > 0) {
+          for (const fv of fieldValues) {
+            await tx.staffFieldValue.upsert({
+              where: {
+                fieldId_staffProfileId: {
+                  fieldId: fv.fieldId,
+                  staffProfileId: id,
+                },
+              },
+              create: {
+                fieldId: fv.fieldId,
+                staffProfileId: id,
+                value: fv.value,
+              },
+              update: {
+                value: fv.value,
+              },
+            });
+          }
+        }
+
+        return updated;
+      });
+    }),
+
 
   // ─── Admin: list / stats ───────────────────────────────────────────────
   stats: protectedProcedure

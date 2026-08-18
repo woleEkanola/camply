@@ -24,6 +24,7 @@ import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
 import { CamperPhotoCropperModal } from "@/components/staff/shared/CamperPhotoCropperModal";
 import { CommunicationTimeline } from "@/components/communication/CommunicationTimeline";
 import { isEndorsed } from "@/server/registration/endorsement";
+import { ManualSpaceReassignmentModal } from "@/components/accommodation/ManualSpaceReassignmentModal";
 
 import {
   ChevronLeftIcon,
@@ -67,6 +68,7 @@ export function RegistrationDetailsDrawer({
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [photoModalOpen, setPhotoModalOpen] = useState(false);
+  const [spaceModalOpen, setSpaceModalOpen] = useState(false);
 
   // Queries
   const { data: registration, refetch } = api.registration.getById.useQuery({ id: registrationId });
@@ -508,12 +510,12 @@ export function RegistrationDetailsDrawer({
 
                     <button
                       type="button"
-                      onClick={() => setActiveTab("assignments")}
+                      onClick={() => setSpaceModalOpen(true)}
                       className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3 text-xs font-bold text-neutral-800 hover:bg-accent-50 hover:border-accent-200 transition"
                     >
                       <div className="flex items-center gap-2">
                         <BuildingOfficeIcon className="h-4 w-4 text-accent-600" />
-                        <span>Assign Hostel</span>
+                        <span>Assign Hostel & Bed</span>
                       </div>
                       <span className="text-txt-muted">›</span>
                     </button>
@@ -700,6 +702,43 @@ export function RegistrationDetailsDrawer({
                         Clear
                       </Button>
                     )}
+                  </div>
+                </div>
+
+                {/* 3. ACCOMMODATION ASSIGNMENT CARD */}
+                <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+                    <h3 className="font-bold text-neutral-900 text-sm">Accommodation & Bed Assignment</h3>
+                    {(registration as any).room ? (
+                      <Badge tone="success">Assigned</Badge>
+                    ) : (
+                      <Badge tone="neutral">Unassigned</Badge>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-xs py-1">
+                    <div>
+                      <span className="text-neutral-500 block">Hostel</span>
+                      <span className="font-bold text-neutral-900">{(registration as any).room?.hostel?.name || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-500 block">Room</span>
+                      <span className="font-bold text-neutral-900">{(registration as any).room?.name || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-500 block">Bed</span>
+                      <span className="font-bold text-neutral-900">{(registration as any).bed?.label || "—"}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-border-subtle">
+                    <Button
+                      size="sm"
+                      onClick={() => setSpaceModalOpen(true)}
+                      className="w-full justify-center"
+                    >
+                      Manually Reassign Hostel / Room / Bed
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -930,6 +969,29 @@ export function RegistrationDetailsDrawer({
         photoUrl={camper?.photoUrl}
         onPhotoUpdated={() => refetch()}
       />
+
+      {/* MANUAL SPACE REASSIGNMENT MODAL */}
+      {spaceModalOpen && (
+        <ManualSpaceReassignmentModal
+          open={spaceModalOpen}
+          onClose={() => setSpaceModalOpen(false)}
+          occupant={{
+            id: registrationId,
+            name: camperName,
+            type: "CAMPER",
+            gender: camper?.gender,
+            photoUrl: camper?.photoUrl,
+            tribeName: (registration as any).tribe?.name,
+            currentHostelName: (registration as any).room?.hostel?.name,
+            currentRoomName: (registration as any).room?.name,
+            currentBedLabel: (registration as any).bed?.label,
+          }}
+          organizationId={orgId ?? ""}
+          campId={campId}
+          venueId={(registration as any).venueId ?? undefined}
+          onSuccess={invalidate}
+        />
+      )}
     </>
   );
 }
