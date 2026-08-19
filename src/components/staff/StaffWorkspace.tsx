@@ -172,7 +172,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
                   <AttendanceToggleBadge
                     status={profile.attendanceIntent}
                     onToggle={(next) =>
-                      setAttendanceIntent.mutate({ staffId: profile.id, intent: next })
+                      setAttendanceIntent.mutate({ id: profile.id, intent: next })
                     }
                     disabled={setAttendanceIntent.isPending}
                     size="md"

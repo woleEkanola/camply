@@ -58,11 +58,10 @@ async function assertCanScan(
   if (ADMIN_ROLES.includes(currentUser.role) && currentUser.organizationId === organizationId) return;
 
   if (["TEACHER", "VOLUNTEER"].includes(currentUser.role)) {
-    // Scoped to organizationId — previously any approved staff profile in
-    // *any* org satisfied this check, letting a volunteer pass a foreign
-    // org's id and scan/check-in/check-out that org's campers.
+    // Teachers and volunteers in the organization have unrestricted access to scan badges
+    if (currentUser.organizationId === organizationId) return;
     const profile = await ctx.prisma.staffProfile.findFirst({
-      where: { userId: ctx.userId, organizationId, status: "APPROVED", deletedAt: null },
+      where: { userId: ctx.userId, organizationId, deletedAt: null },
     });
     if (profile) return;
   }
@@ -453,7 +452,19 @@ export const scanRouter = createTRPCRouter({
         },
         campus: {
           include: {
-            reps: { select: { id: true, firstName: true, lastName: true, phone: true } },
+            reps: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                staffProfiles: {
+                  where: { deletedAt: null },
+                  select: { phone: true },
+                  take: 1,
+                },
+              },
+            },
           },
         },
         camp: true,

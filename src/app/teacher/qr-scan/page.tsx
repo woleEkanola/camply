@@ -13,13 +13,13 @@ export default function TeacherQrScanPage() {
 
   return (
     <AppShell area="teacher">
-      <StaffGate>
+      <StaffGate allowUnapproved>
         {/* No defaultStationId: unified check-in/check-out page — a fresh
             session lands on the safe, read-only Identity Lookup station;
             the teacher switches station (Camp Arrival, Checkout, etc.)
             from the station sheet. homeCampusId pre-highlights the
             teacher's own campus in the Pickup Point picker. */}
-        {(profile: any) => <ScanCenterShell organizationId={organizationId} homeCampusId={profile.preferredCampusId ?? undefined} pointsHref="/teacher/tribe" />}
+        {(profile: any) => <ScanCenterShell organizationId={organizationId} homeCampusId={profile?.preferredCampusId ?? undefined} pointsHref="/teacher/tribe" />}
       </StaffGate>
     </AppShell>
   );

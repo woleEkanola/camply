@@ -37,7 +37,7 @@ import {
   ArrowUturnLeftIcon,
 } from "@heroicons/react/24/outline";
 import { PhoneIcon } from "@heroicons/react/24/solid";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/cn";
 
 interface RecentScan {
   registrationId: string;
@@ -1406,15 +1406,16 @@ export function ScanCenterShell({
                   )}
                   {(lookupData.registration.campus.reps ?? []).map((rep: any) => {
                     const repName = [rep.firstName, rep.lastName].filter(Boolean).join(" ") || "Campus Rep";
+                    const repPhone = rep.phone || rep.staffProfiles?.[0]?.phone || lookupData.registration.campus?.phone;
                     return (
                       <div key={rep.id} className="flex items-center justify-between gap-3 bg-surface/5 border border-white/5 rounded-lg p-3">
                         <div className="min-w-0">
                           <span className="block text-xs uppercase opacity-60 font-semibold">Campus Rep</span>
                           <span className="block font-bold truncate">{repName}</span>
                         </div>
-                        {rep.phone ? (
+                        {repPhone ? (
                           <a
-                            href={`tel:${rep.phone}`}
+                            href={`tel:${repPhone}`}
                             className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white min-h-[44px] shrink-0"
                           >
                             <PhoneIcon className="h-4 w-4" />

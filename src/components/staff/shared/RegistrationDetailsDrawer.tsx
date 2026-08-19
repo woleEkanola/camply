@@ -101,7 +101,7 @@ export function RegistrationDetailsDrawer({
     { enabled: !!campId }
   );
 
-  const { data: tribeSuggestion } = api.tribe.getSuggestion.useQuery(
+  const { data: tribeSuggestion } = api.tribe.suggest.useQuery(
     { registrationId },
     { enabled: !!registrationId && activeTab === "assignments" }
   );
@@ -111,7 +111,7 @@ export function RegistrationDetailsDrawer({
     { enabled: !!orgId }
   );
 
-  const { data: documents } = api.registration.getDocuments.useQuery(
+  const { data: documents } = api.document.listForRegistration.useQuery(
     { registrationId },
     { enabled: !!registrationId }
   );

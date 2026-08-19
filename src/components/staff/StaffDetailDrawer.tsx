@@ -58,6 +58,8 @@ export function StaffDetailDrawer({
 
   const [rejectReason, setRejectReason] = useState("");
   const [actionError, setActionError] = useState("");
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [spaceModalOpen, setSpaceModalOpen] = useState(false);
 
   const invalidate = () => {
     utils.staff.getById.invalidate({ id: staffId });

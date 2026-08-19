@@ -30,7 +30,7 @@ import { CamperProfileView } from "@/components/staff/shared/CamperProfileView";
 import { ExportButton } from "@/components/export/ExportButton";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import { Squares2X2Icon, TableCellsIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import { Squares2X2Icon, TableCellsIcon, SparklesIcon, XMarkIcon, ChevronDownIcon, CheckIcon } from "@heroicons/react/24/outline";
 import { MobileRegistrationCard, MobileRegistrationsView, formatDuplicateSiblingsHint } from "@/components/staff/shared/MobileRegistrationsView";
 import { RegistrationDetailsDrawer } from "@/components/staff/shared/RegistrationDetailsDrawer";
 import { MedicalDataCleanerModal } from "@/components/medical/MedicalDataCleanerModal";
@@ -73,7 +73,7 @@ function RegistrationsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
-  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const [viewMode, setViewMode] = useState<"card" | "list">("list");
   const [selectedRegistration, setSelectedRegistration] = useState<string | null>(null);
   const [filterCampus, setFilterCampus] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -85,6 +85,7 @@ function RegistrationsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [medicalCleanerOpen, setMedicalCleanerOpen] = useState(false);
+  const [bulkMoreOpen, setBulkMoreOpen] = useState(false);
   const [bulkAction, setBulkAction] = useState<"REJECT" | "REQUEST_CORRECTION" | "DELETE" | null>(null);
   const [bulkReason, setBulkReason] = useState("");
   const [bulkResult, setBulkResult] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -149,7 +150,6 @@ function RegistrationsPage() {
   const isTwoStep = (org as any)?.approvalWorkflow === "TWO_STEP";
 
   const DEFAULT_COLUMNS = ["camper", "attendance", "campus", "regNumber", "status", "updated"];
-  const [columnsOpen, setColumnsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_COLUMNS);
 
   useEffect(() => {
@@ -216,7 +216,7 @@ function RegistrationsPage() {
 
   const bulkSetAttendanceIntent = api.registration.bulkSetAttendanceIntent.useMutation({
     onSuccess: (res) => {
-      setBulkResult({ message: `Updated attendance for ${res.updatedCount} registration(s).`, type: "success" });
+      setBulkResult({ message: `Updated attendance for ${res.successes?.length ?? 0} registration(s).`, type: "success" });
       setSelectedIds([]);
       invalidateRegistrations();
     },
@@ -842,93 +842,351 @@ function RegistrationsPage() {
             </div>
           )}
 
+          {/* Streamlined Floating Bulk Action Bar */}
           <BulkActionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
-            <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}>
+            <Button
+              size="sm"
+              loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"}
+              onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}
+            >
               Approve
             </Button>
-            <Button size="sm" loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"} onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "WAITLIST" })}>
+            <Button
+              size="sm"
+              loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"}
+              onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "WAITLIST" })}
+            >
               Waitlist
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT"); setBulkReason(""); }}>
-              Reject
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REQUEST_CORRECTION"); setBulkReason(""); }}>
-              Request Correction
-            </Button>
-            <Button size="sm" variant="secondary" loading={bulkTransition.isPending && bulkTransition.variables?.action === "ARCHIVE"} onClick={() => {
-              if (window.confirm(`Archive ${selectedIds.length} selected registration${selectedIds.length === 1 ? "" : "s"}?`)) {
-                bulkTransition.mutate({ ids: selectedIds, action: "ARCHIVE" });
-              }
-            }}>
-              Archive
-            </Button>
-            <Button size="sm" variant="secondary" loading={bulkSuggestMut.isPending} onClick={() => bulkSuggestMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds })}>
-              Suggest Tribes
-            </Button>
-            <Button size="sm" variant="secondary" loading={bulkApplyMut.isPending} onClick={() => bulkApplyMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds })}>
-              Apply Tribes
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setBulkReassignOpen(true)}>
-              Reassign Campus
             </Button>
             <Button
               size="sm"
               variant="secondary"
+              className="text-emerald-700 dark:text-emerald-300 border-emerald-300"
               loading={bulkSetAttendanceIntent.isPending}
               onClick={() =>
                 bulkSetAttendanceIntent.mutate({
-                  registrationIds: selectedIds,
+                  ids: selectedIds,
                   intent: "COMING",
                 })
               }
             >
-              Mark Coming
+              <CheckIcon className="mr-1 h-4 w-4 text-emerald-600" /> Mark Coming
             </Button>
             <Button
               size="sm"
               variant="secondary"
+              className="text-rose-700 dark:text-rose-300 border-rose-300"
               loading={bulkSetAttendanceIntent.isPending}
               onClick={() =>
                 bulkSetAttendanceIntent.mutate({
-                  registrationIds: selectedIds,
+                  ids: selectedIds,
                   intent: "NOT_COMING",
                 })
               }
             >
-              Mark Not Coming
+              <XMarkIcon className="mr-1 h-4 w-4 text-rose-600" /> Mark Not Coming
             </Button>
             <Button
               size="sm"
               variant="secondary"
-              loading={bulkInvitationResendMut.isPending}
-              disabled={!activeCamp?.id}
-              onClick={() => {
-                if (window.confirm(`Resend the camp invitation (with ID card) to ${selectedIds.length} selected registration${selectedIds.length === 1 ? "" : "s"}?`)) {
-                  bulkInvitationResendMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds });
-                }
-              }}
+              onClick={() => setBulkReassignOpen(true)}
             >
-              Resend Camp Invitation
+              Reassign Campus
             </Button>
-            <Button size="sm" variant="danger" data-testid="bulk-delete-button" loading={bulkSoftDelete.isPending} onClick={() => setBulkAction("DELETE")}>
-              Delete
-            </Button>
+
+            {/* Overflow "More Actions" Menu */}
+            <div className="relative">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setBulkMoreOpen(!bulkMoreOpen)}
+                className="flex items-center gap-1"
+              >
+                <span>More Actions</span>
+                <ChevronDownIcon className="h-3.5 w-3.5 opacity-70" />
+              </Button>
+
+              {bulkMoreOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setBulkMoreOpen(false)} />
+                  <div className="absolute left-0 bottom-full mb-2 z-50 w-56 rounded-xl border border-border-default bg-surface p-1.5 shadow-xl space-y-1 text-xs">
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-hover font-medium text-txt-primary flex items-center justify-between"
+                      onClick={() => {
+                        setBulkMoreOpen(false);
+                        bulkSuggestMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds });
+                      }}
+                    >
+                      <span>Suggest Tribes</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-hover font-medium text-txt-primary flex items-center justify-between"
+                      onClick={() => {
+                        setBulkMoreOpen(false);
+                        bulkApplyMut.mutate({ campId: activeCamp?.id ?? "", registrationIds: selectedIds });
+                      }}
+                    >
+                      <span>Apply Tribes</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-hover font-medium text-txt-primary flex items-center justify-between"
+                      onClick={() => {
+                        setBulkMoreOpen(false);
+                        setBulkAction("REQUEST_CORRECTION");
+                        setBulkReason("");
+                      }}
+                    >
+                      <span>Request Correction</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-hover font-medium text-danger-600 flex items-center justify-between"
+                      onClick={() => {
+                        setBulkMoreOpen(false);
+                        setBulkAction("REJECT");
+                        setBulkReason("");
+                      }}
+                    >
+                      <span>Reject Selected</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-hover font-medium text-txt-secondary flex items-center justify-between border-t border-border-subtle pt-2"
+                      onClick={() => {
+                        setBulkMoreOpen(false);
+                        if (activeCamp?.id && window.confirm(`Resend camp invitation to ${selectedIds.length} selected registrations?`)) {
+                          bulkInvitationResendMut.mutate({ campId: activeCamp.id, registrationIds: selectedIds });
+                        }
+                      }}
+                    >
+                      <span>Resend Camp Invitation</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-hover font-medium text-txt-secondary flex items-center justify-between"
+                      onClick={() => {
+                        setBulkMoreOpen(false);
+                        if (window.confirm(`Archive ${selectedIds.length} selected registrations?`)) {
+                          bulkTransition.mutate({ ids: selectedIds, action: "ARCHIVE" });
+                        }
+                      }}
+                    >
+                      <span>Archive Selected</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-danger-50 font-bold text-danger-600 flex items-center justify-between border-t border-border-subtle pt-2"
+                      onClick={() => {
+                        setBulkMoreOpen(false);
+                        setBulkAction("DELETE");
+                      }}
+                    >
+                      <span>Delete Selected</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </BulkActionBar>
 
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="grid flex-1 gap-3 md:grid-cols-3">
-              <SearchBar placeholder="Name, email, or registration #" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
-              <Select aria-label="Filter by campus" value={filterCampus} onChange={(e) => setFilterCampus(e.target.value)}>
+          {/* Tier 1: Search Bar (Full Width) & Right Tools (Columns, Clean Medical, View Mode) */}
+          <div className="mb-3 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex-1 max-w-xl">
+              <SearchBar
+                placeholder="Search name, email, reg #..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onClear={() => setSearchQuery("")}
+              />
+            </div>
+
+            {/* Desktop View Mode & Column Selector Controls */}
+            <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+              {/* Columns Selector Dropdown */}
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setColumnsOpen(!columnsOpen)}
+                  className="flex items-center gap-1.5"
+                >
+                  <TableCellsIcon className="h-4 w-4 text-txt-secondary" />
+                  <span>Columns</span>
+                  <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-1.5 py-0.5 text-[10px] font-bold text-accent-700 dark:text-accent-300">
+                    {visibleColumns.length}
+                  </span>
+                </Button>
+
+                {columnsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setColumnsOpen(false)} />
+                    <div className="absolute right-0 top-full mt-2 z-50 w-72 rounded-2xl border border-border-default bg-surface p-3 shadow-xl space-y-3">
+                      <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+                        <span className="text-xs font-bold text-txt-primary">Configure Columns</span>
+                        <button
+                          type="button"
+                          className="text-[11px] font-bold text-accent-600 hover:underline"
+                          onClick={() => {
+                            const defaultCols = ["camper", "attendance", "campus", "regNumber", "status", "updated"];
+                            setVisibleColumns(defaultCols);
+                            if (typeof window !== "undefined") {
+                              localStorage.setItem("camply_reg_columns_v2", JSON.stringify(defaultCols));
+                            }
+                          }}
+                        >
+                          Reset Defaults
+                        </button>
+                      </div>
+
+                      <div className="max-h-72 overflow-y-auto space-y-3 pr-1 text-xs">
+                        {/* Standard Columns */}
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-txt-muted block mb-1.5">
+                            Standard Fields
+                          </span>
+                          <div className="space-y-1">
+                            {[
+                              { key: "camper", label: "Camper Name" },
+                              { key: "attendance", label: "Attendance (Coming/Not Coming)" },
+                              { key: "email", label: "Parent Email" },
+                              { key: "campus", label: "Selected Campus" },
+                              { key: "regNumber", label: "Registration #" },
+                              { key: "status", label: "Status" },
+                              { key: "tribe", label: "Assigned Tribe" },
+                              { key: "bed", label: "Bed" },
+                              { key: "gender", label: "Gender" },
+                              { key: "dob", label: "Date of Birth" },
+                              { key: "updated", label: "Updated Date" },
+                            ].map((col) => (
+                              <label
+                                key={col.key}
+                                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-surface-hover cursor-pointer text-txt-primary"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={visibleColumns.includes(col.key)}
+                                  onChange={() => toggleColumn(col.key)}
+                                  className="h-3.5 w-3.5 rounded border-input-border text-accent-600 focus:ring-accent-500"
+                                />
+                                <span>{col.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Dynamic Form Fields */}
+                        {formFields && formFields.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-txt-muted block mb-1.5 border-t border-border-subtle pt-2">
+                              Wizard Form Fields ({formFields.length})
+                            </span>
+                            <div className="space-y-1">
+                              {formFields.map((ff) => {
+                                const colKey = `ff_${ff.id}`;
+                                return (
+                                  <label
+                                    key={ff.id}
+                                    className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-surface-hover cursor-pointer text-txt-primary"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={visibleColumns.includes(colKey)}
+                                      onChange={() => toggleColumn(colKey)}
+                                      className="h-3.5 w-3.5 rounded border-input-border text-accent-600 focus:ring-accent-500"
+                                    />
+                                    <span className="truncate">{ff.label || ff.name}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Clean Medical Data Button */}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setMedicalCleanerOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 border-amber-300/60 hover:bg-amber-500/10"
+              >
+                <SparklesIcon className="h-4 w-4 text-amber-500" />
+                <span className="hidden sm:inline">Clean Medical</span>
+                <span className="sm:hidden">Medical</span>
+              </Button>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center rounded-xl border border-border-default bg-surface-raised p-1 shrink-0">
+                <button
+                  type="button"
+                  title="Table View"
+                  onClick={() => setViewMode("list")}
+                  className={cn(
+                    "flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all",
+                    viewMode === "list"
+                      ? "bg-surface text-accent-600 shadow-2xs"
+                      : "text-txt-muted hover:text-txt-primary"
+                  )}
+                >
+                  <TableCellsIcon className="h-4 w-4" />
+                  <span className="hidden md:inline">Table</span>
+                </button>
+                <button
+                  type="button"
+                  title="Card View"
+                  onClick={() => setViewMode("card")}
+                  className={cn(
+                    "flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all",
+                    viewMode === "card"
+                      ? "bg-surface text-accent-600 shadow-2xs"
+                      : "text-txt-muted hover:text-txt-primary"
+                  )}
+                >
+                  <Squares2X2Icon className="h-4 w-4" />
+                  <span className="hidden md:inline">Cards</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tier 2: Filter Dropdowns & Quick Operational Pills Strip */}
+          <div className="mb-4 flex flex-wrap items-center gap-2.5">
+            {/* Filter Dropdowns */}
+            <div className="w-full sm:w-40">
+              <Select
+                aria-label="Filter by campus"
+                value={filterCampus}
+                onChange={(e) => setFilterCampus(e.target.value)}
+              >
                 <option value="">All Campuses</option>
                 {campuses.map((c: any) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </Select>
-              <Select aria-label="Filter by attendance" value={attendanceFilter} onChange={(e) => setAttendanceFilter(e.target.value as any)}>
-                <option value="">All Attendance (Coming/Not Coming)</option>
+            </div>
+
+            <div className="w-full sm:w-44">
+              <Select
+                aria-label="Filter by attendance"
+                value={attendanceFilter}
+                onChange={(e) => setAttendanceFilter(e.target.value as any)}
+              >
+                <option value="">All Attendance</option>
                 <option value="COMING">Coming Only</option>
                 <option value="NOT_COMING">Not Coming Only</option>
               </Select>
+            </div>
+
+            <div className="w-full sm:w-40">
               <Select
                 data-testid="registration-status-filter"
                 value={duplicatesOnly ? "FILTER_DUPLICATES" : reviewStateFilter ? `REVIEW_${reviewStateFilter}` : filterStatus}
@@ -965,155 +1223,55 @@ function RegistrationsPage() {
               </Select>
             </div>
 
-            {/* Desktop View Mode & Column Selector Controls */}
-            <div className="flex items-center gap-2 shrink-0">
-              {/* Columns Selector Dropdown */}
-              <div className="relative">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setColumnsOpen(!columnsOpen)}
-                  className="flex items-center gap-1.5"
-                >
-                  <TableCellsIcon className="h-4 w-4" />
-                  <span>Columns</span>
-                  <span className="ml-1 rounded-full bg-accent-100 px-1.5 py-0.5 text-[10px] font-bold text-accent-700">
-                    {visibleColumns.length}
-                  </span>
-                </Button>
-
-                {columnsOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setColumnsOpen(false)} />
-                    <div className="absolute right-0 top-full mt-2 z-50 w-72 rounded-2xl border border-neutral-200 bg-white p-3 shadow-xl space-y-3">
-                      <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
-                        <span className="text-xs font-bold text-neutral-900">Configure Columns</span>
-                        <button
-                          type="button"
-                          className="text-[11px] font-bold text-accent-600 hover:underline"
-                          onClick={() => {
-                            const defaultCols = ["camper", "campus", "regNumber", "status", "updated"];
-                            setVisibleColumns(defaultCols);
-                            if (typeof window !== "undefined") {
-                              localStorage.setItem("camply_reg_columns_v1", JSON.stringify(defaultCols));
-                            }
-                          }}
-                        >
-                          Reset Defaults
-                        </button>
-                      </div>
-
-                      <div className="max-h-72 overflow-y-auto space-y-3 pr-1 text-xs">
-                        {/* Standard Columns */}
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-1.5">
-                            Standard Fields
-                          </span>
-                          <div className="space-y-1">
-                            {[
-                              { key: "camper", label: "Camper Name" },
-                              { key: "attendance", label: "Attendance (Coming/Not Coming)" },
-                              { key: "email", label: "Parent Email" },
-                              { key: "campus", label: "Selected Campus" },
-                              { key: "regNumber", label: "Registration #" },
-                              { key: "status", label: "Status" },
-                              { key: "tribe", label: "Assigned Tribe" },
-                              { key: "bed", label: "Bed" },
-                              { key: "gender", label: "Gender" },
-                              { key: "dob", label: "Date of Birth" },
-                              { key: "updated", label: "Updated Date" },
-                            ].map((col) => (
-                              <label
-                                key={col.key}
-                                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-neutral-50 cursor-pointer text-neutral-700"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={visibleColumns.includes(col.key)}
-                                  onChange={() => toggleColumn(col.key)}
-                                  className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
-                                />
-                                <span>{col.label}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Dynamic Form Fields */}
-                        {formFields && formFields.length > 0 && (
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-1.5 border-t border-neutral-100 pt-2">
-                              Wizard Form Fields ({formFields.length})
-                            </span>
-                            <div className="space-y-1">
-                              {formFields.map((ff) => {
-                                const colKey = `ff_${ff.id}`;
-                                return (
-                                  <label
-                                    key={ff.id}
-                                    className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-neutral-50 cursor-pointer text-neutral-700"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={visibleColumns.includes(colKey)}
-                                      onChange={() => toggleColumn(colKey)}
-                                      className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
-                                    />
-                                    <span className="truncate">{ff.label || ff.name}</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Clean Medical Data Button */}
-              <Button
+            {/* Quick Operational Pills */}
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:ml-1">
+              <button
                 type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setMedicalCleanerOpen(true)}
-                className="flex items-center gap-1.5 text-xs font-bold text-amber-900 border-amber-300 hover:bg-amber-50"
+                onClick={() => setUnassignedBedOnly(!unassignedBedOnly)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-semibold transition border",
+                  unassignedBedOnly
+                    ? "bg-amber-500 text-white border-amber-600 shadow-2xs"
+                    : "bg-surface text-txt-secondary border-border-default hover:bg-surface-hover"
+                )}
               >
-                <SparklesIcon className="h-4 w-4 text-amber-600" />
-                <span>Clean Medical Data</span>
-              </Button>
+                <span>🛏️ Needs Bed ({unassignedBedCount})</span>
+              </button>
 
-              {/* View Mode Toggle */}
-              <div className="flex items-center rounded-xl border border-neutral-200/80 bg-neutral-100/80 p-1 shrink-0">
+              {(statsData?.duplicateCount ?? 0) > 0 && (
                 <button
                   type="button"
-                  onClick={() => setViewMode("card")}
+                  onClick={() => setDuplicatesOnly(!duplicatesOnly)}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
-                    viewMode === "card"
-                      ? "bg-white text-accent-700 shadow-2xs"
-                      : "text-neutral-600 hover:text-neutral-900"
+                    "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-semibold transition border",
+                    duplicatesOnly
+                      ? "bg-rose-500 text-white border-rose-600 shadow-2xs"
+                      : "bg-surface text-txt-secondary border-border-default hover:bg-surface-hover"
                   )}
                 >
-                  <Squares2X2Icon className="h-4 w-4" />
-                  <span>Card View</span>
+                  <span>⚠️ Duplicates ({statsData?.duplicateCount ?? 0})</span>
                 </button>
+              )}
+
+              {/* Clear All Filters Button */}
+              {(searchQuery || filterCampus || attendanceFilter || filterStatus || reviewStateFilter || duplicatesOnly || unassignedBedOnly) && (
                 <button
                   type="button"
-                  onClick={() => setViewMode("list")}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
-                    viewMode === "list"
-                      ? "bg-white text-accent-700 shadow-2xs"
-                      : "text-neutral-600 hover:text-neutral-900"
-                  )}
+                  onClick={() => {
+                    setSearchQuery("");
+                    setFilterCampus("");
+                    setAttendanceFilter("");
+                    setFilterStatus("");
+                    setReviewStateFilter("");
+                    setDuplicatesOnly(false);
+                    setUnassignedBedOnly(false);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 font-bold text-accent-600 hover:text-accent-800 hover:bg-accent-500/10 transition"
                 >
-                  <TableCellsIcon className="h-4 w-4" />
-                  <span>List View</span>
+                  <XMarkIcon className="h-3.5 w-3.5" />
+                  <span>Reset filters</span>
                 </button>
-              </div>
+              )}
             </div>
           </div>
 
@@ -1367,7 +1525,7 @@ function RegistrationsPage() {
           organizationId={activeCamp?.organizationId ?? session?.user?.organizationId ?? ""}
           campId={activeCamp?.id}
           onSuccess={() => {
-            refetch();
+            invalidateRegistrations();
           }}
         />
       )}
