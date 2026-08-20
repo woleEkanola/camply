@@ -47,6 +47,8 @@ test.describe("Tribe operations hub", () => {
     await page.goto("/admin/tribes");
     const hub = page.getByTestId("tribe-hub");
     await hub.getByLabel("Choose tribe").selectOption(tribeId);
+    // Campers is the default tab now — Leadership assignment lives on Overview.
+    await hub.getByRole("button", { name: "Overview", exact: true }).click();
     await hub.getByLabel("Assign Male teacher head").selectOption(teacherProfileId);
     await expect.poll(() => prisma.tribe.findUnique({ where: { id: tribeId } }).then((tribe) => tribe?.maleHeadId)).toBe(teacherProfileId);
     await hub.getByLabel("Assign Male camper leader").selectOption(registrationId);

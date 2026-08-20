@@ -1091,6 +1091,13 @@ model LeaderboardSettings {
   // opts in.
   completionMode         String    @default("MANUAL")
   completionPoints       Int       @default(50)
+  // Camp-level award-permission switch. False (default) = today's behaviour,
+  // any approved tribe-assigned teacher/volunteer can award points. True =
+  // only staff individually flagged StaffProfile.canAwardPoints (or an admin,
+  // or a Position.grantsAwardPoints holder, or canAwardCampWide) may award —
+  // everyone else keeps attendance-scanning access, which this flag never
+  // touches (see getCampPointsAccess.canTakeAttendance).
+  restrictPointAwarding  Boolean   @default(false)
   timezone               String    @default("Africa/Lagos")
   lastRebuildAt          DateTime?
   // O(1) reset: archive the settings row's cutoff instead of deleting
@@ -1314,6 +1321,15 @@ model StaffProfile {
   isAssistantHead       Boolean     @default(false)
   isCampMonitor         Boolean     @default(false)
   isAssistantMonitor    Boolean     @default(false)
+  /// Elevates a trusted teacher/volunteer to award points to ANY camper in the
+  /// camp, not just their assigned tribe. Default false — every existing row is
+  /// unaffected and stays tribe-scoped.
+  canAwardCampWide      Boolean     @default(false)
+  /// Per-person award designation used when LeaderboardSettings.restrictPointAwarding
+  /// is true for the camp: only staff with this flag (plus admins, canAwardCampWide,
+  /// and Position.grantsAwardPoints holders) may award points; everyone else keeps
+  /// attendance-scanning access. Ignored (no-op) while the camp switch is off.
+  canAwardPoints        Boolean     @default(false)
 
   // Camp Structure: reporting hierarchy (exactly one of these two is set, enforced in the router)
   reportsTo       StaffProfile?  @relation("ReportsTo", fields: [reportsToId], references: [id])

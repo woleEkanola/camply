@@ -843,7 +843,6 @@ export const accommodationRouter = createTRPCRouter({
         const isGenderCompatible =
           !normalizedGender ||
           !hostelGenderNorm ||
-          hostelGenderNorm === "MIXED" ||
           hostelGenderNorm === normalizedGender;
 
         let hostelTotalBeds = 0;

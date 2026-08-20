@@ -33,6 +33,7 @@ export function StaffDetailDrawer({
 
   const utils = api.useUtils();
   const { data: profile } = api.staff.getById.useQuery({ id: staffId });
+  const { data: leaderboardSettings } = api.leaderboard.settings.get.useQuery({ campId }, { enabled: canManage && !!campId });
   const { data: venues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: canManage && !!campId });
   const { data: tribes = [] } = api.tribe.listByCamp.useQuery({ campId }, { enabled: canManage && !!campId && profile?.type === "TEACHER" });
   const { data: departments = [] } = api.department.list.useQuery({ organizationId, campId }, { enabled: canManage && !!organizationId && !!campId });
@@ -80,6 +81,7 @@ export function StaffDetailDrawer({
   const assignReportsTo = api.staff.assignReportsTo.useMutation({ onSuccess: invalidate, onError: onErr });
   const setDepartmentHead = api.staff.setDepartmentHead.useMutation({ onSuccess: invalidate, onError: onErr });
   const setTribeMonitor = api.staff.setTribeMonitor.useMutation({ onSuccess: invalidate, onError: onErr });
+  const setPointScope = api.staff.setPointScope.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignHostel = api.staff.assignHostel.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignRoom = api.staff.assignRoom.useMutation({ onSuccess: invalidate, onError: onErr });
   const setPrimaryDepartment = api.departmentOperations.setPrimaryDepartment.useMutation({ onSuccess: invalidate, onError: onErr });
@@ -315,6 +317,34 @@ export function StaffDetailDrawer({
               Assistant Camp Monitor
             </label>
           </>
+        )}
+        {isOrgAdmin && (profile.type === "TEACHER" || profile.type === "VOLUNTEER") && (
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
+            <input
+              type="checkbox"
+              checked={profile.canAwardCampWide}
+              onChange={(e) => setPointScope.mutate({ id: staffId, canAwardCampWide: e.target.checked })}
+              className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+            />
+            Award points camp-wide
+            <span className="text-xs text-neutral-500">— can award any camper in the camp, not just their tribe</span>
+          </label>
+        )}
+        {isOrgAdmin && (profile.type === "TEACHER" || profile.type === "VOLUNTEER") && (
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
+            <input
+              type="checkbox"
+              checked={profile.canAwardPoints}
+              onChange={(e) => setPointScope.mutate({ id: staffId, canAwardPoints: e.target.checked })}
+              className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+            />
+            May award points
+            <span className="text-xs text-neutral-500">
+              {leaderboardSettings?.restrictPointAwarding
+                ? "— required to award points while this camp restricts awarding to designated staff"
+                : "— not needed yet: this camp lets any tribe-assigned staff award points"}
+            </span>
+          </label>
         )}
       </div>
 

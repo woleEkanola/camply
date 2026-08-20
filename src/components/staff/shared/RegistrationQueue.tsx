@@ -520,7 +520,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
               variant="secondary"
               className="text-emerald-700 dark:text-emerald-300 border-emerald-300"
               loading={bulkSetAttendanceIntent.isPending}
-              onClick={() => bulkSetAttendanceIntent.mutate({ ids: selectedIds, intent: "COMING" })}
+              onClick={() => bulkSetAttendanceIntent.mutate({ registrationIds: selectedIds, intent: "COMING" })}
             >
               <CheckIcon className="mr-1 h-4 w-4 text-emerald-600" /> Mark Coming
             </Button>
@@ -529,7 +529,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
               variant="secondary"
               className="text-rose-700 dark:text-rose-300 border-rose-300"
               loading={bulkSetAttendanceIntent.isPending}
-              onClick={() => bulkSetAttendanceIntent.mutate({ ids: selectedIds, intent: "NOT_COMING" })}
+              onClick={() => bulkSetAttendanceIntent.mutate({ registrationIds: selectedIds, intent: "NOT_COMING" })}
             >
               <XMarkIcon className="mr-1 h-4 w-4 text-rose-600" /> Mark Not Coming
             </Button>

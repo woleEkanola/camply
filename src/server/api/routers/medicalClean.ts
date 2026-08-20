@@ -6,10 +6,10 @@ import { evaluateMedicalText, PROTECTED_SHORT_TERMS } from "../../../lib/medical
 import { logEvent } from "../../audit";
 
 const assertOrgAdmin = (ctx: any, organizationId: string) =>
-  assertOrgAdminOrCommand(ctx, organizationId, "REGISTRATION");
+  assertOrgAdminOrCommand(ctx, organizationId, "REGISTRATIONS");
 
 const assertOrgAdminOrCampusRep = (ctx: any, organizationId: string, campusId?: string | null) =>
-  assertScopedOrgAccess(ctx, organizationId, campusId, "REGISTRATION");
+  assertScopedOrgAccess(ctx, organizationId, campusId, "REGISTRATIONS");
 
 export const medicalCleanRouter = createTRPCRouter({
   // ─── Preview Bulk Cleanup ───────────────────────────────────────────────

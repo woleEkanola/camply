@@ -865,7 +865,7 @@ function RegistrationsPage() {
               loading={bulkSetAttendanceIntent.isPending}
               onClick={() =>
                 bulkSetAttendanceIntent.mutate({
-                  ids: selectedIds,
+                  registrationIds: selectedIds,
                   intent: "COMING",
                 })
               }
@@ -879,7 +879,7 @@ function RegistrationsPage() {
               loading={bulkSetAttendanceIntent.isPending}
               onClick={() =>
                 bulkSetAttendanceIntent.mutate({
-                  ids: selectedIds,
+                  registrationIds: selectedIds,
                   intent: "NOT_COMING",
                 })
               }
