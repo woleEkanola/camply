@@ -6,6 +6,7 @@ import { useState } from 'react';
 import superjson from 'superjson';
 import { api } from '../utils/trpc';
 import { signOut } from 'next-auth/react';
+import '@/lib/pwaPrompt';
 
 // UNAUTHORIZED is thrown by many procedures for ordinary business-logic
 // reasons that have nothing to do with the session being stale — e.g.

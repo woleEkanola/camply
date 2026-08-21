@@ -20,11 +20,14 @@ export interface DialogProps {
    * (a real, if brief, double-dialog visual overlap too). Defaults to the
    * standard "dialog-panel" used everywhere else. */
   testId?: string;
+  /** Escape hatch for a wider panel than `size` offers (e.g. `max-w-4xl`) —
+   * merged after the size classes via `cn`, so a `max-w-*` here wins. */
+  className?: string;
 }
 
 const sizeClasses = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-2xl" };
 
-export function Dialog({ open, onClose, title, children, footer, size = "md", testId = "dialog-panel" }: DialogProps) {
+export function Dialog({ open, onClose, title, children, footer, size = "md", testId = "dialog-panel", className }: DialogProps) {
   return (
     <Transition show={open} as={Fragment}>
       <HeadlessDialog onClose={onClose} className="relative z-50">
@@ -57,7 +60,8 @@ export function Dialog({ open, onClose, title, children, footer, size = "md", te
               className={cn(
                 "flex max-h-[90vh] w-full flex-col bg-elevated text-txt-primary border border-elevated-border shadow-2xl",
                 "rounded-t-2xl pb-[env(safe-area-inset-bottom)] md:max-h-[85vh] md:rounded-lg md:pb-0",
-                sizeClasses[size]
+                sizeClasses[size],
+                className
               )}
             >
               {/* Grab handle signals the sheet is dismissible/draggable-feeling on mobile; desktop keeps the plain card. */}

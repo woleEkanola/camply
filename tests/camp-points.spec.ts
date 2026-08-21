@@ -63,7 +63,7 @@ test.describe("Camp Points station", () => {
     await loginWithPassword(page, "admin@camply.com", "password123");
     await page.goto("/admin/tribes");
     await page.getByLabel("Choose tribe").selectOption(tribeId);
-    await page.getByRole("button", { name: "Points" }).click();
+    await page.getByTestId("tribe-hub").getByRole("button", { name: "Points", exact: true }).click();
     await expect(page.getByTestId("camp-points-workspace")).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: new RegExp(categoryName) }).click();
     await expect(page.getByTestId("dialog-panel")).toBeVisible();

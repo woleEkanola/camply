@@ -2,7 +2,7 @@ import { z } from "zod";
 import { normalizeGender } from "../../../lib/gender";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { assertOrgAdminOrCommand, assertOrgAdminOrCampusRep as assertScopedOrgAccess, assertSameOrg } from "../trpc/scoping";
+import { assertOrgAdminOrCommand, assertOrgAdminOrCampusRep as assertScopedOrgAccess, assertSameOrg, assertOrgAdmin as assertStrictOrgAdmin } from "../trpc/scoping";
 
 const assertOrgAdminOrCampusRep = (ctx: any, organizationId: string, campusId?: string | null) =>
   assertScopedOrgAccess(ctx, organizationId, campusId, "STAFF");
@@ -113,6 +113,87 @@ export const staffRouter = createTRPCRouter({
       });
     }),
 
+  adminUpdateProfile: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        firstName: z.string().min(1, "First name is required").optional(),
+        lastName: z.string().min(1, "Last name is required").optional(),
+        preferredName: z.string().optional().nullable(),
+        email: z.string().email("Valid email required").optional(),
+        phone: z.string().optional(),
+        gender: z.string().optional().nullable(),
+        dateOfBirth: z.union([z.string(), z.date()]).transform((val) => (val ? new Date(val) : null)).optional().nullable(),
+        church: z.string().optional().nullable(),
+        churchDepartment: z.string().optional().nullable(),
+        yearsServing: z.string().optional().nullable(),
+        workerStatus: z.string().optional().nullable(),
+        volunteerCategory: z.string().optional().nullable(),
+        preferredAgeGroup: z.string().optional().nullable(),
+        areasOfStrength: z.string().optional().nullable(),
+        previousCampExperience: z.string().optional().nullable(),
+        skills: z.array(z.string()).optional(),
+        availability: z.string().optional().nullable(),
+        emergencyContactName: z.string().optional().nullable(),
+        emergencyContactPhone: z.string().optional().nullable(),
+        emergencyContactRelationship: z.string().optional().nullable(),
+        medicalConditions: z.string().optional().nullable(),
+        allergies: z.string().optional().nullable(),
+        fieldValues: z.array(z.object({ fieldId: z.string(), value: z.string() })).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.staffProfile.findUnique({
+        where: { id: input.id },
+        include: { fieldValues: true },
+      });
+      if (!existing || existing.deletedAt) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Staff profile not found" });
+      }
+
+      await assertOrgAdminOrCampusRep(ctx, existing.organizationId);
+
+      const { id, fieldValues, ...profileData } = input;
+
+      return ctx.prisma.$transaction(async (tx: any) => {
+        const updatePayload: Record<string, any> = {};
+        for (const [key, value] of Object.entries(profileData)) {
+          if (value !== undefined) {
+            updatePayload[key] = value;
+          }
+        }
+
+        const updated = await tx.staffProfile.update({
+          where: { id },
+          data: updatePayload,
+          include: { fieldValues: { include: { field: true } } },
+        });
+
+        if (fieldValues && fieldValues.length > 0) {
+          for (const fv of fieldValues) {
+            await tx.staffFieldValue.upsert({
+              where: {
+                fieldId_staffProfileId: {
+                  fieldId: fv.fieldId,
+                  staffProfileId: id,
+                },
+              },
+              create: {
+                fieldId: fv.fieldId,
+                staffProfileId: id,
+                value: fv.value,
+              },
+              update: {
+                value: fv.value,
+              },
+            });
+          }
+        }
+
+        return updated;
+      });
+    }),
+
 
   // ─── Admin: list / stats ───────────────────────────────────────────────
   stats: protectedProcedure
@@ -180,6 +261,7 @@ export const staffRouter = createTRPCRouter({
       departmentId: z.string().optional(),
       assignmentStatus: z.enum(["ASSIGNED", "UNASSIGNED"]).optional(),
       volunteerCategory: z.string().optional(),
+      attendanceIntent: z.enum(["COMING", "NOT_COMING"]).optional(),
       hostelId: z.string().optional(),
       floorId: z.string().optional(),
       roomId: z.string().optional(),
@@ -197,6 +279,7 @@ export const staffRouter = createTRPCRouter({
         type: input.type,
         deletedAt: null,
         ...(input.status && { status: input.status }),
+        ...(input.attendanceIntent && { attendanceIntent: input.attendanceIntent }),
         ...(input.venueId && { assignedVenueId: input.venueId }),
         ...(input.campusId && { preferredCampusId: input.campusId }),
         ...(input.gender && { gender: normalizeGender(input.gender) ?? input.gender }),
@@ -538,6 +621,65 @@ export const staffRouter = createTRPCRouter({
       return { count: input.ids.length };
     }),
 
+  setAttendanceIntent: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        intent: z.enum(["COMING", "NOT_COMING"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
+      if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+      return ctx.prisma.staffProfile.update({
+        where: { id: input.id },
+        data: {
+          attendanceIntent: input.intent,
+          attendanceNote: input.note !== undefined ? input.note : profile.attendanceNote,
+          attendanceUpdatedAt: new Date(),
+        },
+      });
+    }),
+
+  bulkSetAttendanceIntent: protectedProcedure
+    .input(
+      z.object({
+        ids: z.array(z.string()),
+        intent: z.enum(["COMING", "NOT_COMING"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const successes: string[] = [];
+      const failures: Array<{ id: string; reason: string }> = [];
+
+      for (const id of input.ids) {
+        try {
+          const profile = await ctx.prisma.staffProfile.findUnique({ where: { id } });
+          if (!profile) {
+            failures.push({ id, reason: "Staff profile not found" });
+            continue;
+          }
+          await assertOrgAdminOrCampusRep(ctx, profile.organizationId);
+          await ctx.prisma.staffProfile.update({
+            where: { id },
+            data: {
+              attendanceIntent: input.intent,
+              attendanceNote: input.note !== undefined ? input.note : profile.attendanceNote,
+              attendanceUpdatedAt: new Date(),
+            },
+          });
+          successes.push(id);
+        } catch (err: any) {
+          failures.push({ id, reason: err.message || "Failed to update attendance" });
+        }
+      }
+
+      return { successes, failures };
+    }),
+
   // ─── Admin: assignment ──────────────────────────────────────────────────
   assignVenue: protectedProcedure
     .input(z.object({ id: z.string(), venueId: z.string().nullable() }))
@@ -702,6 +844,24 @@ export const staffRouter = createTRPCRouter({
       const data: Record<string, boolean> = {};
       if (input.isCampMonitor !== undefined) data.isCampMonitor = input.isCampMonitor;
       if (input.isAssistantMonitor !== undefined) data.isAssistantMonitor = input.isAssistantMonitor;
+      return ctx.prisma.staffProfile.update({ where: { id: input.id }, data });
+    }),
+
+  // Elevates a teacher/volunteer to award camper points across the whole
+  // camp instead of only their assigned tribe (src/server/campPoints/access.ts).
+  // Gated on the strict org-admin check (not assertOrgAdminOrCampusRep/
+  // assertOrgAdminOrCommand) — same reasoning as position.ts's
+  // grantsAwardPoints gate: whoever can grant a scope-widening capability
+  // must not be someone that capability could later be used to influence.
+  setPointScope: protectedProcedure
+    .input(z.object({ id: z.string(), canAwardCampWide: z.boolean().optional(), canAwardPoints: z.boolean().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.staffProfile.findUnique({ where: { id: input.id } });
+      if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertStrictOrgAdmin(ctx, profile.organizationId);
+      const data: Record<string, boolean> = {};
+      if (input.canAwardCampWide !== undefined) data.canAwardCampWide = input.canAwardCampWide;
+      if (input.canAwardPoints !== undefined) data.canAwardPoints = input.canAwardPoints;
       return ctx.prisma.staffProfile.update({ where: { id: input.id }, data });
     }),
 

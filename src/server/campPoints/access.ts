@@ -8,11 +8,21 @@ export type CampPointsAccess = {
   isAdmin: boolean;
   canAwardPoints: boolean;
   canTakeAttendance: boolean;
+  /** Per-person elevation (StaffProfile.canAwardCampWide) — true for admins
+   * too, so callers can check this alone to decide whether scope pickers
+   * should be shown/unlocked. */
+  canAwardCampWide: boolean;
+  /** Camp-level switch (LeaderboardSettings.restrictPointAwarding). Exposed
+   * so the client can explain *why* the award button is hidden for an
+   * ordinary tribe teacher, rather than silently omitting it. */
+  restrictPointAwarding: boolean;
   staffProfile: null | {
     id: string;
     type: "TEACHER" | "VOLUNTEER";
     assignedTribeId: string | null;
     isTribeHead: boolean;
+    canAwardCampWide: boolean;
+    canAwardPoints: boolean;
   };
   managedCampusIds: string[];
 };
@@ -40,7 +50,7 @@ export async function getCampPointsAccess(
     (ORG_ADMIN_ROLES.has(user.role) && user.organizationId === camp.organizationId) ||
     Boolean(commandAccess?.permissions.includes("CAMP_POINTS"));
 
-  const [staffProfile, managedCampuses] = await Promise.all([
+  const [staffProfile, managedCampuses, leaderboardSettings] = await Promise.all([
     ctx.prisma.staffProfile.findFirst({
       where: {
         userId: ctx.userId,
@@ -53,6 +63,8 @@ export async function getCampPointsAccess(
         id: true,
         type: true,
         assignedTribeId: true,
+        canAwardCampWide: true,
+        canAwardPoints: true,
         maleHeadOfTribes: { where: { campId, deletedAt: null }, select: { id: true }, take: 1 },
         femaleHeadOfTribes: { where: { campId, deletedAt: null }, select: { id: true }, take: 1 },
       },
@@ -64,6 +76,10 @@ export async function getCampPointsAccess(
         reps: { some: { id: ctx.userId } },
       },
       select: { id: true },
+    }),
+    ctx.prisma.leaderboardSettings.findUnique({
+      where: { campId },
+      select: { restrictPointAwarding: true },
     }),
   ]);
 
@@ -90,14 +106,31 @@ export async function getCampPointsAccess(
     type: staffProfile.type,
     assignedTribeId: staffProfile.assignedTribeId,
     isTribeHead: staffProfile.maleHeadOfTribes.length > 0 || staffProfile.femaleHeadOfTribes.length > 0,
+    canAwardCampWide: staffProfile.canAwardCampWide,
+    canAwardPoints: staffProfile.canAwardPoints,
   } : null;
+  const canAwardCampWide = isAdmin || !!normalizedStaffProfile?.canAwardCampWide;
+  const restrictPointAwarding = !!leaderboardSettings?.restrictPointAwarding;
   return {
     camp,
     isAdmin,
     // Every approved teacher/volunteer assigned to a tribe works from the
-    // same tribe hub. Their server-side scope remains locked to that tribe.
-    canAwardPoints: isAdmin || !!pointGrant || !!normalizedStaffProfile?.assignedTribeId,
+    // same tribe hub. Their server-side scope remains locked to that tribe,
+    // unless individually elevated via canAwardCampWide. When the camp has
+    // restrictPointAwarding on, the blanket "assigned to a tribe" grant is
+    // replaced by an explicit per-person canAwardPoints designation — this
+    // never touches canTakeAttendance below, so a de-designated teacher
+    // keeps marking daily attendance.
+    canAwardPoints:
+      isAdmin ||
+      !!pointGrant ||
+      canAwardCampWide ||
+      (restrictPointAwarding
+        ? !!normalizedStaffProfile?.canAwardPoints
+        : !!normalizedStaffProfile?.assignedTribeId),
     canTakeAttendance: isAdmin || !!staffProfile || managedCampusIds.length > 0,
+    canAwardCampWide,
+    restrictPointAwarding,
     staffProfile: normalizedStaffProfile,
     managedCampusIds,
   };
@@ -107,7 +140,7 @@ export function assertCanAwardPoints(access: CampPointsAccess) {
   if (!access.canAwardPoints) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Your camp position cannot award camper points." });
   }
-  if (!access.isAdmin && !access.staffProfile?.assignedTribeId) {
+  if (!access.isAdmin && !access.canAwardCampWide && !access.staffProfile?.assignedTribeId) {
     throw new TRPCError({ code: "FORBIDDEN", message: "A tribe assignment is required to award points." });
   }
 }
@@ -121,6 +154,7 @@ export function assertScope(
 
   if (purpose === "POINTS") {
     assertCanAwardPoints(access);
+    if (access.canAwardCampWide) return;
     if (!scope.tribeId || scope.tribeId !== access.staffProfile?.assignedTribeId) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You may only award points to your assigned tribe." });
     }

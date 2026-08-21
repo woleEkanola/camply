@@ -7,8 +7,11 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { AttendanceToggleBadge } from "@/components/ui/AttendanceToggleBadge";
 import { Select } from "@/components/ui/Input";
 import { SearchBar } from "@/components/ui/SearchBar";
+import { StaffEditModal } from "@/components/staff/StaffEditModal";
+import { ManualSpaceReassignmentModal } from "@/components/accommodation/ManualSpaceReassignmentModal";
 
 export function StaffDetailDrawer({
   staffId,
@@ -30,6 +33,7 @@ export function StaffDetailDrawer({
 
   const utils = api.useUtils();
   const { data: profile } = api.staff.getById.useQuery({ id: staffId });
+  const { data: leaderboardSettings } = api.leaderboard.settings.get.useQuery({ campId }, { enabled: canManage && !!campId });
   const { data: venues = [] } = api.venue.getByCamp.useQuery({ campId }, { enabled: canManage && !!campId });
   const { data: tribes = [] } = api.tribe.listByCamp.useQuery({ campId }, { enabled: canManage && !!campId && profile?.type === "TEACHER" });
   const { data: departments = [] } = api.department.list.useQuery({ organizationId, campId }, { enabled: canManage && !!organizationId && !!campId });
@@ -55,6 +59,8 @@ export function StaffDetailDrawer({
 
   const [rejectReason, setRejectReason] = useState("");
   const [actionError, setActionError] = useState("");
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [spaceModalOpen, setSpaceModalOpen] = useState(false);
 
   const invalidate = () => {
     utils.staff.getById.invalidate({ id: staffId });
@@ -75,11 +81,13 @@ export function StaffDetailDrawer({
   const assignReportsTo = api.staff.assignReportsTo.useMutation({ onSuccess: invalidate, onError: onErr });
   const setDepartmentHead = api.staff.setDepartmentHead.useMutation({ onSuccess: invalidate, onError: onErr });
   const setTribeMonitor = api.staff.setTribeMonitor.useMutation({ onSuccess: invalidate, onError: onErr });
+  const setPointScope = api.staff.setPointScope.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignHostel = api.staff.assignHostel.useMutation({ onSuccess: invalidate, onError: onErr });
   const assignRoom = api.staff.assignRoom.useMutation({ onSuccess: invalidate, onError: onErr });
   const setPrimaryDepartment = api.departmentOperations.setPrimaryDepartment.useMutation({ onSuccess: invalidate, onError: onErr });
   const addSecondaryDepartment = api.departmentOperations.addSecondaryDepartment.useMutation({ onSuccess: () => { setAddSecondaryId(""); invalidate(); }, onError: onErr });
   const removePerson = api.departmentOperations.removePerson.useMutation({ onSuccess: invalidate, onError: onErr });
+  const setAttendanceIntent = api.staff.setAttendanceIntent.useMutation({ onSuccess: invalidate, onError: onErr });
 
   const assignCampus = api.user.assignCampusToRep.useMutation({
     onSuccess: () => {
@@ -110,6 +118,21 @@ export function StaffDetailDrawer({
   const profileTab = (
     <div className="space-y-4">
       {actionError && <div className="rounded-md status-danger">{actionError}</div>}
+      
+      {canManage && (
+        <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
+          <span className="text-xs text-txt-muted">Need to correct registration details?</span>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setEditModalOpen(true)}
+            className="text-xs font-bold text-accent-700 hover:bg-accent-50"
+          >
+            Edit Registration Details
+          </Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <div><span className="text-neutral-500">Phone</span><div className="font-medium text-neutral-900">{profile.phone}</div></div>
         <div><span className="text-neutral-500">Gender</span><div className="font-medium text-neutral-900">{profile.gender || "—"}</div></div>
@@ -190,42 +213,71 @@ export function StaffDetailDrawer({
       )}
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-neutral-700">Department</label>
-        <Select value={profile.departmentId ?? ""} onChange={(e) => assignDepartment.mutate({ id: staffId, departmentId: e.target.value || null })}>
-          <option value="">Unassigned</option>
-          {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        <label className="mb-1 block text-sm font-medium text-neutral-700">Primary Department</label>
+        <p className="mb-2 text-xs text-neutral-500">Pick which department is this person&apos;s main operational assignment.</p>
+        <Select
+          value={profile.departmentId ?? ""}
+          onChange={(e) => {
+            if (e.target.value) {
+              setPrimaryDepartment.mutate({ staffId, departmentId: e.target.value });
+            }
+          }}
+        >
+          <option value="">No primary department</option>
+          {memberships.map((m) => (
+            <option key={m.departmentId} value={m.departmentId}>
+              {m.departmentName} {m.isPrimary ? "(Primary)" : ""}
+            </option>
+          ))}
         </Select>
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-neutral-700">Secondary departments</label>
-        {secondaryMemberships.length === 0 ? (
-          <p className="text-sm text-neutral-500">None</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {secondaryMemberships.map((membership) => (
-              <li key={membership.departmentId} className="flex items-center justify-between gap-2 rounded-lg bg-surface-raised px-2.5 py-1.5 text-sm">
-                <span className="text-neutral-900">{membership.departmentName}</span>
-                <div className="flex items-center gap-1.5">
-                  <button type="button" className="text-xs font-medium text-accent-700 hover:underline" onClick={() => setPrimaryDepartment.mutate({ staffId, departmentId: membership.departmentId })}>Make primary</button>
-                  <button type="button" className="text-xs font-medium text-danger-700 hover:underline" onClick={() => membership.roles.forEach((role) => removePerson.mutate({ assignmentId: role.assignmentId }))}>Remove</button>
-                </div>
+        <label className="mb-1 block text-sm font-medium text-neutral-700">Secondary Departments</label>
+        <p className="mb-2 text-xs text-neutral-500">Staff can serve in multiple departments simultaneously.</p>
+        {secondaryMemberships.length > 0 && (
+          <ul className="mb-3 space-y-1">
+            {secondaryMemberships.map((m) => (
+              <li key={m.departmentId} className="flex items-center justify-between rounded border border-border-default bg-surface-raised px-3 py-1.5 text-xs">
+                <span className="font-medium text-neutral-900">{m.departmentName}</span>
+                <button
+                  type="button"
+                  onClick={() => removePerson.mutate({ assignmentId: m.roles[0]?.assignmentId })}
+                  disabled={removePerson.isPending}
+                  className="text-danger-600 hover:text-danger-700 font-semibold"
+                >
+                  Remove
+                </button>
               </li>
             ))}
           </ul>
         )}
-        {profile.departmentId && (
-          <div className="mt-2 flex items-center gap-2">
-            <Select value={addSecondaryId} onChange={(e) => setAddSecondaryId(e.target.value)}>
-              <option value="">Add to another department…</option>
-              {addableDepartments.map((department: any) => <option key={department.id} value={department.id}>{department.name}</option>)}
+        {addableDepartments.length > 0 && (
+          <div className="flex gap-2">
+            <Select containerClassName="flex-1" value={addSecondaryId} onChange={(e) => setAddSecondaryId(e.target.value)}>
+              <option value="">Add secondary department…</option>
+              {addableDepartments.map((d: any) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
             </Select>
-            <Button variant="secondary" disabled={!addSecondaryId} loading={addSecondaryDepartment.isPending} onClick={() => addSecondaryDepartment.mutate({ staffId, departmentId: addSecondaryId })}>Add</Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!addSecondaryId}
+              loading={addSecondaryDepartment.isPending}
+              onClick={() => {
+                if (addSecondaryId) {
+                  addSecondaryDepartment.mutate({ staffId, departmentId: addSecondaryId });
+                }
+              }}
+            >
+              Add
+            </Button>
           </div>
         )}
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 border-t border-border-subtle pt-4">
         <label className="flex items-center gap-2 text-sm text-neutral-700">
           <input
             type="checkbox"
@@ -265,6 +317,34 @@ export function StaffDetailDrawer({
               Assistant Camp Monitor
             </label>
           </>
+        )}
+        {isOrgAdmin && (profile.type === "TEACHER" || profile.type === "VOLUNTEER") && (
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
+            <input
+              type="checkbox"
+              checked={profile.canAwardCampWide}
+              onChange={(e) => setPointScope.mutate({ id: staffId, canAwardCampWide: e.target.checked })}
+              className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+            />
+            Award points camp-wide
+            <span className="text-xs text-neutral-500">— can award any camper in the camp, not just their tribe</span>
+          </label>
+        )}
+        {isOrgAdmin && (profile.type === "TEACHER" || profile.type === "VOLUNTEER") && (
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
+            <input
+              type="checkbox"
+              checked={profile.canAwardPoints}
+              onChange={(e) => setPointScope.mutate({ id: staffId, canAwardPoints: e.target.checked })}
+              className="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+            />
+            May award points
+            <span className="text-xs text-neutral-500">
+              {leaderboardSettings?.restrictPointAwarding
+                ? "— required to award points while this camp restricts awarding to designated staff"
+                : "— not needed yet: this camp lets any tribe-assigned staff award points"}
+            </span>
+          </label>
         )}
       </div>
 
@@ -390,62 +470,115 @@ export function StaffDetailDrawer({
     </div>
   );
 
-  const accommodationTab = canManage ? (
+  const accommodationTab = (
     <div className="space-y-4">
-      {!profile.assignedVenueId ? (
-        <p className="text-sm text-neutral-500">Assign a venue first to pick a hostel.</p>
-      ) : (
-        <>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-neutral-700">Hostel</label>
-            <Select
-              value={profile.assignedHostelId ?? ""}
-              onChange={(e) => {
-                assignHostel.mutate({ id: staffId, hostelId: e.target.value || null });
-                assignRoom.mutate({ id: staffId, roomId: null });
-              }}
-            >
-              <option value="">Unassigned</option>
-              {hostels.map((h: any) => <option key={h.id} value={h.id}>{h.name}</option>)}
-            </Select>
-          </div>
-          {profile.assignedHostelId && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">Room</label>
-              <Select value={profile.assignedRoomId ?? ""} onChange={(e) => assignRoom.mutate({ id: staffId, roomId: e.target.value || null })}>
-                <option value="">Unassigned</option>
-                {hostels.find((h: any) => h.id === profile.assignedHostelId)?.rooms.map((r: any) => (
-                  <option key={r.id} value={r.id}>{r.name}</option>
-                ))}
-              </Select>
-            </div>
+      {/* Current Accommodation Summary Card */}
+      <div className="rounded-2xl border border-border-default bg-surface p-4 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+          <span className="font-bold text-neutral-900 text-sm">Current Room & Bed</span>
+          {profile.assignedHostel ? (
+            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              Assigned
+            </span>
+          ) : (
+            <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">
+              Unassigned
+            </span>
           )}
-        </>
-      )}
-    </div>
-  ) : (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-      <div><span className="text-neutral-500">Hostel</span><div className="font-medium text-neutral-900">{profile.assignedHostel?.name || "Unassigned"}</div></div>
-      <div><span className="text-neutral-500">Room</span><div className="font-medium text-neutral-900">{profile.assignedRoom?.name || "Unassigned"}</div></div>
-      <div><span className="text-neutral-500">Bed</span><div className="font-medium text-neutral-900">{profile.assignedBed?.label || "Unassigned"}</div></div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <span className="text-neutral-500 block">Hostel</span>
+            <span className="font-bold text-neutral-900">{profile.assignedHostel?.name || "—"}</span>
+          </div>
+          <div>
+            <span className="text-neutral-500 block">Room</span>
+            <span className="font-bold text-neutral-900">{profile.assignedRoom?.name || "—"}</span>
+          </div>
+          <div>
+            <span className="text-neutral-500 block">Bed</span>
+            <span className="font-bold text-neutral-900">{profile.assignedBed?.label || "—"}</span>
+          </div>
+        </div>
+
+        {canManage && (
+          <div className="pt-2 border-t border-border-subtle">
+            <Button
+              size="sm"
+              onClick={() => setSpaceModalOpen(true)}
+              className="w-full justify-center"
+            >
+              Manually Reassign Hostel / Room / Bed
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 
   return (
-    <Drawer
-      open
-      onClose={onClose}
-      title={`${profile.firstName} ${profile.lastName}`}
-      subtitle={<StatusBadge status={profile.status} />}
-    >
-      <Tabs
-        tabs={[
-          { label: "Profile", content: profileTab },
-          { label: "Assignment", content: assignmentTab },
-          { label: "Hierarchy", content: hierarchyTab },
-          { label: "Accommodation", content: accommodationTab },
-        ]}
-      />
-    </Drawer>
+    <>
+      <Drawer
+        open
+        onClose={onClose}
+        title={`${profile.firstName} ${profile.lastName}`}
+        subtitle={
+          <div className="flex items-center gap-2">
+            <StatusBadge status={profile.status} />
+            <AttendanceToggleBadge
+              status={profile.attendanceIntent}
+              onToggle={(next) => setAttendanceIntent.mutate({ id: staffId, intent: next })}
+              disabled={setAttendanceIntent.isPending}
+            />
+          </div>
+        }
+      >
+        <Tabs
+          tabs={[
+            { label: "Profile", content: profileTab },
+            { label: "Assignment", content: assignmentTab },
+            { label: "Hierarchy", content: hierarchyTab },
+            { label: "Accommodation", content: accommodationTab },
+          ]}
+        />
+      </Drawer>
+
+      {/* Edit Details Modal */}
+      {editModalOpen && (
+        <StaffEditModal
+          open={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          staffId={staffId}
+          organizationId={organizationId}
+          campId={campId}
+          onSuccess={invalidate}
+        />
+      )}
+
+      {/* Manual Accommodation Space Reassignment Modal */}
+      {spaceModalOpen && (
+        <ManualSpaceReassignmentModal
+          open={spaceModalOpen}
+          onClose={() => setSpaceModalOpen(false)}
+          occupant={{
+            id: staffId,
+            name: `${profile.firstName} ${profile.lastName}`.trim(),
+            type: "STAFF",
+            staffType: profile.type,
+            gender: profile.gender,
+            photoUrl: profile.photoUrl,
+            tribeName: profile.assignedTribe?.name,
+            currentHostelName: profile.assignedHostel?.name,
+            currentRoomName: profile.assignedRoom?.name,
+            currentBedLabel: profile.assignedBed?.label,
+          }}
+          organizationId={organizationId}
+          campId={campId}
+          venueId={profile.assignedVenueId ?? undefined}
+          onSuccess={invalidate}
+        />
+      )}
+    </>
   );
 }

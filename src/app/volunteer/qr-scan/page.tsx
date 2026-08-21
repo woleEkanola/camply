@@ -13,9 +13,9 @@ export default function VolunteerQrScanPage() {
 
   return (
     <AppShell area="volunteer">
-      <StaffGate>
+      <StaffGate allowUnapproved>
         {(profile) => (
-          <ScanCenterShell organizationId={organizationId} homeCampusId={profile.preferredCampusId ?? undefined} pointsHref="/volunteer/tribe" />
+          <ScanCenterShell organizationId={organizationId} homeCampusId={profile?.preferredCampusId ?? undefined} pointsHref="/volunteer/tribe" />
         )}
       </StaffGate>
     </AppShell>

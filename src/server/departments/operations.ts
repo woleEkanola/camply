@@ -33,10 +33,12 @@ function shouldGenerate(
   const start = dateOnly(camp.startDate);
   const end = dateOnly(camp.endDate);
   if (routine === "SPECIFIC_DAY") return isSameDay(specificDate, date);
-  if (routine === "BEFORE_CAMP" || routine === "ONE_TIME") return isSameDay(start, date);
+  if (routine === "BEFORE_CAMP" || routine === "ONE_TIME") {
+    return isSameDay(specificDate, date) || isSameDay(start, date) || isSameDay(new Date(), date);
+  }
   if (routine === "ARRIVAL") return isSameDay(camp.arrivalDate ?? start, date);
   if (routine === "AFTER_CHECKOUT" || routine === "AFTER_CAMP") return isSameDay(camp.departureDate ?? end, date);
-  return date >= start && date <= end;
+  return (date >= start && date <= end) || isSameDay(new Date(), date);
 }
 
 /** Lazily creates only the requested operational day's execution rows. */

@@ -41,6 +41,7 @@ import { campCommandRouter } from "./routers/campCommand";
 import { departmentOperationsRouter } from "./routers/departmentOperations";
 import { scheduleRouter } from "./routers/schedule";
 import { campResourceRouter } from "./routers/campResource";
+import { medicalCleanRouter } from "./routers/medicalClean";
 
 /**
  * This is the primary router for your server.
@@ -90,6 +91,7 @@ export const appRouter = createTRPCRouter({
   departmentOperations: departmentOperationsRouter,
   schedule: scheduleRouter,
   campResource: campResourceRouter,
+  medicalClean: medicalCleanRouter,
 });
 
 // export type definition of API

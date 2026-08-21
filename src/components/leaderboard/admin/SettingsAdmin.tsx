@@ -268,6 +268,32 @@ export function SettingsAdmin({ campId, organizationId }: { campId: string; orga
 
       <Card>
         <CardHeader>
+          <CardTitle>Point Awarding</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!!settings.restrictPointAwarding}
+              onChange={(e) => update.mutate({ campId, restrictPointAwarding: e.target.checked } as any)}
+              className="mt-0.5 h-4 w-4 rounded border-input-border"
+              data-testid="restrict-point-awarding-toggle"
+            />
+            <span>
+              Only designated staff may award points
+              <span className="mt-0.5 block text-xs text-txt-secondary">
+                When on, an ordinary tribe teacher or volunteer keeps marking daily attendance but can no longer award
+                points — only admins and staff individually flagged &quot;May award points&quot; or &quot;Award points
+                camp-wide&quot; (in their staff profile) can. When off, any approved staff member assigned to a tribe
+                can award points, as today.
+              </span>
+            </span>
+          </label>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Ranking Weights</CardTitle>
         </CardHeader>
         <CardBody className="space-y-6">

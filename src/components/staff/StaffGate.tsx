@@ -9,15 +9,21 @@ const MESSAGES: Record<string, { title: string; body: string }> = {
   DEACTIVATED: { title: "Account deactivated", body: "Your account has been deactivated. Contact a camp administrator for details." },
 };
 
-/** Gates every teacher/volunteer page behind an APPROVED StaffProfile — pending/rejected/deactivated users see a status message instead of operational tools. */
-export function StaffGate({ children }: { children: (profile: any) => React.ReactNode }) {
+/** Gates teacher/volunteer pages behind an APPROVED StaffProfile — pending/rejected/deactivated users see a status message, unless allowUnapproved is true (e.g. for unrestricted QR scanning). */
+export function StaffGate({
+  children,
+  allowUnapproved = false,
+}: {
+  children: (profile: any) => React.ReactNode;
+  allowUnapproved?: boolean;
+}) {
   const { data: profile, isLoading } = api.staff.getMyProfile.useQuery();
 
   if (isLoading) {
     return <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-accent-600" />;
   }
 
-  if (!profile || profile.status !== "APPROVED") {
+  if (!allowUnapproved && (!profile || profile.status !== "APPROVED")) {
     const message = MESSAGES[profile?.status ?? "PENDING"];
     return (
       <Card>
@@ -29,5 +35,5 @@ export function StaffGate({ children }: { children: (profile: any) => React.Reac
     );
   }
 
-  return <>{children(profile)}</>;
+  return <>{children(profile || {})}</>;
 }

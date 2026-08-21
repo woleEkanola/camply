@@ -37,6 +37,7 @@ import {
   ArrowUturnLeftIcon,
 } from "@heroicons/react/24/outline";
 import { PhoneIcon } from "@heroicons/react/24/solid";
+import { cn } from "@/lib/cn";
 
 interface RecentScan {
   registrationId: string;
@@ -807,7 +808,7 @@ export function ScanCenterShell({
             setSuccessData(null);
             setScannerActive(true);
           }}
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-600 p-6 text-white cursor-pointer animate-fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto bg-emerald-600 p-4 sm:p-6 text-white cursor-pointer animate-fade-in"
         >
           <button
             type="button"
@@ -816,84 +817,86 @@ export function ScanCenterShell({
               setSuccessData(null);
               setScannerActive(true);
             }}
-            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-10 cursor-pointer border border-white/20"
+            className="fixed top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-20 cursor-pointer border border-white/20"
             aria-label="Close popup"
           >
             <XMarkIcon className="h-7 w-7 stroke-2" />
           </button>
 
-          <div className="flex flex-col items-center max-w-lg text-center space-y-6">
-            <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
-            
-            <div className="space-y-2">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight">{successData.actionPerformed}</h1>
-              <p className="text-2xl md:text-3xl font-bold opacity-90">{successData.camperName}</p>
-              <p className="text-sm font-semibold tracking-wider opacity-75 uppercase">{successData.regNumber}</p>
-            </div>
+          <div className="min-h-full flex flex-col items-center justify-center py-12 sm:py-16 md:py-20">
+            <div className="flex flex-col items-center max-w-lg w-full text-center space-y-6">
+              <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
+              
+              <div className="space-y-2">
+                <h1 className="text-4xl md:text-5xl font-black tracking-tight">{successData.actionPerformed}</h1>
+                <p className="text-2xl md:text-3xl font-bold opacity-90">{successData.camperName}</p>
+                <p className="text-sm font-semibold tracking-wider opacity-75 uppercase">{successData.regNumber}</p>
+              </div>
 
-            {successData.photoUrl && (
-              <img
-                src={successData.photoUrl}
-                alt={successData.camperName}
-                className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
-              />
-            )}
-
-            <div className="grid grid-cols-2 gap-4 w-full bg-surface/10 backdrop-blur rounded-xl p-4 text-left text-sm border border-white/10">
-              {successData.tribe && (
-                <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Tribe</span>
-                  <span className="font-bold">{successData.tribe}</span>
-                </div>
+              {successData.photoUrl && (
+                <img
+                  src={successData.photoUrl}
+                  alt={successData.camperName}
+                  className="h-44 w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                />
               )}
-              {successData.hostel && (
-                <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Hostel</span>
-                  <span className="font-bold">{successData.hostel}</span>
-                </div>
-              )}
-              {successData.room && (
-                <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Room & Bed</span>
-                  <span className="font-bold">{successData.room} / {successData.bed || "—"}</span>
-                </div>
-              )}
-              {successData.teacherName && (
-                <div>
-                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Teacher</span>
-                  <span className="font-bold">{successData.teacherName}</span>
-                </div>
-              )}
-            </div>
 
-            {successData.medicalFlags?.length > 0 && (
-              <MedicalBanner flags={successData.medicalFlags} camper={successData.camper} />
-            )}
+              <div className="grid grid-cols-2 gap-4 w-full bg-surface/10 backdrop-blur rounded-xl p-4 text-left text-sm border border-white/10">
+                {successData.tribe && (
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Tribe</span>
+                    <span className="font-bold">{successData.tribe}</span>
+                  </div>
+                )}
+                {successData.hostel && (
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Hostel</span>
+                    <span className="font-bold">{successData.hostel}</span>
+                  </div>
+                )}
+                {successData.room && (
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Room & Bed</span>
+                    <span className="font-bold">{successData.room} / {successData.bed || "—"}</span>
+                  </div>
+                )}
+                {successData.teacherName && (
+                  <div>
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Teacher</span>
+                    <span className="font-bold">{successData.teacherName}</span>
+                  </div>
+                )}
+              </div>
 
-            <div className="flex flex-col items-center gap-3 w-full pt-1">
-              <button
-                type="button"
-                disabled={undoScanMutation.isPending}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  undoScanMutation.mutate({
-                    organizationId,
-                    scanEventId: successData.scanEventId,
-                    registrationId: successData.registrationId,
-                    station: activeStationDef.name,
-                  });
-                }}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-neutral-100 active:scale-95 text-emerald-950 font-bold text-sm shadow-xl transition border border-white/40 cursor-pointer disabled:opacity-50"
-              >
-                <ArrowUturnLeftIcon className="h-4 w-4 stroke-2 text-emerald-950" />
-                {undoScanMutation.isPending ? "Undoing..." : "Undo this scan"}
-              </button>
+              {successData.medicalFlags?.length > 0 && (
+                <MedicalBanner flags={successData.medicalFlags} camper={successData.camper} />
+              )}
 
-              <p className="text-xs opacity-75 font-medium">
-                {dismissMode === "MANUAL"
-                  ? "Click (X) or tap anywhere to close and scan next"
-                  : "Tap to dismiss now · resumes scanning automatically"}
-              </p>
+              <div className="flex flex-col items-center gap-3 w-full pt-1">
+                <button
+                  type="button"
+                  disabled={undoScanMutation.isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    undoScanMutation.mutate({
+                      organizationId,
+                      scanEventId: successData.scanEventId,
+                      registrationId: successData.registrationId,
+                      station: activeStationDef.name,
+                    });
+                  }}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-neutral-100 active:scale-95 text-emerald-950 font-bold text-sm shadow-xl transition border border-white/40 cursor-pointer disabled:opacity-50"
+                >
+                  <ArrowUturnLeftIcon className="h-4 w-4 stroke-2 text-emerald-950" />
+                  {undoScanMutation.isPending ? "Undoing..." : "Undo this scan"}
+                </button>
+
+                <p className="text-xs opacity-75 font-medium">
+                  {dismissMode === "MANUAL"
+                    ? "Click (X) or tap anywhere to close and scan next"
+                    : "Tap to dismiss now · resumes scanning automatically"}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -906,9 +909,10 @@ export function ScanCenterShell({
             setStaffScanData(null);
             setScannerActive(true);
           }}
-          className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 text-white cursor-pointer animate-fade-in ${
+          className={cn(
+            "fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 text-white cursor-pointer animate-fade-in",
             staffScanData.notApplicable ? "bg-amber-700" : staffScanData.duplicate ? "bg-blue-600" : "bg-sky-700"
-          }`}
+          )}
         >
           <button
             type="button"
@@ -917,76 +921,206 @@ export function ScanCenterShell({
               setStaffScanData(null);
               setScannerActive(true);
             }}
-            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-10 cursor-pointer border border-white/20"
+            className="fixed top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-20 cursor-pointer border border-white/20"
             aria-label="Close popup"
           >
             <XMarkIcon className="h-7 w-7 stroke-2" />
           </button>
 
-          <div className="flex flex-col items-center max-w-lg text-center space-y-6">
-            {staffScanData.notApplicable ? (
-              <ExclamationTriangleIcon className="h-24 w-24 md:h-32 md:w-32" />
-            ) : staffScanData.duplicate ? (
-              <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
-            ) : (
-              <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
-            )}
+          <div className="min-h-full flex flex-col items-center justify-center py-12 sm:py-16 md:py-20">
+            <div className="flex flex-col items-center max-w-xl w-full text-center space-y-6">
+              {staffScanData.notApplicable ? (
+                <ExclamationTriangleIcon className="h-24 w-24 md:h-32 md:w-32" />
+              ) : staffScanData.duplicate ? (
+                <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
+              ) : (
+                <CheckCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-bounce" />
+              )}
 
-            <div className="space-y-2">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight">
-                {staffScanData.actionPerformed ?? staffScanData.staffAction}
-              </h1>
-              <p className="text-2xl md:text-3xl font-bold opacity-90">
-                {`${staffScanData.profile.firstName} ${staffScanData.profile.lastName}`.trim()}
-              </p>
-              <p className="text-sm font-semibold tracking-wider opacity-75 uppercase">
-                {staffScanData.profile.type} · {staffScanData.profile.preferredCampus?.name ?? "—"}
-              </p>
-            </div>
+              <div className="space-y-2">
+                <h1 className="text-4xl md:text-5xl font-black tracking-tight">
+                  {staffScanData.actionPerformed ?? staffScanData.staffAction}
+                </h1>
+                <p className="text-2xl md:text-3xl font-bold opacity-95">
+                  {`${staffScanData.profile.firstName} ${staffScanData.profile.lastName}`.trim()}
+                  {staffScanData.profile.preferredName && (
+                    <span className="text-lg md:text-xl font-normal opacity-80 block">
+                      ("{staffScanData.profile.preferredName}")
+                    </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-white/20 border border-white/30">
+                    {staffScanData.profile.type}
+                  </span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold",
+                      (staffScanData.profile.attendanceIntent ?? "COMING") === "NOT_COMING"
+                        ? "bg-rose-500/30 text-rose-200 border border-rose-400/40"
+                        : "bg-emerald-500/30 text-emerald-100 border border-emerald-400/40"
+                    )}
+                  >
+                    {(staffScanData.profile.attendanceIntent ?? "COMING") === "NOT_COMING" ? "Not Coming" : "Coming"}
+                  </span>
+                  <span className="text-xs font-semibold opacity-75 uppercase">
+                    {staffScanData.profile.preferredCampus?.name ?? "—"}
+                  </span>
+                </div>
+              </div>
 
-            {staffScanData.message && <p className="max-w-md text-base font-medium opacity-90">{staffScanData.message}</p>}
+              {staffScanData.message && (
+                <p className="max-w-md text-base font-medium opacity-90">{staffScanData.message}</p>
+              )}
 
-            <div className="grid grid-cols-2 gap-4 w-full bg-surface/10 backdrop-blur rounded-xl p-4 text-left text-sm border border-white/10">
-              {staffScanData.profile.department?.name && (
+              {/* Staff Photo / Initials Avatar */}
+              {staffScanData.profile.photoUrl || staffScanData.profile.user?.photoUrl ? (
+                <img
+                  src={staffScanData.profile.photoUrl || staffScanData.profile.user?.photoUrl}
+                  alt={`${staffScanData.profile.firstName} ${staffScanData.profile.lastName}`}
+                  className="h-36 w-36 sm:h-44 sm:w-44 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                />
+              ) : (
+                <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-2xl bg-surface/20 flex items-center justify-center text-4xl font-black shadow-lg border border-white/20">
+                  {(staffScanData.profile.firstName?.[0] ?? "S").toUpperCase()}
+                </div>
+              )}
+
+              {/* Rich 6-Card Metadata Grid matching Camper Popup */}
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full bg-surface/10 backdrop-blur rounded-xl p-4 sm:p-5 text-left text-sm border border-white/10">
                 <div>
                   <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Department</span>
-                  <span className="font-bold">{staffScanData.profile.department.name}</span>
+                  <span className="font-bold text-white block">
+                    {staffScanData.profile.department?.name || staffScanData.profile.preferredDepartment?.name || "—"}
+                  </span>
                 </div>
-              )}
-              {staffScanData.profile.assignedTribe?.name && (
+                <div>
+                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Position / Role</span>
+                  <span className="font-bold text-white block truncate">
+                    {staffScanData.profile.positionAssignments?.[0]?.position?.name ||
+                      (staffScanData.profile.isDepartmentHead ? "Department Head" :
+                       staffScanData.profile.isCampMonitor ? "Camp Monitor" :
+                       staffScanData.profile.workerStatus || "General Staff")}
+                  </span>
+                </div>
                 <div>
                   <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Tribe</span>
-                  <span className="font-bold">{staffScanData.profile.assignedTribe.name}</span>
+                  <span className="font-bold text-white block">
+                    {staffScanData.profile.assignedTribe?.name || "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Hostel & Room / Bed</span>
+                  <span className="font-bold text-white block truncate">
+                    {staffScanData.profile.assignedRoom?.hostel?.name || staffScanData.profile.assignedHostel?.name || "—"}
+                    {staffScanData.profile.assignedRoom?.name ? ` · ${staffScanData.profile.assignedRoom.name}` : ""}
+                    {staffScanData.profile.assignedBed?.label ? ` (Bed ${staffScanData.profile.assignedBed.label})` : ""}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Campus</span>
+                  <span className="font-bold text-white block">{staffScanData.profile.preferredCampus?.name || "—"}</span>
+                </div>
+                <div>
+                  <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Church / Ministry</span>
+                  <span className="font-bold text-white truncate block">
+                    {staffScanData.profile.church || "—"}
+                    {staffScanData.profile.churchDepartment ? ` (${staffScanData.profile.churchDepartment})` : ""}
+                  </span>
+                </div>
+              </div>
+
+              {/* Medical & Safety Alerts Banner */}
+              {(staffScanData.profile.allergies || staffScanData.profile.medicalConditions) && (
+                <div className="w-full bg-red-500/20 border border-red-400/30 backdrop-blur rounded-xl p-4 text-left space-y-1.5 shadow-lg">
+                  <span className="block text-xs uppercase tracking-wider font-black text-red-200">⚠ Medical & Allergy Alert</span>
+                  {staffScanData.profile.allergies && (
+                    <div className="text-sm">
+                      <span className="opacity-80">Allergies:</span>{" "}
+                      <span className="font-bold text-white">{staffScanData.profile.allergies}</span>
+                    </div>
+                  )}
+                  {staffScanData.profile.medicalConditions && (
+                    <div className="text-sm">
+                      <span className="opacity-80">Conditions:</span>{" "}
+                      <span className="font-bold text-white">{staffScanData.profile.medicalConditions}</span>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
 
-            {staffScanData.scanEventId && (
-              <div className="flex flex-col items-center gap-3 w-full pt-1">
-                <button
-                  type="button"
-                  disabled={undoScanMutation.isPending}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    undoScanMutation.mutate({
-                      organizationId,
-                      scanEventId: staffScanData.scanEventId,
-                      station: staffScanData.profile?.type ? `${staffScanData.profile.type} Scan` : "Staff Scan",
-                    });
-                  }}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-neutral-100 active:scale-95 text-neutral-900 font-bold text-sm shadow-xl transition border border-white/40 cursor-pointer disabled:opacity-50"
-                >
-                  <ArrowUturnLeftIcon className="h-4 w-4 stroke-2 text-neutral-900" />
-                  {undoScanMutation.isPending ? "Undoing..." : "Undo this scan"}
-                </button>
+              {/* Staff Phone & Emergency Contacts with Direct Call Actions */}
+              <div className="w-full bg-surface/10 backdrop-blur rounded-xl p-4 text-left space-y-3 border border-white/10">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Staff Phone</span>
+                    <span className="block font-bold truncate text-sm">{staffScanData.profile.phone || "—"}</span>
+                  </div>
+                  {staffScanData.profile.phone && (
+                    <a
+                      href={`tel:${staffScanData.profile.phone}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:scale-95 px-3 py-2 text-xs font-bold text-white min-h-[38px] shrink-0 shadow transition"
+                    >
+                      <PhoneIcon className="h-3.5 w-3.5" />
+                      Call Staff
+                    </a>
+                  )}
+                </div>
+
+                {(staffScanData.profile.emergencyContactName || staffScanData.profile.emergencyContactPhone) && (
+                  <div className="border-t border-white/10 pt-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="block text-xs uppercase opacity-75 font-semibold text-white/80">Emergency Contact</span>
+                      <span className="block font-bold truncate text-sm">
+                        {staffScanData.profile.emergencyContactName || "—"}
+                        {staffScanData.profile.emergencyContactRelationship ? ` (${staffScanData.profile.emergencyContactRelationship})` : ""}
+                      </span>
+                      {staffScanData.profile.emergencyContactPhone && (
+                        <span className="block text-xs opacity-80">{staffScanData.profile.emergencyContactPhone}</span>
+                      )}
+                    </div>
+                    {staffScanData.profile.emergencyContactPhone && (
+                      <a
+                        href={`tel:${staffScanData.profile.emergencyContactPhone}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 rounded-lg bg-red-500 hover:bg-red-600 active:scale-95 px-3 py-2 text-xs font-bold text-white min-h-[38px] shrink-0 shadow transition"
+                      >
+                        <PhoneIcon className="h-3.5 w-3.5" />
+                        Call Contact
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
 
-            <p className="text-xs opacity-75 font-medium">
-              {dismissMode === "MANUAL"
-                ? "Click (X) or tap anywhere to close and scan next"
-                : "Tap to dismiss now · resumes scanning automatically"}
-            </p>
+              {staffScanData.scanEventId && (
+                <div className="flex flex-col items-center gap-3 w-full pt-1">
+                  <button
+                    type="button"
+                    disabled={undoScanMutation.isPending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      undoScanMutation.mutate({
+                        organizationId,
+                        scanEventId: staffScanData.scanEventId,
+                        station: staffScanData.profile?.type ? `${staffScanData.profile.type} Scan` : "Staff Scan",
+                      });
+                    }}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-neutral-100 active:scale-95 text-neutral-900 font-bold text-sm shadow-xl transition border border-white/40 cursor-pointer disabled:opacity-50"
+                  >
+                    <ArrowUturnLeftIcon className="h-4 w-4 stroke-2 text-neutral-900" />
+                    {undoScanMutation.isPending ? "Undoing..." : "Undo this scan"}
+                  </button>
+                </div>
+              )}
+
+              <p className="text-xs opacity-75 font-medium">
+                {dismissMode === "MANUAL"
+                  ? "Click (X) or tap anywhere to close and scan next"
+                  : "Tap to dismiss now · resumes scanning automatically"}
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -1007,13 +1141,13 @@ export function ScanCenterShell({
               setDuplicateData(null);
               setScannerActive(true);
             }}
-            className="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-10 cursor-pointer border border-white/20"
+            className="fixed top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-20 cursor-pointer border border-white/20"
             aria-label="Close popup"
           >
             <XMarkIcon className="h-7 w-7 stroke-2" />
           </button>
 
-          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+          <div className="min-h-full flex flex-col items-center justify-center py-12 sm:py-16 md:py-20">
             <div className="flex flex-col items-center max-w-lg w-full text-center space-y-6">
               <InformationCircleIcon className="h-24 w-24 md:h-32 md:w-32 animate-pulse" />
               
@@ -1079,9 +1213,22 @@ export function ScanCenterShell({
             setEmergencyLookupData(null);
             setScannerActive(true);
           }}
-          className="fixed inset-0 z-50 overflow-y-auto bg-red-700 p-4 sm:p-6 text-white cursor-pointer"
+          className="fixed inset-0 z-50 overflow-y-auto bg-red-700 p-4 sm:p-6 text-white cursor-pointer animate-fade-in"
         >
-          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEmergencyLookupData(null);
+              setScannerActive(true);
+            }}
+            className="fixed top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/40 hover:bg-black/60 text-white p-3 backdrop-blur-md transition shadow-xl z-20 cursor-pointer border border-white/20"
+            aria-label="Close popup"
+          >
+            <XMarkIcon className="h-7 w-7 stroke-2" />
+          </button>
+
+          <div className="min-h-full flex flex-col items-center justify-center py-12 sm:py-16 md:py-20">
             <div className="flex flex-col max-w-xl w-full text-center space-y-6">
               <div className="flex flex-col items-center space-y-2">
                 <ExclamationTriangleIcon className="h-20 w-20 text-red-200 animate-bounce" />
@@ -1144,7 +1291,7 @@ export function ScanCenterShell({
 
       {/* ═══ OVERLAY 4: CAMPER DETAILS LOOKUP OVERLAY ═══ */}
       {lookupData && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-purple-900 p-4 sm:p-6 text-white">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-purple-900 p-4 sm:p-6 text-white animate-fade-in">
           <button
             type="button"
             onClick={() => {
@@ -1152,12 +1299,12 @@ export function ScanCenterShell({
               setScannerActive(true);
             }}
             aria-label="Close"
-            className="fixed right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm"
+            className="fixed right-4 top-4 sm:right-6 sm:top-6 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20"
           >
             <XMarkIcon className="h-6 w-6" />
           </button>
 
-          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+          <div className="min-h-full flex flex-col items-center justify-center py-12 sm:py-16 md:py-20">
             <div className="flex flex-col max-w-xl w-full space-y-6 text-left">
               <div className="flex items-center gap-4 border-b border-white/10 pb-4">
                 {lookupData.registration.camper.photoUrl ? (
@@ -1250,8 +1397,7 @@ export function ScanCenterShell({
                 </div>
               </div>
 
-              {/* Campus rep contact + full teacher list — reach anyone from
-                  this camper's campus quickly in an emergency. */}
+              {/* Campus rep contact + full teacher list */}
               {lookupData.registration.campus?.id && (
                 <div className="border-t border-white/10 pt-4 space-y-3">
                   <span className="block text-xs uppercase opacity-65 font-bold">Campus Contacts</span>
@@ -1260,15 +1406,16 @@ export function ScanCenterShell({
                   )}
                   {(lookupData.registration.campus.reps ?? []).map((rep: any) => {
                     const repName = [rep.firstName, rep.lastName].filter(Boolean).join(" ") || "Campus Rep";
+                    const repPhone = rep.phone || rep.staffProfiles?.[0]?.phone || lookupData.registration.campus?.phone;
                     return (
                       <div key={rep.id} className="flex items-center justify-between gap-3 bg-surface/5 border border-white/5 rounded-lg p-3">
                         <div className="min-w-0">
                           <span className="block text-xs uppercase opacity-60 font-semibold">Campus Rep</span>
                           <span className="block font-bold truncate">{repName}</span>
                         </div>
-                        {rep.phone ? (
+                        {repPhone ? (
                           <a
-                            href={`tel:${rep.phone}`}
+                            href={`tel:${repPhone}`}
                             className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white min-h-[44px] shrink-0"
                           >
                             <PhoneIcon className="h-4 w-4" />
@@ -1307,13 +1454,10 @@ export function ScanCenterShell({
         />
       )}
 
-      {/* ═══ OVERLAY 5: CRITICAL MEDICAL INTERRUPT — only genuinely
-          life-safety CRITICAL conditions reach this overlay (see
-          src/lib/medical.ts classifyMedical); everything else renders as
-          an inline MedicalBanner in the success overlay instead. ═══ */}
+      {/* ═══ OVERLAY 5: CRITICAL MEDICAL INTERRUPT ═══ */}
       {medicalData && (
-        <div role="alertdialog" aria-live="assertive" className="fixed inset-0 z-50 overflow-y-auto bg-red-700 p-4 sm:p-6 text-white">
-          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+        <div role="alertdialog" aria-live="assertive" className="fixed inset-0 z-50 overflow-y-auto bg-red-700 p-4 sm:p-6 text-white animate-fade-in">
+          <div className="min-h-full flex flex-col items-center justify-center py-12 sm:py-16 md:py-20">
             <div className="flex flex-col max-w-xl w-full text-center space-y-6">
               <div className="flex flex-col items-center space-y-3">
                 <ExclamationTriangleIcon className="h-20 w-20 text-red-100 animate-bounce" />
@@ -1377,8 +1521,8 @@ export function ScanCenterShell({
 
       {/* ═══ OVERLAY 6: SECURE CHECKOUT GUARDIAN FORM OVERLAY ═══ */}
       {checkoutTargetReg && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-blue-900 p-4 sm:p-6 text-white">
-          <div className="min-h-full flex flex-col items-center justify-start sm:justify-center py-6">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-blue-900 p-4 sm:p-6 text-white animate-fade-in">
+          <div className="min-h-full flex flex-col items-center justify-center py-12 sm:py-16 md:py-20">
             <div className="flex flex-col max-w-xl w-full space-y-6 text-left">
               
               <div className="flex items-center gap-4 border-b border-white/15 pb-4">

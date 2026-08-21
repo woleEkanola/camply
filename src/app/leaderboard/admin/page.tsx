@@ -13,9 +13,10 @@ import { SessionsAdmin } from "@/components/leaderboard/admin/SessionsAdmin";
 import { BulkAwardAdmin } from "@/components/leaderboard/admin/BulkAwardAdmin";
 import { AchievementsAdmin } from "@/components/leaderboard/admin/AchievementsAdmin";
 import { AuditLogAdmin } from "@/components/leaderboard/admin/AuditLogAdmin";
+import { PointActivityAdmin } from "@/components/leaderboard/admin/PointActivityAdmin";
 import { SettingsAdmin } from "@/components/leaderboard/admin/SettingsAdmin";
 
-const SUB_TABS = ["Categories", "Rules", "Sessions", "Bulk Award", "Achievements", "Audit Log", "Settings"] as const;
+const SUB_TABS = ["Categories", "Rules", "Sessions", "Bulk Award", "Achievements", "Audit Log", "Point Activity", "Settings"] as const;
 
 /** Role-gated in-page (not via middleware, matching the rest of the app's
  * per-route auth pattern) — SUPER_ADMIN/OWNER/ADMIN, or a current Camp Head
@@ -115,7 +116,8 @@ export default function LeaderboardAdminPage() {
               {tabIndex === 3 && <BulkAwardAdmin campId={campId} />}
               {tabIndex === 4 && <AchievementsAdmin campId={campId} />}
               {tabIndex === 5 && <AuditLogAdmin campId={campId} />}
-              {tabIndex === 6 && <SettingsAdmin campId={campId} organizationId={organizationId!} />}
+              {tabIndex === 6 && <PointActivityAdmin campId={campId} />}
+              {tabIndex === 7 && <SettingsAdmin campId={campId} organizationId={organizationId!} />}
             </div>
           </>
         )}

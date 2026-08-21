@@ -73,6 +73,27 @@ function subjectColumn(subjectType: z.infer<typeof subjectTypeSchema>): "tribeId
   }
 }
 
+/** Lazily ensures a camp-scoped "Adjustment" category exists for admin
+ * tribe resets/deductions — same lazy-create-on-first-use pattern as
+ * attendance.ts's resolveAttendanceScoring, never a hard-coded id. */
+async function ensureAdjustmentCategory(prisma: any, campId: string) {
+  const existing = await prisma.scoreCategory.findFirst({
+    where: { campId, key: { equals: "LEADERBOARD_ADJUSTMENT", mode: "insensitive" } },
+  });
+  if (existing) return existing;
+  return prisma.scoreCategory.create({
+    data: {
+      campId,
+      key: "LEADERBOARD_ADJUSTMENT",
+      name: "Admin Adjustment",
+      description: "Manual point reset or deduction applied by a camp admin.",
+      kind: "MANUAL",
+      enabled: true,
+      sortOrder: 999,
+    },
+  });
+}
+
 export const leaderboardRouter = createTRPCRouter({
   // ─── Reads ─────────────────────────────────────────────────────────────
 
@@ -1096,6 +1117,7 @@ export const leaderboardRouter = createTRPCRouter({
           completionMode: z.enum(["CHECKOUT", "CAMP_END", "MANUAL"]).optional(),
           completionPoints: z.number().int().min(0).optional(),
           timezone: z.string().optional(),
+          restrictPointAwarding: z.boolean().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -1181,6 +1203,72 @@ export const leaderboardRouter = createTRPCRouter({
       return settings;
     }),
 
+  /** Zeroes ONE tribe by writing a single compensating ScoreEvent for
+   * -currentTotal — narrower than `reset` above (which archives the whole
+   * camp leaderboard). No-op (returns null) when the tribe is already at 0,
+   * so repeated calls / accidental double-clicks are safe. */
+  resetTribe: protectedProcedure
+    .input(z.object({ campId: z.string(), tribeId: z.string(), reason: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const camp = await ctx.prisma.camp.findUniqueOrThrow({ where: { id: input.campId } });
+      await assertCanManageCamp(ctx, input.campId);
+      const tribe = await ctx.prisma.tribe.findFirst({ where: { id: input.tribeId, campId: input.campId, deletedAt: null } });
+      if (!tribe) throw new TRPCError({ code: "NOT_FOUND", message: "Tribe not found in this camp." });
+
+      const stat = await ctx.prisma.leaderboardStat.findFirst({
+        where: { campId: input.campId, subjectType: "TRIBE", subjectId: input.tribeId, day: null },
+      });
+      const total = stat?.totalPoints ?? 0;
+      if (total === 0) return null;
+
+      const category = await ensureAdjustmentCategory(ctx.prisma, input.campId);
+      const event = await recordScoreEvent({
+        campId: input.campId,
+        tribeId: input.tribeId,
+        categoryId: category.id,
+        points: -total,
+        reason: input.reason ?? `Reset ${tribe.name} to zero`,
+        source: "MANUAL",
+        createdById: ctx.session!.user.id,
+      });
+      await writeAudit(ctx, camp, "LEADERBOARD_TRIBE_RESET", { reason: input.reason, subjectType: "TRIBE", subjectId: input.tribeId, newValue: { previousTotal: total, eventId: event?.id ?? null } });
+      return event;
+    }),
+
+  /** Loops resetTribe's single-compensating-event logic over every tribe in
+   * the camp. Leaves camper/teacher/campus scores untouched — narrower than
+   * `reset` above. */
+  resetAllTribes: protectedProcedure
+    .input(z.object({ campId: z.string(), reason: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const camp = await ctx.prisma.camp.findUniqueOrThrow({ where: { id: input.campId } });
+      await assertCanManageCamp(ctx, input.campId);
+      const [tribes, stats] = await Promise.all([
+        ctx.prisma.tribe.findMany({ where: { campId: input.campId, deletedAt: null }, select: { id: true, name: true } }),
+        ctx.prisma.leaderboardStat.findMany({ where: { campId: input.campId, subjectType: "TRIBE", day: null } }),
+      ]);
+      const statByTribe = new Map(stats.map((s: any) => [s.subjectId, s.totalPoints as number]));
+      const category = await ensureAdjustmentCategory(ctx.prisma, input.campId);
+
+      const results: Array<{ tribeId: string; eventId: string | null }> = [];
+      for (const tribe of tribes) {
+        const total = statByTribe.get(tribe.id) ?? 0;
+        if (total === 0) continue;
+        const event = await recordScoreEvent({
+          campId: input.campId,
+          tribeId: tribe.id,
+          categoryId: category.id,
+          points: -total,
+          reason: input.reason ?? `Reset all tribes to zero`,
+          source: "MANUAL",
+          createdById: ctx.session!.user.id,
+        });
+        results.push({ tribeId: tribe.id, eventId: event?.id ?? null });
+      }
+      await writeAudit(ctx, camp, "LEADERBOARD_TRIBE_RESET_ALL", { reason: input.reason, newValue: { tribesReset: results.length } });
+      return { tribesReset: results.length, results };
+    }),
+
   audit: protectedProcedure
     .input(z.object({ campId: z.string(), limit: z.number().min(1).max(200).default(50) }))
     .query(async ({ ctx, input }) => {
@@ -1191,6 +1279,95 @@ export const leaderboardRouter = createTRPCRouter({
         orderBy: { createdAt: "desc" },
         take: input.limit,
       });
+    }),
+
+  /** "Who scanned/awarded points and why" — every ScoreEvent for the camp,
+   * filterable and cursor-paginated, with the awarder/subject/category
+   * names resolved via the same batched-findMany-then-Map pattern
+   * campPoints.history uses (never N+1 per row). Admin-only: this exposes
+   * every staff member's individual awarding activity, not just totals. */
+  pointActivity: protectedProcedure
+    .input(z.object({
+      campId: z.string(),
+      tribeId: z.string().optional(),
+      categoryId: z.string().optional(),
+      awarderId: z.string().optional(),
+      subjectType: subjectTypeSchema.optional(),
+      from: z.date().optional(),
+      to: z.date().optional(),
+      cursor: z.string().optional(),
+      limit: z.number().int().min(1).max(100).default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertCanManageCamp(ctx, input.campId);
+      const events = await ctx.prisma.scoreEvent.findMany({
+        where: {
+          campId: input.campId,
+          ...(input.tribeId ? { tribeId: input.tribeId } : {}),
+          ...(input.categoryId ? { categoryId: input.categoryId } : {}),
+          ...(input.awarderId ? { createdById: input.awarderId } : {}),
+          ...(input.subjectType === "TRIBE" ? { tribeId: { not: null }, registrationId: null, staffProfileId: null }
+            : input.subjectType === "CAMPER" ? { registrationId: { not: null } }
+            : input.subjectType === "STAFF" ? { staffProfileId: { not: null } }
+            : input.subjectType === "CAMPUS" ? { campusId: { not: null }, tribeId: null, registrationId: null, staffProfileId: null }
+            : {}),
+          ...(input.from || input.to ? { occurredAt: { ...(input.from ? { gte: input.from } : {}), ...(input.to ? { lte: input.to } : {}) } } : {}),
+        },
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        take: input.limit + 1,
+        ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+      });
+
+      const hasMore = events.length > input.limit;
+      const page = hasMore ? events.slice(0, input.limit) : events;
+
+      const registrationIds = [...new Set(page.map((e: any) => e.registrationId).filter(Boolean))];
+      const staffProfileIds = [...new Set(page.map((e: any) => e.staffProfileId).filter(Boolean))];
+      const tribeIds = [...new Set(page.map((e: any) => e.tribeId).filter(Boolean))];
+      const campusIds = [...new Set(page.map((e: any) => e.campusId).filter(Boolean))];
+      const categoryIds = [...new Set(page.map((e: any) => e.categoryId).filter(Boolean))];
+      const awarderIds = [...new Set(page.map((e: any) => e.createdById).filter(Boolean))];
+
+      const [registrations, staffProfiles, tribes, campuses, categories, awarders] = await Promise.all([
+        ctx.prisma.registration.findMany({ where: { id: { in: registrationIds } }, select: { id: true, camper: { select: { name: true } } } }),
+        ctx.prisma.staffProfile.findMany({ where: { id: { in: staffProfileIds } }, select: { id: true, firstName: true, lastName: true, type: true } }),
+        ctx.prisma.tribe.findMany({ where: { id: { in: tribeIds } }, select: { id: true, name: true } }),
+        ctx.prisma.campus.findMany({ where: { id: { in: campusIds } }, select: { id: true, name: true } }),
+        ctx.prisma.scoreCategory.findMany({ where: { id: { in: categoryIds } }, select: { id: true, name: true, color: true } }),
+        ctx.prisma.user.findMany({ where: { id: { in: awarderIds } }, select: { id: true, firstName: true, lastName: true, email: true } }),
+      ]);
+      const camperName = new Map(registrations.map((r: any) => [r.id, r.camper.name]));
+      const staffName = new Map(staffProfiles.map((s: any) => [s.id, { name: [s.firstName, s.lastName].filter(Boolean).join(" "), type: s.type }]));
+      const tribeName = new Map(tribes.map((t: any) => [t.id, t.name]));
+      const campusName = new Map(campuses.map((c: any) => [c.id, c.name]));
+      const categoryById = new Map(categories.map((c: any) => [c.id, c]));
+      const awarderName = new Map(awarders.map((u: any) => [u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.email]));
+
+      const rows = page.map((event: any) => {
+        const staff = staffName.get(event.staffProfileId);
+        const subject = event.registrationId
+          ? { kind: "CAMPER" as const, id: event.registrationId, name: camperName.get(event.registrationId) ?? "Camper" }
+          : event.staffProfileId
+            ? { kind: "STAFF" as const, id: event.staffProfileId, name: staff?.name ?? "Staff" }
+            : event.tribeId
+              ? { kind: "TRIBE" as const, id: event.tribeId, name: tribeName.get(event.tribeId) ?? "Tribe" }
+              : { kind: "CAMPUS" as const, id: event.campusId, name: campusName.get(event.campusId) ?? "Campus" };
+        return {
+          eventId: event.id,
+          occurredAt: event.occurredAt,
+          points: event.points,
+          source: event.source,
+          reason: event.reason,
+          notes: event.notes,
+          category: categoryById.get(event.categoryId) ?? null,
+          subject,
+          awarder: event.createdById ? { id: event.createdById, name: awarderName.get(event.createdById) ?? "Unknown" } : null,
+          isReversal: !!event.reversesEventId,
+          reversesEventId: event.reversesEventId,
+        };
+      });
+
+      return { rows, nextCursor: hasMore ? page[page.length - 1].id : null };
     }),
 
   /**

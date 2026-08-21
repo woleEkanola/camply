@@ -20,6 +20,18 @@ export function BulkAwardAdmin({ campId }: { campId: string }) {
   const [reason, setReason] = useState("");
   const award = api.leaderboard.award.useMutation();
 
+  const [resetTribeId, setResetTribeId] = useState("");
+  const [resetReason, setResetReason] = useState("");
+  const invalidateTribes = () => Promise.all([utils.leaderboard.tribes.invalidate({ campId }), utils.leaderboard.overview.invalidate({ campId })]);
+  const resetTribe = api.leaderboard.resetTribe.useMutation({
+    onSuccess: () => { toast.success(resetTribeId ? `Reset ${(tribes ?? []).find((t: any) => t.tribe.id === resetTribeId)?.tribe.name ?? "tribe"} to zero.` : "Tribe reset."); invalidateTribes(); setResetTribeId(""); setResetReason(""); },
+    onError: (err) => toast.error(err.message || "Failed to reset tribe."),
+  });
+  const resetAllTribes = api.leaderboard.resetAllTribes.useMutation({
+    onSuccess: (result) => { toast.success(`Reset ${result.tribesReset} tribe${result.tribesReset === 1 ? "" : "s"} to zero.`); invalidateTribes(); setResetReason(""); },
+    onError: (err) => toast.error(err.message || "Failed to reset tribes."),
+  });
+
   function toggle(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -78,6 +90,48 @@ export function BulkAwardAdmin({ campId }: { campId: string }) {
           <Button size="sm" loading={award.isPending} disabled={selected.size === 0 || !categoryId} onClick={submitAll}>
             Award to {selected.size} tribe{selected.size === 1 ? "" : "s"}
           </Button>
+          <p className="text-xs text-txt-secondary">
+            To deduct points from selected tribes, enter a negative number above (e.g. <code>-50</code>) and use the same button.
+          </p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody className="space-y-4">
+          <h3 className="text-sm font-semibold text-txt-primary">Tribe Points Reset</h3>
+          <p className="text-xs text-txt-secondary">
+            Zeroes a tribe by writing one compensating point entry for its current total — fully auditable, doesn&apos;t touch camper or teacher scores.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Select id="reset-tribe" label="Tribe" value={resetTribeId} onChange={(e) => setResetTribeId(e.target.value)}>
+              <option value="">Select a tribe…</option>
+              {(tribes ?? []).map(({ tribe }: any) => (
+                <option key={tribe.id} value={tribe.id}>{tribe.name}</option>
+              ))}
+            </Select>
+            <Input id="reset-reason" containerClassName="sm:col-span-2" label="Reason" value={resetReason} onChange={(e) => setResetReason(e.target.value)} placeholder="e.g. Disqualified for rule violation" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="danger"
+              loading={resetTribe.isPending}
+              disabled={!resetTribeId}
+              onClick={() => { if (window.confirm("Reset this tribe's points to zero? This cannot be undone with a single click, though the history stays in the audit log.")) resetTribe.mutate({ campId, tribeId: resetTribeId, reason: resetReason || undefined }); }}
+              data-testid="reset-tribe-button"
+            >
+              Reset this tribe to zero
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              loading={resetAllTribes.isPending}
+              onClick={() => { if (window.confirm("Reset EVERY tribe's points to zero? Camper and teacher scores are untouched. This cannot be undone with a single click.")) resetAllTribes.mutate({ campId, reason: resetReason || undefined }); }}
+              data-testid="reset-all-tribes-button"
+            >
+              Reset all tribes to zero
+            </Button>
+          </div>
         </CardBody>
       </Card>
 

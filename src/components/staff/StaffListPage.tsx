@@ -44,6 +44,7 @@ import { TeacherRecruitmentPanel } from "@/components/staff/TeacherRecruitmentPa
 import { CampusQuotasCard } from "@/components/staff/CampusQuotasCard";
 import { DynamicFieldGroup } from "@/components/forms/DynamicFieldGroup";
 import { ExportMenuButton } from "@/components/export/ExportMenuButton";
+import { AttendanceToggleBadge } from "@/components/ui/AttendanceToggleBadge";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "OWNER", "ADMIN", "CAMPUS_REPRESENTATIVE"];
 const VOLUNTEER_CATEGORIES = ["Registration", "Medical", "Kitchen", "Transport", "Security", "Media", "Logistics", "Technical", "Cleaning", "Protocol"];
@@ -104,6 +105,9 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [emailAction, setEmailAction] = useState<null | { mode: "APPROVE" | "RESEND"; ids: string[] }>(null);
   const [sendEmailOnApprove, setSendEmailOnApprove] = useState(true);
   const [emailActionResult, setEmailActionResult] = useState<null | { sent: number; failed: number; skipped: number }>(null);
+  const [recruitmentModalOpen, setRecruitmentModalOpen] = useState(false);
+  const [quotasModalOpen, setQuotasModalOpen] = useState(false);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
 
   const [campusFilter, setCampusFilter] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
@@ -116,13 +120,14 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   const [floorFilter, setFloorFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState("");
   const [bedStatusFilter, setBedStatusFilter] = useState<"" | "ASSIGNED" | "UNASSIGNED">("");
+  const [attendanceFilter, setAttendanceFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(50);
   // hostel/room/bed/tribe are hideable but off by default (same pattern as
   // the columns above) — widening every row by four extra columns pushed a
   // plain row-center click (staff-admin-approval.spec.ts) onto the inline
   // Department <select>, opening its dropdown instead of navigating.
-  const [visibleColumnIds, setVisibleColumnIds] = useState(["campus", "preference", "department", "skills", "status", "approval-email"]);
+  const [visibleColumnIds, setVisibleColumnIds] = useState(["attendance", "campus", "preference", "department", "skills", "status", "approval-email"]);
 
   useEffect(() => {
     const savedPageSize = Number(localStorage.getItem(`camply-${type.toLowerCase()}-page-size`));
@@ -154,7 +159,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
   useEffect(() => {
     setCursor(undefined);
     setAllLoadedItems([]);
-  }, [debouncedSearchQuery, statusFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter, departmentFilter, assignmentFilter, hostelFilter, floorFilter, roomFilter, bedStatusFilter, pageSize]);
+  }, [debouncedSearchQuery, statusFilter, attendanceFilter, campusFilter, venueFilter, genderFilter, tribeFilter, categoryFilter, departmentFilter, assignmentFilter, hostelFilter, floorFilter, roomFilter, bedStatusFilter, pageSize]);
 
   const { data: stats } = api.staff.stats.useQuery({ organizationId, campId, type }, { enabled: !!organizationId && !!campId });
   const { data, isLoading } = api.staff.adminList.useQuery(
@@ -163,6 +168,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
       campId,
       type,
       status: statusFilter || undefined,
+      attendanceIntent: attendanceFilter ? (attendanceFilter as "COMING" | "NOT_COMING") : undefined,
       q: debouncedSearchQuery || undefined,
       campusId: campusFilter || undefined,
       venueId: venueFilter || undefined,
@@ -286,6 +292,19 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     onSuccess: () => { setSuccess(`${type === "TEACHER" ? "Teacher" : "Volunteer"} manual profile created successfully!`); setIsAddOpen(false); setAddEmail(""); setAddFormValues({}); invalidate(); setTimeout(() => setSuccess(""), 5000); },
     onError: (err) => setError(err.message),
   });
+  const setAttendanceIntent = api.staff.setAttendanceIntent.useMutation({
+    onSuccess: () => invalidate(),
+    onError: (err) => setError(err.message),
+  });
+  const bulkSetAttendanceIntent = api.staff.bulkSetAttendanceIntent.useMutation({
+    onSuccess: (result) => {
+      setSuccess(`Updated attendance for ${result.successes.length} profile${result.successes.length === 1 ? "" : "s"}.`);
+      setSelectedIds([]);
+      invalidate();
+      setTimeout(() => setSuccess(""), 5000);
+    },
+    onError: (err) => setError(err.message),
+  });
 
   const columns: Column<any>[] = [
     {
@@ -309,6 +328,20 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             <div className="truncate text-xs text-txt-muted">{row.phone}</div>
           </div>
         </div>
+      ),
+    },
+    {
+      id: "attendance",
+      header: "Attendance",
+      hideable: true,
+      accessor: (row) => (
+        <AttendanceToggleBadge
+          status={row.attendanceIntent}
+          onToggle={(next) =>
+            setAttendanceIntent.mutate({ id: row.id, intent: next })
+          }
+          disabled={setAttendanceIntent.isPending}
+        />
       ),
     },
     { id: "campus", header: "Campus", hideable: true, accessor: (row) => row.preferredCampus?.name || "—" },
@@ -461,7 +494,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
     </div>
   );
 
-  const hasActiveFilters = campusFilter || venueFilter || genderFilter || tribeFilter || categoryFilter || departmentFilter || assignmentFilter || hostelFilter || floorFilter || roomFilter || bedStatusFilter;
+  const hasActiveFilters = attendanceFilter || campusFilter || venueFilter || genderFilter || tribeFilter || categoryFilter || departmentFilter || assignmentFilter || hostelFilter || floorFilter || roomFilter || bedStatusFilter;
   const totalItems = data?.totalCount ?? allLoadedItems.length;
 
   return (
@@ -474,8 +507,25 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             <p className="text-sm text-neutral-500">Manage and assign {type === "TEACHER" ? "teachers" : "volunteers"} for {activeYear?.name ?? "the active camp"}</p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            {type === "TEACHER" && (
+            {type === "TEACHER" ? (
               <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-full justify-center whitespace-nowrap sm:w-auto"
+                  onClick={() => setRecruitmentModalOpen(true)}
+                >
+                  <UsersIcon className="mr-1 h-4 w-4 text-accent-600" />
+                  Recruitment Link
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-full justify-center whitespace-nowrap sm:w-auto"
+                  onClick={() => setQuotasModalOpen(true)}
+                >
+                  Campus Quotas
+                </Button>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -484,7 +534,7 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                   loading={autoAssignToTribes.isPending}
                   onClick={() => { if (window.confirm("Assign only teachers who do not have a tribe yet? Existing tribe and leadership assignments will be preserved.")) autoAssignToTribes.mutate({ organizationId, campId }); }}
                 >
-                  Assign Unassigned to Tribes
+                  Assign Tribes
                 </Button>
                 <Button
                   variant="secondary"
@@ -497,6 +547,16 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
                   Assign Departments
                 </Button>
               </>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full justify-center whitespace-nowrap sm:w-auto"
+                onClick={() => setLinkModalOpen(true)}
+              >
+                <UsersIcon className="mr-1 h-4 w-4 text-accent-600" />
+                Registration Link
+              </Button>
             )}
             <ExportMenuButton
               organizationId={organizationId}
@@ -550,205 +610,279 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           </div>
         )}
 
-        {/* Teacher Recruitment + Campus Quotas — mobile only, above the list
-            (desktop sidebar copies below stay hidden on mobile to avoid duplication). */}
-        {type === "TEACHER" && (
-          <div className="mb-4 space-y-4 lg:hidden">
-            <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
-            <CampusQuotasCard organizationId={organizationId} campId={campId} />
+        <div className="w-full space-y-4">
+          {/* Status tabs */}
+          <div className="border-b border-border-default">
+            <nav className="flex space-x-6">
+              {STATUS_TABS.map((tab) => {
+                const value = tab === "All" ? "" : tab.toUpperCase();
+                const active = statusFilter === value;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setStatusFilter(value)}
+                    className={cn(
+                      "relative pb-3 text-sm font-semibold transition",
+                      active ? "text-accent-700 dark:text-accent-300" : "text-neutral-500 hover:text-neutral-900"
+                    )}
+                  >
+                    {tab}
+                    {active && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent-600" />}
+                  </button>
+                );
+              })}
+            </nav>
           </div>
-        )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-          {/* Main content */}
-          <div className="min-w-0 lg:col-span-3 space-y-4">
-            {/* Status tabs */}
-            <div className="border-b border-border-default">
-              <nav className="flex space-x-6">
-                {STATUS_TABS.map((tab) => {
-                  const value = tab === "All" ? "" : tab.toUpperCase();
-                  const active = statusFilter === value;
-                  return (
-                    <button
-                      key={tab}
-                      onClick={() => setStatusFilter(value)}
-                      className={cn(
-                        "relative pb-3 text-sm font-semibold transition",
-                        active ? "text-accent-700" : "text-neutral-500 hover:text-neutral-900"
-                      )}
-                    >
-                      {tab}
-                      {active && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent-600" />}
-                    </button>
-                  );
-                })}
-              </nav>
+          {/* Tier 1: Search Bar & Right-aligned Tool Controls */}
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-[240px] flex-1 max-w-xl">
+              <SearchBar
+                placeholder="Search by name, email or phone..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onClear={() => setSearchQuery("")}
+              />
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
-              <div className="min-w-[220px] flex-1">
-                <SearchBar placeholder="Search by name, email or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onClear={() => setSearchQuery("")} />
+            <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center">
+              {/* Columns Selector Dropdown */}
+              <Menu as="div" className="relative">
+                <Menu.Button className="inline-flex items-center gap-1.5 rounded-xl border border-border-default bg-surface px-3 py-1.5 text-xs font-bold text-txt-primary hover:bg-surface-hover shadow-2xs">
+                  <ListBulletIcon className="h-4 w-4 text-txt-secondary" />
+                  <span>Columns</span>
+                  <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-1.5 py-0.5 text-[10px] font-bold text-accent-700 dark:text-accent-300">
+                    {visibleColumnIds.length}
+                  </span>
+                </Menu.Button>
+                <Transition as={Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100" leave="transition ease-in duration-75" leaveFrom="transform opacity-100 scale-100" leaveTo="transform opacity-0 scale-95">
+                  <Menu.Items className="absolute right-0 z-20 mt-2 w-56 rounded-2xl border border-border-default bg-surface p-2 shadow-xl space-y-1 text-xs">
+                    <div className="px-2 py-1 font-bold text-txt-primary border-b border-border-subtle mb-1">
+                      Configure Columns
+                    </div>
+                    {[
+                      { id: "attendance", label: "Attendance Intent" },
+                      { id: "campus", label: "Campus" },
+                      { id: "preference", label: "Preferred Role" },
+                      { id: "department", label: "Department" },
+                      { id: "skills", label: "Skills" },
+                      { id: "status", label: "Status" },
+                      { id: "approval-email", label: "Approval Email" },
+                      { id: "hostel", label: "Hostel" },
+                      { id: "room", label: "Room" },
+                      { id: "bed", label: "Bed" },
+                      { id: "tribe", label: "Assigned Tribe" },
+                    ].map((col) => (
+                      <label
+                        key={col.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-hover cursor-pointer text-txt-primary"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={visibleColumnIds.includes(col.id)}
+                          onChange={() =>
+                            setVisibleColumnIds((cur) =>
+                              cur.includes(col.id) ? cur.filter((i) => i !== col.id) : [...cur, col.id]
+                            )
+                          }
+                          className="h-3.5 w-3.5 rounded border-input-border text-accent-600 focus:ring-accent-500"
+                        />
+                        <span>{col.label}</span>
+                      </label>
+                    ))}
+                  </Menu.Items>
+                </Transition>
+              </Menu>
+
+              {/* Show Per Page */}
+              <div className="flex items-center gap-1.5 text-xs text-txt-secondary">
+                <span>Show</span>
+                <Select
+                  value={String(pageSize)}
+                  onChange={(event) => setPageSize(Number(event.target.value))}
+                  aria-label="Teachers per page"
+                  className="w-20 text-xs py-1"
+                >
+                  {[10, 50, 100, 150].map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </Select>
               </div>
-              <Select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} aria-label="Filter by Campus" className="w-full sm:w-auto">
+
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            </div>
+          </div>
+
+          {/* Tier 2: Filter Dropdown Ribbon & Active Badges */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="w-full sm:w-44">
+              <Select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} aria-label="Filter by Campus">
                 <option value="">All Campuses</option>
                 {filterCampuses.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
-              <Select value={venueFilter} onChange={(e) => setVenueFilter(e.target.value)} className="w-full sm:w-auto">
+            </div>
+
+            <div className="w-full sm:w-40">
+              <Select value={venueFilter} onChange={(e) => setVenueFilter(e.target.value)} aria-label="Filter by Venue">
                 <option value="">All Venues</option>
                 {filterVenues.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
               </Select>
-              <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full sm:w-auto">
-                <option value="">All Status</option>
-                <option value="PENDING">Pending</option>
-                <option value="APPROVED">Approved</option>
-                <option value="REJECTED">Rejected</option>
-                <option value="DEACTIVATED">Deactivated</option>
-              </Select>
-              <button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} className="inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-surface px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-surface-hover">
-                <FunnelIcon className="h-4 w-4" /> Filters
-              </button>
             </div>
 
-            {filtersOpen && (
-              <div className="grid gap-3 rounded-xl border border-border-default bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="teacher-advanced-filters">
-                <Select value={genderFilter} onChange={(event) => setGenderFilter(event.target.value)} aria-label="Filter by gender">
-                  <option value="">All genders</option><option value="MALE">Male</option><option value="FEMALE">Female</option>
-                </Select>
-                {type === "TEACHER" && <Select value={tribeFilter} onChange={(event) => setTribeFilter(event.target.value)} aria-label="Filter by tribe"><option value="">All tribes</option>{filterTribes.map((tribe: any) => <option key={tribe.id} value={tribe.id}>{tribe.name}</option>)}</Select>}
-                {type === "TEACHER" && <Select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)} aria-label="Filter by department"><option value="">All departments</option>{departments.map((department: any) => <option key={department.id} value={department.id}>{department.name}</option>)}</Select>}
-                {type === "TEACHER" && <Select value={assignmentFilter} onChange={(event) => setAssignmentFilter(event.target.value)} aria-label="Filter by assignment status"><option value="">Any assignment</option><option value="ASSIGNED">Assigned</option><option value="UNASSIGNED">Unassigned</option></Select>}
-                <Select value={hostelFilter} onChange={(event) => { setHostelFilter(event.target.value); setFloorFilter(""); setRoomFilter(""); }} aria-label="Filter by hostel">
-                  <option value="">All hostels</option>
-                  {(structureData ?? []).map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-                </Select>
-                {floorOptions.length > 0 && (
-                  <Select value={floorFilter} onChange={(event) => { setFloorFilter(event.target.value); setRoomFilter(""); }} aria-label="Filter by floor">
-                    <option value="">All floors</option>
-                    {floorOptions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                  </Select>
-                )}
-                {hostelFilter && roomOptions.length > 0 && (
-                  <Select value={roomFilter} onChange={(event) => setRoomFilter(event.target.value)} aria-label="Filter by room">
-                    <option value="">All rooms</option>
-                    {roomOptions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                  </Select>
-                )}
-                <Select value={bedStatusFilter} onChange={(event) => setBedStatusFilter(event.target.value as "" | "ASSIGNED" | "UNASSIGNED")} aria-label="Filter by bed status">
-                  <option value="">Any bed status</option>
-                  <option value="ASSIGNED">Bed assigned</option>
-                  <option value="UNASSIGNED">No bed</option>
+            <div className="w-full sm:w-40">
+              <Select value={attendanceFilter} onChange={(e) => setAttendanceFilter(e.target.value)} aria-label="Filter by Attendance">
+                <option value="">All Attendance</option>
+                <option value="COMING">Coming Only</option>
+                <option value="NOT_COMING">Not Coming Only</option>
+              </Select>
+            </div>
+
+            {type === "TEACHER" && departments.length > 0 && (
+              <div className="w-full sm:w-44">
+                <Select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} aria-label="Filter by Department">
+                  <option value="">All Departments</option>
+                  {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </Select>
               </div>
             )}
+
+            <div className="w-full sm:w-40">
+              <Select value={bedStatusFilter} onChange={(e) => setBedStatusFilter(e.target.value as any)} aria-label="Filter by Bed Status">
+                <option value="">All Bed Status</option>
+                <option value="ASSIGNED">Bed Assigned</option>
+                <option value="UNASSIGNED">No Bed</option>
+              </Select>
+            </div>
+
+            <button
+              type="button"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((open) => !open)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition",
+                filtersOpen
+                  ? "border-accent-600 bg-accent-500/10 text-accent-600"
+                  : "border-border-default bg-surface text-txt-secondary hover:bg-surface-hover"
+              )}
+            >
+              <FunnelIcon className="h-3.5 w-3.5" />
+              <span>More Filters</span>
+            </button>
 
             {hasActiveFilters && (
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-neutral-500">Active filters:</span>
-                {campusFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{filterCampuses.find((c: any) => c.id === campusFilter)?.name}</span>}
-                {venueFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{filterVenues.find((v: any) => v.id === venueFilter)?.name}</span>}
-                {genderFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{genderFilter}</span>}
-                {tribeFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{filterTribes.find((t: any) => t.id === tribeFilter)?.name}</span>}
-                {categoryFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{categoryFilter}</span>}
-                {hostelFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{structureData?.find((h) => h.id === hostelFilter)?.name}</span>}
-                {roomFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{roomOptions.find((r) => r.id === roomFilter)?.name}</span>}
-                {bedStatusFilter && <span className="rounded-full bg-accent-50 px-2 py-1 text-accent-700">{bedStatusFilter === "ASSIGNED" ? "Bed assigned" : "No bed"}</span>}
-                <button onClick={() => { setCampusFilter(""); setVenueFilter(""); setGenderFilter(""); setTribeFilter(""); setCategoryFilter(""); setDepartmentFilter(""); setAssignmentFilter(""); setHostelFilter(""); setFloorFilter(""); setRoomFilter(""); setBedStatusFilter(""); }} className="text-accent-600 hover:underline">Clear all</button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAttendanceFilter("");
+                  setCampusFilter("");
+                  setVenueFilter("");
+                  setGenderFilter("");
+                  setTribeFilter("");
+                  setCategoryFilter("");
+                  setDepartmentFilter("");
+                  setAssignmentFilter("");
+                  setHostelFilter("");
+                  setFloorFilter("");
+                  setRoomFilter("");
+                  setBedStatusFilter("");
+                  setSearchQuery("");
+                }}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-accent-600 hover:text-accent-800 hover:bg-accent-500/10 transition"
+              >
+                <XMarkIcon className="h-3.5 w-3.5" />
+                <span>Reset filters</span>
+              </button>
             )}
-
-            {/* Toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-y-2 rounded-xl border border-border-default bg-surface p-3">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-neutral-700">{selectedIds.length} selected</span>
-                {selectedIds.length > 0 && (
-                  <Menu as="div" className="relative">
-                    <Menu.Button className="inline-flex items-center gap-1 rounded-lg border border-border-default bg-surface px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-surface-hover">
-                      Bulk Actions <EllipsisVerticalIcon className="h-4 w-4" />
-                    </Menu.Button>
-                    <Transition as={Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100" leave="transition ease-in duration-75" leaveFrom="transform opacity-100 scale-100" leaveTo="transform opacity-0 scale-95">
-                      <Menu.Items className="absolute left-0 z-10 mt-2 w-48 rounded-lg border border-border-subtle bg-surface py-1 shadow-lg">
-                        <Menu.Item>{({ active }) => <button onClick={() => openEmailAction("APPROVE")} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><CheckIcon className="h-4 w-4 text-success-600" /> Approve</button>}</Menu.Item>
-                        {type === "TEACHER" && (
-                          <Menu.Item>{({ active }) => <button onClick={() => openEmailAction("RESEND")} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><EnvelopeIcon className="h-4 w-4 text-accent-600" /> Send approval email</button>}</Menu.Item>
-                        )}
-                        <Menu.Item>{({ active }) => <button onClick={() => bulkReject.mutate({ ids: selectedIds })} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><XMarkIcon className="h-4 w-4 text-danger-600" /> Reject</button>}</Menu.Item>
-                        <Menu.Item>{({ active }) => <button onClick={() => { if (window.confirm("Permanently delete selected profiles?")) bulkDelete.mutate({ ids: selectedIds }); }} className={cn("flex w-full items-center gap-2 px-4 py-2 text-left text-sm", active ? "bg-surface-raised" : "")}><TrashIcon className="h-4 w-4 text-danger-600" /> Delete</button>}</Menu.Item>
-                      </Menu.Items>
-                    </Transition>
-                  </Menu>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-xs text-txt-secondary">Show
-                  <Select value={String(pageSize)} onChange={(event) => setPageSize(Number(event.target.value))} aria-label="Teachers per page" className="w-24 text-xs">
-                    {[10, 50, 100, 150].map((size) => <option key={size} value={size}>{size}</option>)}
-                  </Select>
-                </label>
-                <span className="text-xs text-neutral-500 hidden sm:inline">{totalItems} {type === "TEACHER" ? "teachers" : "volunteers"}</span>
-                <ViewModeToggle value={viewMode} onChange={setViewMode} />
-              </div>
-            </div>
-
-            {/* Alerts */}
-            {error && <div className="rounded-lg bg-danger-50 p-3 text-sm text-danger-700 flex justify-between"><span>{error}</span><button onClick={() => setError("")} className="text-xs underline">Dismiss</button></div>}
-            {success && <div className="rounded-lg bg-success-50 p-3 text-sm text-success-700 flex justify-between"><span>{success}</span><button onClick={() => setSuccess("")} className="text-xs underline">Dismiss</button></div>}
-
-            {/* Content */}
-            {viewMode === "list" ? (
-              <Table
-                mode="controlled"
-                columns={columns}
-                data={allLoadedItems}
-                rowKey={(row) => row.id}
-                onRowClick={(row) => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
-                actions={actions}
-                isLoading={isLoading && allLoadedItems.length === 0}
-                emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
-                emptyDescription="Try adjusting search or status filters, or share the registration link above."
-                selectable
-                selectedIds={selectedIds}
-                onSelectionChange={setSelectedIds}
-                columnVisibility={{ visibleIds: visibleColumnIds, onToggle: (id) => setVisibleColumnIds((current) => current.includes(id) ? current.filter((columnId) => columnId !== id) : [...current, id]) }}
-              />
-            ) : (
-              <StaffCardGrid
-                items={allLoadedItems}
-                type={type}
-                onRowClick={(row) => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
-                actions={actions}
-                isLoading={isLoading && allLoadedItems.length === 0}
-                selectedIds={selectedIds}
-                onSelectionChange={setSelectedIds}
-                emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
-                emptyDescription="Try adjusting search or status filters, or share the registration link above."
-              />
-            )}
-
-            {/* Pagination */}
-            <div className="flex items-center justify-between rounded-xl border border-border-default bg-surface p-3">
-              <span className="text-xs text-neutral-500">Showing {allLoadedItems.length > 0 ? 1 : 0} to {allLoadedItems.length} of {totalItems} {type === "TEACHER" ? "teachers" : "volunteers"}</span>
-              <div className="flex items-center gap-1">
-                <button disabled={cursor === undefined && allLoadedItems.length <= 10} className="rounded-lg border border-border-default p-1.5 text-neutral-500 hover:bg-surface-hover disabled:opacity-40">
-                  <ChevronLeftIcon className="h-4 w-4" />
-                </button>
-                <button onClick={() => data?.nextCursor && setCursor(data.nextCursor)} disabled={!data?.nextCursor} className="rounded-lg border border-border-default p-1.5 text-neutral-500 hover:bg-surface-hover disabled:opacity-40">
-                  <ChevronRightIcon className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
           </div>
 
-          {/* Right panel */}
-          <div className="min-w-0 space-y-4">
-            {type === "TEACHER" ? (
-              <div className="hidden space-y-4 lg:block">
-                <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} />
-                <CampusQuotasCard organizationId={organizationId} campId={campId} />
-              </div>
-            ) : (
-              <StaffLinkCard organizationId={organizationId} campId={campId} type={type} />
-            )}
+          {filtersOpen && (
+            <div className="grid gap-3 rounded-2xl border border-border-default bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="teacher-advanced-filters">
+              <Select value={genderFilter} onChange={(event) => setGenderFilter(event.target.value)} aria-label="Filter by gender">
+                <option value="">All genders</option><option value="MALE">Male</option><option value="FEMALE">Female</option>
+              </Select>
+              {type === "TEACHER" && <Select value={tribeFilter} onChange={(event) => setTribeFilter(event.target.value)} aria-label="Filter by tribe"><option value="">All tribes</option>{filterTribes.map((tribe: any) => <option key={tribe.id} value={tribe.id}>{tribe.name}</option>)}</Select>}
+              {type === "TEACHER" && <Select value={assignmentFilter} onChange={(event) => setAssignmentFilter(event.target.value)} aria-label="Filter by assignment status"><option value="">Any assignment</option><option value="ASSIGNED">Assigned</option><option value="UNASSIGNED">Unassigned</option></Select>}
+              {type === "VOLUNTEER" && <Select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filter by category"><option value="">All categories</option>{VOLUNTEER_CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}</Select>}
+              <Select value={hostelFilter} onChange={(event) => { setHostelFilter(event.target.value); setFloorFilter(""); setRoomFilter(""); }} aria-label="Filter by hostel">
+                <option value="">All hostels</option>
+                {(structureData ?? []).map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+              </Select>
+              {floorOptions.length > 0 && (
+                <Select value={floorFilter} onChange={(event) => { setFloorFilter(event.target.value); setRoomFilter(""); }} aria-label="Filter by floor">
+                  <option value="">All floors</option>
+                  {floorOptions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </Select>
+              )}
+              {hostelFilter && roomOptions.length > 0 && (
+                <Select value={roomFilter} onChange={(event) => setRoomFilter(event.target.value)} aria-label="Filter by room">
+                  <option value="">All rooms</option>
+                  {roomOptions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </Select>
+              )}
+            </div>
+          )}
+
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-txt-secondary font-medium">Active filters:</span>
+              {attendanceFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{attendanceFilter === "COMING" ? "Coming" : "Not Coming"}</span>}
+              {campusFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{filterCampuses.find((c: any) => c.id === campusFilter)?.name}</span>}
+              {venueFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{filterVenues.find((v: any) => v.id === venueFilter)?.name}</span>}
+              {genderFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{genderFilter}</span>}
+              {tribeFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{filterTribes.find((t: any) => t.id === tribeFilter)?.name}</span>}
+              {departmentFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{departments.find((d: any) => d.id === departmentFilter)?.name}</span>}
+              {categoryFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{categoryFilter}</span>}
+              {hostelFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{structureData?.find((h) => h.id === hostelFilter)?.name}</span>}
+              {roomFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{roomOptions.find((r) => r.id === roomFilter)?.name}</span>}
+              {bedStatusFilter && <span className="rounded-full bg-accent-100 dark:bg-accent-950 px-2 py-0.5 text-accent-700 dark:text-accent-300 font-medium">{bedStatusFilter === "ASSIGNED" ? "Bed assigned" : "No bed"}</span>}
+            </div>
+          )}
+
+          {/* Alerts */}
+          {error && <div className="rounded-xl bg-danger-50 p-3 text-sm text-danger-700 flex justify-between"><span>{error}</span><button onClick={() => setError("")} className="text-xs underline">Dismiss</button></div>}
+          {success && <div className="rounded-xl bg-success-50 p-3 text-sm text-success-700 flex justify-between"><span>{success}</span><button onClick={() => setSuccess("")} className="text-xs underline">Dismiss</button></div>}
+
+          {/* Table Content (Full-Width) */}
+          {viewMode === "list" ? (
+            <Table
+              mode="controlled"
+              columns={columns.filter((c) => !c.id || visibleColumnIds.includes(c.id))}
+              data={allLoadedItems}
+              rowKey={(row) => row.id}
+              onRowClick={(row) => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
+              actions={actions}
+              isLoading={isLoading && allLoadedItems.length === 0}
+              emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
+              emptyDescription="Try adjusting search or status filters, or share the registration link above."
+              selectable
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+            />
+          ) : (
+            <StaffCardGrid
+              items={allLoadedItems}
+              type={type}
+              onRowClick={(row) => router.push(`/admin/${type === "TEACHER" ? "teachers" : "volunteers"}/${row.id}`)}
+              actions={actions}
+              isLoading={isLoading && allLoadedItems.length === 0}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              emptyTitle={`No ${type === "TEACHER" ? "teachers" : "volunteers"} match your filters`}
+              emptyDescription="Try adjusting search or status filters, or share the registration link above."
+            />
+          )}
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between rounded-2xl border border-border-default bg-surface p-3">
+            <span className="text-xs text-txt-secondary">Showing {allLoadedItems.length > 0 ? 1 : 0} to {allLoadedItems.length} of {totalItems} {type === "TEACHER" ? "teachers" : "volunteers"}</span>
+            <div className="flex items-center gap-1">
+              <button disabled={cursor === undefined && allLoadedItems.length <= 10} className="rounded-lg border border-border-default p-1.5 text-txt-secondary hover:bg-surface-hover disabled:opacity-40">
+                <ChevronLeftIcon className="h-4 w-4" />
+              </button>
+              <button onClick={() => data?.nextCursor && setCursor(data.nextCursor)} disabled={!data?.nextCursor} className="rounded-lg border border-border-default p-1.5 text-txt-secondary hover:bg-surface-hover disabled:opacity-40">
+                <ChevronRightIcon className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -772,6 +906,24 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
           </div>
           <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
             <Button size="sm" className="shrink-0" loading={bulkApprove.isPending} onClick={() => openEmailAction("APPROVE")}><CheckIcon className="mr-1 h-4 w-4" /> Approve</Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="shrink-0 text-emerald-700 dark:text-emerald-300 border-emerald-300"
+              loading={bulkSetAttendanceIntent.isPending}
+              onClick={() => bulkSetAttendanceIntent.mutate({ ids: selectedIds, intent: "COMING" })}
+            >
+              <CheckIcon className="mr-1 h-4 w-4 text-emerald-600" /> Mark Coming
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="shrink-0 text-rose-700 dark:text-rose-300 border-rose-300"
+              loading={bulkSetAttendanceIntent.isPending}
+              onClick={() => bulkSetAttendanceIntent.mutate({ ids: selectedIds, intent: "NOT_COMING" })}
+            >
+              <XMarkIcon className="mr-1 h-4 w-4 text-rose-600" /> Mark Not Coming
+            </Button>
             {type === "TEACHER" && (
               <Button size="sm" variant="secondary" className="shrink-0" loading={resendApprovalEmails.isPending} onClick={() => openEmailAction("RESEND")}><EnvelopeIcon className="mr-1 h-4 w-4" /> Email</Button>
             )}
@@ -911,6 +1063,38 @@ function StaffListPageContent({ type }: { type: "TEACHER" | "VOLUNTEER" }) {
             <Button loading={createManually.isPending} disabled={!addEmail.trim() || !addFormValues.firstName?.trim() || !addFormValues.lastName?.trim()} onClick={() => createManually.mutate({ organizationId, campId, type, email: addEmail.trim(), values: addFormValues })}>Add Profile</Button>
           </div>
         </div>
+      </Dialog>
+
+      {/* Teacher Recruitment Link Dialog */}
+      <Dialog
+        open={recruitmentModalOpen}
+        onClose={() => setRecruitmentModalOpen(false)}
+        title="Teacher Recruitment Link"
+        size="md"
+      >
+        <TeacherRecruitmentPanel organizationId={organizationId} campId={campId} onClose={() => setRecruitmentModalOpen(false)} />
+      </Dialog>
+
+      {/* Campus Quotas Dialog */}
+      <Dialog
+        open={quotasModalOpen}
+        onClose={() => setQuotasModalOpen(false)}
+        title="Teacher Campus Quotas"
+        size="lg"
+      >
+        <div className="py-2">
+          <CampusQuotasCard organizationId={organizationId} campId={campId} />
+        </div>
+      </Dialog>
+
+      {/* Volunteer Registration Link Dialog */}
+      <Dialog
+        open={linkModalOpen}
+        onClose={() => setLinkModalOpen(false)}
+        title="Volunteer Registration Link"
+        size="md"
+      >
+        <StaffLinkCard organizationId={organizationId} campId={campId} type={type} />
       </Dialog>
     </AppShell>
   );

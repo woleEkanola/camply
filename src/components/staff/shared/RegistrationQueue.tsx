@@ -6,6 +6,7 @@ import { api } from "@/utils/trpc";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { AttendanceToggleBadge } from "@/components/ui/AttendanceToggleBadge";
 import { Table, type Column } from "@/components/ui/Table";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -21,7 +22,7 @@ import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { MobileRegistrationsView, MobileRegistrationCard, formatDuplicateSiblingsHint } from "./MobileRegistrationsView";
 import { RegistrationDetailsDrawer } from "./RegistrationDetailsDrawer";
-import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/outline";
+import { Squares2X2Icon, TableCellsIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 const STATUS_OPTIONS = [
   "DRAFT",
@@ -51,6 +52,7 @@ interface Registration {
   createdAt?: string;
   updatedAt?: string;
   status: string;
+  attendanceIntent?: string | null;
   campusId: string;
   review?: { verificationStatus: string; recommendation: string | null } | null;
 }
@@ -67,6 +69,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
   const [filterStatus, setFilterStatus] = useState("");
+  const [attendanceFilter, setAttendanceFilter] = useState<"" | "COMING" | "NOT_COMING">("");
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewStateFilter, setReviewStateFilter] = useState<"" | "AWAITING_VETTING" | "AWAITING_FINAL" | "AWAITING_DOCUMENT_REPLACEMENT">("");
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
@@ -89,9 +92,6 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const userRole = (session?.user as any)?.role;
   const isReviewer = isTwoStep && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(userRole);
 
-  // Default a two-step reviewer straight into their outstanding work ("Pending" =
-  // submitted-but-not-yet-recommended). One-shot: once org resolves we set it a
-  // single time, so it never fights a filter the user then picks manually.
   const defaultFilterInitialized = useRef(false);
   useEffect(() => {
     if (defaultFilterInitialized.current) return;
@@ -115,7 +115,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
     setCursor(undefined);
     setAccumulatedItems([]);
     setEndorsedIds(new Set());
-  }, [filterStatus, reviewStateFilter, duplicatesOnly, debouncedSearchQuery]);
+  }, [filterStatus, attendanceFilter, reviewStateFilter, duplicatesOnly, debouncedSearchQuery]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -133,6 +133,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
       organizationId,
       campusId: managedCampuses.length === 1 ? campusId : undefined,
       status: filterStatus || undefined,
+      attendanceIntent: attendanceFilter || undefined,
       reviewState: isTwoStep && reviewStateFilter ? reviewStateFilter : undefined,
       duplicatesOnly: duplicatesOnly || undefined,
       q: debouncedSearchQuery || undefined,
@@ -194,6 +195,23 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
     },
   });
 
+  const setAttendanceIntent = api.registration.setAttendanceIntent.useMutation({
+    onSuccess: () => invalidateRegistrations(),
+    onError: (err) => setActionError(err.message),
+  });
+
+  const bulkSetAttendanceIntent = api.registration.bulkSetAttendanceIntent.useMutation({
+    onSuccess: (res) => {
+      const msg = `Updated attendance for ${res.successes.length} registration${res.successes.length === 1 ? "" : "s"}.`;
+      setBulkResult({ message: msg, type: res.failures.length > 0 ? "error" : "success" });
+      setSelectedIds([]);
+      invalidateRegistrations();
+    },
+    onError: (err) => {
+      setBulkResult({ message: err.message, type: "error" });
+    },
+  });
+
   const bulkSoftDelete = api.registration.bulkSoftDelete.useMutation({
     onSuccess: (res) => {
       const msg = `Deleted ${res.succeeded} registration${res.succeeded === 1 ? "" : "s"}${res.failed > 0 ? `; ${res.failed} failed` : ""}.`;
@@ -215,9 +233,6 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
   const endorseMutation = api.registration.endorse.useMutation({
     onSuccess: (_, variables) => {
       setActionError("");
-      // Update the local review field so the button transitions to
-      // "Awaiting Approval" without a server refetch (which would filter
-      // the just-endorsed item out of the AWAITING_VETTING view).
       setAccumulatedItems((prev) =>
         prev.map((item) =>
           item.id === variables.registrationId
@@ -273,10 +288,22 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         </div>
       ),
     },
-    { header: "Campus", accessor: (row: any) => row.campus?.name ?? "\u2014" },
+    {
+      header: "Attendance",
+      accessor: (row: any) => (
+        <AttendanceToggleBadge
+          status={row.attendanceIntent}
+          onToggle={(next) =>
+            setAttendanceIntent.mutate({ registrationId: row.id, intent: next })
+          }
+          disabled={setAttendanceIntent.isPending}
+        />
+      ),
+    },
+    { header: "Campus", accessor: (row: any) => row.campus?.name ?? "—" },
     {
       header: "Registration #",
-      accessor: (row: any) => row.registrationNumber || "\u2014",
+      accessor: (row: any) => row.registrationNumber || "—",
     },
     {
       header: "Status",
@@ -301,7 +328,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
         title="Registrations"
         description={
           isTwoStep
-            ? "Recommend registrations for your campus \u2014 an organization admin gives final approval."
+            ? "Recommend registrations for your campus — an organization admin gives final approval."
             : undefined
         }
         actions={
@@ -430,10 +457,11 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
             <StatCard
               label="Total Registrations"
               value={statsTotalCount}
-              selected={filterStatus === "" && reviewStateFilter === "" && !duplicatesOnly}
+              selected={filterStatus === "" && reviewStateFilter === "" && !duplicatesOnly && attendanceFilter === ""}
               onClick={() => {
                 setReviewStateFilter("");
                 setFilterStatus("");
+                setAttendanceFilter("");
                 setDuplicatesOnly(false);
               }}
             />
@@ -445,6 +473,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                   selected={reviewStateFilter === "AWAITING_VETTING"}
                   onClick={() => {
                     setFilterStatus("");
+                    setAttendanceFilter("");
                     setDuplicatesOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_VETTING" ? "" : "AWAITING_VETTING");
                   }}
@@ -455,6 +484,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                   selected={reviewStateFilter === "AWAITING_FINAL"}
                   onClick={() => {
                     setFilterStatus("");
+                    setAttendanceFilter("");
                     setDuplicatesOnly(false);
                     setReviewStateFilter(reviewStateFilter === "AWAITING_FINAL" ? "" : "AWAITING_FINAL");
                   }}
@@ -462,61 +492,46 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
               </>
             )}
             <StatCard
-              label="Duplicates"
-              value={duplicateCount}
-              selected={duplicatesOnly}
+              label="Approved"
+              value={kpi["APPROVED"] ?? 0}
+              tone="success"
+              selected={filterStatus === "APPROVED"}
               onClick={() => {
                 setReviewStateFilter("");
-                setFilterStatus("");
-                setDuplicatesOnly((prev) => !prev);
+                setDuplicatesOnly(false);
+                setFilterStatus(filterStatus === "APPROVED" ? "" : "APPROVED");
               }}
             />
-            {/* For two-step reviewers, raw PENDING is fully split into Pending + Awaiting above. */}
-            {(isTwoStep ? ["APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"] : ["PENDING", "APPROVED", "REJECTED", "WAITLISTED", "REQUIRES_ACTION", "CHECKED_IN", "ARCHIVED"]).map((s) => (
-              <StatCard
-                key={s}
-                label={s === "REQUIRES_ACTION" ? "Corrections" : s.replace(/_/g, " ")}
-                value={kpi[s] ?? 0}
-                selected={filterStatus === s && !duplicatesOnly}
-                onClick={() => {
-                  setReviewStateFilter("");
-                  setDuplicatesOnly(false);
-                  setFilterStatus(filterStatus === s ? "" : s);
-                }}
-              />
-            ))}
           </div>
 
-          {bulkResult && (
-            <div
-              className={cn(
-                "mb-4 rounded-md p-3 text-sm",
-                bulkResult.type === "success" ? "bg-success-50 text-success-700" : "bg-danger-50 text-danger-700"
-              )}
-            >
-              <span>{bulkResult.message}</span>
-              <button onClick={() => setBulkResult(null)} className="ml-3 text-xs underline">
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          <BulkActionBar count={selectedIds.length} onClear={() => setSelectedIds([])}>
-            {!isTwoStep && (
-              <Button
-                size="sm"
-                loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"}
-                onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}
-              >
-                Approve
-              </Button>
-            )}
+          <BulkActionBar
+            count={selectedIds.length}
+            onClear={() => setSelectedIds([])}
+          >
             <Button
               size="sm"
-              loading={bulkTransition.isPending && bulkTransition.variables?.action === "WAITLIST"}
-              onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "WAITLIST" })}
+              loading={bulkTransition.isPending && bulkTransition.variables?.action === "APPROVE"}
+              onClick={() => bulkTransition.mutate({ ids: selectedIds, action: "APPROVE" })}
             >
-              Waitlist
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="text-emerald-700 dark:text-emerald-300 border-emerald-300"
+              loading={bulkSetAttendanceIntent.isPending}
+              onClick={() => bulkSetAttendanceIntent.mutate({ registrationIds: selectedIds, intent: "COMING" })}
+            >
+              <CheckIcon className="mr-1 h-4 w-4 text-emerald-600" /> Mark Coming
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="text-rose-700 dark:text-rose-300 border-rose-300"
+              loading={bulkSetAttendanceIntent.isPending}
+              onClick={() => bulkSetAttendanceIntent.mutate({ registrationIds: selectedIds, intent: "NOT_COMING" })}
+            >
+              <XMarkIcon className="mr-1 h-4 w-4 text-rose-600" /> Mark Not Coming
             </Button>
             <Button size="sm" variant="secondary" onClick={() => { setBulkAction("REJECT"); setBulkReason(""); }}>
               Reject
@@ -547,7 +562,7 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
           </BulkActionBar>
 
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="grid flex-1 gap-3 md:grid-cols-2">
+            <div className="grid flex-1 gap-3 md:grid-cols-3">
               <SearchBar
                 placeholder="Name, email, or registration #"
                 value={searchQuery}
@@ -586,6 +601,14 @@ export function RegistrationQueue({ organizationId, managedCampuses }: Registrat
                     {s === "PENDING" && isTwoStep ? "Waiting Decision" : s.replace(/_/g, " ")}
                   </option>
                 ))}
+              </Select>
+              <Select
+                value={attendanceFilter}
+                onChange={(e) => setAttendanceFilter(e.target.value as any)}
+              >
+                <option value="">All Attendance</option>
+                <option value="COMING">Coming</option>
+                <option value="NOT_COMING">Not Coming</option>
               </Select>
             </div>
 

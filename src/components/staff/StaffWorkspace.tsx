@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/utils/trpc";
 import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { AttendanceToggleBadge } from "@/components/ui/AttendanceToggleBadge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -13,10 +14,12 @@ import {
   PrinterIcon,
   EnvelopeIcon,
 } from "@heroicons/react/24/outline";
+import { StaffEditModal } from "@/components/staff/StaffEditModal";
 
 export interface StaffWorkspaceTab {
   id: string;
   label: string;
+  count?: number;
   content: React.ReactNode;
 }
 
@@ -32,10 +35,20 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(defaultTab ?? tabs[0]?.id);
   const utils = api.useUtils();
+  const [editOpen, setEditOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [resendOpen, setResendOpen] = useState(false);
   const [resendResult, setResendResult] = useState<string | null>(null);
+
+  const setAttendanceIntent = api.staff.setAttendanceIntent.useMutation({
+    onSuccess: () => {
+      utils.staff.getById.invalidate({ id: staffId });
+      utils.staff.adminList.invalidate();
+      utils.staff.stats.invalidate();
+    },
+  });
+
   const approve = api.staff.approve.useMutation({
     onSuccess: () => {
       utils.staff.getById.invalidate({ id: staffId });
@@ -43,6 +56,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
       utils.staff.stats.invalidate();
     },
   });
+
   const reject = api.staff.reject.useMutation({
     onSuccess: () => {
       setRejectOpen(false);
@@ -52,6 +66,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
       utils.staff.stats.invalidate();
     },
   });
+
   const resendApprovalEmail = api.staff.resendApprovalEmails.useMutation({
     onSuccess: (result) => {
       setResendResult(`${result.sent} sent, ${result.failed} failed, ${result.skipped} skipped.`);
@@ -59,6 +74,7 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
       utils.staff.adminList.invalidate();
     },
   });
+
   const { data: profile, isLoading } = api.staff.getById.useQuery({ id: staffId });
 
   if (isLoading || !profile) {
@@ -118,6 +134,13 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
               <Button
                 size="sm"
                 variant="secondary"
+                onClick={() => setEditOpen(true)}
+              >
+                Edit Details
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
                 data-testid="print-badge-button"
                 icon={<PrinterIcon className="h-4 w-4" />}
                 onClick={() => window.open(`/api/staff/${staffId}/id-card.pdf`, "_blank")}
@@ -146,6 +169,14 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-lg font-bold text-neutral-900">{name}</h1>
                   <StatusBadge status={profile.status} />
+                  <AttendanceToggleBadge
+                    status={profile.attendanceIntent}
+                    onToggle={(next) =>
+                      setAttendanceIntent.mutate({ id: profile.id, intent: next })
+                    }
+                    disabled={setAttendanceIntent.isPending}
+                    size="md"
+                  />
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-txt-secondary">
                   {profile.email && <span>{profile.email}</span>}
@@ -223,18 +254,30 @@ export function StaffWorkspace({ staffId, tabs, defaultTab, onPrevious, onNext }
       <Dialog open={resendOpen} onClose={() => setResendOpen(false)} title="Resend approval email" size="sm">
         <div className="space-y-4">
           <p className="text-sm text-neutral-600">
-            Send the approval message again to <strong>{profile.email}</strong>? This will not change the teacher&apos;s approval or assignments.
+            Resend the approval email to {profile.email}?
           </p>
-          {resendResult && <div data-testid="approval-email-result" className="rounded-lg bg-surface-raised p-3 text-sm">{resendResult}</div>}
-          {resendApprovalEmail.error && <div className="rounded-lg bg-danger-50 p-3 text-sm text-danger-700">{resendApprovalEmail.error.message}</div>}
+          {resendResult && <p className="text-xs text-neutral-500">{resendResult}</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setResendOpen(false)}>{resendResult ? "Close" : "Cancel"}</Button>
-            {!resendResult && (
-              <Button loading={resendApprovalEmail.isPending} onClick={() => resendApprovalEmail.mutate({ ids: [staffId] })}>Send email</Button>
-            )}
+            <Button variant="secondary" onClick={() => setResendOpen(false)}>Close</Button>
+            <Button loading={resendApprovalEmail.isPending} onClick={() => resendApprovalEmail.mutate({ ids: [staffId] })}>Send</Button>
           </div>
         </div>
       </Dialog>
+
+      {/* Edit modal */}
+      {editOpen && (
+        <StaffEditModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          staffId={staffId}
+          organizationId={profile.organizationId}
+          campId={profile.campId}
+          onSuccess={() => {
+            utils.staff.getById.invalidate({ id: staffId });
+            utils.staff.adminList.invalidate();
+          }}
+        />
+      )}
     </div>
   );
 }
