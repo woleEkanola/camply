@@ -57,7 +57,7 @@ test.describe("Camp Points attendance", () => {
   test("manual and search attendance share one session and score the leaderboard", async ({ page }) => {
     await loginWithPassword(page, teacherEmail, "password123");
     await page.goto("/teacher/tribe");
-    await page.getByRole("button", { name: "Attendance" }).click();
+    await page.getByRole("button", { name: "Attendance", exact: true }).click();
     await expect(page.getByTestId("camp-points-workspace")).toBeVisible();
     await fieldByLabel(page, "Session name").fill("E2E Morning Attendance");
     await fieldByLabel(page, "Late after").fill("10");

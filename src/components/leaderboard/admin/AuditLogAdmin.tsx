@@ -20,7 +20,7 @@ export function AuditLogAdmin({ campId }: { campId: string }) {
   });
 
   const columns: Column<any>[] = [
-    { header: "Action", accessor: "action", primary: true },
+    { header: "Action", accessor: (row) => row.action.replace(/^LEADERBOARD_/, "").replace(/_/g, " "), primary: true },
     { header: "Reason", accessor: (row) => row.reason ?? "—", secondary: true },
     { header: "Subject", accessor: (row) => `${row.subjectType ?? "—"}${row.subjectId ? ` · ${row.subjectId}` : ""}` },
     { header: "When", accessor: (row) => new Date(row.createdAt).toLocaleString() },

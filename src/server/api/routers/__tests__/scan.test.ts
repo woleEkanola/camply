@@ -276,7 +276,7 @@ describe("scanRouter - processScan", () => {
     expect(rescan.result).toBe("SUCCESS");
   });
 
-  it("checkout desk prompt works and updates state on submission", async () => {
+  it("checkout desk defaults to seamless 1-scan checkout without requiring guardian details", async () => {
     const caller = appRouter.createCaller({
       prisma,
       session: {
@@ -288,14 +288,66 @@ describe("scanRouter - processScan", () => {
     // Set camper to checked in first
     await prisma.registration.update({
       where: { id: registrationId },
-      data: { status: "CHECKED_IN", checkedInAt: new Date(), checkedInById: adminId },
+      data: { status: "CHECKED_IN", checkedInAt: new Date(), checkedInById: adminId, checkedOutAt: null },
     });
 
-    // Initial scan to prompt details
+    // Seamless scan directly checks out camper
+    const seamlessResult = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Checkout",
+    });
+
+    expect(seamlessResult.result).toBe("SUCCESS");
+    expect(seamlessResult.actionPerformed).toBe("Checked Out");
+    expect(seamlessResult.scanEventId).toBeTruthy();
+
+    const reloadedReg = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(reloadedReg?.checkedOutAt).toBeTruthy();
+    expect(reloadedReg?.checkedOutById).toBe(adminId);
+
+    // Scan again to verify duplicate checkout is detected
+    const dupCheckoutResult = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Checkout",
+    });
+
+    expect(dupCheckoutResult.result).toBe("DUPLICATE");
+    expect(dupCheckoutResult.originalStation).toBe("Checkout Desk");
+
+    // Undo checkout reverts checkedOutAt
+    const undoRes = await caller.scan.undoScan({
+      organizationId: orgId,
+      scanEventId: seamlessResult.scanEventId,
+    });
+    expect(undoRes.success).toBe(true);
+
+    const undoneReg = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(undoneReg?.checkedOutAt).toBeNull();
+  });
+
+  it("checkout desk prompts for details when requireCheckoutDetails is true and updates state on submission", async () => {
+    const caller = appRouter.createCaller({
+      prisma,
+      session: {
+        user: { id: adminId, email: "admin@test.com", role: "ADMIN", organizationId: orgId },
+        expires: "",
+      },
+    });
+
+    // Set camper to checked in first
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: { status: "CHECKED_IN", checkedInAt: new Date(), checkedInById: adminId, checkedOutAt: null },
+    });
+
+    // Initial scan with requireCheckoutDetails to prompt details
     const promptResult = await caller.scan.processScan({
       organizationId: orgId,
       qrToken,
       station: "Checkout",
+      requireCheckoutDetails: true,
     });
 
     expect(promptResult.result).toBe("REQUIRES_CHECKOUT_DETAILS");
@@ -306,6 +358,7 @@ describe("scanRouter - processScan", () => {
       organizationId: orgId,
       qrToken,
       station: "Checkout",
+      requireCheckoutDetails: true,
       checkoutDetails: {
         collectorName: "Alice Smith",
         collectorRelationship: "Mother",
@@ -471,7 +524,26 @@ describe("scanRouter - processScan", () => {
 
     await prisma.registration.update({
       where: { id: registrationId },
-      data: { status: "CHECKED_IN", checkedInAt: new Date(), checkedInById: adminId },
+      data: { status: "CHECKED_IN", checkedInAt: new Date(), checkedInById: adminId, checkedOutAt: null },
+    });
+
+    // Seamless checkout via stationId = "CHECKOUT" even when station name is "Front Desk"
+    const checkoutResult = await caller.scan.processScan({
+      organizationId: orgId,
+      qrToken,
+      station: "Front Desk",
+      stationId: "CHECKOUT",
+    });
+
+    expect(checkoutResult.result).toBe("SUCCESS");
+    expect(checkoutResult.actionPerformed).toBe("Checked Out");
+    const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
+    expect(reg?.checkedOutAt).toBeTruthy();
+
+    // Reset and test with requireCheckoutDetails: true
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: { checkedOutAt: null },
     });
 
     const promptResult = await caller.scan.processScan({
@@ -479,21 +551,10 @@ describe("scanRouter - processScan", () => {
       qrToken,
       station: "Front Desk",
       stationId: "CHECKOUT",
+      requireCheckoutDetails: true,
     });
 
     expect(promptResult.result).toBe("REQUIRES_CHECKOUT_DETAILS");
-
-    const checkoutResult = await caller.scan.processScan({
-      organizationId: orgId,
-      qrToken,
-      station: "Front Desk",
-      stationId: "CHECKOUT",
-      checkoutDetails: { collectorName: "Bob Smith", collectorRelationship: "Father" },
-    });
-
-    expect(checkoutResult.result).toBe("SUCCESS");
-    const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
-    expect(reg?.checkedOutAt).toBeTruthy();
   });
 
   it("bulkSyncOfflineScans processes a batch of chronologically sorted offline scans", async () => {

@@ -18,6 +18,8 @@ type PointActivityRow = {
   subject: { kind: "CAMPER" | "STAFF" | "TRIBE" | "CAMPUS"; id: string; name: string };
   awarder: { id: string; name: string } | null;
   isReversal: boolean;
+  voidedAt: string | null;
+  voidReason: string | null;
 };
 
 /** "Who scanned/awarded points and why" — every ScoreEvent for the camp,
@@ -39,6 +41,7 @@ export function PointActivityAdmin({ campId }: { campId: string }) {
   const [tribeId, setTribeId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [subjectType, setSubjectType] = useState("");
+  const [showVoided, setShowVoided] = useState(false);
   const [rows, setRows] = useState<PointActivityRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,6 +56,7 @@ export function PointActivityAdmin({ campId }: { campId: string }) {
         tribeId: tribeId || undefined,
         categoryId: categoryId || undefined,
         subjectType: (subjectType || undefined) as any,
+        includeVoided: showVoided,
         cursor,
       });
       setRows((current) => (cursor ? [...current, ...(result.rows as PointActivityRow[])] : (result.rows as PointActivityRow[])));
@@ -69,23 +73,45 @@ export function PointActivityAdmin({ campId }: { campId: string }) {
     if (!campId) return;
     loadPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campId, tribeId, categoryId, subjectType]);
+  }, [campId, tribeId, categoryId, subjectType, showVoided]);
+
+  const voidEvent = api.leaderboard.voidEvent.useMutation({
+    onSuccess: () => {
+      toast.success("Point event voided.");
+      loadPage();
+    },
+    onError: (err) => toast.error(err.message || "Failed to void — it may already have been voided."),
+  });
+
+  function handleVoid(row: PointActivityRow) {
+    const reason = window.prompt(`Void ${row.points > 0 ? "+" : ""}${row.points} pts for ${row.subject.name}?\n\nEnter a reason (required) — this is normalizing a mistake or fraudulent entry, not a routine undo.`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      toast.error("A reason is required to void a point event.");
+      return;
+    }
+    voidEvent.mutate({ campId, eventId: row.eventId, reason: reason.trim() });
+  }
 
   const columns: Column<PointActivityRow>[] = useMemo(
     () => [
       { header: "When", accessor: (row) => new Date(row.occurredAt).toLocaleString(), secondary: true },
-      { header: "Recipient", accessor: (row) => `${row.subject.name} (${row.subject.kind})`, primary: true },
+      {
+        header: "Recipient",
+        accessor: (row) => `${row.voidedAt ? "🚫 " : ""}${row.subject.name} (${row.subject.kind})`,
+        primary: true,
+      },
       { header: "Category", accessor: (row) => row.category?.name ?? "—" },
       { header: "Points", accessor: (row) => (row.points > 0 ? `+${row.points}` : String(row.points)), className: "font-bold" },
       { header: "Awarded by", accessor: (row) => row.awarder?.name ?? "System" },
-      { header: "Reason", accessor: (row) => row.reason ?? "—", wrap: true },
-      { header: "Source", accessor: (row) => (row.isReversal ? "UNDO" : row.source) },
+      { header: "Reason", accessor: (row) => (row.voidedAt ? row.voidReason ?? "—" : row.reason ?? "—"), wrap: true },
+      { header: "Source", accessor: (row) => (row.voidedAt ? "VOIDED" : row.isReversal ? "UNDO" : row.source) },
     ],
     []
   );
 
   const downloadCsv = () => {
-    const header = ["When", "Recipient", "Kind", "Category", "Points", "Awarded by", "Reason", "Notes", "Source"];
+    const header = ["When", "Recipient", "Kind", "Category", "Points", "Awarded by", "Reason", "Notes", "Source", "Voided"];
     const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
     const lines = rows.map((row) =>
       [
@@ -95,9 +121,10 @@ export function PointActivityAdmin({ campId }: { campId: string }) {
         row.category?.name ?? "",
         String(row.points),
         row.awarder?.name ?? "",
-        row.reason ?? "",
+        row.voidedAt ? row.voidReason ?? "" : row.reason ?? "",
         row.notes ?? "",
-        row.isReversal ? "UNDO" : row.source,
+        row.voidedAt ? "VOIDED" : row.isReversal ? "UNDO" : row.source,
+        row.voidedAt ? new Date(row.voidedAt).toISOString() : "",
       ].map(escape).join(",")
     );
     const csv = [header.map(escape).join(","), ...lines].join("\n");
@@ -128,6 +155,10 @@ export function PointActivityAdmin({ campId }: { campId: string }) {
           <option value="TRIBE">Tribes</option>
           <option value="CAMPUS">Campuses</option>
         </Select>
+        <label className="flex items-center gap-2 text-sm text-txt-secondary">
+          <input type="checkbox" checked={showVoided} onChange={(e) => setShowVoided(e.target.checked)} className="h-4 w-4 rounded border-input-border" />
+          Show voided
+        </label>
         <Button size="sm" variant="secondary" onClick={downloadCsv} disabled={!rows.length}>Export loaded rows (CSV)</Button>
       </div>
 
@@ -139,6 +170,18 @@ export function PointActivityAdmin({ campId }: { campId: string }) {
         isLoading={loading}
         emptyTitle="No point activity yet"
         emptyDescription="Awards, deductions, and undos will appear here as they happen."
+        actions={(row) =>
+          row.voidedAt || row.isReversal ? null : (
+            <button
+              type="button"
+              className="text-xs text-status-danger underline disabled:opacity-50"
+              disabled={voidEvent.isPending}
+              onClick={() => handleVoid(row)}
+            >
+              Void
+            </button>
+          )
+        }
         footer={
           nextCursor ? (
             <div className="flex justify-center py-3">

@@ -179,6 +179,11 @@ export async function mergeStaffProfilesInTx(
   ).count;
 
   // ── StaffAttendanceRecord (@@unique([sessionId, staffProfileId])) ──────
+  // Fetched unfiltered by deletedAt — the unique constraint is on
+  // (sessionId, staffProfileId) regardless of soft-delete state, so a
+  // deleted row still occupies that slot and must still be resolved here or
+  // the bulk move below would hit a P2002. deletedAt is only used below to
+  // skip folding a deleted row's status into the surviving record.
   const targetAttendance = await tx.staffAttendanceRecord.findMany({ where: { staffProfileId: target.id } });
   const targetAttendanceBySession = new Map(targetAttendance.map((r) => [r.sessionId, r]));
   const sourceAttendance = await tx.staffAttendanceRecord.findMany({ where: { staffProfileId: source.id } });
@@ -187,7 +192,7 @@ export async function mergeStaffProfilesInTx(
   for (const sr of sourceAttendance) {
     const tr = targetAttendanceBySession.get(sr.sessionId);
     if (!tr) continue; // handled by the bulk move below
-    if (tr.status === "ABSENT" && sr.status !== "ABSENT") {
+    if (!tr.deletedAt && !sr.deletedAt && tr.status === "ABSENT" && sr.status !== "ABSENT") {
       await tx.staffAttendanceRecord.update({ where: { id: tr.id }, data: { status: sr.status, source: sr.source, notes: sr.notes ?? tr.notes } });
       attendanceRecordsUpgraded += 1;
     }

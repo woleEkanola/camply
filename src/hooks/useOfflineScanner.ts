@@ -132,6 +132,9 @@ export function useOfflineScanner(organizationId: string) {
 
     updateQueueCount();
 
+
+
+
     return () => {
       window.removeEventListener("online", updateOnlineStatus);
       window.removeEventListener("offline", updateOnlineStatus);
@@ -175,6 +178,7 @@ export function useOfflineScanner(organizationId: string) {
     location?: string;
     acknowledgedMedical?: boolean;
     skipMedicalAlerts?: boolean;
+    requireCheckoutDetails?: boolean;
     checkoutDetails?: {
       collectorName: string;
       collectorRelationship: string;
@@ -255,7 +259,7 @@ export function useOfflineScanner(organizationId: string) {
 
     const stationLower = params.station.toLowerCase();
 
-    if (stationLower === "checkout" && !params.checkoutDetails) {
+    if (stationLower === "checkout" && params.requireCheckoutDetails && !params.checkoutDetails) {
       return {
         result: "REQUIRES_CHECKOUT_DETAILS" as const,
         registration: mockedRegistration,

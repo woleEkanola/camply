@@ -398,6 +398,7 @@ export const scanRouter = createTRPCRouter({
         timestamp: z.date().optional(),
         acknowledgedMedical: z.boolean().optional(),
         skipMedicalAlerts: z.boolean().optional(),
+        requireCheckoutDetails: z.boolean().optional().default(false),
         checkoutDetails: z
           .object({
             collectorName: z.string(),
@@ -755,8 +756,8 @@ export const scanRouter = createTRPCRouter({
           };
         }
 
-        // If checkout details are not yet provided (frontend needs to gather name/relationship/signature)
-        if (!input.checkoutDetails) {
+        // If checkout details are required (when guardian verification mode is active) and not yet provided
+        if (input.requireCheckoutDetails && !input.checkoutDetails) {
           return {
             result: "REQUIRES_CHECKOUT_DETAILS" as const,
             registration,
@@ -770,9 +771,9 @@ export const scanRouter = createTRPCRouter({
             data: {
               checkedOutAt: activeTime,
               checkedOutById: ctx.userId,
-              checkoutCollectorName: input.checkoutDetails.collectorName,
-              checkoutCollectorRelationship: input.checkoutDetails.collectorRelationship,
-              checkoutDetails: input.checkoutDetails.details || null,
+              checkoutCollectorName: input.checkoutDetails?.collectorName ?? null,
+              checkoutCollectorRelationship: input.checkoutDetails?.collectorRelationship ?? null,
+              checkoutDetails: input.checkoutDetails?.details || null,
             },
             include,
           }),
@@ -788,8 +789,8 @@ export const scanRouter = createTRPCRouter({
               result: "SUCCESS",
               metadata: {
                 stationId: "CHECKOUT",
-                collectorName: input.checkoutDetails.collectorName,
-                relationship: input.checkoutDetails.collectorRelationship,
+                collectorName: input.checkoutDetails?.collectorName ?? null,
+                relationship: input.checkoutDetails?.collectorRelationship ?? null,
               },
             },
           }),
@@ -801,8 +802,8 @@ export const scanRouter = createTRPCRouter({
               action: "CHECK_OUT_COMPLETED",
               newValue: {
                 checkedOutAt: activeTime,
-                collectorName: input.checkoutDetails.collectorName,
-                collectorRelationship: input.checkoutDetails.collectorRelationship,
+                collectorName: input.checkoutDetails?.collectorName ?? null,
+                collectorRelationship: input.checkoutDetails?.collectorRelationship ?? null,
               },
             },
           }),
@@ -1613,24 +1614,14 @@ export const scanRouter = createTRPCRouter({
               continue;
             }
 
-            if (!scan.checkoutDetails) {
-              syncResults.push({
-                timestamp: scan.timestamp,
-                qrToken: scan.qrToken,
-                status: "FAILED",
-                error: "Checkout collector details missing.",
-              });
-              continue;
-            }
-
             await ctx.prisma.registration.update({
               where: { id: reg.id },
               data: {
                 checkedOutAt: parsedTimestamp,
                 checkedOutById: ctx.userId,
-                checkoutCollectorName: scan.checkoutDetails.collectorName,
-                checkoutCollectorRelationship: scan.checkoutDetails.collectorRelationship,
-                checkoutDetails: scan.checkoutDetails.details || null,
+                checkoutCollectorName: scan.checkoutDetails?.collectorName ?? null,
+                checkoutCollectorRelationship: scan.checkoutDetails?.collectorRelationship ?? null,
+                checkoutDetails: scan.checkoutDetails?.details || null,
               },
             });
 
@@ -1646,8 +1637,8 @@ export const scanRouter = createTRPCRouter({
                 result: "SUCCESS",
                 metadata: {
                   offlineSync: true,
-                  collectorName: scan.checkoutDetails.collectorName,
-                  relationship: scan.checkoutDetails.collectorRelationship,
+                  collectorName: scan.checkoutDetails?.collectorName ?? null,
+                  relationship: scan.checkoutDetails?.collectorRelationship ?? null,
                 },
               },
             });

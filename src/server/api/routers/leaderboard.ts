@@ -5,6 +5,8 @@ import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc/t
 import { assertSameOrg, assertCanManageCamp as assertScopedCampAccess } from "../trpc/scoping";
 import { assertReportsAccess } from "./scan";
 import { recordScoreEvent } from "../../leaderboard/record";
+import { voidScoreEvent, VoidError } from "../../leaderboard/void";
+import { resolveStaffScoreScope } from "../../leaderboard/staffScope";
 import { rebuildLeaderboard } from "../../leaderboard/aggregate";
 import { toPublicDto, toPublicAnnouncementDto } from "../../leaderboard/publicDto";
 import { notifyAchievementAwarded } from "../../leaderboard/notify";
@@ -94,6 +96,55 @@ async function ensureAdjustmentCategory(prisma: any, campId: string) {
   });
 }
 
+/**
+ * Shared compensating-event logic behind resetSubject/resetTribe/
+ * resetAllTribes. Returns null (no-op) when the subject is already at 0, so
+ * repeated calls / accidental double-clicks are safe.
+ *
+ * For CAMPER/STAFF, also carries the subject's tribeId/campusId so those
+ * rollups drain by the same amount — their points genuinely contributed to
+ * the tribe/campus total, so resetting the camper alone without this would
+ * leave tribe.total > sum(members). CAMPUS reset deliberately carries only
+ * campusId: it does NOT drain member campers, so a campus reset intentionally
+ * leaves the campus total below the sum of its campers (see plan).
+ */
+async function performSubjectReset(
+  ctx: { prisma: any; session: any },
+  campId: string,
+  subjectType: "CAMPER" | "STAFF" | "TRIBE" | "CAMPUS",
+  subjectId: string,
+  reason: string | undefined
+) {
+  const subjectField = subjectColumn(subjectType);
+  const stat = await ctx.prisma.leaderboardStat.findFirst({
+    where: { campId, subjectType, subjectId, day: null },
+  });
+  const total = stat?.totalPoints ?? 0;
+  if (total === 0) return null;
+
+  let rollup: { tribeId?: string | null; campusId?: string | null } = {};
+  if (subjectType === "CAMPER") {
+    const registration = await ctx.prisma.registration.findUnique({ where: { id: subjectId }, select: { tribeId: true, campusId: true } });
+    rollup = { tribeId: registration?.tribeId ?? null, campusId: registration?.campusId ?? null };
+  } else if (subjectType === "STAFF") {
+    const scope = await resolveStaffScoreScope(ctx.prisma, subjectId);
+    rollup = { tribeId: scope?.tribeId ?? null, campusId: scope?.campusId ?? null };
+  }
+
+  const category = await ensureAdjustmentCategory(ctx.prisma, campId);
+  const event = await recordScoreEvent({
+    campId,
+    [subjectField]: subjectId,
+    ...rollup,
+    categoryId: category.id,
+    points: -total,
+    reason: reason ?? `Reset to zero`,
+    source: "MANUAL",
+    createdById: ctx.session!.user.id,
+  } as any);
+  return { event, previousTotal: total };
+}
+
 export const leaderboardRouter = createTRPCRouter({
   // ─── Reads ─────────────────────────────────────────────────────────────
 
@@ -153,7 +204,7 @@ export const leaderboardRouter = createTRPCRouter({
           include: { definition: true },
         }),
         ctx.prisma.scoreEvent.findMany({
-          where: { campId: input.campId },
+          where: { campId: input.campId, voidedAt: null },
           orderBy: { createdAt: "desc" },
           take: 20,
         }),
@@ -211,7 +262,7 @@ export const leaderboardRouter = createTRPCRouter({
           where: { campId: input.campId, subjectType: "TRIBE", subjectId: input.tribeId, day: null },
         }),
         ctx.prisma.scoreEvent.findMany({
-          where: { campId: input.campId, tribeId: input.tribeId },
+          where: { campId: input.campId, tribeId: input.tribeId, voidedAt: null },
           orderBy: { createdAt: "desc" },
           take: 50,
         }),
@@ -303,7 +354,7 @@ export const leaderboardRouter = createTRPCRouter({
           where: { campId: input.campId, subjectType: "CAMPER", subjectId: input.registrationId, day: null },
         }),
         ctx.prisma.scoreEvent.findMany({
-          where: { campId: input.campId, registrationId: input.registrationId },
+          where: { campId: input.campId, registrationId: input.registrationId, voidedAt: null },
           orderBy: { createdAt: "desc" },
           take: 50,
         }),
@@ -330,7 +381,7 @@ export const leaderboardRouter = createTRPCRouter({
           where: { campId: input.campId, subjectType: "STAFF", subjectId: input.staffId, day: null },
         }),
         ctx.prisma.scoreEvent.findMany({
-          where: { campId: input.campId, staffProfileId: input.staffId },
+          where: { campId: input.campId, staffProfileId: input.staffId, voidedAt: null },
           orderBy: { createdAt: "desc" },
           take: 50,
         }),
@@ -505,12 +556,17 @@ export const leaderboardRouter = createTRPCRouter({
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertLeaderboardRead(ctx, input.campId);
+      // Excludes voided/reversed events (NOT EXISTS a reversal row pointing
+      // back at it) — same treatment as computeDerivedStats's attendance
+      // query, so a deleted/fraudulent attendance record voided via
+      // deleteAttendanceRecord stops skewing this average once voided.
       const rows: Array<{ day: Date; avgMinutesLate: number | null }> = await ctx.prisma.$queryRaw`
         SELECT se."day",
                AVG(EXTRACT(EPOCH FROM (se."occurredAt" - ss."startsAt")) / 60.0)::float AS "avgMinutesLate"
         FROM "ScoreEvent" se
         JOIN "ScoredSession" ss ON ss."id" = se."scoredSessionId"
         WHERE se."campId" = ${input.campId} AND se."scoredSessionId" IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM "ScoreEvent" reversal WHERE reversal."reversesEventId" = se."id")
         GROUP BY se."day"
         ORDER BY se."day" ASC
       `;
@@ -534,13 +590,16 @@ export const leaderboardRouter = createTRPCRouter({
     .input(z.object({ campId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertLeaderboardRead(ctx, input.campId);
+      // Same NOT EXISTS reversal exclusion as averageArrivalTime above —
+      // a voided attendance event drops out of "attended" here too.
       const rows: Array<{ day: Date; attended: bigint; prompt: bigint; sessions: bigint }> = await ctx.prisma.$queryRaw`
         WITH per_day AS (
           SELECT "day",
                  COUNT(DISTINCT ("registrationId", "scoredSessionId")) FILTER (WHERE "registrationId" IS NOT NULL) AS attended,
                  COUNT(DISTINCT ("registrationId", "scoredSessionId")) FILTER (WHERE "registrationId" IS NOT NULL AND "points" > 0) AS prompt
-          FROM "ScoreEvent"
+          FROM "ScoreEvent" e
           WHERE "campId" = ${input.campId} AND "scoredSessionId" IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM "ScoreEvent" reversal WHERE reversal."reversesEventId" = e."id")
           GROUP BY "day"
         ),
         sessions_per_day AS (
@@ -706,7 +765,7 @@ export const leaderboardRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await assertLeaderboardRead(ctx, input.campId);
       return ctx.prisma.scoreEvent.findMany({
-        where: { campId: input.campId },
+        where: { campId: input.campId, voidedAt: null },
         orderBy: { createdAt: "desc" },
         take: input.limit,
       });
@@ -865,6 +924,43 @@ export const leaderboardRouter = createTRPCRouter({
       });
 
       return undoEvent;
+    }),
+
+  /**
+   * Fraud/mistake normalization for a single point event, exposed on
+   * PointActivityAdmin (previously read-only). Unlike undo (a compensating
+   * event a user can trigger on their own award), this requires a reason
+   * and stamps voidedAt on both the original and its compensation so they
+   * drop out of HistoryTab / camper / tribe / staff detail feeds while
+   * totals stay correct (see void.ts's doc comment for why).
+   */
+  voidEvent: protectedProcedure
+    .input(z.object({ campId: z.string(), eventId: z.string(), reason: z.string().min(1, "A reason is required.") }))
+    .mutation(async ({ ctx, input }) => {
+      const camp = await ctx.prisma.camp.findUniqueOrThrow({ where: { id: input.campId } });
+      await assertCanManageCamp(ctx, input.campId);
+
+      const existing = await ctx.prisma.scoreEvent.findUniqueOrThrow({ where: { id: input.eventId } });
+      if (existing.campId !== input.campId) throw new TRPCError({ code: "FORBIDDEN" });
+
+      let result;
+      try {
+        result = await voidScoreEvent({ eventId: input.eventId, actorId: ctx.session!.user.id, reason: input.reason });
+      } catch (err) {
+        if (err instanceof VoidError) {
+          throw new TRPCError({ code: err.code === "NOT_FOUND" ? "NOT_FOUND" : "CONFLICT", message: err.message });
+        }
+        throw err;
+      }
+
+      await writeAudit(ctx, camp, "LEADERBOARD_VOID", {
+        reason: input.reason,
+        subjectType: "SCORE_EVENT",
+        subjectId: result.original.id,
+        newValue: { reversesEventId: result.original.id, points: -result.original.points, compensatingEventId: result.compensating.id },
+      });
+
+      return result.compensating;
     }),
 
   category: createTRPCRouter({
@@ -1186,9 +1282,14 @@ export const leaderboardRouter = createTRPCRouter({
       return result;
     }),
 
-  /** O(1) reset: archives the settings row's cutoff rather than deleting any
-   * ScoreEvent history — everything before the archive timestamp is simply
-   * excluded from future reads, never destroyed. */
+  /**
+   * Stamps the settings row's archive cutoff (kept for compatibility — no
+   * read path currently filters on it, see below) AND, unlike before,
+   * actually zeroes every subject with a nonzero total via
+   * performSubjectReset, so standings genuinely start fresh instead of the
+   * button being a no-op. Never deletes ScoreEvent history — each zeroing is
+   * a compensating event, same as every other reset action here.
+   */
   reset: protectedProcedure
     .input(z.object({ campId: z.string(), reason: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
@@ -1199,7 +1300,19 @@ export const leaderboardRouter = createTRPCRouter({
         create: { campId: input.campId, archivedAt: new Date() },
         update: { archivedAt: new Date() },
       });
-      await writeAudit(ctx, camp, "LEADERBOARD_RESET", { reason: input.reason, subjectType: "LEADERBOARD_SETTINGS", subjectId: settings.id });
+
+      const stats = await ctx.prisma.leaderboardStat.findMany({
+        where: { campId: input.campId, day: null, totalPoints: { not: 0 } },
+        select: { subjectType: true, subjectId: true },
+      });
+      let subjectsReset = 0;
+      for (const stat of stats) {
+        const subjectType = stat.subjectType as "CAMPER" | "TRIBE" | "CAMPUS" | "STAFF";
+        const result = await performSubjectReset(ctx, input.campId, subjectType, stat.subjectId, input.reason ?? "Leaderboard reset");
+        if (result) subjectsReset++;
+      }
+
+      await writeAudit(ctx, camp, "LEADERBOARD_RESET", { reason: input.reason, subjectType: "LEADERBOARD_SETTINGS", subjectId: settings.id, newValue: { subjectsReset } });
       return settings;
     }),
 
@@ -1215,24 +1328,33 @@ export const leaderboardRouter = createTRPCRouter({
       const tribe = await ctx.prisma.tribe.findFirst({ where: { id: input.tribeId, campId: input.campId, deletedAt: null } });
       if (!tribe) throw new TRPCError({ code: "NOT_FOUND", message: "Tribe not found in this camp." });
 
-      const stat = await ctx.prisma.leaderboardStat.findFirst({
-        where: { campId: input.campId, subjectType: "TRIBE", subjectId: input.tribeId, day: null },
-      });
-      const total = stat?.totalPoints ?? 0;
-      if (total === 0) return null;
+      const result = await performSubjectReset(ctx, input.campId, "TRIBE", input.tribeId, input.reason ?? `Reset ${tribe.name} to zero`);
+      if (!result) return null;
+      await writeAudit(ctx, camp, "LEADERBOARD_TRIBE_RESET", { reason: input.reason, subjectType: "TRIBE", subjectId: input.tribeId, newValue: { previousTotal: result.previousTotal, eventId: result.event?.id ?? null } });
+      return result.event;
+    }),
 
-      const category = await ensureAdjustmentCategory(ctx.prisma, input.campId);
-      const event = await recordScoreEvent({
-        campId: input.campId,
-        tribeId: input.tribeId,
-        categoryId: category.id,
-        points: -total,
-        reason: input.reason ?? `Reset ${tribe.name} to zero`,
-        source: "MANUAL",
-        createdById: ctx.session!.user.id,
+  /**
+   * General subject-reset action, extending resetTribe to CAMPER/STAFF/
+   * CAMPUS. Kept as a separate procedure (rather than folding resetTribe
+   * into it) so existing callers/specs pinned to resetTribe's shape don't
+   * need to change.
+   */
+  resetSubject: protectedProcedure
+    .input(z.object({ campId: z.string(), subjectType: subjectTypeSchema, subjectId: z.string(), reason: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const camp = await ctx.prisma.camp.findUniqueOrThrow({ where: { id: input.campId } });
+      await assertCanManageCamp(ctx, input.campId);
+
+      const result = await performSubjectReset(ctx, input.campId, input.subjectType, input.subjectId, input.reason);
+      if (!result) return null;
+      await writeAudit(ctx, camp, "LEADERBOARD_SUBJECT_RESET", {
+        reason: input.reason,
+        subjectType: input.subjectType,
+        subjectId: input.subjectId,
+        newValue: { previousTotal: result.previousTotal, eventId: result.event?.id ?? null },
       });
-      await writeAudit(ctx, camp, "LEADERBOARD_TRIBE_RESET", { reason: input.reason, subjectType: "TRIBE", subjectId: input.tribeId, newValue: { previousTotal: total, eventId: event?.id ?? null } });
-      return event;
+      return result.event;
     }),
 
   /** Loops resetTribe's single-compensating-event logic over every tribe in
@@ -1297,12 +1419,17 @@ export const leaderboardRouter = createTRPCRouter({
       to: z.date().optional(),
       cursor: z.string().optional(),
       limit: z.number().int().min(1).max(100).default(50),
+      // Voided rows (mistakes/fraud removed via voidEvent) are hidden from
+      // this feed by default, same treatment as HistoryTab and the detail
+      // pages — pass true to audit them.
+      includeVoided: z.boolean().default(false),
     }))
     .query(async ({ ctx, input }) => {
       await assertCanManageCamp(ctx, input.campId);
       const events = await ctx.prisma.scoreEvent.findMany({
         where: {
           campId: input.campId,
+          ...(input.includeVoided ? {} : { voidedAt: null }),
           ...(input.tribeId ? { tribeId: input.tribeId } : {}),
           ...(input.categoryId ? { categoryId: input.categoryId } : {}),
           ...(input.awarderId ? { createdById: input.awarderId } : {}),
@@ -1364,6 +1491,8 @@ export const leaderboardRouter = createTRPCRouter({
           awarder: event.createdById ? { id: event.createdById, name: awarderName.get(event.createdById) ?? "Unknown" } : null,
           isReversal: !!event.reversesEventId,
           reversesEventId: event.reversesEventId,
+          voidedAt: event.voidedAt,
+          voidReason: event.voidReason,
         };
       });
 

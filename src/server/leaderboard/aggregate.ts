@@ -576,7 +576,7 @@ async function computeCompositeScores(tx: Tx, campId: string): Promise<void> {
         const grouped = userIds.length
           ? await tx.attendanceSession.groupBy({
               by: ["createdById"],
-              where: { campId, createdById: { in: userIds } },
+              where: { campId, createdById: { in: userIds }, deletedAt: null },
               _count: { _all: true },
             })
           : [];

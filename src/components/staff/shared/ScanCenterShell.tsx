@@ -103,6 +103,20 @@ export function ScanCenterShell({
     }
   };
 
+  // Checkout Verification Mode: "SEAMLESS" (default, 1-scan check out) vs "GUARDIAN_DETAILS" (requires parent details & signature)
+  const [checkoutMode, setCheckoutMode] = useState<"SEAMLESS" | "GUARDIAN_DETAILS">(() => {
+    if (typeof window === "undefined") return "SEAMLESS";
+    const saved = localStorage.getItem("camply-scan-checkout-mode");
+    return saved === "GUARDIAN_DETAILS" ? "GUARDIAN_DETAILS" : "SEAMLESS";
+  });
+
+  const handleCheckoutModeChange = (mode: "SEAMLESS" | "GUARDIAN_DETAILS") => {
+    setCheckoutMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("camply-scan-checkout-mode", mode);
+    }
+  };
+
   const [searchQuery, setSearchQuery] = useState("");
   const [scannerActive, setScannerActive] = useState(true);
   const [lastCacheSyncTime, setLastCacheSyncTime] = useState<string>("Never");
@@ -372,6 +386,7 @@ export function ScanCenterShell({
         device: deviceIdentifier || undefined,
         location: stationLocation || undefined,
         acknowledgedMedical: payload.acknowledgedMedical,
+        requireCheckoutDetails: checkoutMode === "GUARDIAN_DETAILS",
         checkoutDetails: payload.checkoutDetails,
       });
 
@@ -622,9 +637,11 @@ export function ScanCenterShell({
         onDeviceChange={handleDeviceChange}
         dismissMode={dismissMode}
         onDismissModeChange={handleDismissModeChange}
+        checkoutMode={checkoutMode}
+        onCheckoutModeChange={handleCheckoutModeChange}
       />
 
-      {/* Offline status & Popup mode — collapsed to single tappable chips */}
+      {/* Offline status, Popup mode, & Checkout mode — collapsed to single tappable chips */}
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={() => setOfflineSheetOpen(true)} className="cursor-pointer">
           <Badge tone={offlineScanner.isOnline ? "success" : "warning"}>
@@ -642,6 +659,18 @@ export function ScanCenterShell({
             Popup: {dismissMode === "MANUAL" ? "Manual (X)" : "Auto (1.5s)"}
           </Badge>
         </button>
+        {activeStation === "CHECKOUT" && (
+          <button
+            type="button"
+            onClick={() => handleCheckoutModeChange(checkoutMode === "SEAMLESS" ? "GUARDIAN_DETAILS" : "SEAMLESS")}
+            title={`Checkout process mode: ${checkoutMode === "SEAMLESS" ? "Seamless (Scan & Check Out) - Default" : "Require Guardian Verification (Name & Signature)"}`}
+            className="cursor-pointer"
+          >
+            <Badge tone={checkoutMode === "SEAMLESS" ? "success" : "attention"}>
+              Checkout: {checkoutMode === "SEAMLESS" ? "Quick Scan (Default)" : "Guardian Form"}
+            </Badge>
+          </button>
+        )}
         {pointsHref && (
           <Button variant="secondary" size="sm" onClick={() => router.push(pointsHref)}>
             Award Camp Points
@@ -693,13 +722,17 @@ export function ScanCenterShell({
       <SearchSheet
         open={searchSheetOpen}
         onClose={() => setSearchSheetOpen(false)}
-        onSearch={(query) => handleScanSubmit({ query })}
-        onSelectCamper={(camper) =>
+        onSearch={(query) => {
+          setSearchSheetOpen(false);
+          handleScanSubmit({ query });
+        }}
+        onSelectCamper={(camper) => {
+          setSearchSheetOpen(false);
           handleScanSubmit({
             qrToken: camper.qrToken || undefined,
             query: camper.registrationNumber || camper.name,
-          })
-        }
+          });
+        }}
         organizationId={organizationId}
       />
 
