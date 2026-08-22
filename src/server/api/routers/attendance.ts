@@ -1,7 +1,16 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc/trpc";
 import { TRPCError } from "@trpc/server";
-import { markAttendance, markStaffAttendance, AttendanceError } from "../../attendance/engine";
+import {
+  markAttendance,
+  markStaffAttendance,
+  deleteAttendanceRecord,
+  deleteStaffAttendanceRecord,
+  reopenAttendanceSession,
+  deleteAttendanceSession,
+  clearAutoAbsent,
+  AttendanceError,
+} from "../../attendance/engine";
 import { getCampPointsAccess, assertScope } from "../../campPoints/access";
 import { normalizeScannedQRToken } from "../../../lib/qr";
 
@@ -50,7 +59,10 @@ async function resolveAttendanceScoring(ctx: any, campId: string, lateAfterMinut
 }
 
 const audienceSchema = z.enum(["CAMPER", "TEACHER", "VOLUNTEER", "ALL_STAFF"]);
-const sessionInclude = { records: { include: { registration: { include: { camper: true } } } }, staffRecords: { include: { staffProfile: true } } } as const;
+const sessionInclude = {
+  records: { where: { deletedAt: null }, include: { registration: { include: { camper: true } } } },
+  staffRecords: { where: { deletedAt: null }, include: { staffProfile: true } },
+} as const;
 const eligibleStatus: any = { in: ["APPROVED", "CHECKED_IN", "COMPLETED"] };
 
 export const attendanceRouter = createTRPCRouter({
@@ -91,8 +103,8 @@ export const attendanceRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await attendanceAccess(ctx, input.campId, input.tribeId, input.campusId);
       return ctx.prisma.attendanceSession.findMany({
-        where: { campId: input.campId, ...(input.tribeId ? { tribeId: input.tribeId } : {}), ...(input.campusId ? { campusId: input.campusId } : {}), ...(input.audience ? { audience: input.audience } : {}) },
-        include: { records: true, staffRecords: true }, orderBy: { date: "desc" },
+        where: { campId: input.campId, deletedAt: null, ...(input.tribeId ? { tribeId: input.tribeId } : {}), ...(input.campusId ? { campusId: input.campusId } : {}), ...(input.audience ? { audience: input.audience } : {}) },
+        include: { records: { where: { deletedAt: null } }, staffRecords: { where: { deletedAt: null } } }, orderBy: { date: "desc" },
       });
     }),
 
@@ -208,16 +220,16 @@ export const attendanceRouter = createTRPCRouter({
       await sessionAccess(ctx, session);
       if (input.markRemainingAbsent) {
         if (session.audience !== "CAMPER") {
-          const staff = await ctx.prisma.staffProfile.findMany({ where: { campId: session.campId, status: "APPROVED", deletedAt: null, ...(session.audience === "ALL_STAFF" ? {} : { type: session.audience as any }), ...(session.tribeId ? { assignedTribeId: session.tribeId } : {}), ...(session.campusId ? { preferredCampusId: session.campusId } : {}), attendanceRecords: { none: { sessionId: session.id } } }, select: { id: true } });
-          for (const person of staff) await markStaffAttendance({ sessionId: session.id, staffProfileId: person.id, status: "ABSENT", source: "MANUAL", actorId: ctx.userId });
+          const staff = await ctx.prisma.staffProfile.findMany({ where: { campId: session.campId, status: "APPROVED", deletedAt: null, ...(session.audience === "ALL_STAFF" ? {} : { type: session.audience as any }), ...(session.tribeId ? { assignedTribeId: session.tribeId } : {}), ...(session.campusId ? { preferredCampusId: session.campusId } : {}), attendanceRecords: { none: { sessionId: session.id, deletedAt: null } } }, select: { id: true } });
+          for (const person of staff) await markStaffAttendance({ sessionId: session.id, staffProfileId: person.id, status: "ABSENT", source: "MANUAL", actorId: ctx.userId, autoAbsent: true });
         } else {
         const registrations = await ctx.prisma.registration.findMany({
           where: {
             campId: session.campId, ...(session.tribeId ? { tribeId: session.tribeId } : {}), ...(session.campusId ? { campusId: session.campusId } : {}),
-            deletedAt: null, status: eligibleStatus, attendanceRecords: { none: { sessionId: session.id } },
+            deletedAt: null, status: eligibleStatus, attendanceRecords: { none: { sessionId: session.id, deletedAt: null } },
           }, select: { id: true },
         });
-        for (const registration of registrations) await markAttendance({ sessionId: session.id, registrationId: registration.id, status: "ABSENT", source: "MANUAL", actorId: ctx.userId });
+        for (const registration of registrations) await markAttendance({ sessionId: session.id, registrationId: registration.id, status: "ABSENT", source: "MANUAL", actorId: ctx.userId, autoAbsent: true });
         }
       }
       await ctx.prisma.attendanceSession.update({ where: { id: session.id }, data: { status: "CLOSED", closedAt: new Date(), closedById: ctx.userId } });
@@ -235,7 +247,7 @@ export const attendanceRouter = createTRPCRouter({
         if (!tribeId) return { total: 0, present: 0, absent: 0, late: 0 };
         const start = new Date(); start.setHours(0, 0, 0, 0);
         const end = new Date(); end.setHours(23, 59, 59, 999);
-        const session = await ctx.prisma.attendanceSession.findFirst({ where: { campId: input.campId, tribeId, date: { gte: start, lte: end } }, include: { records: true } });
+        const session = await ctx.prisma.attendanceSession.findFirst({ where: { campId: input.campId, tribeId, date: { gte: start, lte: end } }, include: { records: { where: { deletedAt: null } } } });
         if (!session) return { total: 0, present: 0, absent: 0, late: 0 };
         return {
           total: session.records.length,
@@ -246,5 +258,68 @@ export const attendanceRouter = createTRPCRouter({
       } catch {
         return { total: 0, present: 0, absent: 0, late: 0 };
       }
+    }),
+
+  // ─── Normalization: delete / reopen / clear-sweep ─────────────────────
+  // All admin-only (assertScope's "ATTENDANCE" gate below requires
+  // access.isAdmin OR the session's own tribe/campus scope — see
+  // campPoints/access.ts). See the plan for why these are soft
+  // deletes + void-by-compensation rather than hard deletes.
+
+  deleteRecord: protectedProcedure
+    .input(z.object({ sessionId: z.string(), recordId: z.string(), staff: z.boolean().default(false), reason: z.string().min(1, "A reason is required.") }))
+    .mutation(async ({ ctx, input }) => {
+      const session = await ctx.prisma.attendanceSession.findUnique({ where: { id: input.sessionId } });
+      if (!session) throw new TRPCError({ code: "NOT_FOUND" });
+      const access = await sessionAccess(ctx, session);
+      if (!access.isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Only an admin can delete an attendance record." });
+      try {
+        return input.staff
+          ? await deleteStaffAttendanceRecord({ recordId: input.recordId, actorId: ctx.userId, reason: input.reason })
+          : await deleteAttendanceRecord({ recordId: input.recordId, actorId: ctx.userId, reason: input.reason });
+      } catch (error) {
+        if (error instanceof AttendanceError) throw new TRPCError({ code: error.code === "CONFLICT" ? "CONFLICT" : error.code === "FORBIDDEN" ? "FORBIDDEN" : "NOT_FOUND", message: error.message });
+        throw error;
+      }
+    }),
+
+  reopenSession: protectedProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const session = await ctx.prisma.attendanceSession.findUnique({ where: { id: input.sessionId } });
+      if (!session) throw new TRPCError({ code: "NOT_FOUND" });
+      const access = await sessionAccess(ctx, session);
+      if (!access.isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Only an admin can reopen a closed session." });
+      try {
+        return await reopenAttendanceSession({ sessionId: input.sessionId, actorId: ctx.userId });
+      } catch (error) {
+        if (error instanceof AttendanceError) throw new TRPCError({ code: error.code === "CONFLICT" ? "CONFLICT" : error.code === "FORBIDDEN" ? "FORBIDDEN" : "NOT_FOUND", message: error.message });
+        throw error;
+      }
+    }),
+
+  deleteSession: protectedProcedure
+    .input(z.object({ sessionId: z.string(), reason: z.string().min(1, "A reason is required.") }))
+    .mutation(async ({ ctx, input }) => {
+      const session = await ctx.prisma.attendanceSession.findUnique({ where: { id: input.sessionId } });
+      if (!session) throw new TRPCError({ code: "NOT_FOUND" });
+      const access = await sessionAccess(ctx, session);
+      if (!access.isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Only an admin can delete an attendance session." });
+      try {
+        return await deleteAttendanceSession({ sessionId: input.sessionId, actorId: ctx.userId, reason: input.reason });
+      } catch (error) {
+        if (error instanceof AttendanceError) throw new TRPCError({ code: error.code === "CONFLICT" ? "CONFLICT" : error.code === "FORBIDDEN" ? "FORBIDDEN" : "NOT_FOUND", message: error.message });
+        throw error;
+      }
+    }),
+
+  clearAutoAbsent: protectedProcedure
+    .input(z.object({ sessionId: z.string(), reason: z.string().min(1, "A reason is required.") }))
+    .mutation(async ({ ctx, input }) => {
+      const session = await ctx.prisma.attendanceSession.findUnique({ where: { id: input.sessionId } });
+      if (!session) throw new TRPCError({ code: "NOT_FOUND" });
+      const access = await sessionAccess(ctx, session);
+      if (!access.isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Only an admin can clear the auto-absent sweep." });
+      return clearAutoAbsent({ sessionId: input.sessionId, actorId: ctx.userId, reason: input.reason });
     }),
 });

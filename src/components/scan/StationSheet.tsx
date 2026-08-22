@@ -21,6 +21,8 @@ interface StationSheetProps {
   onDeviceChange: (val: string) => void;
   dismissMode?: "AUTO" | "MANUAL";
   onDismissModeChange?: (val: "AUTO" | "MANUAL") => void;
+  checkoutMode?: "SEAMLESS" | "GUARDIAN_DETAILS";
+  onCheckoutModeChange?: (val: "SEAMLESS" | "GUARDIAN_DETAILS") => void;
 }
 
 export function StationSheet({
@@ -36,6 +38,8 @@ export function StationSheet({
   onDeviceChange,
   dismissMode = "MANUAL",
   onDismissModeChange,
+  checkoutMode = "SEAMLESS",
+  onCheckoutModeChange,
 }: StationSheetProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingStation, setPendingStation] = useState<StationId | null>(null);
@@ -144,6 +148,38 @@ export function StationSheet({
                 >
                   <div className="text-xs font-bold text-txt-primary">Auto-dismiss</div>
                   <div className="text-[10px] text-txt-muted mt-0.5">Clears after 1.5s</div>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-txt-secondary mb-1.5">
+                Checkout Process Mode
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onCheckoutModeChange?.("SEAMLESS")}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    checkoutMode === "SEAMLESS"
+                      ? "border-accent-600 bg-accent-50/60 dark:bg-accent-950/40 text-txt-primary font-bold shadow-xs"
+                      : "border-border-default bg-bg-surface text-txt-secondary hover:bg-bg-subtle"
+                  }`}
+                >
+                  <div className="text-xs font-bold text-txt-primary">Seamless Scan</div>
+                  <div className="text-[10px] text-txt-muted mt-0.5">Scan & check out (Default)</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCheckoutModeChange?.("GUARDIAN_DETAILS")}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    checkoutMode === "GUARDIAN_DETAILS"
+                      ? "border-accent-600 bg-accent-50/60 dark:bg-accent-950/40 text-txt-primary font-bold shadow-xs"
+                      : "border-border-default bg-bg-surface text-txt-secondary hover:bg-bg-subtle"
+                  }`}
+                >
+                  <div className="text-xs font-bold text-txt-primary">Guardian Details</div>
+                  <div className="text-[10px] text-txt-muted mt-0.5">Prompt parent & signature</div>
                 </button>
               </div>
             </div>

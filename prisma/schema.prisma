@@ -877,6 +877,14 @@ model ScoreEvent {
 
   createdAt DateTime @default(now())
 
+  // Additive: void-by-compensation. A voided event stays in the ledger (the
+  // compensating -N event that reverses it is a separate row via
+  // reversesEventId above) but is hidden from user-facing feeds. Both the
+  // original and its compensation get stamped so neither resurfaces.
+  voidedAt   DateTime?
+  voidedById String?
+  voidReason String?
+
   @@index([campId, day])
   @@index([campId, tribeId, day])
   @@index([campId, registrationId, day])
@@ -884,6 +892,7 @@ model ScoreEvent {
   @@index([campId, createdAt])
   @@index([campId, categoryId, day])
   @@index([reversesEventId])
+  @@index([campId, voidedAt])
 }
 
 model ScoreCategory {
@@ -1441,6 +1450,13 @@ model AttendanceSession {
   // model untouched otherwise.
   scoredSessionId String?
 
+  // Additive: soft delete for an entire session (e.g. a duplicate or
+  // fabricated session). Records under it are soft-deleted in the same
+  // transaction; see deleteSession in the attendance router.
+  deletedAt    DateTime?
+  deletedById  String?
+  deleteReason String?
+
   // Additive: this model previously had zero indexes.
   @@index([campId, date])
   @@index([tribeId, date])
@@ -1465,6 +1481,18 @@ model StaffAttendanceRecord {
   recordedById   String
   recordedAt     DateTime          @default(now())
 
+  // Additive: soft delete. The row is kept (not hard-deleted) so scoreVersion
+  // and idempotencyKey history stay intact for a later re-mark — see
+  // deleteRecord in the attendance router for why hard delete would silently
+  // break re-marking after a session reopen.
+  deletedAt    DateTime?
+  deletedById  String?
+  deleteReason String?
+  // True only for rows auto-created by closeSession's "mark remaining
+  // absent" sweep, so clearAutoAbsent can target exactly those rows and
+  // never a manually-marked ABSENT.
+  autoAbsent   Boolean            @default(false)
+
   @@unique([sessionId, staffProfileId])
   @@index([staffProfileId])
   @@index([scoreEventId])
@@ -1485,6 +1513,18 @@ model AttendanceRecord {
   scoreEventId   String?
   recordedById   String
   recordedAt     DateTime          @default(now())
+
+  // Additive: soft delete. The row is kept (not hard-deleted) so scoreVersion
+  // and idempotencyKey history stay intact for a later re-mark — see
+  // deleteRecord in the attendance router for why hard delete would silently
+  // break re-marking after a session reopen.
+  deletedAt    DateTime?
+  deletedById  String?
+  deleteReason String?
+  // True only for rows auto-created by closeSession's "mark remaining
+  // absent" sweep, so clearAutoAbsent can target exactly those rows and
+  // never a manually-marked ABSENT.
+  autoAbsent   Boolean            @default(false)
 
   @@unique([sessionId, registrationId])
   // Additive: the unique index above leads with sessionId, wrong column for

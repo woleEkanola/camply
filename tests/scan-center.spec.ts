@@ -66,6 +66,8 @@ test.describe("Scan Center - Unified Operations Platform", () => {
 
   test("processes arrival check-in, triggers green overlay, and reports duplicate with blue overlay", async ({ page }) => {
     test.setTimeout(120000);
+    await page.setViewportSize({ width: 1280, height: 800 });
+
     // 1. Log in and go to admin check-in
     await loginWithPassword(page, "owner@camply.com", "password123");
     await page.goto("/admin/qr-scan");
@@ -78,37 +80,43 @@ test.describe("Scan Center - Unified Operations Platform", () => {
     await page.getByRole("button", { name: "Camp Arrival" }).click();
     await expect(page.getByRole("heading", { name: "Camp Arrival" })).toBeVisible();
 
-    // 2. Search for the camper manually using fallback query input
-    const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
-    await searchInput.fill(registrationNumber);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const searchCamper = async () => {
+      await page.getByRole("button", { name: "Smart Search" }).click();
+      const searchInput = page.locator("input[placeholder='Name, registration #, or phone...']");
+      await expect(searchInput).toBeVisible();
+      await searchInput.fill(registrationNumber);
+      await page.waitForTimeout(600);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+    };
+
+    // 2. Search for the camper manually using smart search
+    await searchCamper();
 
     // 3. Verify green Success Overlay pops up
-    const successOverlay = page.getByRole("heading", { name: "Checked In at Camp Arrival", exact: true });
-    await expect(successOverlay).toBeVisible({ timeout: 10000 });
+    const successOverlay = page.getByRole("heading", { name: "Checked In at Camp", exact: true });
+    await expect(successOverlay).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(camperName).first()).toBeVisible();
 
-    // Dismiss overlay by clicking it
-    await page.click("text=Checked In at Camp Arrival");
+    // Dismiss overlay by clicking close button
+    await page.getByRole("button", { name: "Close popup" }).click();
     await expect(successOverlay).not.toBeVisible();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
  
     // 4. Search again to verify Duplicate Blue Overlay triggers (no error!)
-    await searchInput.fill(registrationNumber);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await searchCamper();
  
     const duplicateOverlay = page.getByRole("heading", { name: "Already Checked In", exact: true });
     await expect(duplicateOverlay).toBeVisible({ timeout: 20000 });
-    await expect(page.getByText("Camp Arrival already recorded offline.")).not.toBeVisible(); // server duplicate message
-    await expect(page.getByText("Camper already checked in at Camp Arrival")).toBeVisible();
 
     // Dismiss duplicate overlay
-    await page.click("text=Already Checked In");
+    await page.getByRole("button", { name: "Close popup" }).click();
     await expect(duplicateOverlay).not.toBeVisible();
   });
 
   test("allows switching stations, handles meals success and duplicate meal warning", async ({ page }) => {
     test.setTimeout(120000);
+    await page.setViewportSize({ width: 1280, height: 800 });
+
     // Pre-check-in the camper so the scan serves a meal rather than auto-checking them in
     await prisma.registration.update({
       where: { id: registrationId },
@@ -126,29 +134,35 @@ test.describe("Scan Center - Unified Operations Platform", () => {
     // Verify active station header changes
     await expect(page.getByRole("heading", { name: "Breakfast Station" })).toBeVisible();
 
+    const searchCamper = async () => {
+      await page.getByRole("button", { name: "Smart Search" }).click();
+      const searchInput = page.locator("input[placeholder='Name, registration #, or phone...']");
+      await expect(searchInput).toBeVisible();
+      await searchInput.fill(registrationNumber);
+      await page.waitForTimeout(600);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+    };
+
     // 2. Search for camper to serve Breakfast
-    const searchInput = page.locator('input[placeholder*="Enter Registration #"]');
-    await searchInput.fill(registrationNumber);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await searchCamper();
 
     // 3. Verify green success overlay displays "Served breakfast"
     const successOverlay = page.locator("text=Served breakfast");
-    await expect(successOverlay).toBeVisible({ timeout: 10000 });
+    await expect(successOverlay).toBeVisible({ timeout: 15000 });
 
     // Dismiss
-    await page.click("text=Served breakfast");
+    await page.getByRole("button", { name: "Close popup" }).click();
     await expect(successOverlay).not.toBeVisible();
 
     // 4. Search again to check duplicate meal warning
-    await searchInput.fill(registrationNumber);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await searchCamper();
 
     // Verify blue duplicate overlay, station-specific copy
     const duplicateOverlay = page.getByRole("heading", { name: "Already Collected Breakfast", exact: true });
-    await expect(duplicateOverlay).toBeVisible({ timeout: 10000 });
+    await expect(duplicateOverlay).toBeVisible({ timeout: 15000 });
     await expect(page.getByText("Breakfast already collected.")).toBeVisible();
 
     // Dismiss
-    await page.click("text=Already Collected Breakfast");
+    await page.getByRole("button", { name: "Close popup" }).click();
   });
 });

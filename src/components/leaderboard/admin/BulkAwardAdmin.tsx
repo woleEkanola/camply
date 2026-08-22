@@ -8,6 +8,13 @@ import { Input, Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { SkeletonText } from "@/components/ui/Skeleton";
 
+const RESET_SUBJECT_TYPES = [
+  { value: "CAMPER", label: "Camper" },
+  { value: "STAFF", label: "Staff" },
+  { value: "TRIBE", label: "Tribe" },
+  { value: "CAMPUS", label: "Campus" },
+] as const;
+
 export function BulkAwardAdmin({ campId }: { campId: string }) {
   const utils = api.useUtils();
   const toast = useToast();
@@ -30,6 +37,34 @@ export function BulkAwardAdmin({ campId }: { campId: string }) {
   const resetAllTribes = api.leaderboard.resetAllTribes.useMutation({
     onSuccess: (result) => { toast.success(`Reset ${result.tribesReset} tribe${result.tribesReset === 1 ? "" : "s"} to zero.`); invalidateTribes(); setResetReason(""); },
     onError: (err) => toast.error(err.message || "Failed to reset tribes."),
+  });
+
+  const [resetSubjectType, setResetSubjectType] = useState<"CAMPER" | "STAFF" | "TRIBE" | "CAMPUS">("CAMPER");
+  const [resetSubjectId, setResetSubjectId] = useState("");
+  const [resetSubjectReason, setResetSubjectReason] = useState("");
+  const { data: camperOptions } = api.leaderboard.campers.useQuery({ campId }, { enabled: resetSubjectType === "CAMPER" });
+  const { data: staffOptions } = api.leaderboard.staff.useQuery({ campId }, { enabled: resetSubjectType === "STAFF" });
+  const { data: campusOptions } = api.leaderboard.campuses.useQuery({ campId }, { enabled: resetSubjectType === "CAMPUS" });
+  const subjectOptions =
+    resetSubjectType === "CAMPER"
+      ? (camperOptions ?? []).map((row: any) => ({ id: row.registration?.id ?? row.stat.subjectId, label: `${row.registration?.camper?.name ?? "Camper"} — ${row.stat.totalPoints} pts` }))
+      : resetSubjectType === "STAFF"
+        ? (staffOptions ?? []).map((row: any) => ({ id: row.staff?.id ?? row.stat.subjectId, label: `${[row.staff?.firstName, row.staff?.lastName].filter(Boolean).join(" ") || "Staff"} — ${row.stat.totalPoints} pts` }))
+        : resetSubjectType === "TRIBE"
+          ? (tribes ?? []).map(({ tribe }: any) => ({ id: tribe.id, label: `${tribe.name} — ${tribe.points ?? 0} pts` }))
+          : (campusOptions ?? []).map((row: any) => ({ id: row.campus?.id ?? row.stat.subjectId, label: `${row.campus?.name ?? "Campus"} — ${row.stat.totalPoints} pts` }));
+
+  const resetSubject = api.leaderboard.resetSubject.useMutation({
+    onSuccess: (result) => {
+      toast.success(result ? "Subject reset to zero." : "Already at zero — nothing to reset.");
+      utils.leaderboard.campers.invalidate({ campId });
+      utils.leaderboard.staff.invalidate({ campId });
+      utils.leaderboard.campuses.invalidate({ campId });
+      invalidateTribes();
+      setResetSubjectId("");
+      setResetSubjectReason("");
+    },
+    onError: (err) => toast.error(err.message || "Failed to reset subject."),
   });
 
   function toggle(id: string) {
@@ -132,6 +167,52 @@ export function BulkAwardAdmin({ campId }: { campId: string }) {
               Reset all tribes to zero
             </Button>
           </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody className="space-y-4">
+          <h3 className="text-sm font-semibold text-txt-primary">Subject Points Reset</h3>
+          <p className="text-xs text-txt-secondary">
+            Normalize a mistake or fraudulent entry by zeroing one camper, staff member, tribe, or campus. Same
+            compensating-entry mechanism as the tribe reset above — nothing is deleted, everything stays in the audit log.
+            Resetting a camper or staff member also drains the amount they contributed to their tribe/campus totals.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <Select
+              id="reset-subject-type"
+              label="Type"
+              value={resetSubjectType}
+              onChange={(e) => { setResetSubjectType(e.target.value as any); setResetSubjectId(""); }}
+            >
+              {RESET_SUBJECT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </Select>
+            <Select
+              id="reset-subject-id"
+              label={RESET_SUBJECT_TYPES.find((t) => t.value === resetSubjectType)?.label ?? "Subject"}
+              value={resetSubjectId}
+              onChange={(e) => setResetSubjectId(e.target.value)}
+            >
+              <option value="">Select…</option>
+              {subjectOptions.map((o: any) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </Select>
+            <Input id="reset-subject-reason" containerClassName="sm:col-span-2" label="Reason" value={resetSubjectReason} onChange={(e) => setResetSubjectReason(e.target.value)} placeholder="e.g. Duplicate scan removed" />
+          </div>
+          <Button
+            size="sm"
+            variant="danger"
+            loading={resetSubject.isPending}
+            disabled={!resetSubjectId}
+            onClick={() => {
+              const label = subjectOptions.find((o: any) => o.id === resetSubjectId)?.label ?? "this subject";
+              if (window.confirm(`Reset ${label} to zero? This cannot be undone with a single click, though the history stays in the audit log.`)) {
+                resetSubject.mutate({ campId, subjectType: resetSubjectType, subjectId: resetSubjectId, reason: resetSubjectReason || undefined });
+              }
+            }}
+            data-testid="reset-subject-button"
+          >
+            Reset to zero
+          </Button>
         </CardBody>
       </Card>
 
